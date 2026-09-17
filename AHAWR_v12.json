@@ -6,10 +6,10 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -9632,
-        624
+        -10992,
+        1232
       ],
-      "id": "e6eb8caa-16ff-445a-817f-c68d30e9e086",
+      "id": "94e7392c-0b86-4633-9ce0-03e7597a697f",
       "name": "When clicking ‘Execute workflow’"
     },
     {
@@ -24,7 +24,7 @@
           "conditions": [
             {
               "keyName": "mission_id",
-              "keyValue": "simple-readonly-review"
+              "keyValue": "jsa-stabilization-v1"
             }
           ]
         },
@@ -33,24 +33,24 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -9408,
-        624
+        -10768,
+        1232
       ],
-      "id": "c2cb8d1f-0337-4b26-9ed2-04d983760b2e",
+      "id": "7b0e8d7e-df7d-43ab-97bb-64b1873723dd",
       "name": "Get Mission",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\n\nconst missionId = String(row.mission_id ?? '').trim();\nif (!missionId) {\n  throw new Error('Mission not found: Data Table returned no mission_id.');\n}\n\nconst enabled = row.enabled === true || String(row.enabled ?? '').toLowerCase() === 'true';\nif (!enabled) {\n  throw new Error(`Mission '${missionId}' is disabled.`);\n}\n\nfunction parseJsonArray(value, fieldName) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error(`${fieldName} must be a JSON array.`);\n    return parsed.map(String);\n  } catch (error) {\n    throw new Error(`Invalid ${fieldName} for mission '${missionId}': ${error.message}`);\n  }\n}\n\nconst objective = String(row.objective ?? '').trim();\nif (!objective) {\n  throw new Error(`Mission '${missionId}' has empty objective.`);\n}\n\nconst rules = parseJsonArray(row.rules_json, 'rules_json');\nconst acceptance = parseJsonArray(row.acceptance_criteria_json, 'acceptance_criteria_json');\n\nconst stateNamespace = String(row.state_namespace ?? '').trim();\n\nif (!stateNamespace) {\n  throw new Error(`Mission \"${missionId}\" does not define state_namespace.`);\n}\n\nconst originalGoal = [\n  `MISSION: ${String(row.name ?? missionId).trim()}`,\n  '',\n  'OBJECTIVE:',\n  objective,\n  '',\n  'RULES:',\n  rules.length ? rules.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)',\n  '',\n  'ACCEPTANCE CRITERIA:',\n  acceptance.length ? acceptance.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)'\n].join('\\\\n');\n\nreturn [{ json: {\n  mission_id: missionId,\n  mission_version: Number(row.version ?? 1),\n  mission_name: String(row.name ?? missionId),\n  mission_enabled: enabled,\n  state_namespace: stateNamespace,\n  objective,\n  rules,\n  acceptance_criteria: acceptance,\n  original_goal: originalGoal\n} }];"
+        "jsCode": "const row = $json ?? {};\n\nconst missionId = String(row.mission_id ?? '').trim();\nif (!missionId) throw new Error('Mission not found: Data Table returned no mission_id.');\n\nconst enabled = row.enabled === true || String(row.enabled ?? '').toLowerCase() === 'true';\nif (!enabled) throw new Error(`Mission '${missionId}' is disabled.`);\n\nfunction parseJsonArray(value, fieldName) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error(`${fieldName} must be a JSON array.`);\n    return parsed.map(String);\n  } catch (error) {\n    throw new Error(`Invalid ${fieldName} for mission '${missionId}': ${error.message}`);\n  }\n}\n\nconst objective = String(row.objective ?? '').trim();\nif (!objective) throw new Error(`Mission '${missionId}' has empty objective.`);\n\nconst rules = parseJsonArray(row.rules_json, 'rules_json');\nconst acceptance = parseJsonArray(row.acceptance_criteria_json, 'acceptance_criteria_json');\n\nconst stateNamespace = String(row.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${missionId}\" does not define state_namespace.`);\n\nconst originalGoal = [\n  `MISSION: ${String(row.name ?? missionId).trim()}`,\n  '',\n  'OBJECTIVE:',\n  objective,\n  '',\n  'RULES:',\n  rules.length ? rules.map((x, i) => `${i + 1}. ${x}`).join('\\n') : '(none)',\n  '',\n  'ACCEPTANCE CRITERIA:',\n  acceptance.length ? acceptance.map((x, i) => `${i + 1}. ${x}`).join('\\n') : '(none)'\n].join('\\n');\n\nreturn [{ json: {\n  mission_id: missionId,\n  mission_version: Number(row.version ?? 1),\n  mission_name: String(row.name ?? missionId),\n  mission_enabled: enabled,\n  state_namespace: stateNamespace,\n  objective,\n  rules,\n  acceptance_criteria: acceptance,\n  original_goal: originalGoal\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -9216,
-        624
+        -10576,
+        1232
       ],
-      "id": "14a8ae67-9021-4634-a859-a9c2fdda6547",
+      "id": "6aa30277-7488-4b2c-92b3-4e1c3c3568da",
       "name": "Mission"
     },
     {
@@ -242,10 +242,10 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -6864,
-        1568
+        -8224,
+        2176
       ],
-      "id": "c3becb24-eda6-468d-a4d6-e2f98b4eb02b",
+      "id": "bfa6ac20-87d1-46f2-aaee-17fdd3a3e308",
       "name": "Architect Start"
     },
     {
@@ -255,10 +255,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6288,
-        1568
+        -7648,
+        2176
       ],
-      "id": "fc554fbd-68b3-46fa-a544-ae742698e61a",
+      "id": "853d39ac-c33d-4824-a13d-14f6f07dd4b5",
       "name": "Evaluate Architect"
     },
     {
@@ -289,36 +289,36 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -6064,
-        1568
+        -7424,
+        2176
       ],
-      "id": "08c4c863-e24f-41e3-bb3a-7775fd358b5c",
+      "id": "72d3993b-4944-458a-87a3-45356649de6b",
       "name": "Architect Completed?"
     },
     {
       "parameters": {
-        "jsCode": "const raw = String(\n  $json.output ??\n  $json.response ??\n  $json.content ??\n  $json.hermes_output ??\n  ''\n).trim();\n\nif (!raw) {\n  throw new Error('Architect returned empty output.');\n}\n\nfunction extractJsonObject(text) {\n  const cleaned = text\n    .replace(/```json\\s*/gi, '')\n    .replace(/```\\s*/g, '')\n    .trim();\n\n  try {\n    return JSON.parse(cleaned);\n  } catch (_) {}\n\n  let start = -1;\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n\n  for (let i = 0; i < cleaned.length; i++) {\n    const ch = cleaned[i];\n\n    if (inString) {\n      if (escaped) { escaped = false; }\n      else if (ch === '\\\\') { escaped = true; }\n      else if (ch === '\"') { inString = false; }\n      continue;\n    }\n\n    if (ch === '\"') { inString = true; continue; }\n\n    if (ch === '{') {\n      if (start === -1) start = i;\n      depth++;\n      continue;\n    }\n\n    if (ch === '}') {\n      if (depth > 0) depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = cleaned.slice(start, i + 1);\n        try { return JSON.parse(candidate); } catch (_) { start = -1; }\n      }\n    }\n  }\n\n  throw new Error(`Architect returned invalid JSON. Raw output:\\n${text}`);\n}\n\nconst plan = extractJsonObject(raw);\n\nif (!plan || typeof plan !== 'object') {\n  throw new Error('Architect response is not a JSON object.');\n}\n\nif (!Array.isArray(plan.tasks)) {\n  throw new Error(`Architect response does not contain tasks array. Parsed keys: ${Object.keys(plan).join(', ')}. The Architect must DECOMPOSE the mission into Worker tasks and must not execute or answer the mission directly.`);\n}\n\nif (plan.tasks.length === 0) {\n  throw new Error('Architect returned an empty tasks array.');\n}\n\nconst maxTasks = Number($('Constants').first().json.max_tasks ?? 20);\nplan.tasks = plan.tasks.slice(0, maxTasks);\n\nfor (const task of plan.tasks) {\n  if (!task || typeof task !== 'object' || !task.id || !task.title || !task.objective || !Array.isArray(task.acceptance_criteria)) {\n    throw new Error(`Invalid task definition: ${JSON.stringify(task)}`);\n  }\n  if (!Array.isArray(task.verification)) task.verification = [];\n  if (!Array.isArray(task.scope)) task.scope = [];\n  if (!Array.isArray(task.dependencies)) task.dependencies = [];\n}\n\nreturn [\n  {\n    json: {\n      plan_summary: String(plan.summary ?? ''),\n      tasks: plan.tasks,\n      task_index: 0,\n      task_attempt: 1,\n      total_tasks: plan.tasks.length,\n      review_feedback: ''\n    }\n  }\n];"
+        "jsCode": "const raw = String($json.output ?? $json.response ?? $json.content ?? $json.hermes_output ?? '').trim();\nif (!raw) throw new Error('Architect returned empty output.');\nfunction extractJsonObject(text) {\n  const cleaned = text.replace(/```json\\s*/gi, '').replace(/```\\s*/g, '').trim();\n  try { return JSON.parse(cleaned); } catch (_) {}\n  let start = -1, depth = 0, inString = false, escaped = false;\n  for (let i = 0; i < cleaned.length; i++) {\n    const ch = cleaned[i];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === '\\\\') escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '{') { if (start === -1) start = i; depth++; continue; }\n    if (ch === '}') {\n      if (depth > 0) depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = cleaned.slice(start, i + 1);\n        try { return JSON.parse(candidate); } catch (_) { start = -1; }\n      }\n    }\n  }\n  throw new Error(`Architect returned invalid JSON. Raw output:\\n${text}`);\n}\nconst plan = extractJsonObject(raw);\nif (!plan || typeof plan !== 'object') throw new Error('Architect response is not a JSON object.');\nif (!Array.isArray(plan.tasks)) throw new Error(`Architect response does not contain tasks array. Parsed keys: ${Object.keys(plan).join(', ')}.`);\nif (plan.tasks.length === 0) throw new Error('Architect returned an empty tasks array.');\nconst maxTasks = Number($('Constants').first().json.max_tasks ?? 20);\nplan.tasks = plan.tasks.slice(0, maxTasks);\nfor (const task of plan.tasks) {\n  if (!task || typeof task !== 'object' || !task.id || !task.title || !task.objective || !Array.isArray(task.acceptance_criteria)) {\n    throw new Error(`Invalid task definition: ${JSON.stringify(task)}`);\n  }\n  if (!Array.isArray(task.verification)) task.verification = [];\n  if (!Array.isArray(task.scope)) task.scope = [];\n  if (!Array.isArray(task.dependencies)) task.dependencies = [];\n}\nreturn [{ json: {\n  plan_summary: String(plan.summary ?? ''),\n  tasks: plan.tasks,\n  task_index: 0,\n  task_attempt: 1,\n  total_tasks: plan.tasks.length,\n  review_feedback: ''\n}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6960,
-        1072
+        -8320,
+        1680
       ],
-      "id": "2fa5df8d-caa3-4d32-92e3-4553c4ddf2e1",
+      "id": "6e13cbf0-b4ab-400b-b61d-8b659dccb584",
       "name": "Parse Plan"
     },
     {
       "parameters": {
-        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\n\nif (index >= tasks.length) {\n  return [{\n    json: { ...$json, execution_route: 'all_tasks_completed' }\n  }];\n}\n\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\n\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  feedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  feedback\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ...$json,\n    execution_route: 'run_task',\n    current_task: task,\n    current_task_id: task.id,\n    worker_prompt: workerPrompt\n  }\n}];"
+        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\nif (index >= tasks.length) return [{ json: { ...$json, execution_route: 'all_tasks_completed' } }];\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  feedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  feedback\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, execution_route: 'run_task', current_task: task, current_task_id: task.id, worker_prompt: workerPrompt } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5696,
-        1008
+        -7056,
+        1616
       ],
-      "id": "1559a3e9-a82b-40cc-ac61-b261813f15f4",
+      "id": "81968efc-a7e4-4b8b-b8c4-b18f6856ee46",
       "name": "Prepare Current Task"
     },
     {
@@ -349,10 +349,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -4880,
-        976
+        -6240,
+        1584
       ],
-      "id": "d58b301c-2d30-46f9-bbb3-b673c2d6c41c",
+      "id": "32cd9825-c859-4e09-a8b3-22a2f749f145",
       "name": "All Tasks Completed?"
     },
     {
@@ -370,7 +370,7 @@
             "role": "worker",
             "run_id": "={{ String($json.worker_run_id ?? '') }}",
             "session_id": "={{ String($json.worker_session_id ?? '') }}",
-            "input": "={{ (() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const index = Number($json.task_index ?? 0);\n  const task = tasks[index];\n\n  if (!task) return '';\n\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    $json.review_feedback\n      ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String($json.review_feedback)\n      : ''\n  ].filter(Boolean).join('\\n');\n})() }}",
+            "input": "={{ (() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const index = Number($json.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    $json.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String($json.review_feedback) : ''\n  ].filter(Boolean).join('\\n');\n})() }}",
             "resume_input": "Continue the existing Worker task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.",
             "model": "={{ $('Constants').first().json.worker_model }}",
             "provider": "={{ $('Constants').first().json.worker_provider }}",
@@ -544,23 +544,23 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -4640,
-        1072
+        -6000,
+        1680
       ],
-      "id": "e675fce0-f6c6-4db3-9aeb-32adf375fd1e",
+      "id": "35c1ef62-f032-4380-b474-31e2dbca4b17",
       "name": "Worker Start"
     },
     {
       "parameters": {
-        "jsCode": "const status = String($json.worker_status ?? '').toLowerCase();\nconst route = String($json.worker_route ?? '').toLowerCase();\n\nreturn [{\n  json: {\n    ...$json,\n    worker_status: status,\n    worker_route: route,\n    worker_output: String($json.worker_output ?? $json.output ?? $json.response ?? $json.content ?? ''),\n    worker_poll_count: Number($json.poll_count ?? 0),\n    worker_run_not_found: Boolean($json.run_not_found ?? false),\n    http_error_code: $json.http_code ?? null,\n    hermes_error: String($json.error ?? ''),\n    transient_error: route === 'transient_error'\n  }\n}];"
+        "jsCode": "const status = String($json.worker_status ?? '').toLowerCase();\nconst route = String($json.worker_route ?? '').toLowerCase();\nreturn [{ json: { ...$json, worker_status: status, worker_route: route, worker_output: String($json.worker_output ?? $json.output ?? $json.response ?? $json.content ?? ''), worker_poll_count: Number($json.poll_count ?? 0), worker_run_not_found: Boolean($json.run_not_found ?? false), http_error_code: $json.http_code ?? null, hermes_error: String($json.error ?? ''), transient_error: route === 'transient_error' } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4304,
-        1072
+        -5664,
+        1680
       ],
-      "id": "4b7ec5a6-5b67-4106-b018-1459ee7c0efa",
+      "id": "8cf380c5-bf41-44ad-b6c0-e332a7b37387",
       "name": "Evaluate Worker"
     },
     {
@@ -591,10 +591,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -4096,
-        1072
+        -5456,
+        1680
       ],
-      "id": "cce64ca3-1bc4-4c8c-ad2d-f66decad3cc3",
+      "id": "6decb585-0757-422a-a299-861a82be02d2",
       "name": "Worker Completed?"
     },
     {
@@ -612,7 +612,7 @@
             "role": "reviewer",
             "run_id": "={{ String($('Reviewer State').first().json.reviewer_run_id ?? '') }}",
             "session_id": "={{ String($('Reviewer State').first().json.reviewer_session_id ?? '') }}",
-            "input": "={{ (() => {\n  const state = ($('Reviewer State').first().json ?? {});\n  const pct = $('Prepare Current Task');\n  const taskSource = pct.isExecuted ? pct.last().json : state;\n  const tasks = Array.isArray(taskSource.tasks) ? taskSource.tasks : [];\n  const index = Number(taskSource.task_index ?? 0);\n  const task = tasks[index] ?? taskSource.current_task ?? {};\n\n  const workerOutput = String(\n    $('Load Worker Result').first().json.worker_output ?? ''\n  );\n\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : [])\n      .map((x, i) => `${i + 1}. ${x}`)\n      .join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    'WORKER RESULT:',\n    workerOutput\n  ].join('\\n');\n})() }}",
+            "input": "={{ (() => {\n  const state = ($('Reviewer State').first().json ?? {});\n  const pct = $('Prepare Current Task');\n  const taskSource = pct.isExecuted ? pct.last().json : state;\n  const tasks = Array.isArray(taskSource.tasks) ? taskSource.tasks : [];\n  const index = Number(taskSource.task_index ?? 0);\n  const task = tasks[index] ?? taskSource.current_task ?? {};\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    'WORKER RESULT:',\n    workerOutput\n  ].join('\\n');\n})() }}",
             "resume_input": "Continue the existing Reviewer task from the saved Hermes session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.",
             "model": "={{ $('Constants').first().json.reviewer_model }}",
             "provider": "={{ $('Constants').first().json.reviewer_provider }}",
@@ -786,23 +786,23 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
       "position": [
-        -3264,
-        576
+        -4624,
+        1184
       ],
-      "id": "2efdef61-8a34-4eb6-a306-02729be101f2",
+      "id": "5c357655-5e7d-4445-bbe8-ed0fc2fbf20f",
       "name": "Reviewer Start"
     },
     {
       "parameters": {
-        "jsCode": "function unwrap(value) { const x = value?.json ?? value?.data ?? value ?? {}; return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; }\nconst result = unwrap($json);\nconst status = String($json.status ?? $json.reviewer_status ?? '').toLowerCase();\n\nconst route = String($json.reviewer_route ?? $json.route ?? (status === 'completed' ? 'completed' : '')).toLowerCase();\nreturn [{json:{...result,\n               reviewer_status:status,\n               reviewer_route:route,\n               reviewer_output: String(result.output ?? result.reviewer_output ?? result.response ?? result.content ?? ''),\n               reviewer_poll_count:Number(result.poll_count??0),\n               reviewer_run_not_found:Boolean(result.run_not_found??false),\n               http_error_code:result.http_code??null,hermes_error:String(result.error??''),\n               transient_error:route==='transient_error'}}];"
+        "jsCode": "function unwrap(value) { const x = value?.json ?? value?.data ?? value ?? {}; return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; }\nconst result = unwrap($json);\nconst status = String($json.status ?? $json.reviewer_status ?? '').toLowerCase();\nconst route = String($json.reviewer_route ?? $json.route ?? (status === 'completed' ? 'completed' : '')).toLowerCase();\nreturn [{json:{...result, reviewer_status:status, reviewer_route:route, reviewer_output: String(result.output ?? result.reviewer_output ?? result.response ?? result.content ?? ''), reviewer_poll_count:Number(result.poll_count??0), reviewer_run_not_found:Boolean(result.run_not_found??false), http_error_code:result.http_code??null, hermes_error:String(result.error??''), transient_error:route==='transient_error'}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2496,
-        768
+        -3856,
+        1376
       ],
-      "id": "fd98e5b2-6127-452e-ab8c-48534de5ed68",
+      "id": "60a4c674-18c5-4664-a442-38af40ed2cb1",
       "name": "Evaluate Reviewer"
     },
     {
@@ -833,23 +833,23 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -2176,
-        768
+        -3536,
+        1376
       ],
-      "id": "cec50210-f2b1-4336-91f9-a70038dfef45",
+      "id": "e1c77a03-7e8e-423c-a069-c34127609a6d",
       "name": "Reviewer Completed?"
     },
     {
       "parameters": {
-        "jsCode": "const raw = String(\n  $json.output ??\n  $json.reviewer_output ??\n  $json.response ??\n  $json.content ??\n  $json.hermes_output ??\n  ''\n).trim();\n\nif (!raw) {\n  throw new Error('Reviewer returned empty output');\n}\n\nlet text = raw\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/\\s*```$/i, '')\n  .trim();\n\nfunction extractReviewObject(input) {\n  const candidates = [];\n  let start = -1;\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n\n  for (let i = 0; i < input.length; i++) {\n    const ch = input[i];\n    if (inString) {\n      if (escaped) { escaped = false; }\n      else if (ch === '\\\\') { escaped = true; }\n      else if (ch === '\"') { inString = false; }\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '{') { if (depth === 0) start = i; depth++; continue; }\n    if (ch === '}') {\n      if (depth === 0) continue;\n      depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = input.slice(start, i + 1);\n        try {\n          const parsed = JSON.parse(candidate);\n          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {\n            candidates.push(parsed);\n          }\n        } catch (_) {}\n        start = -1;\n      }\n    }\n  }\n\n  const review = candidates.find(candidate => {\n    const status = String(candidate.status ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    return (\n      ['pass', 'needs_changes'].includes(status) &&\n      Number.isFinite(score) &&\n      score >= 0 && score <= 100 &&\n      Object.prototype.hasOwnProperty.call(candidate, 'reason') &&\n      Object.prototype.hasOwnProperty.call(candidate, 'next_task')\n    );\n  });\n\n  if (!review) {\n    throw new Error('Reviewer output does not contain a valid review JSON object. Expected status, score, reason and next_task.');\n  }\n\n  return review;\n}\n\nconst review = extractReviewObject(text);\nconst reviewStatus = String(review.status ?? '').toLowerCase();\nconst reviewScore = Number(review.score ?? 0);\nconst reviewReason = String(review.reason ?? '');\nconst reviewNextTask = String(review.next_task ?? '');\n\nreturn [{\n  json: {\n    ...$json,\n    review,\n    review_valid: true,\n    review_raw: raw,\n    review_status: reviewStatus,\n    review_score: reviewScore,\n    review_reason: reviewReason,\n    review_next_task: reviewNextTask\n  }\n}];"
+        "jsCode": "const raw = String($json.output ?? $json.reviewer_output ?? $json.response ?? $json.content ?? $json.hermes_output ?? '').trim();\nif (!raw) throw new Error('Reviewer returned empty output');\nlet text = raw.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/\\s*```$/i, '').trim();\nfunction extractReviewObject(input) {\n  const candidates = [];\n  let start = -1, depth = 0, inString = false, escaped = false;\n  for (let i = 0; i < input.length; i++) {\n    const ch = input[i];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === '\\\\') escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '{') { if (depth === 0) start = i; depth++; continue; }\n    if (ch === '}') {\n      if (depth === 0) continue;\n      depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = input.slice(start, i + 1);\n        try { const parsed = JSON.parse(candidate); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) candidates.push(parsed); } catch (_) {}\n        start = -1;\n      }\n    }\n  }\n  const review = candidates.find(candidate => {\n    const status = String(candidate.status ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    return ['pass','needs_changes'].includes(status) && Number.isFinite(score) && score >= 0 && score <= 100 && Object.prototype.hasOwnProperty.call(candidate,'reason') && Object.prototype.hasOwnProperty.call(candidate,'next_task');\n  });\n  if (!review) throw new Error('Reviewer output does not contain a valid review JSON object. Expected status, score, reason and next_task.');\n  return review;\n}\nconst review = extractReviewObject(text);\nreturn [{ json: { ...$json, review, review_valid: true, review_raw: raw, review_status: String(review.status ?? '').toLowerCase(), review_score: Number(review.score ?? 0), review_reason: String(review.reason ?? ''), review_next_task: String(review.next_task ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1408,
-        16
+        -2768,
+        624
       ],
-      "id": "93a79f61-8689-484c-bd74-dcf5405ef9c5",
+      "id": "11babe2a-87f7-41a9-b493-2f7a53530b4d",
       "name": "Parse Review"
     },
     {
@@ -880,36 +880,36 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -192,
-        16
+        -1552,
+        624
       ],
-      "id": "cf3b6175-7ce9-4665-ac9a-be6456783fe0",
+      "id": "e0bf496e-9002-4843-a39b-7f1c900453ba",
       "name": "Review Passed?"
     },
     {
       "parameters": {
-        "jsCode": "const state = $('Prepare Current Task').last().json ?? {};\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\nconst nextIndex = Number(state.task_index ?? 0) + 1;\nif (nextIndex >= tasks.length) {\n  return [{json:{\n    ...state,\n    plan_summary: String(state.plan_summary ?? ''),\n    tasks,\n    total_tasks: tasks.length,\n    task_index: nextIndex,\n    execution_route:'all_tasks_completed',\n    last_review_score:Number($json.review_score ?? $json.review?.score ?? 0),\n    last_review_reason:String($json.review_reason ?? $json.review?.reason ?? '')\n  }}];\n}\nreturn [{json:{\n  ...state,\n  plan_summary:String(state.plan_summary ?? ''),\n  tasks,\n  total_tasks:tasks.length,\n  task_index:nextIndex,\n  task_attempt:1,\n  review_feedback:'',\n  execution_route:'run_task',\n  last_review_score:Number($json.review_score ?? $json.review?.score ?? 0),\n  last_review_reason:String($json.review_reason ?? $json.review?.reason ?? '')\n}}];"
+        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\nconst nextIndex = Number(state.task_index ?? 0) + 1;\nif (nextIndex >= tasks.length) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_index: nextIndex, execution_route: 'all_tasks_completed', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: String($json.review_reason ?? $json.review?.reason ?? '') }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_index: nextIndex, task_attempt: 1, review_feedback: '', execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: String($json.review_reason ?? $json.review?.reason ?? '') }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        0,
-        0
+        -1360,
+        608
       ],
-      "id": "70d1d170-e1c3-43cc-8877-9340eea19e19",
+      "id": "fa1a3d2a-7e1c-473b-9e94-e20728e4c5ca",
       "name": "Advance Task"
     },
     {
       "parameters": {
-        "jsCode": "const state = $('Prepare Current Task').last().json ?? {};\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\nconst currentAttempt = Number(state.task_attempt ?? 1);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\nif (currentAttempt >= maxAttempts) {\n  return [{json:{\n    ...state,\n    plan_summary:String(state.plan_summary ?? ''),\n    tasks,\n    total_tasks:tasks.length,\n    execution_route:'failed',\n    final_status:'failed_task_attempt_limit',\n    failure_reason:reviewReason || 'Maximum task attempts reached.',\n    last_review_score:Number($json.review_score ?? $json.review?.score ?? 0),\n    last_review_reason:reviewReason\n  }}];\n}\nreturn [{json:{\n  ...state,\n  plan_summary:String(state.plan_summary ?? ''),\n  tasks,\n  total_tasks:tasks.length,\n  task_attempt:currentAttempt+1,\n  review_feedback:reviewNext || reviewReason,\n  execution_route:'run_task',\n  last_review_score:Number($json.review_score ?? $json.review?.score ?? 0),\n  last_review_reason:reviewReason\n}}];"
+        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\nconst currentAttempt = Number(state.task_attempt ?? 1);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\nif (currentAttempt >= maxAttempts) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, execution_route: 'failed', final_status: 'failed_task_attempt_limit', failure_reason: reviewReason || 'Maximum task attempts reached.', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_attempt: currentAttempt + 1, review_feedback: reviewNext || reviewReason, execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        16,
-        192
+        -1344,
+        800
       ],
-      "id": "ce31acb2-b8a4-4814-b93f-4e4814f92b24",
+      "id": "077b826c-f4f3-4284-b328-7a56d60304e1",
       "name": "Retry Current Task"
     },
     {
@@ -940,36 +940,36 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        896,
-        208
+        -464,
+        816
       ],
-      "id": "f4632474-1dc5-42fe-a77e-bc1991acd44f",
+      "id": "1e0d0400-12a9-47fa-9c05-d05292150680",
       "name": "Continue Workflow?"
     },
     {
       "parameters": {
-        "jsCode": "const status = String(\n  $json.final_status ||\n  $json.reviewer_route ||\n  $json.worker_route ||\n  $json.architect_route ||\n  'failed'\n);\n\nconst role =\n  ($json.reviewer_route || $json.reviewer_status) ? 'reviewer' :\n  ($json.worker_route || $json.worker_status) ? 'worker' :\n  ($json.architect_route || $json.architect_status) ? 'architect' :\n  'task';\n\nconst reason = String(\n  $json.failure_reason ||\n  $json.last_review_reason ||\n  $json.hermes_error ||\n  $json.error ||\n  `Hermes ${role} failed.`\n);\n\nreturn [{ json: { status, role, reason, run_id: String($json.run_id ?? ''), http_error_code: $json.http_error_code ?? null, task_id: String($json.current_task_id ?? ''), task_attempt: Number($json.task_attempt ?? 0), provider_error: String($json.provider_error ?? '') } }];"
+        "jsCode": "const status = String($json.final_status || $json.reviewer_route || $json.worker_route || $json.architect_route || 'failed');\nconst role = ($json.reviewer_route || $json.reviewer_status) ? 'reviewer' : ($json.worker_route || $json.worker_status) ? 'worker' : ($json.architect_route || $json.architect_status) ? 'architect' : 'task';\nconst reason = String($json.failure_reason || $json.last_review_reason || $json.hermes_error || $json.error || `Hermes ${role} failed.`);\nreturn [{ json: { status, role, reason, run_id: String($json.run_id ?? ''), http_error_code: $json.http_error_code ?? null, task_id: String($json.current_task_id ?? ''), task_attempt: Number($json.task_attempt ?? 0), provider_error: String($json.provider_error ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1376,
-        1872
+        16,
+        2480
       ],
-      "id": "a7510d8a-416e-448f-a67d-61dd97ef7d6a",
+      "id": "4a1fdf69-38d3-4188-a969-2fb42db6aa98",
       "name": "Failure Result"
     },
     {
       "parameters": {
-        "jsCode": "return [{\n  json: {\n    status: 'approved',\n    plan_summary: String($json.plan_summary ?? ''),\n    total_tasks: Number($json.total_tasks ?? 0),\n    completed_tasks: Number($json.task_index ?? 0),\n    last_task: String($json.current_task_id ?? ''),\n    last_review_score: Number($json.last_review_score ?? 0),\n    reason: String($json.last_review_reason ?? 'All planned tasks passed independent review.')\n  }\n}];"
+        "jsCode": "return [{ json: { status: 'approved', plan_summary: String($json.plan_summary ?? ''), total_tasks: Number($json.total_tasks ?? 0), completed_tasks: Number($json.task_index ?? 0), last_task: String($json.current_task_id ?? ''), last_review_score: Number($json.last_review_score ?? 0), reason: String($json.last_review_reason ?? 'All planned tasks passed independent review.') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1376,
-        2080
+        16,
+        2688
       ],
-      "id": "308c39a6-7501-4e92-bef3-ea04273b78f9",
+      "id": "80651498-7bf7-4558-bc97-483be76cbe4f",
       "name": "Approved Result"
     },
     {
@@ -984,7 +984,7 @@
           "conditions": [
             {
               "keyName": "profile_id",
-              "keyValue": "default"
+              "keyValue": "openrouter"
             }
           ]
         },
@@ -993,10 +993,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -9024,
-        624
+        -10384,
+        1232
       ],
-      "id": "5eb8c585-7bf4-480e-9fc6-f8f59d273714",
+      "id": "2337b62e-aee0-488c-bb26-893d0d4af1a9",
       "name": "Load Config",
       "alwaysOutputData": true
     },
@@ -1013,37 +1013,37 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -8640,
-        624
+        -10000,
+        1232
       ],
-      "id": "70b5a645-6401-477f-8317-82c7639f78fe",
+      "id": "5fcc4384-431d-4e82-bd63-4222bb2e25f4",
       "name": "Load Prompts",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const rows = $('Load Prompts').all().map(item => item.json || {});\nconst result = {};\nfor (const agent of ['architect','worker','reviewer']) {\n  const candidates = rows\n    .filter(r => String(r.agent_id ?? '').trim() === agent)\n    .filter(r => r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')\n    .sort((a,b) => Number(b.version ?? 0) - Number(a.version ?? 0));\n  if (!candidates.length) throw new Error(`No enabled prompt found for agent '${agent}'.`);\n  result[`${agent}_prompt`] = String(candidates[0].system_prompt ?? '').trim();\n  if (!result[`${agent}_prompt`]) throw new Error(`Prompt '${agent}' is empty.`);\n}\nreturn [{json:result}];"
+        "jsCode": "const rows = $('Load Prompts').all().map(item => item.json || {});\nconst result = {};\nfor (const agent of ['architect','worker','reviewer']) {\n  const candidates = rows.filter(r => String(r.agent_id ?? '').trim() === agent).filter(r => r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true').sort((a,b) => Number(b.version ?? 0) - Number(a.version ?? 0));\n  if (!candidates.length) throw new Error(`No enabled prompt found for agent '${agent}'.`);\n  result[`${agent}_prompt`] = String(candidates[0].system_prompt ?? '').trim();\n  if (!result[`${agent}_prompt`]) throw new Error(`Prompt '${agent}' is empty.`);\n}\nreturn [{json:result}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -8464,
-        624
+        -9824,
+        1232
       ],
-      "id": "cdc05e18-0c3e-449f-a8e0-0614abcf8f34",
+      "id": "43ad3d77-d441-447a-abbc-44354009fed6",
       "name": "Prompt Templates"
     },
     {
       "parameters": {
-        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\n\nconst row =\n  rows.find(\n    r =>\n      (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test') &&\n      (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')\n  ) ||\n  rows[0];\n\nif (!row) {\n  throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\n}\n\nfunction num(value, field, min = 0) {\n  const n = Number(value);\n  if (!Number.isFinite(n) || n < min) {\n    throw new Error(`Invalid ${field}: ${value}`);\n  }\n  return n;\n}\n\nlet retryDelays = [15, 30, 60, 120, 300];\n\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) {\n      throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    }\n    retryDelays = parsed.map(Number);\n  } catch (e) {\n    throw new Error(`Invalid retry_delays_json: ${e.message}`);\n  }\n}\n\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\n\nif (!stateNamespace) {\n  throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n}\n\nreturn [\n  {\n    json: {\n      planner_model: String(row.architect_model ?? '').trim(),\n      planner_provider: String(row.architect_provider ?? '').trim(),\n      worker_model: String(row.worker_model ?? '').trim(),\n      worker_provider: String(row.worker_provider ?? '').trim(),\n      reviewer_model: String(row.reviewer_model ?? '').trim(),\n      reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n      service_model: String(row.service_model ?? '').trim(),\n      service_provider: String(row.service_provider ?? '').trim(),\n      max_tasks: num(row.max_tasks,'max_tasks',1),\n      max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n      architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n      worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n      reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n      architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n      worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n      reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n      architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n      worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n      reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n      telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n      state_namespace: stateNamespace,\n      execution_mode: String(row.execution_mode ?? 'production').trim(),\n      retry_delays: retryDelays\n    }\n  }\n];"
+        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\nconst row = rows.find(r => (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test' || String(r.profile_id ?? '').trim() === 'openrouter') && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')) || rows[0];\nif (!row) throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\nreturn [{ json: {\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -8832,
-        624
+        -10192,
+        1232
       ],
-      "id": "6846417e-f408-465e-b798-bed689d70507",
+      "id": "cd9a8a8f-ab38-4dc2-9502-21fdeb75214c",
       "name": "Constants"
     },
     {
@@ -1053,19 +1053,19 @@
             {
               "id": "reviewer-current-task-id",
               "name": "current_task_id",
-              "value": "={{ String($json.current_task_id ?? $('Prepare Current Task').last().json.current_task_id ?? '') }}",
+              "value": "={{ (() => {\n  const srcs = [];\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) srcs.push($(n).last().json ?? {}); } catch (_) {}\n  }\n  srcs.push($json ?? {});\n  for (const s of srcs) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const idx = Number(s.task_index ?? 0);\n    const task = tasks[idx] ?? s.current_task ?? {};\n    const id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\n    if (id) return id;\n  }\n  return '';\n})() }}",
               "type": "string"
             },
             {
               "id": "reviewer-task-index",
               "name": "task_index",
-              "value": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
+              "value": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
               "type": "number"
             },
             {
               "id": "reviewer-task-attempt",
               "name": "task_attempt",
-              "value": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+              "value": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
               "type": "number"
             },
             {
@@ -1099,10 +1099,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        -3488,
-        768
+        -4848,
+        1376
       ],
-      "id": "f85812ee-d653-4141-a1aa-9ab08e175533",
+      "id": "95fd17a0-8bb8-4015-896d-85a2f2f53620",
       "name": "Reviewer State"
     },
     {
@@ -1122,10 +1122,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.5,
       "position": [
-        -7440,
-        1200
+        -8800,
+        1808
       ],
-      "id": "45046844-cbd5-464f-89cc-5188a06dbcc4",
+      "id": "fc03ac52-db49-4003-948b-5c38c294a8d2",
       "name": "Upload from file"
     },
     {
@@ -1156,10 +1156,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -7200,
-        1200
+        -8560,
+        1808
       ],
-      "id": "0e3973ca-ca2e-4e9a-b0ab-7728ce6d770b",
+      "id": "fb6b0bfc-e884-4551-9fab-5498bdde1f50",
       "name": "If1"
     },
     {
@@ -1169,10 +1169,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -6272,
-        1088
+        -7632,
+        1696
       ],
-      "id": "82c14566-63e6-449c-8d18-fade8ba3856a",
+      "id": "dbc1aa55-ade5-461c-a560-23c064fe97f2",
       "name": "Restore Plan Context"
     },
     {
@@ -1182,10 +1182,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5088,
-        1152
+        -6448,
+        1760
       ],
-      "id": "2b95c841-c6b8-44d2-935d-46c242b041ed",
+      "id": "bc3102ab-5be5-4609-9554-77dd8b0c4155",
       "name": "Restore Task Context"
     },
     {
@@ -1195,10 +1195,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -368,
-        16
+        -1728,
+        624
       ],
-      "id": "84049056-8fab-4bdd-aac8-733cc1d5e271",
+      "id": "8dc59901-20af-47d3-a594-2dd0f0c626a8",
       "name": "Restore Review Context"
     },
     {
@@ -1274,10 +1274,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -8288,
-        624
+        -9648,
+        1232
       ],
-      "id": "71fd7535-57e9-44ae-b450-992edde98d64",
+      "id": "fe292acd-441a-46af-af8a-4569cf59edd4",
       "name": "Ensure Task State Table"
     },
     {
@@ -1302,10 +1302,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -7952,
-        624
+        -9312,
+        1232
       ],
-      "id": "0ce5da40-3b8e-4e02-94dc-3ded29332631",
+      "id": "695346c6-ed1d-4840-bc83-06dfeb1724d3",
       "name": "Load Task State",
       "alwaysOutputData": true
     },
@@ -1321,7 +1321,7 @@
           "conditions": [
             {
               "id": "has-saved-plan",
-              "leftValue": "={{\n  (\n    String($json.status ?? '') === 'active'\n    ||\n    String($json.status ?? '') === 'failed'\n  )\n  &&\n  String($json.plan_json ?? '').trim() !== ''\n}}",
+              "leftValue": "={{\n  (String($json.status ?? '') === 'active' || String($json.status ?? '') === 'failed')\n  && String($json.plan_json ?? '').trim() !== ''\n}}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -1337,23 +1337,23 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -7760,
-        624
+        -9120,
+        1232
       ],
-      "id": "104a9bcc-181a-46d9-bf38-65b2ce55eaf6",
+      "id": "c310cb55-f877-4cdd-a81b-4257790123dd",
       "name": "Resume Saved State?"
     },
     {
       "parameters": {
-        "jsCode": "const planText = String($json.plan_json ?? '').trim();\n\nif (!planText) throw new Error('Saved task state contains no plan_json.');\n\nlet plan;\ntry { plan = JSON.parse(planText); }\ncatch (error) { throw new Error(`Saved task state contains invalid plan_json: ${error.message}`); }\n\nif (!plan || typeof plan !== 'object' || !Array.isArray(plan.tasks) || plan.tasks.length === 0) {\n  throw new Error('Saved task state contains an invalid or empty task plan.');\n}\n\nconst taskIndex = Number($json.task_index ?? 0);\nif (!Number.isInteger(taskIndex) || taskIndex < 0 || taskIndex > plan.tasks.length) {\n  throw new Error(`Saved task state contains invalid task_index: ${$json.task_index}`);\n}\n\nreturn [{\n  json: {\n    plan_summary: String(plan.summary ?? ''),\n    tasks: plan.tasks,\n    task_index: taskIndex,\n    task_attempt: Number($json.task_attempt ?? 1),\n    total_tasks: plan.tasks.length,\n    review_feedback: String($json.review_feedback ?? ''),\n    last_review_score: Number($json.last_review_score ?? 0),\n    last_review_reason: String($json.last_review_reason ?? ''),\n    reviewer_run_id: String($json.reviewer_run_id ?? ''),\n    reviewer_status: String($json.reviewer_status ?? ''),\n    reviewer_session_id: String($json.reviewer_session_id ?? ''),\n    worker_run_id: String($json.worker_run_id ?? ''),\n    worker_status: String($json.worker_status ?? ''),\n    worker_session_id: String($json.worker_session_id ?? ''),\n    architect_run_id: String($json.architect_run_id ?? ''),\n    architect_status: String($json.architect_status ?? ''),\n    architect_session_id: String($json.architect_session_id ?? ''),\n    execution_route: taskIndex >= plan.tasks.length ? 'all_tasks_completed' : 'run_task'\n  }\n}];"
+        "jsCode": "const row = $json ?? {};\n\n// Устойчивый парсер: нормальный JSON, двойное кодирование, \"голый\" массив, и \\\" → \" fallback\nfunction tryParsePlan(t) {\n  if (typeof t !== 'string') return null;\n  const s = t.trim();\n  if (!s) return null;\n  try {\n    const p = JSON.parse(s);\n    if (Array.isArray(p)) return { summary: '', tasks: p };\n    if (p && typeof p === 'object' && Array.isArray(p.tasks)) return p;\n    if (typeof p === 'string') {\n      const inner = JSON.parse(p.trim());\n      if (Array.isArray(inner)) return { summary: '', tasks: inner };\n      if (inner && typeof inner === 'object' && Array.isArray(inner.tasks)) return inner;\n    }\n  } catch (_) {}\n  return null;\n}\n\nfunction parsePlan(text) {\n  if (text == null) return { ok: false, reason: 'plan_json is null/undefined' };\n  const raw = String(text).trim();\n  if (!raw) return { ok: false, reason: 'plan_json is empty' };\n\n  let plan = tryParsePlan(raw);\n  if (plan) return { ok: true, plan, how: 'direct' };\n\n  // Ключевой случай: в БД лежит {\"...\":\"...\"} — снимаем backslash перед кавычками\n  const unescaped = raw.replace(/\\\\\"/g, '\"');\n  plan = tryParsePlan(unescaped);\n  if (plan) return { ok: true, plan, how: 'unescaped' };\n\n  try {\n    const decoded = JSON.parse('\"' + raw.replace(/\\r?\\n/g, '\\\\n') + '\"');\n    plan = tryParsePlan(decoded);\n    if (plan) return { ok: true, plan, how: 'json-string' };\n  } catch (_) {}\n\n  return { ok: false, reason: 'plan_json не удалось распарсить ни одним способом', raw };\n}\n\nconst parsed = parsePlan(row.plan_json);\n\nif (!parsed.ok) {\n  const stateKey = String(row.state_key ?? '');\n  const preview = String(parsed.raw ?? '').slice(0, 300);\n  throw new Error(`Saved task state for state_key=\"${stateKey}\" has malformed plan_json.\\nReason: ${parsed.reason}\\nRaw value (first 300 chars): ${JSON.stringify(preview)}\\nFix: удали строку со state_key=\"${stateKey}\" в Autonomous Agent Task State и перезапусти workflow.`);\n}\n\nconst plan = parsed.plan;\nconst tasks = plan.tasks;\n\nif (!Array.isArray(tasks) || tasks.length === 0) {\n  const stateKey = String(row.state_key ?? '');\n  throw new Error(`Saved task state for state_key=\"${stateKey}\" has an empty tasks array.`);\n}\n\nconst taskIndex = Number(row.task_index ?? 0);\nif (!Number.isInteger(taskIndex) || taskIndex < 0 || taskIndex > tasks.length) {\n  throw new Error(`Saved task state contains invalid task_index: ${row.task_index}`);\n}\n\nreturn [{\n  json: {\n    plan_summary: String(plan.summary ?? ''),\n    tasks,\n    task_index: taskIndex,\n    task_attempt: Number(row.task_attempt ?? 1),\n    total_tasks: tasks.length,\n    review_feedback: String(row.review_feedback ?? ''),\n    last_review_score: Number(row.last_review_score ?? 0),\n    last_review_reason: String(row.last_review_reason ?? ''),\n    reviewer_run_id: String(row.reviewer_run_id ?? ''),\n    reviewer_status: String(row.reviewer_status ?? ''),\n    reviewer_session_id: String(row.reviewer_session_id ?? ''),\n    worker_run_id: String(row.worker_run_id ?? ''),\n    worker_status: String(row.worker_status ?? ''),\n    worker_session_id: String(row.worker_session_id ?? ''),\n    architect_run_id: String(row.architect_run_id ?? ''),\n    architect_status: String(row.architect_status ?? ''),\n    architect_session_id: String(row.architect_session_id ?? ''),\n    execution_route: taskIndex >= tasks.length ? 'all_tasks_completed' : 'run_task'\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -7536,
-        608
+        -8896,
+        1216
       ],
-      "id": "3c384a51-e55f-4c00-95b0-ffe72ada2722",
+      "id": "a035aa26-c29e-4489-8fbb-7e4cf496317d",
       "name": "Restore Saved Task State"
     },
     {
@@ -1518,23 +1518,23 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -6064,
-        1088
+        -7424,
+        1696
       ],
-      "id": "b6a7af35-6474-47fc-abbc-95d98cf29569",
+      "id": "d2053153-76f9-4106-8fa7-58355ffbe396",
       "name": "Persist Initial Task State"
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted initial task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{\n  ...row,\n  plan_summary:String(plan.summary ?? ''),\n  tasks:Array.isArray(plan.tasks) ? plan.tasks : [],\n  task_index:Number(row.task_index ?? 0),\n  task_attempt:Number(row.task_attempt ?? 1),\n  total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0,\n  review_feedback:String(row.review_feedback ?? ''),\n  last_review_score:Number(row.last_review_score ?? 0),\n  last_review_reason:String(row.last_review_reason ?? ''),\n  reviewer_run_id:String(row.reviewer_run_id ?? ''),\n  reviewer_status:String(row.reviewer_status ?? ''),\n  reviewer_session_id:String(row.reviewer_session_id ?? ''),\n  worker_run_id:String(row.worker_run_id ?? ''),\n  worker_status:String(row.worker_status ?? ''),\n  worker_session_id:String(row.worker_session_id ?? ''),\n  architect_run_id:String(row.architect_run_id ?? ''),\n  architect_status:String(row.architect_status ?? ''),\n  architect_session_id:String(row.architect_session_id ?? ''),\n  execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task'\n}}];"
+        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted initial task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{ ...row, plan_summary:String(plan.summary ?? ''), tasks:Array.isArray(plan.tasks) ? plan.tasks : [], task_index:Number(row.task_index ?? 0), task_attempt:Number(row.task_attempt ?? 1), total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0, review_feedback:String(row.review_feedback ?? ''), last_review_score:Number(row.last_review_score ?? 0), last_review_reason:String(row.last_review_reason ?? ''), reviewer_run_id:String(row.reviewer_run_id ?? ''), reviewer_status:String(row.reviewer_status ?? ''), reviewer_session_id:String(row.reviewer_session_id ?? ''), worker_run_id:String(row.worker_run_id ?? ''), worker_status:String(row.worker_status ?? ''), worker_session_id:String(row.worker_session_id ?? ''), architect_run_id:String(row.architect_run_id ?? ''), architect_status:String(row.architect_status ?? ''), architect_session_id:String(row.architect_session_id ?? ''), execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task' }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5888,
-        1088
+        -7248,
+        1696
       ],
-      "id": "2e5b85a1-ee1f-452c-8eb1-7423365fa38a",
+      "id": "3899da78-0b8a-4b7d-88b7-aeb565ac5507",
       "name": "Restore Plan After State Save"
     },
     {
@@ -1559,16 +1559,16 @@
           "value": {
             "state_key": "={{$('Constants').first().json.state_namespace}}",
             "plan_json": "={{ JSON.stringify({ summary: $('Advance Task').last().json.plan_summary, tasks: $('Advance Task').last().json.tasks }) }}",
-            "task_index": "={{ Number($('Advance Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Advance Task').last().json.task_attempt ?? 1) }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "status": "={{ $('Advance Task').last().json.execution_route === 'all_tasks_completed' ? 'completed' : 'active' }}",
             "review_feedback": "={{ String($('Advance Task').last().json.review_feedback ?? '') }}",
             "last_review_score": "={{ Number($('Advance Task').last().json.last_review_score ?? 0) }}",
             "last_review_reason": "={{ String($('Advance Task').last().json.last_review_reason ?? '') }}",
             "updated_at": "={{ new Date().toISOString() }}",
-            "architect_run_id": "={{ String($('Prepare Current Task').last().json.architect_run_id ?? '') }}",
-            "architect_status": "={{ String($('Prepare Current Task').last().json.architect_status ?? '') }}",
-            "architect_session_id": "={{ String($('Prepare Current Task').last().json.architect_session_id ?? '') }}"
+            "architect_run_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_run_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_status": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_status ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_session_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_session_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -1692,30 +1692,32 @@
               "readOnly": false,
               "removed": false
             }
-          ]
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        224,
-        0
+        -1136,
+        608
       ],
-      "id": "eb5faf73-5dc2-4c95-8d56-a067f004f047",
+      "id": "9ae6a603-6710-4b9c-9d10-8e4bb0d68d0b",
       "name": "Persist Task Progress"
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{\n  ...row,\n  plan_summary:String(plan.summary ?? ''),\n  tasks:Array.isArray(plan.tasks) ? plan.tasks : [],\n  total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0,\n  task_index:Number(row.task_index ?? 0),\n  task_attempt:Number(row.task_attempt ?? 1),\n  review_feedback:String(row.review_feedback ?? ''),\n  last_review_score:Number(row.last_review_score ?? 0),\n  last_review_reason:String(row.last_review_reason ?? ''),\n  reviewer_run_id:String(row.reviewer_run_id ?? ''),\n  reviewer_status:String(row.reviewer_status ?? ''),\n  reviewer_session_id:String(row.reviewer_session_id ?? ''),\n  worker_run_id:String(row.worker_run_id ?? ''),\n  worker_status:String(row.worker_status ?? ''),\n  worker_session_id:String(row.worker_session_id ?? ''),\n  architect_run_id:String(row.architect_run_id ?? ''),\n  architect_status:String(row.architect_status ?? ''),\n  architect_session_id:String(row.architect_session_id ?? ''),\n  execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task'\n}}];"
+        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{ ...row, plan_summary:String(plan.summary ?? ''), tasks:Array.isArray(plan.tasks) ? plan.tasks : [], total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0, task_index:Number(row.task_index ?? 0), task_attempt:Number(row.task_attempt ?? 1), review_feedback:String(row.review_feedback ?? ''), last_review_score:Number(row.last_review_score ?? 0), last_review_reason:String(row.last_review_reason ?? ''), reviewer_run_id:String(row.reviewer_run_id ?? ''), reviewer_status:String(row.reviewer_status ?? ''), reviewer_session_id:String(row.reviewer_session_id ?? ''), worker_run_id:String(row.worker_run_id ?? ''), worker_status:String(row.worker_status ?? ''), worker_session_id:String(row.worker_session_id ?? ''), architect_run_id:String(row.architect_run_id ?? ''), architect_status:String(row.architect_status ?? ''), architect_session_id:String(row.architect_session_id ?? ''), execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task' }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
-        0
+        -896,
+        608
       ],
-      "id": "8e3d43d0-3284-419a-a570-bfc5c1dcb993",
+      "id": "9c9c53c7-ae53-45bb-9dab-3b8fc56ab605",
       "name": "Restore Task After State Save"
     },
     {
@@ -1791,10 +1793,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -8128,
-        624
+        -9488,
+        1232
       ],
-      "id": "9f574ad5-3b43-4393-98c9-57288b9c9b2b",
+      "id": "7ff65628-eabb-475f-b81a-62f8a6063586",
       "name": "Ensure Task Attempt History Table"
     },
     {
@@ -1808,9 +1810,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{ $('Constants').first().json.state_namespace }}",
-            "task_id": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "task_id": "={{ String($json.current_task_id ?? $json.task_id ?? '') }}",
+            "task_index": "={{ Number($json.task_index ?? 0) }}",
+            "task_attempt": "={{ Number($json.task_attempt ?? 1) }}",
             "event_type": "worker_completed",
             "worker_run_id": "={{ String($json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($json.worker_status ?? '') }}",
@@ -2009,10 +2011,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -3920,
-        832
+        -5280,
+        1440
       ],
-      "id": "7ee6f288-6f64-4f97-af7f-54c4b6b1f6e0",
+      "id": "ae61169f-fe3c-46aa-8142-63600d9f4ea8",
       "name": "Persist Worker Result"
     },
     {
@@ -2026,9 +2028,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{$('Constants').first().json.state_namespace}}",
-            "task_id": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "task_id": "={{ (() => {\n  const names = ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save'];\n  const candidates = [];\n  for (const n of names) { try { if ($(n).isExecuted) candidates.push($(n).last().json ?? {}); } catch (_) {} }\n  candidates.push($json ?? {});\n  for (const s of candidates) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const idx = Number(s.task_index ?? 0);\n    const task = tasks[idx] ?? s.current_task ?? {};\n    const id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\n    if (id) return id;\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "event_type": "worker_terminal",
             "worker_run_id": "={{ String($json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($json.worker_status ?? '') }}",
@@ -2228,10 +2230,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -3408,
-        1088
+        -4768,
+        1696
       ],
-      "id": "45f3d8aa-96df-4abd-b12c-4397c96f9ed6",
+      "id": "64ebaaea-56c5-449d-a289-c8de9948368d",
       "name": "Persist Worker Terminal State"
     },
     {
@@ -2245,9 +2247,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{ $('Constants').first().json.state_namespace }}",
-            "task_id": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "task_id": "={{ (() => {\n  const names = ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save'];\n  const candidates = [];\n  for (const n of names) { try { if ($(n).isExecuted) candidates.push($(n).last().json ?? {}); } catch (_) {} }\n  candidates.push($json ?? {});\n  for (const s of candidates) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const idx = Number(s.task_index ?? 0);\n    const task = tasks[idx] ?? s.current_task ?? {};\n    const id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\n    if (id) return id;\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "event_type": "reviewer_completed",
             "worker_run_id": "={{ String($('Load Worker Result').first().json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($('Load Worker Result').first().json.worker_status ?? '') }}",
@@ -2449,10 +2451,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -1792,
-        16
+        -3152,
+        624
       ],
-      "id": "a9bb1c48-17c5-4683-afe4-a30febaa3731",
+      "id": "e0945c05-4e3e-4eb6-9bd5-fd0a62330285",
       "name": "Persist Reviewer Result"
     },
     {
@@ -2466,9 +2468,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{$('Constants').first().json.state_namespace}}",
-            "task_id": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "task_id": "={{ (() => {\n  const names = ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save'];\n  const candidates = [];\n  for (const n of names) { try { if ($(n).isExecuted) candidates.push($(n).last().json ?? {}); } catch (_) {} }\n  candidates.push($json ?? {});\n  for (const s of candidates) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const idx = Number(s.task_index ?? 0);\n    const task = tasks[idx] ?? s.current_task ?? {};\n    const id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\n    if (id) return id;\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "event_type": "reviewer_terminal",
             "worker_run_id": "={{ String($('Load Worker Result').first().json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($('Load Worker Result').first().json.worker_status ?? '') }}",
@@ -2671,10 +2673,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -1760,
-        976
+        -3120,
+        1584
       ],
-      "id": "123cc8fe-b2b7-48d7-a6a5-c9b28a73db0d",
+      "id": "40d890e0-c978-473c-9bb5-6da751a76517",
       "name": "Persist Reviewer Terminal State"
     },
     {
@@ -2688,9 +2690,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{ $('Constants').first().json.state_namespace }}",
-            "task_id": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "task_id": "={{ (() => {\n  const names = ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save'];\n  const candidates = [];\n  for (const n of names) { try { if ($(n).isExecuted) candidates.push($(n).last().json ?? {}); } catch (_) {} }\n  candidates.push($json ?? {});\n  for (const s of candidates) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const idx = Number(s.task_index ?? 0);\n    const task = tasks[idx] ?? s.current_task ?? {};\n    const id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\n    if (id) return id;\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "event_type": "review_parsed",
             "worker_run_id": "={{ String($('Load Worker Result').first().json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($('Load Worker Result').first().json.worker_status ?? '') }}",
@@ -2895,10 +2897,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -1248,
-        16
+        -2608,
+        624
       ],
-      "id": "813ae8f4-42cc-4a27-be3b-1b8f6c385cb8",
+      "id": "310400a5-d6f3-4ad1-9f54-6d47d2033c01",
       "name": "Persist Parsed Review"
     },
     {
@@ -2922,9 +2924,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{$('Constants').first().json.state_namespace}}",
-            "plan_json": "={{ JSON.stringify({ summary: $('Prepare Current Task').last().json.plan_summary, tasks: $('Prepare Current Task').last().json.tasks }) }}",
-            "task_index": "={{ Number($('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "plan_json": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && Array.isArray(j.tasks) && j.tasks.length) return JSON.stringify({ summary: String(j.plan_summary ?? ''), tasks: j.tasks }); } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "status": "active",
             "review_feedback": "={{ String($json.review?.next_task ?? $json.review?.reason ?? '') }}",
             "last_review_score": "={{ Number($json.review?.score ?? 0) }}",
@@ -2933,9 +2935,9 @@
             "reviewer_run_id": "={{ String($('Reviewer State').first().json.reviewer_run_id ?? '') }}",
             "reviewer_status": "={{ String($('Reviewer State').first().json.reviewer_status ?? '') }}",
             "reviewer_session_id": "={{ String($('Reviewer State').first().json.reviewer_session_id ?? '') }}",
-            "architect_run_id": "={{ String($('Prepare Current Task').last().json.architect_run_id ?? '') }}",
-            "architect_status": "={{ String($('Prepare Current Task').last().json.architect_status ?? '') }}",
-            "architect_session_id": "={{ String($('Prepare Current Task').last().json.architect_session_id ?? '') }}"
+            "architect_run_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_run_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_status": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_status ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_session_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_session_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}"
           },
           "matchingColumns": [],
           "schema": [
@@ -3098,10 +3100,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -1040,
-        16
+        -2400,
+        624
       ],
-      "id": "c6f19e7a-d248-4c1c-a84b-d10b7003cbeb",
+      "id": "faa7b64d-efcd-4afe-8f64-c9aef9cabe2a",
       "name": "Persist Reviewer State"
     },
     {
@@ -3125,9 +3127,9 @@
           "mappingMode": "defineBelow",
           "value": {
             "state_key": "={{$('Constants').first().json.state_namespace}}",
-            "plan_json": "={{ JSON.stringify({ summary: $('Prepare Current Task').last().json.plan_summary, tasks: $('Prepare Current Task').last().json.tasks }) }}",
-            "task_index": "={{ Number($json.task_index ?? $('Prepare Current Task').last().json.task_index ?? 0) }}",
-            "task_attempt": "={{ Number($json.task_attempt ?? $('Prepare Current Task').last().json.task_attempt ?? 1) }}",
+            "plan_json": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && Array.isArray(j.tasks) && j.tasks.length) return JSON.stringify({ summary: String(j.plan_summary ?? ''), tasks: j.tasks }); } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "task_index": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_index ?? NaN); if (Number.isFinite(v)) return v; } } catch (_) {}\n  }\n  return Number($json.task_index ?? 0);\n})() }}",
+            "task_attempt": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return Number($json.task_attempt ?? 1);\n})() }}",
             "status": "active",
             "review_feedback": "={{ String($json.review_feedback ?? '') }}",
             "last_review_score": "={{ Number($json.last_review_score ?? 0) }}",
@@ -3136,9 +3138,9 @@
             "worker_run_id": "={{ String($('Load Worker Result').first().json.worker_run_id ?? '') }}",
             "worker_status": "={{ String($('Load Worker Result').first().json.worker_status ?? '') }}",
             "worker_session_id": "={{ String($('Reviewer State').first().json.worker_session_id ?? '') }}",
-            "architect_run_id": "={{ String($('Prepare Current Task').last().json.architect_run_id ?? '') }}",
-            "architect_status": "={{ String($('Prepare Current Task').last().json.architect_status ?? '') }}",
-            "architect_session_id": "={{ String($('Prepare Current Task').last().json.architect_session_id ?? '') }}",
+            "architect_run_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_run_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_status": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_status ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_session_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_session_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
             "reviewer_run_id": "={{ String($('Reviewer State').first().json.reviewer_run_id ?? '') }}",
             "reviewer_status": "={{ String($('Reviewer State').first().json.reviewer_status ?? '') }}",
             "reviewer_session_id": "={{ String($('Reviewer State').first().json.reviewer_session_id ?? '') }}"
@@ -3334,23 +3336,23 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        256,
-        192
+        -1104,
+        800
       ],
-      "id": "834c9c28-5136-455f-8296-dadbc7d88b97",
+      "id": "d463b64a-984c-45ce-a1db-17dc783f72d0",
       "name": "Persist Retry State"
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{\n  ...row,\n  plan_summary:String(plan.summary ?? ''),\n  tasks:Array.isArray(plan.tasks) ? plan.tasks : [],\n  total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0,\n  task_index:Number(row.task_index ?? 0),\n  task_attempt:Number(row.task_attempt ?? 1),\n  review_feedback:String(row.review_feedback ?? ''),\n  last_review_score:Number(row.last_review_score ?? 0),\n  last_review_reason:String(row.last_review_reason ?? ''),\n  reviewer_run_id:String(row.reviewer_run_id ?? ''),\n  reviewer_status:String(row.reviewer_status ?? ''),\n  reviewer_session_id:String(row.reviewer_session_id ?? ''),\n  worker_run_id:String(row.worker_run_id ?? ''),\n  worker_status:String(row.worker_status ?? ''),\n  worker_session_id:String(row.worker_session_id ?? ''),\n  architect_run_id:String(row.architect_run_id ?? ''),\n  architect_status:String(row.architect_status ?? ''),\n  architect_session_id:String(row.architect_session_id ?? ''),\n  execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task'\n}}];"
+        "jsCode": "const row = $json ?? {};\nconst planText = String(row.plan_json ?? '').trim();\nif (!planText) throw new Error('Persisted task state contains no plan_json.');\nconst plan = JSON.parse(planText);\nreturn [{json:{ ...row, plan_summary:String(plan.summary ?? ''), tasks:Array.isArray(plan.tasks) ? plan.tasks : [], total_tasks:Array.isArray(plan.tasks) ? plan.tasks.length : 0, task_index:Number(row.task_index ?? 0), task_attempt:Number(row.task_attempt ?? 1), review_feedback:String(row.review_feedback ?? ''), last_review_score:Number(row.last_review_score ?? 0), last_review_reason:String(row.last_review_reason ?? ''), reviewer_run_id:String(row.reviewer_run_id ?? ''), reviewer_status:String(row.reviewer_status ?? ''), reviewer_session_id:String(row.reviewer_session_id ?? ''), worker_run_id:String(row.worker_run_id ?? ''), worker_status:String(row.worker_status ?? ''), worker_session_id:String(row.worker_session_id ?? ''), architect_run_id:String(row.architect_run_id ?? ''), architect_status:String(row.architect_status ?? ''), architect_session_id:String(row.architect_session_id ?? ''), execution_route:Number(row.task_index ?? 0) >= (Array.isArray(plan.tasks) ? plan.tasks.length : 0) ? 'all_tasks_completed' : 'run_task' }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        464,
-        192
+        -896,
+        800
       ],
-      "id": "456f4b44-3910-443a-afa9-641e6e31b767",
+      "id": "30ebadd1-b0e6-4ff1-bbf2-009f06f08437",
       "name": "Restore Retry State"
     },
     {
@@ -3372,11 +3374,11 @@
             },
             {
               "keyName": "task_id",
-              "keyValue": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}"
+              "keyValue": "={{ (() => {\nconst srcs = [];\nfor (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\ntry { if ($(n).isExecuted) srcs.push($(n).last().json ?? {}); } catch (_) {}\n}\nsrcs.push($json ?? {});\nfor (const s of srcs) {\nconst tasks = Array.isArray(s.tasks) ? s.tasks : [];\nconst idx = Number(s.task_index ?? 0);\nconst task = tasks[idx] ?? s.current_task ?? {};\nconst id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\nif (id) return id;\n}\nreturn '';\n})() }}"
             },
             {
               "keyName": "task_attempt",
-              "keyValue": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}"
+              "keyValue": "={{ (() => {\n  const srcs = [];\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) srcs.push($(n).last().json ?? {}); } catch (_) {}\n  }\n  srcs.push($json ?? {});\n  for (const s of srcs) {\n    const a = Number(s.task_attempt ?? NaN);\n    if (Number.isFinite(a) && a > 0) return a;\n  }\n  return 1;\n})() }}"
             },
             {
               "keyName": "event_type",
@@ -3389,25 +3391,25 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -3680,
-        768
+        -5040,
+        1376
       ],
-      "id": "0cbc5902-f7a6-461f-93c3-a78ee9a4d737",
+      "id": "cdb35d3c-3d00-40ca-ab1a-f32164b766b2",
       "name": "Load Worker Result",
       "alwaysOutputData": true,
       "executeOnce": false
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\nconst prep = $('Prepare Current Task').isExecuted ? $('Prepare Current Task').last().json : {};\nreturn [{\n  json: {\n    ...prep,\n    worker_run_id: String(row.worker_run_id ?? ''),\n    worker_status: String(row.worker_status ?? ''),\n    worker_output: String(row.worker_output ?? ''),\n    worker_error: String(row.worker_error ?? ''),\n    hermes_error: String(row.worker_error ?? ''),\n    worker_route: String(row.worker_status ?? '').toLowerCase() === 'completed' ? 'completed' : 'permanent_failure',\n    error: String(row.worker_error ?? '')\n  }\n}];"
+        "jsCode": "const row = $json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nreturn [{ json: { ...prep, worker_run_id: String(row.worker_run_id ?? ''), worker_status: String(row.worker_status ?? ''), worker_output: String(row.worker_output ?? ''), worker_error: String(row.worker_error ?? ''), hermes_error: String(row.worker_error ?? ''), worker_route: String(row.worker_status ?? '').toLowerCase() === 'completed' ? 'completed' : 'permanent_failure', error: String(row.worker_error ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -3184,
-        1088
+        -4544,
+        1696
       ],
-      "id": "c94e30e7-4125-49e1-b940-580979338504",
+      "id": "b5836179-6ae1-470b-b82c-4a9567d9a233",
       "name": "Restore Worker Non-Transient Context"
     },
     {
@@ -3427,11 +3429,11 @@
             },
             {
               "keyName": "task_id",
-              "keyValue": "={{ String($('Prepare Current Task').last().json.current_task_id ?? '') }}"
+              "keyValue": "={{ (() => {\nconst srcs = [];\nfor (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\ntry { if ($(n).isExecuted) srcs.push($(n).last().json ?? {}); } catch (_) {}\n}\nsrcs.push($json ?? {});\nfor (const s of srcs) {\nconst tasks = Array.isArray(s.tasks) ? s.tasks : [];\nconst idx = Number(s.task_index ?? 0);\nconst task = tasks[idx] ?? s.current_task ?? {};\nconst id = String(task.id ?? task.task_id ?? s.current_task_id ?? '');\nif (id) return id;\n}\nreturn '';\n})() }}"
             },
             {
               "keyName": "task_attempt",
-              "keyValue": "={{ Number($('Prepare Current Task').last().json.task_attempt ?? 1) }}"
+              "keyValue": "={{ (() => {\n  const srcs = [];\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) srcs.push($(n).last().json ?? {}); } catch (_) {}\n  }\n  srcs.push($json ?? {});\n  for (const s of srcs) {\n    const a = Number(s.task_attempt ?? NaN);\n    if (Number.isFinite(a) && a > 0) return a;\n  }\n  return 1;\n})() }}"
             },
             {
               "keyName": "event_type",
@@ -3444,50 +3446,50 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -1584,
-        16
+        -2944,
+        624
       ],
-      "id": "2275ce06-1080-44c5-8d4a-dd7b9a835f4f",
+      "id": "429b77c1-a2b2-4d7a-9c86-e95fbe89c574",
       "name": "Load Reviewer Result",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\nconst prep = $('Prepare Current Task').isExecuted ? $('Prepare Current Task').last().json : {};\nreturn [{\n  json: {\n    ...prep,\n    reviewer_run_id: String(row.reviewer_run_id ?? ''),\n    reviewer_status: String(row.reviewer_status ?? ''),\n    reviewer_output: String(row.reviewer_output ?? ''),\n    reviewer_error: String(row.reviewer_error ?? ''),\n    hermes_error: String(row.reviewer_error ?? ''),\n    reviewer_route: String(row.reviewer_status ?? '').toLowerCase() === 'completed' ? 'completed' : 'permanent_failure',\n    error: String(row.reviewer_error ?? '')\n  }\n}];"
+        "jsCode": "const row = $json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nreturn [{ json: { ...prep, reviewer_run_id: String(row.reviewer_run_id ?? ''), reviewer_status: String(row.reviewer_status ?? ''), reviewer_output: String(row.reviewer_output ?? ''), reviewer_error: String(row.reviewer_error ?? ''), hermes_error: String(row.reviewer_error ?? ''), reviewer_route: String(row.reviewer_status ?? '').toLowerCase() === 'completed' ? 'completed' : 'permanent_failure', error: String(row.reviewer_error ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1568,
-        976
+        -2928,
+        1584
       ],
-      "id": "07bba2f9-01e1-426d-981d-2650d6281f5b",
+      "id": "5187d0d5-6e3b-4dea-b14c-946b755099df",
       "name": "Restore Reviewer Non-Transient Context"
     },
     {
       "parameters": {
-        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = $('Prepare Current Task').isExecuted ? $('Prepare Current Task').last().json : {};\nconst taskId = String(prep.current_task_id ?? '');\nconst reviewMessage = [\n  '🧪 REVIEW RESULT',\n  `Task: ${taskId}`,\n  `Status: ${String(review.review_status ?? '')}`,\n  `Score: ${String(review.review_score ?? 0)}`,\n  String(review.review_reason ?? ''),\n  review.review_next_task ? `Next: ${String(review.review_next_task)}` : ''\n].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
+        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst taskId = String(prep.current_task_id ?? '');\nconst reviewMessage = ['🧪 REVIEW RESULT', `Task: ${taskId}`, `Status: ${String(review.review_status ?? '')}`, `Score: ${String(review.review_score ?? 0)}`, String(review.review_reason ?? ''), review.review_next_task ? `Next: ${String(review.review_next_task)}` : ''].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -864,
-        16
+        -2224,
+        624
       ],
-      "id": "3e891b50-9135-4faf-9029-f0e6ace5b9c6",
+      "id": "ba60a954-04e3-41c3-968f-894e2c2f510f",
       "name": "Restore Review Notification Context"
     },
     {
       "parameters": {
-        "jsCode": "function last(name) {\n  try { const items=$(name).all(); return items.length ? items[items.length-1].json : null; }\n  catch (_) { return null; }\n}\nconst failure=$json;\nconst prep = $('Prepare Current Task').isExecuted ? $('Prepare Current Task').last().json : {};\nconst tasks = Array.isArray(prep.tasks) ? prep.tasks : [];\nconst planSummary = String(prep.plan_summary ?? '');\nconst planText = tasks.length ? JSON.stringify({summary:planSummary,tasks}) : '';\nreturn [{json:{\n  ...failure,\n  failure_plan_json:planText,\n  failure_task_index:Number(prep.task_index ?? 0),\n  failure_task_attempt:Number(prep.task_attempt ?? 1),\n  failure_review_feedback:String(prep.review_feedback ?? ''),\n  failure_last_review_score:Number(prep.last_review_score ?? 0),\n  failure_last_review_reason:String(prep.last_review_reason ?? failure.reason ?? ''),\n  failure_reviewer_run_id:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_run_id ?? '') : ''),\n  failure_reviewer_session_id:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_session_id ?? '') : ''),\n  failure_reviewer_status:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_status ?? '') : '')\n}}];"
+        "jsCode": "function last(name) {\n  try { const items=$(name).all(); return items.length ? items[items.length-1].json : null; }\n  catch (_) { return null; }\n}\nconst failure=$json;\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(prep.tasks) ? prep.tasks : [];\nconst planSummary = String(prep.plan_summary ?? '');\nconst planText = tasks.length ? JSON.stringify({summary:planSummary,tasks}) : '';\nreturn [{json:{ ...failure, failure_plan_json:planText, failure_task_index:Number(prep.task_index ?? 0), failure_task_attempt:Number(prep.task_attempt ?? 1), failure_review_feedback:String(prep.review_feedback ?? ''), failure_last_review_score:Number(prep.last_review_score ?? 0), failure_last_review_reason:String(prep.last_review_reason ?? failure.reason ?? ''), failure_reviewer_run_id:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_run_id ?? '') : ''), failure_reviewer_session_id:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_session_id ?? '') : ''), failure_reviewer_status:String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.reviewer_status ?? '') : '') }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1584,
-        1872
+        224,
+        2480
       ],
-      "id": "67772b00-93f3-4ee9-865d-8d663c4bb4eb",
+      "id": "d4bc9840-1e0b-4c78-a5fa-b074cecc176e",
       "name": "Prepare Workflow Failure Persistence"
     },
     {
@@ -3522,9 +3524,9 @@
             "reviewer_run_id": "={{ String($json.failure_reviewer_run_id ?? '') }}",
             "reviewer_status": "={{ String($json.failure_reviewer_status ?? '') }}",
             "reviewer_session_id": "={{ String($json.failure_reviewer_session_id ?? '') }}",
-            "architect_run_id": "={{ String($('Prepare Current Task').isExecuted ? ($('Prepare Current Task').last().json.architect_run_id ?? '') : '') }}",
-            "architect_status": "={{ String($('Prepare Current Task').isExecuted ? ($('Prepare Current Task').last().json.architect_status ?? '') : '') }}",
-            "architect_session_id": "={{ String($('Prepare Current Task').isExecuted ? ($('Prepare Current Task').last().json.architect_session_id ?? '') : '') }}",
+            "architect_run_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_run_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_status": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_status ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
+            "architect_session_id": "={{ (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State']) {\n    try { if ($(n).isExecuted) { const v = String($(n).last().json.architect_session_id ?? ''); if (v) return v; } } catch (_) {}\n  }\n  return '';\n})() }}",
             "worker_run_id": "={{ String($('Load Worker Result').isExecuted ? ($('Load Worker Result').first().json.worker_run_id ?? '') : '') }}",
             "worker_status": "={{ String($('Load Worker Result').isExecuted ? ($('Load Worker Result').first().json.worker_status ?? '') : '') }}",
             "worker_session_id": "={{ String($('Reviewer State').isExecuted ? ($('Reviewer State').first().json.worker_session_id ?? '') : '') }}"
@@ -3720,10 +3722,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        1792,
-        1872
+        432,
+        2480
       ],
-      "id": "c175fd46-e9b6-41b5-ab51-611ceb5e6cea",
+      "id": "79009dc7-0e19-432f-ac08-e47e6f4075ff",
       "name": "Persist Workflow Failure State"
     },
     {
@@ -3733,10 +3735,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2016,
-        1872
+        656,
+        2480
       ],
-      "id": "382f884e-1130-4cab-8cd4-ba4c7077f2ec",
+      "id": "defe3bbf-3f5c-4720-a9e7-52abeafc839c",
       "name": "Restore Workflow Failure Context"
     },
     {
@@ -3767,36 +3769,36 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        640,
-        192
+        -720,
+        800
       ],
-      "id": "449e94dc-1610-4d86-a2a6-bb88a5449318",
+      "id": "9b403dfd-e77d-4baa-81d8-2d13e9ee3a68",
       "name": "Task Completed After State Save?"
     },
     {
       "parameters": {
-        "jsCode": "function unwrap(value){const x=value?.json??value?.data??value??{};return x&&typeof x==='object'&&!Array.isArray(x)?x:{};}\nconst result=unwrap($json);\nconst prep=$('Prepare Current Task').isExecuted?($('Prepare Current Task').last().json??{}):{};\nreturn [{json:{...prep,\n  reviewer_run_id:String(result.run_id??''),\n  reviewer_session_id:String(result.session_id??''),\n  reviewer_status:String(result.status??''),\n  reviewer_route:String(result.route??''),\n  route:String(result.route??''),\n  reviewer_output:String(result.output??result.response??result.content??''),\n  reviewer_session_verified:Boolean(result.session_verified??false),\n  reviewer_session_mismatch:Boolean(result.session_mismatch??false),\n  error:String(result.error??''),\n  error_code:String(result.error_code??'')}}];"
+        "jsCode": "function unwrap(value){const x=value?.json??value?.data??value??{};return x&&typeof x==='object'&&!Array.isArray(x)?x:{};}\nconst result=unwrap($json);\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nreturn [{json:{...prep, reviewer_run_id:String(result.run_id??''), reviewer_session_id:String(result.session_id??''), reviewer_status:String(result.status??''), reviewer_route:String(result.route??''), route:String(result.route??''), reviewer_output:String(result.output??result.response??result.content??''), reviewer_session_verified:Boolean(result.session_verified??false), reviewer_session_mismatch:Boolean(result.session_mismatch??false), error:String(result.error??''), error_code:String(result.error_code??'')}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2848,
-        768
+        -4208,
+        1376
       ],
-      "id": "0637bf85-4344-4265-8b18-2ba648d2e6e8",
+      "id": "f2d587d0-ca80-427b-8a1c-a6fd383f8a73",
       "name": "Save Reviewer Run Context"
     },
     {
       "parameters": {
-        "jsCode": "const result=$json?.json??$json??{};\nconst prep=$('Prepare Current Task').isExecuted?($('Prepare Current Task').last().json??{}):{};\nreturn [{json:{...prep,\n  worker_run_id:String(result.run_id??''),\n  worker_session_id:String(result.session_id??''),\n  worker_status:String(result.status??''),\n  worker_route:String(result.route??''),\n  worker_output:String(result.output??''),\n  worker_session_verified:Boolean(result.session_verified??false),\n  worker_session_mismatch:Boolean(result.session_mismatch??false),\n  error:String(result.error??''),\n  error_code:String(result.error_code??'')}}];"
+        "jsCode": "const result=$json?.json??$json??{};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nreturn [{json:{...prep, worker_run_id:String(result.run_id??''), worker_session_id:String(result.session_id??''), worker_status:String(result.status??''), worker_route:String(result.route??''), worker_output:String(result.output??''), worker_session_verified:Boolean(result.session_verified??false), worker_session_mismatch:Boolean(result.session_mismatch??false), error:String(result.error??''), error_code:String(result.error_code??'')}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4480,
-        1072
+        -5840,
+        1680
       ],
-      "id": "bf3bc677-347a-49d4-bb78-9720c2799c30",
+      "id": "1c7a66f1-7793-41a7-b62a-485bbf17dba6",
       "name": "Save Worker Run Context"
     },
     {
@@ -3837,10 +3839,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -7296,
-        608
+        -8656,
+        1216
       ],
-      "id": "020b3126-09d2-4807-8c32-4894812b1fb2",
+      "id": "06a01e12-e85c-4f7d-9ced-679a6300773b",
       "name": "Resume Reviewer?"
     },
     {
@@ -3881,10 +3883,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -6432,
-        752
+        -7792,
+        1360
       ],
-      "id": "f9d67a68-00a4-47b2-abef-483b22452057",
+      "id": "1b768b39-6830-4827-8a1b-d803f095199a",
       "name": "Resume Worker?"
     },
     {
@@ -3896,10 +3898,10 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -6496,
-        944
+        -7856,
+        1552
       ],
-      "id": "19e12dc1-ba42-4cfb-88e4-5347f03c317a",
+      "id": "5d601842-63e2-4b03-ae84-7fee99a5228b",
       "name": "Send a text message5",
       "webhookId": "1b7dcc6d-8ef1-46c3-a072-122e942bc31c",
       "alwaysOutputData": true,
@@ -3908,7 +3910,8 @@
           "id": "czj7GHvr93VLvcH5",
           "name": "Telegram account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -3938,10 +3941,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -6736,
-        1072
+        -8096,
+        1680
       ],
-      "id": "165fd2e1-0f47-4a4f-8a77-64f180d88856",
+      "id": "bfac235d-298a-4e4a-be7d-318015a71f67",
       "name": "If"
     },
     {
@@ -3955,10 +3958,10 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -5360,
-        1152
+        -6720,
+        1760
       ],
-      "id": "6604d9b3-67cb-46c4-a6eb-677881216c00",
+      "id": "04c67fc7-4c89-4c99-842a-a4db321a3e9f",
       "name": "Send a text message",
       "webhookId": "1b7dcc6d-8ef1-46c3-a072-122e942bc31c",
       "alwaysOutputData": true,
@@ -3967,7 +3970,8 @@
           "id": "czj7GHvr93VLvcH5",
           "name": "Telegram account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -3997,10 +4001,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -5536,
-        1232
+        -6896,
+        1840
       ],
-      "id": "f26a93b5-d550-4a2e-85d5-d5cac8be1998",
+      "id": "456f07dd-ee93-4396-bd68-a62921354b99",
       "name": "If2"
     },
     {
@@ -4031,10 +4035,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -720,
-        160
+        -2080,
+        768
       ],
-      "id": "c4ac54df-0062-42e2-b086-257bd89d5e32",
+      "id": "0d7d2701-3069-4991-ab84-3f460ec300dc",
       "name": "If3"
     },
     {
@@ -4042,16 +4046,16 @@
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
         "text": "={{ String($json.review_message ?? 'Review result unavailable') }}",
         "additionalFields": {
-          "parse_mode": "HTML"
+          "parse_mode": "Markdown"
         }
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        -560,
-        16
+        -1920,
+        624
       ],
-      "id": "28139d9f-177c-47e2-99f4-9bbbfc33318a",
+      "id": "2f39220d-d0df-4203-ba30-7e9863f07aea",
       "name": "Send a text message3",
       "webhookId": "1b7dcc6d-8ef1-46c3-a072-122e942bc31c",
       "alwaysOutputData": true,
@@ -4060,7 +4064,8 @@
           "id": "czj7GHvr93VLvcH5",
           "name": "Telegram account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -4071,10 +4076,10 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        2688,
-        1856
+        1328,
+        2464
       ],
-      "id": "32200ee4-d234-4738-be9c-f44d9aa234ba",
+      "id": "5ad80429-8b13-44e2-b09a-520a9999ea73",
       "name": "Send a text message6",
       "webhookId": "1b7dcc6d-8ef1-46c3-a072-122e942bc31c",
       "alwaysOutputData": true,
@@ -4083,7 +4088,8 @@
           "id": "czj7GHvr93VLvcH5",
           "name": "Telegram account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -4094,10 +4100,10 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        1968,
-        2064
+        608,
+        2672
       ],
-      "id": "b754e279-6bd0-453e-b7d4-1da101a92ff0",
+      "id": "a882c4ca-f071-42d2-8de3-ea778db80fac",
       "name": "Send a text message7",
       "webhookId": "1b7dcc6d-8ef1-46c3-a072-122e942bc31c",
       "alwaysOutputData": true,
@@ -4106,7 +4112,8 @@
           "id": "czj7GHvr93VLvcH5",
           "name": "Telegram account"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -4136,10 +4143,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        2240,
-        1872
+        880,
+        2480
       ],
-      "id": "a92455ab-f142-4276-bced-efebbf29a893",
+      "id": "07118472-ad7b-4eaf-9874-6807262b88bb",
       "name": "If4"
     },
     {
@@ -4170,10 +4177,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1616,
-        2080
+        256,
+        2688
       ],
-      "id": "9be93432-162c-4ca1-8c68-c34bdf50fdc5",
+      "id": "b7625627-f2a4-4518-a873-849754ba91d5",
       "name": "If5"
     }
   ],
@@ -5062,7 +5069,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "2cc8b9b9-c4f2-46b5-9e1b-ccd2f0a9bbdb",
+  "versionId": "332f1f1c-4022-431e-92a6-dad668889a9f",
   "meta": {
     "instanceId": "e9629f9fcada0dc2525b3ec1f97ca9207b7e2aa614f2237017ccdcd0fddac54b"
   },

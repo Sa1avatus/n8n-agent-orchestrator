@@ -26,4 +26,4 @@ venv/
 .DS_Store
 Thumbs.db
 
-data/
+data/ARCHITECTURE_CONTRACT.md
