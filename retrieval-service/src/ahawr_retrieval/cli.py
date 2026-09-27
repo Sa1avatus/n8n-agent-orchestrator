@@ -1,4 +1,4 @@
-"""CLI: ``exec`` (n8n embedded mode), index, ad-hoc retrieval, log export, optional HTTP API."""
+"""CLI: HTTP API server, JSON ``exec``, index, ad-hoc retrieval, log export."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ahawr-retrieval")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    run = sub.add_parser("exec", help="n8n embedded mode: base64/JSON payload in, JSON out")
+    run = sub.add_parser("exec", help="run one action from a JSON/base64 payload, print JSON")
     run.add_argument("payload", help="base64 JSON, raw JSON, or '-' to read stdin")
 
-    serve = sub.add_parser("serve", help="run the optional HTTP API (needs the [server] extra)")
+    serve = sub.add_parser("serve", help="run the HTTP API (needs the [server] extra)")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8500)
 

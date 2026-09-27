@@ -19,6 +19,16 @@ def _list(value: str | None) -> list[str]:
     return [item.strip() for item in value.replace(";", ",").split(",") if item.strip()]
 
 
+def _pairs(value: str | None) -> dict[str, str]:
+    """``"a=/workspace,b=/docs"`` -> ``{"a": "/workspace", "b": "/docs"}``."""
+    pairs: dict[str, str] = {}
+    for item in _list(value):
+        corpus_id, sep, root = item.partition("=")
+        if sep and corpus_id.strip() and root.strip():
+            pairs[corpus_id.strip()] = root.strip()
+    return pairs
+
+
 @dataclass
 class Settings:
     data_dir: Path = Path("./var")
@@ -52,6 +62,8 @@ class Settings:
     rag_cooldown_seconds: float = 30.0
     rag_mirror: bool = True
     rag_fresh_window_seconds: float = 120.0
+    # corpus_id -> workspace root, indexed automatically on first use
+    bootstrap_corpora: dict[str, str] = field(default_factory=dict)
 
     @property
     def rag_configured(self) -> bool:
@@ -106,4 +118,5 @@ class Settings:
             rag_cooldown_seconds=float(e.get("RETRIEVAL_RAG_COOLDOWN_SECONDS", "30")),
             rag_mirror=_bool(e.get("RETRIEVAL_RAG_MIRROR"), True),
             rag_fresh_window_seconds=float(e.get("RETRIEVAL_RAG_FRESH_WINDOW_SECONDS", "120")),
+            bootstrap_corpora=_pairs(e.get("RETRIEVAL_BOOTSTRAP_CORPORA")),
         )

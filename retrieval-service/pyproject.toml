@@ -7,7 +7,7 @@ name = "ahawr-retrieval"
 version = "0.1.0"
 description = "Context Retrieval Layer for AHAWR Worker and Reviewer roles"
 requires-python = ">=3.11"
-# Core runtime installed into the n8n image (Execute Command mode): no web server needed.
+# Core pipeline (library, CLI, `exec`); the container adds the [server] extra for the HTTP API.
 dependencies = [
   "pydantic>=2.7,<3",
   "httpx>=0.27,<1",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Optional standalone HTTP API (`ahawr-retrieval serve`), used for development and tests.
+# HTTP API (`ahawr-retrieval serve`) used by the ahawr-retrieval container.
 server = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
 dev = [
   "fastapi>=0.115,<1", "uvicorn>=0.30,<1",

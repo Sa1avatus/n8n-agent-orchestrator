@@ -428,6 +428,11 @@ class RetrievalService:
         missing = []
         for corpus_id in corpus_ids:
             corpus = self.store.get_corpus(corpus_id)
+            root = self.settings.bootstrap_corpora.get(corpus_id)
+            if corpus is None and root:
+                # First use of a corpus declared by the deployment: index it now.
+                self.index(IndexRequest(corpus_id=corpus_id, root=root))
+                corpus = self.store.get_corpus(corpus_id)
             if corpus is None:
                 missing.append(corpus_id)
             else:

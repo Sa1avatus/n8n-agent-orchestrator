@@ -110,3 +110,24 @@ def test_workspace_indexing_disabled_without_allowed_roots(tmp_path: Path) -> No
             },
         )
         assert docs.status_code == 200
+
+
+def test_bootstrap_corpora_are_indexed_on_first_request(
+    settings: Settings, workspace: Path
+) -> None:
+    configured = replace(settings, bootstrap_corpora={"ahawr-workspace": str(workspace)})
+    with client_for(configured) as client:
+        response = client.post(
+            "/retrieve", json={"corpora": ["ahawr-workspace"], "query": "compute_total"}
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["chunks"][0]["symbol"] == "compute_total"
+        assert (
+            client.post("/retrieve", json={"corpora": ["not-declared"], "query": "x"}).status_code
+            == 404
+        )
+
+
+def test_settings_parse_bootstrap_pairs() -> None:
+    parsed = Settings.from_env({"RETRIEVAL_BOOTSTRAP_CORPORA": "ws=/workspace, docs=/docs,bad"})
+    assert parsed.bootstrap_corpora == {"ws": "/workspace", "docs": "/docs"}

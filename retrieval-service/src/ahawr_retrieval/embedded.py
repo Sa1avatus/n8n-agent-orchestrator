@@ -1,8 +1,9 @@
-"""Embedded (in-n8n) execution: one JSON request in, one JSON response out.
+"""Command-line execution of the service contract: one JSON request in, one JSON response out.
 
-n8n runs ``python3 -m ahawr_retrieval.cli exec <base64 payload>`` from an Execute Command node,
-the same way the Run Manager runs ``hermes_compress.py``. Each call is a short-lived process over
-the shared on-disk index (SQLite, WAL, busy timeout), so no extra container or daemon is needed.
+``ahawr-retrieval exec '<json or base64 json>'`` runs retrieve/index/invalidate/health without
+HTTP, e.g. ``docker compose exec ahawr-retrieval ahawr-retrieval exec '{"action":"health"}'``
+for scripting and debugging. AHAWR itself uses the HTTP API of the ``ahawr-retrieval``
+container. Several processes may share the on-disk index (SQLite WAL, busy timeout).
 
 Payload::
 
@@ -11,8 +12,8 @@ Payload::
      "bootstrap": [{"corpus_id": "...", "root": "/workspace"}]}   # optional, retrieve only
 
 Result: ``{"ok": true, "action": ..., "response": {...}}`` or
-``{"ok": false, "action": ..., "error": "...", "status_code": 4xx|5xx}``. The command always
-exits 0 so that the workflow can stay fail-open and read the result from stdout.
+``{"ok": false, "action": ..., "error": "...", "status_code": 4xx|5xx}``; the command always
+exits 0.
 """
 
 from __future__ import annotations

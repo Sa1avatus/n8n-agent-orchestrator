@@ -26,8 +26,8 @@ Principles for every phase:
 
 ### Phase 1 — delivered
 
-`retrieval-service/` embedded in the n8n container (Execute Command `exec` with `retrieve`,
-`index`, `invalidate`; the same contract optionally over HTTP); Worker and Reviewer profiles;
+`retrieval-service/` as the `ahawr-retrieval` container of the n8n compose stack with
+`/retrieve`, `/index`, `/invalidate`; Worker and Reviewer profiles;
 FTS5 BM25 + vector + symbol retrieval; weighted RRF; text-only cross-encoder via
 `reranker-service`; deterministic hard filters and ranking layer; chunk provenance with code
 and docs versioning; retrieval cache; per-candidate feature logging; Eval Harness with gold

@@ -396,7 +396,7 @@
       ],
       "task": {
         "title": "Enable the retrieval layer for a mission in n8n",
-        "objective": "Describe which hermes_config columns turn on retrieval for the Worker and Reviewer, how corpora and the workspace root are configured, and where reranker and rag-platform settings are supplied."
+        "objective": "Describe which hermes_config columns turn on retrieval for the Worker and Reviewer, where the retrieval service URL and corpora are configured, and where reranker and rag-platform settings are supplied."
       },
       "relevant": [
         {
@@ -410,7 +410,7 @@
         },
         {
           "path": "docs/retrieval/INTEGRATION.md",
-          "section": "Build n8n with the retrieval layer",
+          "section": "Start the stack",
           "grade": 1
         },
         {

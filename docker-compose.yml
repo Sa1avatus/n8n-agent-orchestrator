@@ -10,11 +10,6 @@ services:
     ports:
       - "5678:5678"
 
-    # Optional: RETRIEVAL_* settings and secrets for the embedded retrieval layer.
-    env_file:
-      - path: .env
-        required: false
-
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
@@ -24,12 +19,45 @@ services:
       - TZ=Asia/Ho_Chi_Minh
       - N8N_SECURE_COOKIE=false
       - NODES_EXCLUDE=[]
-      # Embedded Context Retrieval Layer: index/cache/logs live in the n8n data volume.
-      - RETRIEVAL_DATA_DIR=/home/node/.n8n/ahawr-retrieval
-      - RETRIEVAL_ALLOWED_ROOTS=/workspace
 
     volumes:
       - D:\n8n\data:/home/node/.n8n
       - D:\n8n\scripts:/home/node/scripts
-      # Workspace Hermes works in, mounted read-only for retrieval (set AHAWR_WORKSPACE_DIR in .env).
+
+    depends_on:
+      ahawr-retrieval:
+        condition: service_started
+        # AHAWR is fail-open: n8n still starts if the retrieval container is absent.
+        required: false
+
+  # AHAWR Context Retrieval Layer: its own container inside this stack. n8n reaches it at
+  # http://ahawr-retrieval:8500 over the stack network; no port is published to the host.
+  ahawr-retrieval:
+    build:
+      context: ./retrieval-service
+      dockerfile: Dockerfile
+
+    container_name: ahawr-retrieval
+    restart: unless-stopped
+
+    # RETRIEVAL_* settings and secrets (reranker, embeddings, rag-platform). See .env.example.
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      - RETRIEVAL_DATA_DIR=/data
+      - RETRIEVAL_ALLOWED_ROOTS=/workspace
+      - RETRIEVAL_BOOTSTRAP_CORPORA=${RETRIEVAL_BOOTSTRAP_CORPORA:-ahawr-workspace=/workspace}
+
+    volumes:
+      # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
+      - ahawr-retrieval-data:/data
+
+    extra_hosts:
+      # reranker-service / rag-platform / embedding endpoints running on the host
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  ahawr-retrieval-data:

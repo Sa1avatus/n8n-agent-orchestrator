@@ -1,58 +1,61 @@
 # Integrating the Retrieval Layer with AHAWR
 
-The Context Retrieval Layer runs **inside the n8n container**. The `ahawr_retrieval` package is
-installed into the n8n image and executed by Execute Command nodes, the same way the Run Manager
-executes `hermes_compress.py`. There is no extra container or daemon. `rag-platform` stays a
+The Context Retrieval Layer runs in its own container, `ahawr-retrieval`, **inside the n8n
+compose stack** (`docker-compose.yml` in the repository root). It is started, stopped and
+rebuilt together with n8n, and it is reachable only from the stack network at
+`http://ahawr-retrieval:8500`; no port is published to the host. `rag-platform` stays a
 separate, optional external service.
 
 ```
-n8n container ── Execute Command: python3 -m ahawr_retrieval.cli exec '<base64 request>'
-   │                 │  reads  /workspace (read-only mount of the Hermes workspace)
-   │                 │  keeps  /home/node/.n8n/ahawr-retrieval/{index,retrieval_logs}.sqlite
-   │                 ├─ optional → reranker-service  (RETRIEVAL_RERANKER_URL)
-   │                 └─ optional → rag-platform      (RETRIEVAL_RAG_*), local index on failure
-   └─ Data Tables: execution state, untouched by retrieval
+docker compose stack
+├── n8n-autonomous-agents ── HTTP POST http://ahawr-retrieval:8500/retrieve (fail-open)
+└── ahawr-retrieval
+      reads  /workspace         (Hermes workspace, read-only bind mount)
+      keeps  /data              (named volume: index, cache, retrieval logs)
+      ├─ optional → reranker-service  (RETRIEVAL_RERANKER_URL, e.g. host.docker.internal:8200)
+      └─ optional → rag-platform      (RETRIEVAL_RAG_*), local index on failure
+n8n Data Tables: execution state, untouched by retrieval
 ```
 
-## 1. Build n8n with the retrieval layer
+## 1. Start the stack
 
 1. Copy `.env.example` to `.env` next to `docker-compose.yml`. Set:
    * `AHAWR_WORKSPACE_DIR` to the directory Hermes works in;
    * the reranker and embedding endpoints;
    * optionally the `RETRIEVAL_RAG_*` values.
-2. Rebuild and start:
+2. Build and start both containers:
 
    ```powershell
    docker compose up -d --build
-   docker exec n8n-autonomous-agents python3 -m ahawr_retrieval.cli exec '{"action":"health"}'
+   docker compose ps                     # n8n-autonomous-agents, ahawr-retrieval
+   docker compose exec ahawr-retrieval python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8500/health').read().decode())"
    ```
 
-The compose file mounts the workspace read-only at `/workspace`. It stores the index, cache and
-retrieval logs in the n8n data volume (`RETRIEVAL_DATA_DIR=/home/node/.n8n/ahawr-retrieval`).
+`n8n` declares an optional dependency on `ahawr-retrieval`, so n8n still starts if the retrieval
+container is missing. AHAWR then simply runs without context.
 
 ## 2. Indexing
 
-You do not need a manual step. On the first retrieval call the workflow passes
-`bootstrap: [{corpus_id, root}]` and the corpus is indexed automatically. Every later call runs an
-incremental sync first (`freshness_mode=sync`), so files changed by the Worker are re-indexed chunk
-by chunk before the Reviewer's retrieval. Embeddings missing after an interrupted run or an
-embedder outage are back-filled on later syncs, with a 60 s back-off while the embedder is down.
+You do not need a manual step. Corpora listed in `RETRIEVAL_BOOTSTRAP_CORPORA`
+(default `ahawr-workspace=/workspace`) are indexed on their first request. Every later request
+runs an incremental sync first (`freshness_mode=sync`), so files changed by the Worker are
+re-indexed chunk by chunk before the Reviewer's retrieval. Embeddings missing after an embedder
+outage are back-filled on later syncs, with a 60 s back-off while the embedder is down.
 
-For a large repository with a real embedding model, run the first index once by hand to keep it
-out of the task's timeout:
+For a large repository with a real embedding model, run the first index once to keep it out of
+the task's timeout:
 
 ```powershell
-docker exec n8n-autonomous-agents python3 -m ahawr_retrieval.cli index ahawr-workspace --root /workspace
+docker compose exec ahawr-retrieval ahawr-retrieval index ahawr-workspace --root /workspace
 ```
 
-External documentation can be pushed as inline documents with the `index` action:
+External documentation can be pushed with `POST /index` as inline documents:
 
 ```json
-{"action": "index",
- "request": {"corpus_id": "ahawr-docs",
-             "documents": [{"path": "runbooks/deploy.md", "content": "# Deploy …",
-                            "version": "2026-09-20", "valid_until": "2027-01-01T00:00:00Z"}],
-             "documents_mode": "upsert"}}
+{"corpus_id": "ahawr-docs",
+ "documents": [{"path": "runbooks/deploy.md", "content": "# Deploy …", "version": "2026-09-20",
+                "valid_until": "2027-01-01T00:00:00Z"}],
+ "documents_mode": "upsert"}
 ```
 
 ## 3. Enable it in AHAWR v13
@@ -64,33 +67,32 @@ External documentation can be pushed as inline documents with the `index` action
    | column | example | meaning |
    |---|---|---|
    | `retrieval_enabled` | `true` | master switch (default: off) |
-   | `retrieval_corpora_json` | `ahawr-workspace` | comma-separated corpus ids, or a JSON array of ids / `{"corpus_id","root"}` objects |
-   | `retrieval_workspace_root` | `/workspace` | root used to bootstrap id-only corpora |
-   | `retrieval_timeout_ms` | `120000` | hard limit per call (`timeout` around the command); on timeout the task runs without context |
+   | `retrieval_corpora_json` | `ahawr-workspace` | comma-separated corpus ids, or a JSON array of ids |
+   | `retrieval_url` | `http://ahawr-retrieval:8500` | service URL inside the stack (default) |
+   | `retrieval_timeout_ms` | `120000` | HTTP timeout; on timeout the task runs without context |
    | `retrieval_worker_max_tokens` | `6000` | Worker context budget |
    | `retrieval_reviewer_max_tokens` | `5000` | Reviewer context budget |
    | `retrieval_label` | `hybrid-v1` | configuration label written to retrieval logs for A/B analysis |
 
 3. Optional, per mission: a `retrieval_corpora_json` column in `missions` overrides the corpora.
-
-Execute Command must stay enabled. The compose file already sets `NODES_EXCLUDE=[]`; it is also
-required by `hermes_compress.py`.
+4. If you set `RETRIEVAL_API_KEY`, open `Retrieve Worker Context` and `Retrieve Reviewer Context`
+   and set *Authentication → Generic → Header Auth* with `Authorization: Bearer <key>`, stored
+   as an n8n credential (never in the Data Table).
 
 ### What changes in the workflow
 
 ```
-All Tasks Completed? ─(run task)→ Worker Retrieval Enabled? ─yes→ Build Worker Retrieval Payload → Retrieve Worker Context ─┐
+All Tasks Completed? ─(run task)→ Worker Retrieval Enabled? ─yes→ Build Worker Retrieval Request → Retrieve Worker Context ─┐
                                                            └─no──────────────────────────────────────────────────────────→ Attach Worker Context → Worker Start
-Reviewer State → Reviewer Retrieval Enabled? ─yes→ Build Reviewer Retrieval Payload → Retrieve Reviewer Context ─┐
+Reviewer State → Reviewer Retrieval Enabled? ─yes→ Build Reviewer Retrieval Request → Retrieve Reviewer Context ─┐
                                             └─no──────────────────────────────────────────────────────────────→ Attach Reviewer Context → Reviewer Start
 ```
 
-* `Build * Retrieval Payload` (Code) base64-encodes the request.
-* `Retrieve * Context` (Execute Command) runs
-  `timeout <s> python3 -m ahawr_retrieval.cli exec '<payload>'; exit 0` with
-  `continueRegularOutput`. The CLI always prints one JSON line and exits 0. A timeout, a missing
-  package or any error produces **no context**, and the task proceeds as in v12
-  (`retrieval_*_status = unavailable`, reason in `retrieval_*_error`).
+* `Build * Retrieval Request` (Code) assembles the `/retrieve` request from the current task.
+* `Retrieve * Context` (HTTP Request) calls `POST {retrieval_url}/retrieve` with `neverError` +
+  `continueRegularOutput`. An unreachable container, an HTTP error or a timeout produces
+  **no context**, and the task proceeds as in v12 (`retrieval_*_status = unavailable`, reason in
+  `retrieval_*_error`).
 * `Attach * Context` only adds `retrieval_*` fields to the in-flight item. All Data Table
   writes use explicitly mapped columns, so nothing retrieval-related is persisted to
   `Autonomous Agent Task State` / `Task Attempts`, and resume/recovery paths are unchanged.
@@ -101,36 +103,31 @@ Reviewer State → Reviewer Retrieval Enabled? ─yes→ Build Reviewer Retrieva
 * The request's `trace` carries only `mission_id`, `state_namespace`, `task_id`, `role` and
   `label` — no run, session, attempt or status identifiers.
 
-Each call is a short-lived process: ~0.3 s warm on a small repository, plus index sync time. The
-processes share one SQLite index (WAL, 30 s busy timeout). The rag-platform circuit-breaker state
-and the embedder back-off are persisted in that index, so they apply across calls.
-
 ## 4. rag-platform as external backend
 
 No change to rag-platform is required.
 
 1. In rag-platform (admin API/UI), create a project collection, e.g. `ahawr-code`, and a service
    API key allowed to write and search it. Pick a fixed owner UUID for AHAWR.
-2. Set in `.env`: `RETRIEVAL_RAG_URL`, `RETRIEVAL_RAG_API_KEY`, `RETRIEVAL_RAG_OWNER_ID`,
-   `RETRIEVAL_RAG_PROJECT_ID`, `RETRIEVAL_RAG_COLLECTION`. Keep `RETRIEVAL_BACKEND=auto`.
+2. Set in `.env`: `RETRIEVAL_RAG_URL` (e.g. `http://host.docker.internal:8100`),
+   `RETRIEVAL_RAG_API_KEY`, `RETRIEVAL_RAG_OWNER_ID`, `RETRIEVAL_RAG_PROJECT_ID`,
+   `RETRIEVAL_RAG_COLLECTION`. Keep `RETRIEVAL_BACKEND=auto`.
 3. After the next sync, every active chunk is mirrored into rag-platform as one document. Check
-   with `{"action":"health"}` → `backend.rag_platform.mirror.<corpus>.pending_chunks == 0`.
+   `GET /health` → `backend.rag_platform.mirror.<corpus>.pending_chunks == 0`.
 
 If rag-platform is unavailable, retrieval is served from the local index automatically, and
 responses carry `degraded_reasons: ["rag_platform_unavailable:fallback_local"]`.
 
-## 5. Command contract
+## 5. API summary
 
-| action | request |
+| Endpoint | Purpose |
 |---|---|
-| `retrieve` | profile (`worker`/`reviewer`), corpora, `task`, `review`, optional `query`, `workspace_state` (`code_snapshot`, `docs_snapshot`, `doc_versions`, `strict`), `freshness_mode` (`trust`/`verify`/`sync`), `budget`, `options` (profile overrides), `cache` (`use`/`refresh`/`bypass`), `trace`, `include_candidates`; plus top-level `bootstrap` |
-| `index` | `corpus_id`, `root`, `mode` (`incremental`/`full`), `paths`, `source_types`, `include_globs`, `exclude_globs`, `documents`, `documents_mode`, `force` |
-| `invalidate` | `corpus_id` + `paths` / `chunk_ids` / `all`, optional `source_type`, `reason`, `reindex` |
-| `health` | — (embedder, reranker, backend and mirror status) |
+| `POST /retrieve` | profile (`worker`/`reviewer`), corpora, `task`, `review`, optional `query`, `workspace_state` (`code_snapshot`, `docs_snapshot`, `doc_versions`, `strict`), `freshness_mode` (`trust`/`verify`/`sync`), `budget`, `options` (profile overrides), `cache` (`use`/`refresh`/`bypass`), `trace`, `include_candidates` |
+| `POST /index` | `corpus_id`, `root`, `mode` (`incremental`/`full`), `paths`, `source_types`, `include_globs`, `exclude_globs`, `documents`, `documents_mode`, `force` |
+| `POST /invalidate` | `corpus_id` + `paths` / `chunk_ids` / `all`, optional `source_type`, `reason`, `reindex` |
+| `GET /corpora`, `GET /corpora/{id}` | snapshots, generations, chunk/file counts by status |
+| `GET /health` | embedder, reranker, backend and mirror status |
 
-Result: `{"ok": true, "action": …, "response": {…}}` or
-`{"ok": false, "action": …, "error": …, "status_code": 400|404|422|500}`.
-
-The same contract is also served as an optional HTTP API (`POST /retrieve`, `/index`,
-`/invalidate`) by `ahawr-retrieval serve`, after `pip install ".[server]"`. It is useful for
-development and tooling, and not needed by AHAWR.
+The FastAPI schema is at `/docs` and `/openapi.json` inside the stack. The same operations are
+available without HTTP through `ahawr-retrieval exec '<json or base64>'` inside the container,
+which is useful for scripting and debugging.
