@@ -157,7 +157,7 @@ class RunManager:
                 input=prompt,
             )
             self.store.touch_session(session_id, run_id, None)
-        self._launch(run_id, prompt, model, role, claude_id, resume, cwd)
+        self._launch(run_id, prompt, model, role, claude_id, resume, cwd, request.provider.strip())
         run = self.store.get_run(run_id)
         assert run is not None
         return self.public(run, attached=False)
@@ -189,10 +189,11 @@ class RunManager:
         claude_id: str,
         resume: bool,
         cwd: str,
+        provider: str = "",
         compact: bool = False,
     ) -> asyncio.Task[None]:
         task = asyncio.create_task(
-            self._execute(run_id, prompt, model, role, claude_id, resume, cwd, compact)
+            self._execute(run_id, prompt, model, role, claude_id, resume, cwd, provider, compact)
         )
         self._tasks[run_id] = task
         task.add_done_callback(lambda _t: self._tasks.pop(run_id, None))
@@ -207,6 +208,7 @@ class RunManager:
         claude_id: str,
         resume: bool,
         cwd: str,
+        provider_name: str,
         compact: bool,
     ) -> None:
         async with self._slots:
@@ -221,6 +223,7 @@ class RunManager:
                 return
             self.store.update_run(run_id, status="running", started_at=now())
             profile = self.settings.profile(role)
+            provider = self.settings.provider(provider_name)
             cmd = build_command(
                 self.settings,
                 profile,
@@ -228,6 +231,7 @@ class RunManager:
                 claude_session_id=claude_id,
                 resume=resume,
                 compact=compact,
+                provider=provider,
             )
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
@@ -239,7 +243,7 @@ class RunManager:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     cwd=cwd,
-                    env=child_env(),
+                    env=child_env(provider),
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -400,6 +404,13 @@ class RunManager:
             session = self.store.get_session(session_id)
             if not session or not transcript_exists(session["claude_session_id"]):
                 return skipped("session_not_found")
+            # Compact with the backend (and model) the session last ran on.
+            last = self.store.get_run(session["last_run_id"]) if session["last_run_id"] else None
+            provider_name = str((last or {}).get("provider") or "")
+            model = model or str((last or {}).get("model") or "")
+            provider = self.settings.provider(provider_name)
+            if min_tokens is None and provider and provider.compact_min_tokens is not None:
+                threshold = provider.compact_min_tokens
             tokens = int(session["context_tokens"] or 0)
             if mode == "auto" and tokens < threshold:
                 return skipped("below_threshold", context_tokens=tokens, min_tokens=threshold)
@@ -411,6 +422,7 @@ class RunManager:
                 claude_session_id=session["claude_session_id"],
                 role=session["role"],
                 model=model,
+                provider=provider_name,
                 cwd=session["cwd"],
                 input="/compact",
             )
@@ -422,6 +434,7 @@ class RunManager:
                 session["claude_session_id"],
                 True,
                 session["cwd"],
+                provider_name,
                 compact=True,
             )
         await asyncio.shield(task)

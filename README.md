@@ -613,7 +613,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
   - Worker: `bypassPermissions`, but it cannot read `.env` and cannot `git commit` or `git push`;
   - Architect and Reviewer: read-only.
 - Model access: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), or Bedrock/Vertex/Foundry.
-- Local models: the `litellm` container of the same stack translates Claude Code's Anthropic API calls to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the *Local model* block of `.env.example`.
+- Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`.
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
 
 The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md).
@@ -1292,7 +1292,7 @@ worker_provider
   - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`;
   - Architect и Reviewer: только чтение.
 - Доступ к модели: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (из `claude setup-token`) или Bedrock/Vertex/Foundry.
-- Локальные модели: контейнер `litellm` из того же стека переводит запросы Claude Code из формата Anthropic API в OpenAI-совместимый API llama.cpp. См. `litellm/config.yaml` и блок *Local model* в `.env.example`.
+- Провайдеры по ролям, как в Hermes: роли с `*_provider=anthropic` идут в Anthropic, а роль с `*_provider=local` — через контейнер `litellm` в локальный llama.cpp. См. `litellm/config.yaml` и блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`.
 - Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
 
 Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md).

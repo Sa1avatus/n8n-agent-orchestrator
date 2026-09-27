@@ -113,6 +113,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "workspace": settings.workspace,
             "max_concurrent": settings.max_concurrent,
             "compact_mode": settings.compact_mode,
+            "providers": {
+                name: {
+                    "base_url": provider.env.get("ANTHROPIC_BASE_URL", ""),
+                    "credential": next(
+                        (
+                            k
+                            for k in (
+                                "ANTHROPIC_AUTH_TOKEN",
+                                "ANTHROPIC_API_KEY",
+                                "CLAUDE_CODE_OAUTH_TOKEN",
+                            )
+                            if provider.env.get(k)
+                        ),
+                        "inherited",
+                    ),
+                    "tools": provider.tools,
+                }
+                for name, provider in settings.providers.items()
+            },
             "runs": runs.store.counts(),
             "interrupted_on_start": request.app.state.interrupted,
         }

@@ -39,7 +39,20 @@ def main() -> int:
     log = Path(os.environ["FAKE_CLAUDE_LOG"]) if os.environ.get("FAKE_CLAUDE_LOG") else None
     if log:
         with log.open("a") as fh:
-            fh.write(json.dumps({"args": args, "prompt": prompt, "cwd": os.getcwd()}) + "\n")
+            seen = {
+                k: os.environ[k]
+                for k in (
+                    "ANTHROPIC_BASE_URL",
+                    "ANTHROPIC_AUTH_TOKEN",
+                    "ANTHROPIC_API_KEY",
+                    "CLAUDE_CODE_OAUTH_TOKEN",
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                    "CLAUDE_CODE_DISABLE_THINKING",
+                )
+                if k in os.environ
+            }
+            record = {"args": args, "prompt": prompt, "cwd": os.getcwd(), "env": seen}
+            fh.write(json.dumps(record) + "\n")
 
     if "--resume" in opts and not transcript.exists():
         print(f"No conversation found with session ID: {sid}", file=sys.stderr)

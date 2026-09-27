@@ -8,6 +8,7 @@ mounted workspace, while never reading ``.env`` files or committing/pushing.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -36,8 +37,62 @@ class RoleProfile:
     disallowed_tools: list[str] = field(default_factory=list)
     append_system_prompt: str = ""
     max_turns: int = 0
-    # Built-in tool set offered to the model (`--tools`); empty = Claude Code's default set.
+    # Built-in tool set offered to the model (`--tools`) for this role only; empty = inherit.
     tools: str = ""
+
+
+# Model-access variables. A provider that sets its own endpoint gets only its own credentials,
+# so e.g. a local Worker never sees the Anthropic subscription token.
+CREDENTIAL_VARS = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+)
+PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
+# Keys of a provider block that configure the runner instead of the Claude Code process.
+PROVIDER_RUNNER_KEYS = {"TOOLS", "COMPACT_MIN_TOKENS"}
+
+
+@dataclass(frozen=True)
+class ProviderProfile:
+    """A named model backend, selected per run by the request's ``provider`` (per AHAWR role,
+    like Hermes' ``*_provider``). ``env`` is overlaid on the Claude Code process environment."""
+
+    name: str
+    env: dict[str, str] = field(default_factory=dict)
+    tools: str = ""
+    compact_min_tokens: int | None = None
+
+    @property
+    def isolates_credentials(self) -> bool:
+        return any(key in self.env for key in CREDENTIAL_VARS)
+
+
+def provider_key(name: str) -> str:
+    """``custom:llama-local`` / ``llama-local`` → ``CUSTOM_LLAMA_LOCAL`` / ``LLAMA_LOCAL``."""
+    return re.sub(r"[^A-Z0-9]+", "_", name.strip().upper()).strip("_")
+
+
+def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
+    """``CLAUDE_RUNNER_PROVIDER_<NAME>__<VAR>=value`` (double underscore) → providers."""
+    blocks: dict[str, dict[str, str]] = {}
+    for key, value in env.items():
+        if not key.startswith(PROVIDER_PREFIX) or "__" not in key:
+            continue
+        name, var = key[len(PROVIDER_PREFIX) :].split("__", 1)
+        if name and var:
+            blocks.setdefault(provider_key(name), {})[var] = value
+    providers = {}
+    for name, block in blocks.items():
+        compact = block.get("COMPACT_MIN_TOKENS", "").strip()
+        providers[name] = ProviderProfile(
+            name=name,
+            env={k: v for k, v in block.items() if k not in PROVIDER_RUNNER_KEYS},
+            tools=block.get("TOOLS", "").strip(),
+            compact_min_tokens=int(compact) if compact else None,
+        )
+    return providers
 
 
 DEFAULT_PROFILES: dict[str, RoleProfile] = {
@@ -108,6 +163,8 @@ class Settings:
     compact_timeout_seconds: int = 600
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
+    tools: str = ""
+    providers: dict[str, ProviderProfile] = field(default_factory=dict)
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -133,7 +190,7 @@ class Settings:
                 disallowed_tools=base.disallowed_tools if disallowed is None else disallowed,
                 append_system_prompt=env.get(prefix + "APPEND_SYSTEM_PROMPT", "").strip(),
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
-                tools=(env.get(prefix + "TOOLS") or env.get("CLAUDE_RUNNER_TOOLS") or "").strip(),
+                tools=env.get(prefix + "TOOLS", "").strip(),
             )
         return cls(
             data_dir=Path(env.get("CLAUDE_RUNNER_DATA_DIR", "/data")),
@@ -153,7 +210,16 @@ class Settings:
             compact_min_tokens=_int(env, "CLAUDE_RUNNER_COMPACT_MIN_TOKENS", 120_000),
             compact_timeout_seconds=_int(env, "CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS", 600, 1),
             profiles=profiles,
+            tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
+            providers=_providers(env),
         )
 
     def profile(self, role: str) -> RoleProfile:
         return self.profiles.get(role, self.profiles["generic"])
+
+    def provider(self, name: str) -> ProviderProfile | None:
+        """The configured provider for a request's ``provider`` value; None = container env."""
+        return self.providers.get(provider_key(name)) if name.strip() else None
+
+    def tools_for(self, profile: RoleProfile, provider: ProviderProfile | None) -> str:
+        return profile.tools or (provider.tools if provider else "") or self.tools

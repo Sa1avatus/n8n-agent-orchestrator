@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config import RoleProfile, Settings
+from .config import CREDENTIAL_VARS, ProviderProfile, RoleProfile, Settings
 
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
@@ -44,6 +44,7 @@ def build_command(
     claude_session_id: str,
     resume: bool,
     compact: bool = False,
+    provider: ProviderProfile | None = None,
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
     if model:
@@ -57,10 +58,11 @@ def build_command(
             cmd += ["--allowedTools", ",".join(profile.allowed_tools)]
         if profile.disallowed_tools:
             cmd += ["--disallowedTools", ",".join(profile.disallowed_tools)]
-        if profile.tools:
+        tools = settings.tools_for(profile, provider)
+        if tools:
             # A smaller tool set shrinks the system prompt (~15k → ~4k tokens), which matters
             # for local models with small context windows.
-            cmd += ["--tools", profile.tools]
+            cmd += ["--tools", tools]
         if profile.append_system_prompt:
             cmd += ["--append-system-prompt", profile.append_system_prompt]
         max_turns = profile.max_turns or settings.max_turns
@@ -72,9 +74,16 @@ def build_command(
     return cmd
 
 
-def child_env() -> dict[str, str]:
-    """The CLI inherits the container env (model credentials) minus the runner's own secrets."""
+def child_env(provider: ProviderProfile | None = None) -> dict[str, str]:
+    """The CLI inherits the container env (model credentials) minus the runner's own settings,
+    with the run's provider block on top. A provider with its own endpoint or credential does
+    not inherit the container's credentials."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_RUNNER_")}
+    if provider is not None:
+        if provider.isolates_credentials:
+            for key in CREDENTIAL_VARS:
+                env.pop(key, None)
+        env.update(provider.env)
     env.setdefault("DISABLE_AUTOUPDATER", "1")
     env.setdefault("CLAUDE_CODE_RESUME_INTERRUPTED_TURN", "1")
     return env
