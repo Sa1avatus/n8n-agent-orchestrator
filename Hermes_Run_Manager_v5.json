@@ -53,6 +53,9 @@
             },
             {
               "name": "service_provider"
+            },
+            {
+              "name": "working_directory"
             }
           ]
         }
@@ -60,23 +63,23 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
-        -2528,
-        496
+        -2448,
+        976
       ],
-      "id": "de2ce68b-8674-4214-9d75-ad0188a87435",
+      "id": "5abc0a56-214e-4c6e-a546-8c5aaf5b6918",
       "name": "When Executed by Parent Workflow"
     },
     {
       "parameters": {
-        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\nif (!state.model) throw new Error('Hermes Run Manager: model is required.');\nif (!state.provider) throw new Error('Hermes Run Manager: provider is required.');\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Hermes Run Manager: input is required.');\nreturn [{ json: state }];"
+        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  working_directory: String(i.working_directory ?? '').trim(),\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\nif (!state.model) throw new Error('Hermes Run Manager: model is required.');\nif (!state.provider) throw new Error('Hermes Run Manager: provider is required.');\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Hermes Run Manager: input is required.');\nreturn [{ json: state }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2256,
-        496
+        -2176,
+        976
       ],
-      "id": "d9bb3f33-fab6-4f20-ac39-c7fcccb26edb",
+      "id": "488fc68c-9057-45ef-a4c7-556a6421947a",
       "name": "Normalize Request"
     },
     {
@@ -95,12 +98,16 @@
             {
               "name": "X-Hermes-Session-Id",
               "value": "={{ String($json.session_id ?? $json.requested_session_id ?? '').trim() }}"
+            },
+            {
+              "name": "X-Hermes-Working-Directory",
+              "value": "={{ String($json.working_directory ?? '').trim() }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\n  input: String($json.input || $json.resume_input || ''),\n  model: String($json.model ?? ''),\n  provider: String($json.provider ?? ''),\n  ...(String($json.session_id ?? $json.requested_session_id ?? '').trim()\n    ? { session_id: String($json.session_id ?? $json.requested_session_id ?? '').trim() }\n    : {})\n} }}",
+        "jsonBody": "={{ (() => {\n  const wd = String($json.working_directory ?? '').trim();\n  const sid = String($json.session_id ?? $json.requested_session_id ?? '').trim();\n  const body = {\n    input: String($json.input || $json.resume_input || ''),\n    model: String($json.model ?? ''),\n    provider: String($json.provider ?? '')\n  };\n  if (sid) body.session_id = sid;\n  if (wd) body.working_directory = wd;\n  return body;\n})() }}",
         "options": {
           "response": {
             "response": {
@@ -113,10 +120,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        -1280,
-        704
+        -1200,
+        1184
       ],
-      "id": "ee0ff60c-88c1-4a25-b884-e68aa194d1f8",
+      "id": "1ad98af5-c3c0-445c-afa7-80453d18f2ad",
       "name": "Start / Resume Run",
       "credentials": {
         "httpBearerAuth": {
@@ -127,15 +134,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const postStarted = $('Start / Resume Run').isExecuted;\nconst postResumed = $('Resume Existing Session').isExecuted;\nconst postHandoff = $('Start New Session from Handoff').isExecuted;\n\nif (!postStarted && !postResumed && !postHandoff) {\n  const existingRun = String($json.run_id ?? '').trim();\n\n  return [{\n    json: {\n      ...$json,\n      run_id: existingRun,\n      route: existingRun ? 'running' : 'start_error',\n      error: existingRun\n        ? String($json.error ?? '')\n        : 'Hermes run_id is empty; status request was skipped.',\n      error_code: existingRun\n        ? String($json.error_code ?? '')\n        : 'run_id_missing'\n    }\n  }];\n}\n\n// Для retry берём состояние Retry Controller,\n// чтобы сохранить retry_count/max_retries/delays и session state.\nconst retryState = $('Retry Controller').isExecuted\n  ? $('Retry Controller').last().json\n  : null;\n\nconst base = retryState\n  ? retryState\n  : (\n      postHandoff\n        ? $('Build Compression Handoff').last().json\n        : (\n            postResumed\n              ? $('Evaluate Status').last().json\n              : $('Normalize Request').last().json\n          )\n    );\n\nconst raw = $json?.body ?? $json?.data ?? $json;\n\nconst resumedSession =\n  postResumed &&\n  String($('Evaluate Status').last().json.route ?? '') === 'restart_session';\n\nreturn [{\n  json: validate(\n    (postResumed || postHandoff || retryState)\n      ? {\n          ...base,\n          poll_count: 0,\n          run_id: ''\n        }\n      : base,\n    raw,\n    resumedSession\n  )\n}];\n\nfunction parse(value) {\n  if (typeof value !== 'string') {\n    return value && typeof value === 'object' ? value : {};\n  }\n\n  try {\n    return JSON.parse(value);\n  } catch (_) {\n    return { error: value };\n  }\n}\n\nfunction errorOf(r) {\n  const raw = r.error ?? r.message ?? '';\n  const text =\n    typeof raw === 'string'\n      ? raw\n      : String(raw?.message ?? r.details ?? '');\n\n  const code = String(\n    typeof raw === 'object' && raw\n      ? (raw.code ?? r.code ?? '')\n      : (r.code ?? '')\n  ).toLowerCase();\n\n  return { text, code };\n}\n\nfunction validate(prior, response, resumed) {\n  const r = parse(response);\n  const err = errorOf(r);\n\n  const returnedRun = String(r.run_id ?? '').trim();\n\n  const returnedSession = String(\n    r.session_id ??\n    r.sessionId ??\n    (\n      typeof r.session === 'string'\n        ? r.session\n        : (r.session?.session_id ?? r.session?.id ?? '')\n    )\n  ).trim();\n\n  const requested = String(\n    prior.requested_session_id ?? prior.session_id ?? ''\n  ).trim();\n\n  const mismatch = Boolean(\n    requested &&\n    returnedSession &&\n    requested !== returnedSession\n  );\n\n  if (mismatch) {\n    return {\n      ...prior,\n      run_id: '',\n      session_id: requested,\n      status: 'failed',\n      route: 'session_mismatch',\n      output: '',\n      error: `Hermes returned session_id ${returnedSession}, expected ${requested}.`,\n      error_code: 'session_mismatch',\n      session_verified: false,\n      session_mismatch: true\n    };\n  }\n\n  if (!returnedRun) {\n    return {\n      ...prior,\n      run_id: '',\n      session_id: returnedSession || requested,\n      status: 'failed',\n      route: 'start_error',\n      output: '',\n      error: err.text || 'Hermes did not return run_id.',\n      error_code: err.code || 'run_start_failed',\n      session_verified: false,\n      session_mismatch: false\n    };\n  }\n\n  return {\n    ...prior,\n    run_id: returnedRun,\n    session_id: returnedSession || requested,\n    status: String(r.status ?? 'started').toLowerCase(),\n    route: 'running',\n    output: String(r.output ?? r.response ?? r.content ?? ''),\n    error: err.text,\n    error_code: err.code,\n    resumed: Boolean(resumed),\n    session_verified:\n      !requested ||\n      !returnedSession ||\n      returnedSession === requested,\n    session_mismatch: false\n  };\n}"
+        "jsCode": "const postStarted = $('Start / Resume Run').isExecuted;\nconst postResumed = $('Resume Existing Session').isExecuted;\nconst postHandoff = $('Start New Session from Handoff').isExecuted;\n\nif (!postStarted && !postResumed && !postHandoff) {\n  const existingRun = String($json.run_id ?? '').trim();\n  return [{\n    json: {\n      ...$json,\n      run_id: existingRun,\n      route: existingRun ? 'running' : 'start_error',\n      error: existingRun ? String($json.error ?? '') : 'Hermes run_id is empty; status request was skipped.',\n      error_code: existingRun ? String($json.error_code ?? '') : 'run_id_missing'\n    }\n  }];\n}\n\nconst retryState = $('Retry Controller').isExecuted ? $('Retry Controller').last().json : null;\n\nconst base = retryState\n  ? retryState\n  : (postHandoff\n      ? $('Build Compression Handoff').last().json\n      : (postResumed\n          ? $('Evaluate Status').last().json\n          : $('Normalize Request').last().json));\n\nconst raw = $json?.body ?? $json?.data ?? $json;\n\nconst resumedSession = postResumed && String($('Evaluate Status').last().json.route ?? '') === 'restart_session';\n\nreturn [{\n  json: validate(\n    (postResumed || postHandoff || retryState)\n      ? { ...base, poll_count: 0, run_id: '' }\n      : base,\n    raw,\n    resumedSession\n  )\n}];\n\nfunction parse(value) {\n  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {};\n  try { return JSON.parse(value); } catch (_) { return { error: value }; }\n}\nfunction errorOf(r) {\n  const raw = r.error ?? r.message ?? '';\n  const text = typeof raw === 'string' ? raw : String(raw?.message ?? r.details ?? '');\n  const code = String(typeof raw === 'object' && raw ? (raw.code ?? r.code ?? '') : (r.code ?? '')).toLowerCase();\n  return { text, code };\n}\nfunction validate(prior, response, resumed) {\n  const r = parse(response);\n  const err = errorOf(r);\n  const returnedRun = String(r.run_id ?? '').trim();\n  const returnedSession = String(r.session_id ?? r.sessionId ?? (typeof r.session === 'string' ? r.session : (r.session?.session_id ?? r.session?.id ?? ''))).trim();\n  const requested = String(prior.requested_session_id ?? prior.session_id ?? '').trim();\n  const mismatch = Boolean(requested && returnedSession && requested !== returnedSession);\n  if (mismatch) return { ...prior, run_id: '', session_id: requested, status: 'failed', route: 'session_mismatch', output: '', error: `Hermes returned session_id ${returnedSession}, expected ${requested}.`, error_code: 'session_mismatch', session_verified: false, session_mismatch: true };\n  if (!returnedRun) return { ...prior, run_id: '', session_id: returnedSession || requested, status: 'failed', route: 'start_error', output: '', error: err.text || 'Hermes did not return run_id.', error_code: err.code || 'run_start_failed', session_verified: false, session_mismatch: false };\n  return { ...prior, run_id: returnedRun, session_id: returnedSession || requested, status: String(r.status ?? 'started').toLowerCase(), route: 'running', output: String(r.output ?? r.response ?? r.content ?? ''), error: err.text, error_code: err.code, resumed: Boolean(resumed), session_verified: !requested || !returnedSession || returnedSession === requested, session_mismatch: false };\n}"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1008,
-        704
+        -928,
+        1184
       ],
-      "id": "5a6fa460-9356-48e4-9e59-0fea7084daae",
+      "id": "8bf9ece7-0891-49a4-992a-bd71d60ca80e",
       "name": "Capture Run Response"
     },
     {
@@ -159,10 +166,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        2368,
-        960
+        2448,
+        1440
       ],
-      "id": "4163e2ae-c715-4907-8ba9-d5bae3e73626",
+      "id": "db26dcbb-e4f2-4ba4-ace4-94ba11ae895d",
       "name": "Get Run Status",
       "credentials": {
         "httpBearerAuth": {
@@ -173,15 +180,15 @@
     },
     {
       "parameters": {
-        "jsCode": "function parse(value) {\n  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {};\n  try { return JSON.parse(value); } catch (_) { return { error: value }; }\n}\nfunction baseState() {\n  if ($('Evaluate Status').isExecuted) return $('Evaluate Status').last().json;\n  if ($('Capture Run Response').isExecuted) return $('Capture Run Response').last().json;\n  return $('Normalize Request').last().json;\n}\n\nconst envelope = $json ?? {};\nconst r = parse(envelope?.body ?? envelope?.data ?? envelope);\nconst prior = baseState();\nconst status = String(r.status ?? '').toLowerCase();\nconst raw = r.error ?? r.message ?? r.details ?? r.detail ?? '';\nconst errorText = typeof raw === 'string' ? raw : String(raw?.message ?? raw?.detail ?? r.details ?? '');\nconst errorCode = String(\n  typeof raw === 'object' && raw\n    ? (raw.code ?? r.code ?? '')\n    : (r.code ?? '')\n).toLowerCase();\nconst lower = errorText.toLowerCase();\n\nconst envelopeHttp = Number(\n  envelope.statusCode ?? envelope.status_code ?? envelope.httpCode ?? envelope.http_code ?? NaN\n);\nconst bodyHttp = Number(\n  r.statusCode ?? r.status_code ?? r.httpCode ?? r.http_code ?? NaN\n);\nconst match = errorText.match(/\\b(4\\d\\d|5\\d\\d)\\b/);\nconst httpCode = Number.isFinite(envelopeHttp) ? envelopeHttp\n  : Number.isFinite(bodyHttp) ? bodyHttp\n  : (match ? Number(match[1]) : null);\n\nconst runNotFound =\n  httpCode === 404 ||\n  errorCode === 'run_not_found' ||\n  errorCode === 'not_found' ||\n  lower.includes('run not found') ||\n  lower.includes('run_not_found');\n\nconst transientCodes = new Set([408,409,425,429,500,502,503,504,529]);\nconst transientWords = ['temporarily overloaded','upstream error','upstream request failed','service unavailable','overloaded','timeout','timed out','connection reset','connection refused','rate limit','too many requests'];\nconst transient = !runNotFound && status === 'failed' && (transientCodes.has(httpCode) || transientWords.some((x) => lower.includes(x)));\nconst polls = Number(prior.poll_count ?? 0) + 1;\n\nlet route = 'unknown';\nif (runNotFound) route = prior.requested_session_id ? 'restart_session' : 'start_new';\nelse if (status === 'completed') route = 'completed';\nelse if (status === 'cancelled' || status === 'canceled') route = 'cancelled';\nelse if (transient) route = 'transient_error';\nelse if (status === 'failed') route = 'permanent_failure';\nelse if (['running','started','queued','waiting_for_approval'].includes(status)) route = polls >= Number(prior.max_polls ?? 40) ? 'timeout' : 'running';\n\nconst nextRunId = runNotFound ? '' : String(r.run_id ?? prior.run_id ?? '').trim();\nconst nextSessionId = String(r.session_id ?? prior.session_id ?? prior.requested_session_id ?? '').trim();\n\nreturn [{ json: {\n  ...prior,\n  run_id: nextRunId,\n  session_id: nextSessionId,\n  status,\n  output: String(r.output ?? r.response ?? r.content ?? ''),\n  error: errorText,\n  error_code: errorCode,\n  http_code: httpCode,\n  run_not_found: runNotFound,\n  transient_error: transient,\n  poll_count: polls,\n  route\n} }];"
+        "jsCode": "function parse(value) {\n  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {};\n  try { return JSON.parse(value); } catch (_) { return { error: value }; }\n}\nfunction baseState() {\n  if ($('Evaluate Status').isExecuted) return $('Evaluate Status').last().json;\n  if ($('Capture Run Response').isExecuted) return $('Capture Run Response').last().json;\n  return $('Normalize Request').last().json;\n}\n\nconst envelope = $json ?? {};\nconst r = parse(envelope?.body ?? envelope?.data ?? envelope);\nconst prior = baseState();\nconst status = String(r.status ?? '').toLowerCase();\nconst raw = r.error ?? r.message ?? r.details ?? r.detail ?? '';\nconst errorText = typeof raw === 'string' ? raw : String(raw?.message ?? raw?.detail ?? r.details ?? '');\nconst errorCode = String(typeof raw === 'object' && raw ? (raw.code ?? r.code ?? '') : (r.code ?? '')).toLowerCase();\nconst lower = errorText.toLowerCase();\n\nconst envelopeHttp = Number(envelope.statusCode ?? envelope.status_code ?? envelope.httpCode ?? envelope.http_code ?? NaN);\nconst bodyHttp = Number(r.statusCode ?? r.status_code ?? r.httpCode ?? r.http_code ?? NaN);\nconst match = errorText.match(/\\b(4\\d\\d|5\\d\\d)\\b/);\nconst httpCode = Number.isFinite(envelopeHttp) ? envelopeHttp : Number.isFinite(bodyHttp) ? bodyHttp : (match ? Number(match[1]) : null);\n\nconst runNotFound = httpCode === 404 || errorCode === 'run_not_found' || errorCode === 'not_found' || lower.includes('run not found') || lower.includes('run_not_found');\n\nconst transientCodes = new Set([408,409,425,429,500,502,503,504,529]);\nconst transientWords = ['temporarily overloaded','upstream error','upstream request failed','service unavailable','overloaded','timeout','timed out','connection reset','connection refused','rate limit','too many requests'];\nconst transient = !runNotFound && status === 'failed' && (transientCodes.has(httpCode) || transientWords.some((x) => lower.includes(x)));\nconst polls = Number(prior.poll_count ?? 0) + 1;\n\nlet route = 'unknown';\nif (runNotFound) route = prior.requested_session_id ? 'restart_session' : 'start_new';\nelse if (status === 'completed') route = 'completed';\nelse if (status === 'cancelled' || status === 'canceled') route = 'cancelled';\nelse if (transient) route = 'transient_error';\nelse if (status === 'failed') route = 'permanent_failure';\nelse if (['running','started','queued','waiting_for_approval'].includes(status)) route = polls >= Number(prior.max_polls ?? 40) ? 'timeout' : 'running';\n\nconst nextRunId = runNotFound ? '' : String(r.run_id ?? prior.run_id ?? '').trim();\nconst nextSessionId = String(r.session_id ?? prior.session_id ?? prior.requested_session_id ?? '').trim();\n\nreturn [{ json: {\n  ...prior,\n  run_id: nextRunId,\n  session_id: nextSessionId,\n  status,\n  output: String(r.output ?? r.response ?? r.content ?? ''),\n  error: errorText,\n  error_code: errorCode,\n  http_code: httpCode,\n  run_not_found: runNotFound,\n  transient_error: transient,\n  poll_count: polls,\n  route\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1008,
-        848
+        -928,
+        1328
       ],
-      "id": "b44fd050-e032-4100-90e5-765b54e80c3a",
+      "id": "9b89a79c-6de6-4fee-92b4-6846f9b7922a",
       "name": "Evaluate Status"
     },
     {
@@ -222,10 +229,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -64,
-        848
+        16,
+        1328
       ],
-      "id": "52a05138-18bb-495f-a65a-a6746dcfe59a",
+      "id": "d1ab4806-9fc9-4425-af50-803bb58b2a0a",
       "name": "Run Missing?"
     },
     {
@@ -244,12 +251,16 @@
             {
               "name": "X-Hermes-Session-Id",
               "value": "={{ String($json.requested_session_id ?? $json.session_id ?? '').trim() }}"
+            },
+            {
+              "name": "X-Hermes-Working-Directory",
+              "value": "={{ String($json.working_directory ?? $('Normalize Request').first().json.working_directory ?? '').trim() }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const resume = String($json.route ?? '') === 'restart_session';\n  const s = resume ? String($json.requested_session_id ?? '').trim() : '';\n  const p = {\n    input: resume\n      ? String($json.resume_input || $json.input || '')\n      : String($json.input || ''),\n    model: String($json.model),\n    provider: String($json.provider)\n  };\n  if (s) p.session_id = s;\n  return p;\n})() }}",
+        "jsonBody": "={{ (() => {\n  const resume = String($json.route ?? '') === 'restart_session';\n  const s = resume ? String($json.requested_session_id ?? '').trim() : '';\n  const wd = String($json.working_directory ?? $('Normalize Request').first().json.working_directory ?? '').trim();\n  const p = {\n    input: resume ? String($json.resume_input || $json.input || '') : String($json.input || ''),\n    model: String($json.model),\n    provider: String($json.provider)\n  };\n  if (s) p.session_id = s;\n  if (wd) p.working_directory = wd;\n  return p;\n})() }}",
         "options": {
           "response": {
             "response": {
@@ -262,10 +273,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        544,
-        832
+        624,
+        1312
       ],
-      "id": "8ed33e87-5de9-49ae-9b25-f8b4d7984d61",
+      "id": "9fb68ff6-b0da-4a5f-90e6-98d1d8f55f52",
       "name": "Resume Existing Session",
       "credentials": {
         "httpBearerAuth": {
@@ -302,10 +313,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        240,
-        704
+        320,
+        1184
       ],
-      "id": "76f5c6c7-a427-41db-8b2f-5c92ed49a9b1",
+      "id": "0ec240ef-546f-4b36-bf85-97c86a5a4570",
       "name": "Completed?"
     },
     {
@@ -336,10 +347,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        688,
-        720
+        768,
+        1200
       ],
-      "id": "ba42b1e5-715e-451a-8a43-34096c11b4ea",
+      "id": "65394ae3-7e79-4503-95c3-38e1ef327788",
       "name": "Transient Error?"
     },
     {
@@ -349,10 +360,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        960,
-        512
+        1040,
+        992
       ],
-      "id": "2a37deef-e17d-4995-b8a2-3e25f9d23083",
+      "id": "79ed6b56-6eee-451c-b1f1-d0983c37cf1a",
       "name": "Retry Controller"
     },
     {
@@ -383,10 +394,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1168,
-        512
+        1248,
+        992
       ],
-      "id": "1ebb8c3d-ecfb-45fe-8c0d-96176208ccde",
+      "id": "a1c593dd-64d6-410b-b1c4-205d71c31239",
       "name": "Retry Exhausted?"
     },
     {
@@ -396,10 +407,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        1552,
-        912
+        1632,
+        1392
       ],
-      "id": "097b0c59-8d90-4027-8564-75dfb8b53feb",
+      "id": "7d1df822-4f7e-4ab8-9570-60bc36cb8b8b",
       "name": "Retry Wait",
       "webhookId": "6f3b997d-b774-4f7e-bad6-55a4634aa8d4"
     },
@@ -441,10 +452,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        992,
-        832
+        1072,
+        1312
       ],
-      "id": "ef7d2329-9413-4980-950d-c678b717afba",
+      "id": "c2466a4a-ed8e-4e13-adaf-f75a260a5bcf",
       "name": "Still Running?"
     },
     {
@@ -454,10 +465,10 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        1328,
-        848
+        1408,
+        1328
       ],
-      "id": "a77631e5-0813-49a9-a6bf-5d6167605b58",
+      "id": "1b89584a-4622-4b88-ab46-b60a3d92a4bf",
       "name": "Poll Wait",
       "webhookId": "4f7ceb6a-8865-4eb2-a19b-23695bd2202e"
     },
@@ -468,10 +479,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2368,
-        432
+        2448,
+        912
       ],
-      "id": "da0e49d5-204d-4c15-b7ba-9caf7a2f74bf",
+      "id": "1baa1004-9d9f-4bc4-a836-50819f99fbc9",
       "name": "Build Result"
     },
     {
@@ -706,10 +717,10 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -240,
-        704
+        -160,
+        1184
       ],
-      "id": "0fd852c9-312a-4c1f-b0f2-32518b1181a1",
+      "id": "2aed3fc3-4546-48f8-97c7-f614dfe02085",
       "name": "Persist Agent State — Run Context"
     },
     {
@@ -734,24 +745,24 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -656,
-        704
+        -576,
+        1184
       ],
-      "id": "78c21813-97a9-42e8-8e4f-3268447d5731",
+      "id": "54660d09-1876-4218-9973-24d786896a4d",
       "name": "Load Task State — Run Context",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const saved = $('Load Task State — Run Context').first().json ?? {};\nconst result = $('Capture Run Response').last().json ?? {};\nconst request = $('Normalize Request').last().json ?? {};\n\nconst state = {\n  ...saved,\n  state_key: String(saved.state_key ?? request.state_key ?? ''),\n  service_model: String(request.service_model ?? ''),\n  service_provider: String(request.service_provider ?? ''),\n  plan_json: String(saved.plan_json ?? ''),\n  task_index: Number(saved.task_index ?? 0),\n  task_attempt: Number(saved.task_attempt ?? 1),\n  status: String(saved.status ?? 'active'),\n  review_feedback: String(saved.review_feedback ?? ''),\n  last_review_score: Number(saved.last_review_score ?? 0),\n  last_review_reason: String(saved.last_review_reason ?? ''),\n  reviewer_run_id: String(saved.reviewer_run_id ?? ''),\n  reviewer_status: String(saved.reviewer_status ?? ''),\n  reviewer_session_id: String(saved.reviewer_session_id ?? ''),\n  worker_run_id: String(saved.worker_run_id ?? ''),\n  worker_status: String(saved.worker_status ?? ''),\n  worker_session_id: String(saved.worker_session_id ?? ''),\n  architect_run_id: String(saved.architect_run_id ?? ''),\n  architect_status: String(saved.architect_status ?? ''),\n  architect_session_id: String(saved.architect_session_id ?? '')\n};\n\nconst role = String(result.role ?? request.role ?? '').toLowerCase();\nconst runId = String(result.run_id ?? '').trim();\nconst sessionId = String(result.session_id ?? '').trim();\nconst status = String(result.status ?? '').trim();\nconst route = String(result.route ?? '').trim();\nconst clearingStaleRun = route === 'restart_session' || route === 'start_new';\n\nif (role === 'worker') {\n  state.worker_run_id = clearingStaleRun ? '' : (runId || state.worker_run_id);\n  if (sessionId) state.worker_session_id = sessionId;\n  if (status) state.worker_status = status;\n}\nif (role === 'reviewer') {\n  state.reviewer_run_id = clearingStaleRun ? '' : (runId || state.reviewer_run_id);\n  if (sessionId) state.reviewer_session_id = sessionId;\n  if (status) state.reviewer_status = status;\n}\nif (role === 'architect') {\n  state.architect_run_id = clearingStaleRun ? '' : (runId || state.architect_run_id);\n  if (sessionId) state.architect_session_id = sessionId;\n  if (status) state.architect_status = status;\n}\n\nreturn [{json: state}];"
+        "jsCode": "const saved = $('Load Task State — Run Context').first().json ?? {};\nconst result = $('Capture Run Response').last().json ?? {};\nconst request = $('Normalize Request').last().json ?? {};\n\nconst state = {\n  ...saved,\n  state_key: String(saved.state_key ?? request.state_key ?? ''),\n  service_model: String(request.service_model ?? ''),\n  service_provider: String(request.service_provider ?? ''),\n  working_directory: String(request.working_directory ?? ''),\n  plan_json: String(saved.plan_json ?? ''),\n  task_index: Number(saved.task_index ?? 0),\n  task_attempt: Number(saved.task_attempt ?? 1),\n  status: String(saved.status ?? 'active'),\n  review_feedback: String(saved.review_feedback ?? ''),\n  last_review_score: Number(saved.last_review_score ?? 0),\n  last_review_reason: String(saved.last_review_reason ?? ''),\n  reviewer_run_id: String(saved.reviewer_run_id ?? ''),\n  reviewer_status: String(saved.reviewer_status ?? ''),\n  reviewer_session_id: String(saved.reviewer_session_id ?? ''),\n  worker_run_id: String(saved.worker_run_id ?? ''),\n  worker_status: String(saved.worker_status ?? ''),\n  worker_session_id: String(saved.worker_session_id ?? ''),\n  architect_run_id: String(saved.architect_run_id ?? ''),\n  architect_status: String(saved.architect_status ?? ''),\n  architect_session_id: String(saved.architect_session_id ?? '')\n};\n\nconst role = String(result.role ?? request.role ?? '').toLowerCase();\nconst runId = String(result.run_id ?? '').trim();\nconst sessionId = String(result.session_id ?? '').trim();\nconst status = String(result.status ?? '').trim();\nconst route = String(result.route ?? '').trim();\nconst clearingStaleRun = route === 'restart_session' || route === 'start_new';\n\nif (role === 'worker') {\n  state.worker_run_id = clearingStaleRun ? '' : (runId || state.worker_run_id);\n  if (sessionId) state.worker_session_id = sessionId;\n  if (status) state.worker_status = status;\n}\nif (role === 'reviewer') {\n  state.reviewer_run_id = clearingStaleRun ? '' : (runId || state.reviewer_run_id);\n  if (sessionId) state.reviewer_session_id = sessionId;\n  if (status) state.reviewer_status = status;\n}\nif (role === 'architect') {\n  state.architect_run_id = clearingStaleRun ? '' : (runId || state.architect_run_id);\n  if (sessionId) state.architect_session_id = sessionId;\n  if (status) state.architect_status = status;\n}\n\nreturn [{json: state}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -432,
-        704
+        -352,
+        1184
       ],
-      "id": "08501975-8e69-48da-8a34-53c56c24d49b",
+      "id": "d5958db1-151b-42dc-a997-df3506845924",
       "name": "Build Persist State — Run Context"
     },
     {
@@ -776,24 +787,24 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -832,
-        848
+        -752,
+        1328
       ],
-      "id": "12ade48c-e4f5-49d5-b058-1a7c33e2b3da",
+      "id": "b4e9717e-d62a-4bd2-a01b-0f6825944dc6",
       "name": "Load Task State — Status",
       "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const saved = $('Load Task State — Status').first().json ?? {};\nconst result = $('Evaluate Status').last().json ?? {};\nconst request = $('Normalize Request').last().json ?? {};\n\nconst route = String(result.route ?? '').trim();\nconst clearingStaleRun = route === 'restart_session' || route === 'start_new';\n\nconst state = {\n  ...saved,\n  state_key: String(saved.state_key ?? request.state_key ?? ''),\n  plan_json: String(saved.plan_json ?? ''),\n  task_index: Number(saved.task_index ?? 0),\n  task_attempt: Number(saved.task_attempt ?? 1),\n  status: String(saved.status ?? 'active'),\n  review_feedback: String(saved.review_feedback ?? ''),\n  last_review_score: Number(saved.last_review_score ?? 0),\n  last_review_reason: String(saved.last_review_reason ?? ''),\n  reviewer_run_id: String(saved.reviewer_run_id ?? ''),\n  reviewer_status: String(saved.reviewer_status ?? ''),\n  reviewer_session_id: String(saved.reviewer_session_id ?? ''),\n  worker_run_id: String(saved.worker_run_id ?? ''),\n  worker_status: String(saved.worker_status ?? ''),\n  worker_session_id: String(saved.worker_session_id ?? ''),\n  architect_run_id: String(saved.architect_run_id ?? ''),\n  architect_status: String(saved.architect_status ?? ''),\n  architect_session_id: String(saved.architect_session_id ?? '')\n};\n\nconst role = String(result.role ?? request.role ?? '').toLowerCase();\nconst runId = String(result.run_id ?? '').trim();\nconst sessionId = String(result.session_id ?? '').trim();\nconst status = String(result.status ?? '').trim();\n\nif (role === 'worker') {\n  state.worker_run_id = clearingStaleRun ? '' : (runId || state.worker_run_id);\n  if (sessionId) state.worker_session_id = sessionId;\n  if (status) state.worker_status = status;\n}\nif (role === 'reviewer') {\n  state.reviewer_run_id = clearingStaleRun ? '' : (runId || state.reviewer_run_id);\n  if (sessionId) state.reviewer_session_id = sessionId;\n  if (status) state.reviewer_status = status;\n}\nif (role === 'architect') {\n  state.architect_run_id = clearingStaleRun ? '' : (runId || state.architect_run_id);\n  if (sessionId) state.architect_session_id = sessionId;\n  if (status) state.architect_status = status;\n}\n\nreturn [{json: state}];"
+        "jsCode": "const saved = $('Load Task State — Status').first().json ?? {};\nconst result = $('Evaluate Status').last().json ?? {};\nconst request = $('Normalize Request').last().json ?? {};\n\nconst route = String(result.route ?? '').trim();\nconst clearingStaleRun = route === 'restart_session' || route === 'start_new';\n\nconst state = {\n  ...saved,\n  state_key: String(saved.state_key ?? request.state_key ?? ''),\n  working_directory: String(request.working_directory ?? ''),\n  plan_json: String(saved.plan_json ?? ''),\n  task_index: Number(saved.task_index ?? 0),\n  task_attempt: Number(saved.task_attempt ?? 1),\n  status: String(saved.status ?? 'active'),\n  review_feedback: String(saved.review_feedback ?? ''),\n  last_review_score: Number(saved.last_review_score ?? 0),\n  last_review_reason: String(saved.last_review_reason ?? ''),\n  reviewer_run_id: String(saved.reviewer_run_id ?? ''),\n  reviewer_status: String(saved.reviewer_status ?? ''),\n  reviewer_session_id: String(saved.reviewer_session_id ?? ''),\n  worker_run_id: String(saved.worker_run_id ?? ''),\n  worker_status: String(saved.worker_status ?? ''),\n  worker_session_id: String(saved.worker_session_id ?? ''),\n  architect_run_id: String(saved.architect_run_id ?? ''),\n  architect_status: String(saved.architect_status ?? ''),\n  architect_session_id: String(saved.architect_session_id ?? '')\n};\n\nconst role = String(result.role ?? request.role ?? '').toLowerCase();\nconst runId = String(result.run_id ?? '').trim();\nconst sessionId = String(result.session_id ?? '').trim();\nconst status = String(result.status ?? '').trim();\n\nif (role === 'worker') {\n  state.worker_run_id = clearingStaleRun ? '' : (runId || state.worker_run_id);\n  if (sessionId) state.worker_session_id = sessionId;\n  if (status) state.worker_status = status;\n}\nif (role === 'reviewer') {\n  state.reviewer_run_id = clearingStaleRun ? '' : (runId || state.reviewer_run_id);\n  if (sessionId) state.reviewer_session_id = sessionId;\n  if (status) state.reviewer_status = status;\n}\nif (role === 'architect') {\n  state.architect_run_id = clearingStaleRun ? '' : (runId || state.architect_run_id);\n  if (sessionId) state.architect_session_id = sessionId;\n  if (status) state.architect_status = status;\n}\n\nreturn [{json: state}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        848
+        -560,
+        1328
       ],
-      "id": "e21ae105-a88f-422b-a87d-85bf643cee46",
+      "id": "8bedfd74-d8e4-4cf3-885c-880ee01f65d3",
       "name": "Build Persist State — Status"
     },
     {
@@ -1028,36 +1039,36 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        -432,
-        848
+        -352,
+        1328
       ],
-      "id": "575dc030-b2cf-47db-b3e0-5562082f7c7c",
+      "id": "252daf27-fa4a-4a0a-afa7-982f7889a73f",
       "name": "Persist Agent State — Status"
     },
     {
       "parameters": {
-        "jsCode": "const persisted = $json ?? {};\nconst runner = $('Evaluate Status').last().json ?? {};\n\nreturn [{\n  json: {\n    ...persisted,\n    role: String(runner.role ?? ''),\n    run_id: String(runner.run_id ?? ''),\n    session_id: String(runner.session_id ?? ''),\n    requested_session_id: String(runner.requested_session_id ?? ''),\n    model: String(runner.model ?? ''),\n    provider: String(runner.provider ?? ''),\n    service_model: String(runner.service_model ?? ''),\n    service_provider: String(runner.service_provider ?? ''),\n    input: String(runner.input ?? ''),\n    resume_input: String(runner.resume_input ?? ''),\n    poll_seconds: Number(runner.poll_seconds ?? 3),\n    max_polls: Number(runner.max_polls ?? 40),\n    poll_count: Number(runner.poll_count ?? 0),\n    max_retries: Number(runner.max_retries ?? 3),\n    retry_count: Number(runner.retry_count ?? 0),\n    retry_delays: Array.isArray(runner.retry_delays) ? runner.retry_delays : [15, 30, 60, 120, 300],\n    retry_delay_seconds: Number(runner.retry_delay_seconds ?? 0),\n    status: String(runner.status ?? ''),\n    route: String(runner.route ?? ''),\n    output: String(runner.output ?? ''),\n    error: String(runner.error ?? ''),\n    error_code: String(runner.error_code ?? ''),\n    http_code: runner.http_code ?? null,\n    run_not_found: Boolean(runner.run_not_found ?? false),\n    transient_error: Boolean(runner.transient_error ?? false),\n    resumed: Boolean(runner.resumed ?? false),\n    session_verified: Boolean(runner.session_verified ?? false),\n    session_mismatch: Boolean(runner.session_mismatch ?? false),\n    compression_failed: Boolean(runner.compression_failed ?? false),\n    compression_handoff: Boolean(runner.compression_handoff ?? false),\n    handoff_from_session_id: String(runner.handoff_from_session_id ?? '')\n  }\n}];"
+        "jsCode": "const persisted = $json ?? {};\nconst runner = $('Evaluate Status').last().json ?? {};\nreturn [{ json: { ...persisted, role: String(runner.role ?? ''), run_id: String(runner.run_id ?? ''), session_id: String(runner.session_id ?? ''), requested_session_id: String(runner.requested_session_id ?? ''), model: String(runner.model ?? ''), provider: String(runner.provider ?? ''), service_model: String(runner.service_model ?? ''), service_provider: String(runner.service_provider ?? ''), working_directory: String(runner.working_directory ?? $('Normalize Request').first().json.working_directory ?? ''), input: String(runner.input ?? ''), resume_input: String(runner.resume_input ?? ''), poll_seconds: Number(runner.poll_seconds ?? 3), max_polls: Number(runner.max_polls ?? 40), poll_count: Number(runner.poll_count ?? 0), max_retries: Number(runner.max_retries ?? 3), retry_count: Number(runner.retry_count ?? 0), retry_delays: Array.isArray(runner.retry_delays) ? runner.retry_delays : [15, 30, 60, 120, 300], retry_delay_seconds: Number(runner.retry_delay_seconds ?? 0), status: String(runner.status ?? ''), route: String(runner.route ?? ''), output: String(runner.output ?? ''), error: String(runner.error ?? ''), error_code: String(runner.error_code ?? ''), http_code: runner.http_code ?? null, run_not_found: Boolean(runner.run_not_found ?? false), transient_error: Boolean(runner.transient_error ?? false), resumed: Boolean(runner.resumed ?? false), session_verified: Boolean(runner.session_verified ?? false), session_mismatch: Boolean(runner.session_mismatch ?? false), compression_failed: Boolean(runner.compression_failed ?? false), compression_handoff: Boolean(runner.compression_handoff ?? false), handoff_from_session_id: String(runner.handoff_from_session_id ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -240,
-        848
+        -160,
+        1328
       ],
-      "id": "98bebbc2-558f-49a5-80d2-342c9eb355a4",
+      "id": "aa0d243c-35f5-4b22-9847-f16a78e2b744",
       "name": "Restore Runner State — Status"
     },
     {
       "parameters": {
-        "jsCode": "const persisted = $json ?? {};\nconst runner = $('Capture Run Response').last().json ?? {};\n\nreturn [{\n  json: {\n    ...persisted,\n    role: String(runner.role ?? ''),\n    run_id: String(runner.run_id ?? ''),\n    session_id: String(runner.session_id ?? ''),\n    requested_session_id: String(runner.requested_session_id ?? ''),\n    model: String(runner.model ?? ''),\n    provider: String(runner.provider ?? ''),\n    service_model: String(runner.service_model ?? ''),\n    service_provider: String(runner.service_provider ?? ''),\n    input: String(runner.input ?? ''),\n    resume_input: String(runner.resume_input ?? ''),\n    poll_seconds: Number(runner.poll_seconds ?? 3),\n    max_polls: Number(runner.max_polls ?? 40),\n    poll_count: Number(runner.poll_count ?? 0),\n    max_retries: Number(runner.max_retries ?? 3),\n    retry_count: Number(runner.retry_count ?? 0),\n    retry_delays: Array.isArray(runner.retry_delays) ? runner.retry_delays : [15, 30, 60, 120, 300],\n    retry_delay_seconds: Number(runner.retry_delay_seconds ?? 0),\n    status: String(runner.status ?? ''),\n    route: String(runner.route ?? ''),\n    output: String(runner.output ?? ''),\n    error: String(runner.error ?? ''),\n    error_code: String(runner.error_code ?? ''),\n    http_code: runner.http_code ?? null,\n    run_not_found: Boolean(runner.run_not_found ?? false),\n    transient_error: Boolean(runner.transient_error ?? false),\n    resumed: Boolean(runner.resumed ?? false),\n    session_verified: Boolean(runner.session_verified ?? false),\n    session_mismatch: Boolean(runner.session_mismatch ?? false),\n    compression_failed: Boolean(runner.compression_failed ?? false),\n    compression_handoff: Boolean(runner.compression_handoff ?? false),\n    handoff_from_session_id: String(runner.handoff_from_session_id ?? '')\n  }\n}];"
+        "jsCode": "const persisted = $json ?? {};\nconst runner = $('Capture Run Response').last().json ?? {};\nreturn [{ json: { ...persisted, role: String(runner.role ?? ''), run_id: String(runner.run_id ?? ''), session_id: String(runner.session_id ?? ''), requested_session_id: String(runner.requested_session_id ?? ''), model: String(runner.model ?? ''), provider: String(runner.provider ?? ''), service_model: String(runner.service_model ?? ''), service_provider: String(runner.service_provider ?? ''), working_directory: String(runner.working_directory ?? $('Normalize Request').first().json.working_directory ?? ''), input: String(runner.input ?? ''), resume_input: String(runner.resume_input ?? ''), poll_seconds: Number(runner.poll_seconds ?? 3), max_polls: Number(runner.max_polls ?? 40), poll_count: Number(runner.poll_count ?? 0), max_retries: Number(runner.max_retries ?? 3), retry_count: Number(runner.retry_count ?? 0), retry_delays: Array.isArray(runner.retry_delays) ? runner.retry_delays : [15, 30, 60, 120, 300], retry_delay_seconds: Number(runner.retry_delay_seconds ?? 0), status: String(runner.status ?? ''), route: String(runner.route ?? ''), output: String(runner.output ?? ''), error: String(runner.error ?? ''), error_code: String(runner.error_code ?? ''), http_code: runner.http_code ?? null, run_not_found: Boolean(runner.run_not_found ?? false), transient_error: Boolean(runner.transient_error ?? false), resumed: Boolean(runner.resumed ?? false), session_verified: Boolean(runner.session_verified ?? false), session_mismatch: Boolean(runner.session_mismatch ?? false), compression_failed: Boolean(runner.compression_failed ?? false), compression_handoff: Boolean(runner.compression_handoff ?? false), handoff_from_session_id: String(runner.handoff_from_session_id ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -64,
-        704
+        16,
+        1184
       ],
-      "id": "787bdfe4-aad9-4b74-8790-3b1952caa494",
+      "id": "6c3b83e4-0353-48cd-bcfc-e88bc050305c",
       "name": "Restore Runner State — Run Context"
     },
     {
@@ -1088,10 +1099,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -2080,
-        496
+        -2000,
+        976
       ],
-      "id": "dd897a9c-c972-43bf-af04-f3df5ec4718e",
+      "id": "cdae2fb3-0503-4a21-a474-d13b4b2aa0f6",
       "name": "Has Session?"
     },
     {
@@ -1101,10 +1112,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1856,
-        272
+        -1776,
+        752
       ],
-      "id": "e0cf993c-2825-4868-ad38-b2dcda2d83ef",
+      "id": "7db85f02-4af9-4622-a0ed-ef8d2a275ea0",
       "name": "Mark Compression Target — Start"
     },
     {
@@ -1114,10 +1125,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        848
+        320,
+        1328
       ],
-      "id": "37e9e58a-a9c4-4cf6-a2a4-5803b839dbfc",
+      "id": "2a3091e4-0372-4237-8621-262c9afb688a",
       "name": "Mark Compression Target — Resume"
     },
     {
@@ -1127,23 +1138,23 @@
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [
-        -608,
-        272
+        -528,
+        752
       ],
-      "id": "59e65448-e93b-4540-a455-9f29fcaccb05",
+      "id": "948b810e-9e50-4267-92c1-68f98509c492",
       "name": "Compress Session"
     },
     {
       "parameters": {
-        "jsCode": "// FIX: восстановлено чтение реального exit code из маркера __HERMES_EXIT__=N\n// (shell всегда возвращает 0 из-за финального 'exit 0', реальный код — в stdout).\nconst prior =\n  $('Mark Compression Target — Start').isExecuted\n    ? $('Mark Compression Target — Start').last().json\n    : $('Mark Compression Target — Resume').last().json;\n\nconst stdout = String($json.stdout ?? '').trim();\nconst stderr = String($json.stderr ?? '').trim();\nconst shellExitCode = Number($json.exitCode ?? $json.code ?? 0);\n\nconst exitMatch = stdout.match(/__HERMES_EXIT__=(\\d+)/);\nconst exitCode = exitMatch ? Number(exitMatch[1]) : shellExitCode;\n\nfunction parseJson(value) {\n  if (!value) return {};\n  if (typeof value === 'object' && value !== null) return value;\n  try { return JSON.parse(String(value)); } catch { return {}; }\n}\n\nlet response = {};\nlet diagnostic = '';\nlet hermesStdout = '';\nlet hermesStderr = '';\n\nconst stdoutMarker = '__HERMES_STDOUT__';\nconst stderrMarker = '__HERMES_STDERR__';\n\nconst stdoutPos = stdout.indexOf(stdoutMarker);\n\nif (stdoutPos >= 0) {\n  const afterStdoutMarker = stdout.slice(stdoutPos + stdoutMarker.length);\n  const stderrPos = afterStdoutMarker.indexOf(stderrMarker);\n  if (stderrPos >= 0) {\n    hermesStdout = afterStdoutMarker.slice(0, stderrPos).trim();\n    hermesStderr = afterStdoutMarker.slice(stderrPos + stderrMarker.length).trim();\n  } else {\n    hermesStdout = afterStdoutMarker.trim();\n  }\n} else {\n  hermesStdout = stdout;\n}\n\nresponse = parseJson(hermesStdout);\n\nif (!Object.keys(response).length && hermesStdout) {\n  diagnostic = hermesStdout;\n}\n\nconst responseError = response.error ?? response.message ?? response.detail ?? '';\n\nconst errorText = String(\n  typeof responseError === 'string'\n    ? responseError\n    : (responseError?.message ?? hermesStderr ?? stderr ?? (exitCode !== 0 ? `Compression command exited with code ${exitCode}.` : ''))\n).trim();\n\nconst status = String(response.compression_status ?? response.status ?? '').toLowerCase();\nconst commitStatus = String(response.commit_status ?? '').toLowerCase();\n\nconst failed =\n  Boolean(response.compression_failed) ||\n  exitCode !== 0 ||\n  ['failed', 'aborted', 'cancelled', 'canceled'].includes(status) ||\n  ['failed', 'aborted'].includes(commitStatus);\n\nconst completed =\n  !failed && (\n    Boolean(response.compression_completed) ||\n    status === 'completed' ||\n    commitStatus === 'committed'\n  );\n\nconst sessionId = String(\n  response.compression_session_id ??\n  response.session_id ??\n  response.requested_session_id ??\n  prior.session_id ??\n  prior.requested_session_id ??\n  ''\n).trim();\n\nreturn [{\n  json: {\n    ...prior,\n    compression_run_id: '',\n    compression_session_id: sessionId,\n    compression_status: failed ? 'failed' : (completed ? 'completed' : (status || 'unknown')),\n    compression_error: errorText,\n    compression_output: response.compression_output ?? response.output ?? hermesStdout,\n    compression_stdout: hermesStdout,\n    compression_stderr: hermesStderr || stderr,\n    compression_exit_code: exitCode,\n    compression_response: response,\n    compression_diagnostic: diagnostic || errorText || hermesStderr || stderr,\n    compression_failed: failed,\n    compression_completed: completed,\n    session_id: sessionId || String(prior.session_id ?? '').trim(),\n    requested_session_id: sessionId || String(prior.requested_session_id ?? '').trim(),\n    run_id: ''\n  }\n}];"
+        "jsCode": "const prior =\n  $('Mark Compression Target — Start').isExecuted\n    ? $('Mark Compression Target — Start').last().json\n    : $('Mark Compression Target — Resume').last().json;\n\nconst stdout = String($json.stdout ?? '').trim();\nconst stderr = String($json.stderr ?? '').trim();\nconst shellExitCode = Number($json.exitCode ?? $json.code ?? 0);\n\nconst exitMatch = stdout.match(/__HERMES_EXIT__=(\\d+)/);\nconst exitCode = exitMatch ? Number(exitMatch[1]) : shellExitCode;\n\nfunction parseJson(value) {\n  if (!value) return {};\n  if (typeof value === 'object' && value !== null) return value;\n  try { return JSON.parse(String(value)); } catch { return {}; }\n}\n\nlet response = {};\nlet diagnostic = '';\nlet hermesStdout = '';\nlet hermesStderr = '';\n\nconst stdoutMarker = '__HERMES_STDOUT__';\nconst stderrMarker = '__HERMES_STDERR__';\n\nconst stdoutPos = stdout.indexOf(stdoutMarker);\n\nif (stdoutPos >= 0) {\n  const afterStdoutMarker = stdout.slice(stdoutPos + stdoutMarker.length);\n  const stderrPos = afterStdoutMarker.indexOf(stderrMarker);\n  if (stderrPos >= 0) {\n    hermesStdout = afterStdoutMarker.slice(0, stderrPos).trim();\n    hermesStderr = afterStdoutMarker.slice(stderrPos + stderrMarker.length).trim();\n  } else {\n    hermesStdout = afterStdoutMarker.trim();\n  }\n} else {\n  hermesStdout = stdout;\n}\n\nresponse = parseJson(hermesStdout);\n\nif (!Object.keys(response).length && hermesStdout) {\n  diagnostic = hermesStdout;\n}\n\nconst responseError = response.error ?? response.message ?? response.detail ?? '';\n\nconst errorText = String(\n  typeof responseError === 'string'\n    ? responseError\n    : (responseError?.message ?? hermesStderr ?? stderr ?? (exitCode !== 0 ? `Compression command exited with code ${exitCode}.` : ''))\n).trim();\n\nconst status = String(response.compression_status ?? response.status ?? '').toLowerCase();\nconst commitStatus = String(response.commit_status ?? '').toLowerCase();\n\nconst failed =\n  Boolean(response.compression_failed) ||\n  exitCode !== 0 ||\n  ['failed', 'aborted', 'cancelled', 'canceled'].includes(status) ||\n  ['failed', 'aborted'].includes(commitStatus);\n\nconst completed =\n  !failed && (\n    Boolean(response.compression_completed) ||\n    status === 'completed' ||\n    commitStatus === 'committed'\n  );\n\nconst sessionId = String(\n  response.compression_session_id ??\n  response.session_id ??\n  response.requested_session_id ??\n  prior.session_id ??\n  prior.requested_session_id ??\n  ''\n).trim();\n\nreturn [{\n  json: {\n    ...prior,\n    compression_run_id: '',\n    compression_session_id: sessionId,\n    compression_status: failed ? 'failed' : (completed ? 'completed' : (status || 'unknown')),\n    compression_error: errorText,\n    compression_output: response.compression_output ?? response.output ?? hermesStdout,\n    compression_stdout: hermesStdout,\n    compression_stderr: hermesStderr || stderr,\n    compression_exit_code: exitCode,\n    compression_response: response,\n    compression_diagnostic: diagnostic || errorText || hermesStderr || stderr,\n    compression_failed: failed,\n    compression_completed: completed,\n    session_id: sessionId || String(prior.session_id ?? '').trim(),\n    requested_session_id: sessionId || String(prior.requested_session_id ?? '').trim(),\n    run_id: ''\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -448,
-        272
+        -368,
+        752
       ],
-      "id": "d0edd8fb-4b61-41c7-a066-bc4382e29c2c",
+      "id": "3ac8c236-9007-45a7-9701-57f5f42bc351",
       "name": "Evaluate Compression"
     },
     {
@@ -1174,10 +1185,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -288,
-        272
+        -208,
+        752
       ],
-      "id": "4130e03f-eacb-4881-b902-b0ba0ebd3845",
+      "id": "7591b3fa-22eb-453c-ac76-a12d8cd0972c",
       "name": "Compression Failed?"
     },
     {
@@ -1208,23 +1219,23 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -80,
-        400
+        0,
+        880
       ],
-      "id": "b3be0806-af6c-4ea3-a6dd-f42347f2183b",
+      "id": "08400d75-ee26-4fd9-a576-3c0fbb09bcce",
       "name": "Compression Target?"
     },
     {
       "parameters": {
-        "jsCode": "const current = $json ?? {};\nconst role = String(current.role ?? '').trim().toLowerCase();\nconst persisted = $('Load Task State — Run Context').isExecuted\n  ? ($('Load Task State — Run Context').first().json ?? {})\n  : {};\n\nfunction roleSession(state, roleName) {\n  if (roleName === 'worker') return String(state.worker_session_id ?? '').trim();\n  if (roleName === 'reviewer') return String(state.reviewer_session_id ?? '').trim();\n  if (roleName === 'architect') return String(state.architect_session_id ?? '').trim();\n  return '';\n}\n\nconst previousSession =\n  String(current.compression_target_session_id ?? '').trim() ||\n  roleSession(persisted, role) ||\n  String(current.session_id ?? current.requested_session_id ?? '').trim();\n\nconst reason = String(\n  current.compression_error ||\n  current.compression_stderr ||\n  current.compression_stdout ||\n  `Compression failed with exit code ${current.compression_exit_code ?? 'unknown'}.`\n).trim();\n\nconst handoff = [\n  'SESSION HANDOFF — continue in a fresh Hermes session.',\n  '',\n  'The previous Hermes session could not be safely compressed, so continuation was moved to a new session.',\n  'Do NOT restart the task from scratch.',\n  'Preserve the existing task objective, constraints, progress and expected output format.',\n  '',\n  'PREVIOUS SESSION ID:',\n  previousSession || '(not available)',\n  '',\n  'COMPRESSION FAILURE:',\n  reason,\n  '',\n  'ORIGINAL TASK INPUT:',\n  String(current.input || current.resume_input || '(not available)').trim(),\n  '',\n  'CONTINUE:',\n  'Resume the task from the information above. Verify the current repository/workspace state before making changes.',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...current,\n    handoff_input: handoff,\n    handoff_from_session_id: previousSession,\n    compression_handoff: true,\n    run_id: '',\n    session_id: '',\n    requested_session_id: '',\n  },\n}];"
+        "jsCode": "const current = $json ?? {};\nconst role = String(current.role ?? '').trim().toLowerCase();\nconst persisted = $('Load Task State — Run Context').isExecuted ? ($('Load Task State — Run Context').first().json ?? {}) : {};\n\nfunction roleSession(state, roleName) {\n  if (roleName === 'worker') return String(state.worker_session_id ?? '').trim();\n  if (roleName === 'reviewer') return String(state.reviewer_session_id ?? '').trim();\n  if (roleName === 'architect') return String(state.architect_session_id ?? '').trim();\n  return '';\n}\n\nconst previousSession =\n  String(current.compression_target_session_id ?? '').trim() ||\n  roleSession(persisted, role) ||\n  String(current.session_id ?? current.requested_session_id ?? '').trim();\n\nconst reason = String(\n  current.compression_error ||\n  current.compression_stderr ||\n  current.compression_stdout ||\n  `Compression failed with exit code ${current.compression_exit_code ?? 'unknown'}.`\n).trim();\n\nconst handoff = [\n  'SESSION HANDOFF — continue in a fresh Hermes session.',\n  '',\n  'The previous Hermes session could not be safely compressed, so continuation was moved to a new session.',\n  'Do NOT restart the task from scratch.',\n  'Preserve the existing task objective, constraints, progress and expected output format.',\n  '',\n  'PREVIOUS SESSION ID:',\n  previousSession || '(not available)',\n  '',\n  'COMPRESSION FAILURE:',\n  reason,\n  '',\n  'ORIGINAL TASK INPUT:',\n  String(current.input || current.resume_input || '(not available)').trim(),\n  '',\n  'CONTINUE:',\n  'Resume the task from the information above. Verify the current repository/workspace state before making changes.',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...current,\n    handoff_input: handoff,\n    handoff_from_session_id: previousSession,\n    compression_handoff: true,\n    working_directory: String(current.working_directory ?? $('Normalize Request').first().json.working_directory ?? ''),\n    run_id: '',\n    session_id: '',\n    requested_session_id: '',\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        0,
-        0
+        80,
+        480
       ],
-      "id": "66e72b0b-c1d6-4f33-97eb-11e897e8efde",
+      "id": "e8a9eae7-4737-4453-85db-e4d85e414710",
       "name": "Build Compression Handoff"
     },
     {
@@ -1239,12 +1250,16 @@
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "X-Hermes-Working-Directory",
+              "value": "={{ String($json.working_directory ?? $('Normalize Request').first().json.working_directory ?? '').trim() }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { input: String($json.handoff_input ?? $json.input ?? $json.resume_input ?? ''), model: String($json.model ?? ''), provider: String($json.provider ?? '') } }}",
+        "jsonBody": "={{ (() => {\n  const wd = String($json.working_directory ?? $('Normalize Request').first().json.working_directory ?? '').trim();\n  const body = {\n    input: String($json.handoff_input ?? $json.input ?? $json.resume_input ?? ''),\n    model: String($json.model ?? ''),\n    provider: String($json.provider ?? '')\n  };\n  if (wd) body.working_directory = wd;\n  return body;\n})() }}",
         "options": {
           "response": {
             "response": {
@@ -1257,10 +1272,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        224,
-        0
+        304,
+        480
       ],
-      "id": "83ee42b4-1939-4842-976e-b75b73ee1915",
+      "id": "37a08ed4-cd6e-4f67-a4b3-59acb3eeef52",
       "name": "Start New Session from Handoff",
       "credentials": {
         "httpBearerAuth": {
@@ -1302,10 +1317,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        -1328,
-        272
+        -1248,
+        752
       ],
-      "id": "10df2e9c-bab9-443b-b273-63544786a62b",
+      "id": "02e30862-ddf8-4f88-99ff-b93162ffa59a",
       "name": "Hermes Dashboard Login",
       "credentials": {
         "httpCustomAuth": {
@@ -1321,10 +1336,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1104,
-        272
+        -1024,
+        752
       ],
-      "id": "bfdde0ef-4851-4533-bc0c-2b3d13e5052f",
+      "id": "b70705a3-1145-4d49-b20c-3e2a40fc47b5",
       "name": "Extract Hermes Session Cookie"
     },
     {
@@ -1355,10 +1370,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        -928,
-        272
+        -848,
+        752
       ],
-      "id": "6825e214-bd87-4b04-805b-f1eb78ebf59e",
+      "id": "bd719dce-de91-4a59-b5f0-c9d56a88cb87",
       "name": "Get TUI WS Ticket"
     },
     {
@@ -1368,10 +1383,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -768,
-        272
+        -688,
+        752
       ],
-      "id": "c37054c0-3ef9-404b-9cfa-be0bd3957a9e",
+      "id": "fc98d53d-161a-43e1-9a25-c3670249b147",
       "name": "Build Compression Payload"
     }
   ],
@@ -1835,7 +1850,7 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "244f9bd5-3192-49ac-b962-e3f8f6d5ea92",
+  "versionId": "38220190-0e56-44fb-b84b-8ee7e5a63677",
   "meta": {
     "instanceId": "e9629f9fcada0dc2525b3ec1f97ca9207b7e2aa614f2237017ccdcd0fddac54b"
   },
