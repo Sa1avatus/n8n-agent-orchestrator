@@ -123,7 +123,6 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-ahawr-local-change-me}
       - LLAMACPP_API_BASE=${LLAMACPP_API_BASE:-http://host.docker.internal:8080/v1}
       - LLAMACPP_API_KEY=${LLAMACPP_API_KEY:-none}
-      - LLAMACPP_MODEL=${LLAMACPP_MODEL:-openai/local}
       # used only by the optional Claude / OpenRouter entries in litellm/config.yaml
       - ANTHROPIC_API_KEY=${LITELLM_ANTHROPIC_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}

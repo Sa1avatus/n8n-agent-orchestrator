@@ -51,7 +51,23 @@ def main() -> int:
                 )
                 if k in os.environ
             }
-            record = {"args": args, "prompt": prompt, "cwd": os.getcwd(), "env": seen}
+            secondary = {
+                k: os.environ[k]
+                for k in (
+                    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+                    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                    "CLAUDE_CODE_SUBAGENT_MODEL",
+                )
+                if k in os.environ
+            }
+            record = {
+                "args": args,
+                "prompt": prompt,
+                "cwd": os.getcwd(),
+                "env": seen,
+                "secondary": secondary,
+            }
             fh.write(json.dumps(record) + "\n")
 
     if "--resume" in opts and not transcript.exists():

@@ -243,7 +243,7 @@ class RunManager:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     cwd=cwd,
-                    env=child_env(provider),
+                    env=child_env(provider, model),
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,

@@ -113,7 +113,9 @@ Claude Code speaks only the Anthropic Messages API, while llama.cpp's `llama-ser
 3. `hermes_config`, row `claude-code`:
    * `architect_model=opus`, `architect_provider=anthropic`;
    * `reviewer_model=opus`, `reviewer_provider=anthropic`;
-   * `worker_model=local-coder`, `worker_provider=local`.
+   * `worker_model=<model name as llama-server knows it>` (see `GET /v1/models`, e.g. `qwen3.8-27b-gsq-rco-iq2-s-mtp`), `worker_provider=local`.
+
+   The model is chosen only here. LiteLLM passes the name to llama-server unchanged: a router-mode server loads that model, and a single-model server answers with its loaded model. claude-runner also uses the name for Claude Code's background tasks and subagents of that run.
 4. `docker compose up -d --build`. `GET /health` lists the configured providers without secrets.
 
 Verified with Claude Code 2.1.283 in one runner. A Worker with `provider=local` went through LiteLLM 1.102.1 to an OpenAI-compatible server, with tool calls, resume and `/compact`. A Reviewer with `provider=anthropic` went to Anthropic with the OAuth token, and none of its traffic reached the local server.
@@ -124,8 +126,8 @@ What the local-provider settings do:
 |---|---|
 | `use_chat_completions_url_for_anthropic_messages: true` (LiteLLM) | LiteLLM otherwise sends `openai/*` models to the Responses API (`/v1/responses`), which llama.cpp lacks. |
 | `drop_params`, `additional_drop_params: [prompt_cache_key]` (LiteLLM) | Anthropic-only fields are not forwarded to llama.cpp. |
-| `"*"` model entry (LiteLLM) | Any other model name, such as a Claude alias used for a background task, also goes to the local server. |
-| `…__ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `…__CLAUDE_CODE_SUBAGENT_MODEL` | Aliases, background tasks and subagents of local runs use the local model. |
+| `"*"` → `openai/*` (LiteLLM) | Every model name goes to llama-server unchanged. |
+| Run model → `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (set by the runner) | Background tasks and subagents of a local run use the same model as the run, so no model name is configured outside `hermes_config`. |
 | `…__CLAUDE_CODE_MAX_CONTEXT_TOKENS` = llama-server `-c` | Claude Code assumes 200k for unknown models and would compact too late. |
 | `…__CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192` | The default for unknown models is 32000. |
 | `…__CLAUDE_CODE_DISABLE_THINKING=1`, `…__DISABLE_PROMPT_CACHING=1` | No `reasoning_effort` or cache fields for the local model; the Claude roles keep thinking. |
@@ -170,7 +172,8 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
 - **Провайдеры по ролям, как в Hermes.** Каждая роль передаёт свой `*_provider` из `hermes_config`.
   - Если для провайдера нет блока `CLAUDE_RUNNER_PROVIDER_<ИМЯ>__…` (например, `anthropic`), роль идёт напрямую в Anthropic с `CLAUDE_CODE_OAUTH_TOKEN` или `ANTHROPIC_API_KEY`.
   - Для `local` действует блок `CLAUDE_RUNNER_PROVIDER_LOCAL__…` из `.env.example`: запросы идут через LiteLLM в llama.cpp, а токен Anthropic эта роль не получает.
-  - Пример: Architect и Reviewer — `opus`/`anthropic`, Worker — `local-coder`/`local`.
+  - Пример: Architect и Reviewer — `opus`/`anthropic`, Worker — `qwen3.8-27b-gsq-rco-iq2-s-mtp`/`local`.
+  - Модель задаётся только в `hermes_config`: LiteLLM передаёт имя в llama-server без изменений, а runner использует его и для фоновых задач Claude Code.
   - Не задавай `ANTHROPIC_BASE_URL` и `ANTHROPIC_AUTH_TOKEN` глобально: тогда в LiteLLM уйдут все роли.
   - llama-server нужно запускать с `--jinja` и `-c 32768` или больше.
 - **Совместимость.** Воркфлоу для Hermes не изменены. Обе версии можно держать в n8n одновременно.

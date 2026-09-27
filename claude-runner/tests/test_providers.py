@@ -80,6 +80,15 @@ def test_roles_use_their_own_backend_and_credentials(mixed: Settings, tmp_path: 
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "local-coder",
         "CLAUDE_CODE_DISABLE_THINKING": "1",
     }
+    # secondary model names follow the run's model (hermes_config *_model)
+    assert worker["secondary"] == {
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "local-coder",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "local-coder",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "local-coder",
+        "CLAUDE_CODE_SUBAGENT_MODEL": "local-coder",
+    }
+    for claude in (architect, reviewer):
+        assert claude["secondary"] == {}
     assert worker["args"][worker["args"].index("--tools") + 1] == "Bash,Read,Edit"
 
 
@@ -102,3 +111,14 @@ def test_unknown_provider_falls_back_to_container_env(mixed: Settings, tmp_path:
     with TestClient(create_app(mixed)) as client:
         assert run(client, role="worker", provider="custom:openrouter")["status"] == "completed"
     assert calls(tmp_path)[-1]["env"] == {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-subscription"}
+
+
+def test_local_model_name_comes_only_from_the_run(mixed: Settings, tmp_path: Path) -> None:
+    """No ANTHROPIC_DEFAULT_* in the provider block: every model name is the role's *_model."""
+    block = {k: v for k, v in mixed.providers["LOCAL"].env.items() if "MODEL" not in k}
+    object.__setattr__(mixed.providers["LOCAL"], "env", block)
+    with TestClient(create_app(mixed)) as client:
+        run(client, role="worker", provider="local", model="qwen3.8-27b-gsq-rco-iq2-s-mtp")
+    secondary = calls(tmp_path)[-1]["secondary"]
+    assert set(secondary.values()) == {"qwen3.8-27b-gsq-rco-iq2-s-mtp"}
+    assert len(secondary) == 4

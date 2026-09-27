@@ -3,30 +3,20 @@
 # server (llama-server). Values come from the container environment (see ../.env.example).
 
 model_list:
-  # The name Claude Code asks for (hermes_config *_model, ANTHROPIC_DEFAULT_*_MODEL).
-  - model_name: local-coder
+  # Every model name is passed to llama-server unchanged: the model is chosen by the role's
+  # *_model in hermes_config (e.g. worker_model=qwen3.8-27b-gsq-rco-iq2-s-mtp). llama-server in
+  # router mode (--models-dir/--models-preset) loads the model with that name; a single-model
+  # llama-server answers with its loaded model whatever the name.
+  - model_name: "*"
     litellm_params:
-      # "openai/<name>": any OpenAI-compatible server; llama-server serves its loaded model
-      # whatever the name.
-      model: os.environ/LLAMACPP_MODEL
+      model: openai/*          # "openai/": any OpenAI-compatible server
       api_base: os.environ/LLAMACPP_API_BASE
       api_key: os.environ/LLAMACPP_API_KEY
       # Claude Code-specific fields that an OpenAI-compatible server does not need.
       additional_drop_params: ["prompt_cache_key"]
-    model_info:
-      supports_function_calling: true
-
-  # Any other model name (e.g. a Claude alias used for background tasks) also goes to the
-  # local server, so a missed ANTHROPIC_DEFAULT_*_MODEL setting cannot fail a run.
-  - model_name: "*"
-    litellm_params:
-      model: os.environ/LLAMACPP_MODEL
-      api_base: os.environ/LLAMACPP_API_BASE
-      api_key: os.environ/LLAMACPP_API_KEY
-      additional_drop_params: ["prompt_cache_key"]
 
   # Optional: real Claude models next to the local one (needs ANTHROPIC_API_KEY for LiteLLM).
-  # Put these entries ABOVE the "*" entry.
+  # Put these entries ABOVE the "*" entry (the first matching entry wins).
   # - model_name: opus
   #   litellm_params:
   #     model: anthropic/claude-opus-4-8

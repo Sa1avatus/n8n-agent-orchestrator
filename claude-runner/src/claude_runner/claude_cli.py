@@ -74,15 +74,29 @@ def build_command(
     return cmd
 
 
-def child_env(provider: ProviderProfile | None = None) -> dict[str, str]:
+# Model names Claude Code uses besides --model: aliases, background tasks, subagents.
+SECONDARY_MODEL_VARS = (
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "CLAUDE_CODE_SUBAGENT_MODEL",
+)
+
+
+def child_env(provider: ProviderProfile | None = None, model: str = "") -> dict[str, str]:
     """The CLI inherits the container env (model credentials) minus the runner's own settings,
     with the run's provider block on top. A provider with its own endpoint or credential does
-    not inherit the container's credentials."""
+    not inherit the container's credentials, and all of Claude Code's secondary model names
+    default to the run's model, so hermes_config *_model alone decides the model."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_RUNNER_")}
     if provider is not None:
         if provider.isolates_credentials:
             for key in CREDENTIAL_VARS:
                 env.pop(key, None)
+            for key in SECONDARY_MODEL_VARS:
+                env.pop(key, None)
+                if model and key not in provider.env:
+                    env[key] = model
         env.update(provider.env)
     env.setdefault("DISABLE_AUTOUPDATER", "1")
     env.setdefault("CLAUDE_CODE_RESUME_INTERRUPTED_TURN", "1")
