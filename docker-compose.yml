@@ -129,6 +129,7 @@ services:
 
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
+      - ./litellm/ahawr_hooks.py:/app/ahawr_hooks.py:ro
 
     extra_hosts:
       # llama-server running on the Docker host

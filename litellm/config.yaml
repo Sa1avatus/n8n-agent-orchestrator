@@ -28,6 +28,9 @@ model_list:
   #     api_key: os.environ/OPENROUTER_API_KEY
 
 litellm_settings:
+  # ahawr_hooks.py: moves Claude Code's mid-conversation system messages into user turns,
+  # which local chat templates (Qwen, Llama, Gemma) require.
+  callbacks: ahawr_hooks.proxy_handler_instance
   # Drop request parameters the backend does not support instead of failing the call.
   drop_params: true
   # LiteLLM routes /v1/messages for "openai/*" models to the OpenAI Responses API by default;

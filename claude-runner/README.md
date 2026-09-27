@@ -125,6 +125,7 @@ What the local-provider settings do:
 | Setting | Why |
 |---|---|
 | `use_chat_completions_url_for_anthropic_messages: true` (LiteLLM) | LiteLLM otherwise sends `openai/*` models to the Responses API (`/v1/responses`), which llama.cpp lacks. |
+| `ahawr_hooks.py` pre-call hook (LiteLLM) | Claude Code sends context such as the `# Environment` block as `system` messages in the middle of the conversation. Local chat templates (Qwen, Llama, Gemma) reject them ("System message must be at the beginning"), so the hook moves them into the user turn as `<system-reminder>` blocks. |
 | `drop_params`, `additional_drop_params: [prompt_cache_key]` (LiteLLM) | Anthropic-only fields are not forwarded to llama.cpp. |
 | `"*"` → `openai/*` (LiteLLM) | Every model name goes to llama-server unchanged. |
 | Run model → `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (set by the runner) | Background tasks and subagents of a local run use the same model as the run, so no model name is configured outside `hermes_config`. |

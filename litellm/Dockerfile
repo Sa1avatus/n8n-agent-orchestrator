@@ -10,8 +10,8 @@ RUN pip install --no-cache-dir "litellm[proxy]==${LITELLM_VERSION}" \
     && useradd --uid 10002 --create-home litellm
 
 WORKDIR /app
-# Default config; docker-compose mounts ./litellm/config.yaml over it so edits need no rebuild.
-COPY config.yaml /app/config.yaml
+# Default config and hooks; docker-compose mounts ./litellm over them so edits need no rebuild.
+COPY config.yaml ahawr_hooks.py /app/
 
 USER litellm
 EXPOSE 4000
