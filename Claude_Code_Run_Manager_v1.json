@@ -3,65 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "workflowInputs": {
-          "values": [
-            {
-              "name": "role"
-            },
-            {
-              "name": "run_id"
-            },
-            {
-              "name": "session_id"
-            },
-            {
-              "name": "input"
-            },
-            {
-              "name": "resume_input"
-            },
-            {
-              "name": "model"
-            },
-            {
-              "name": "provider"
-            },
-            {
-              "name": "poll_seconds",
-              "type": "number"
-            },
-            {
-              "name": "max_polls",
-              "type": "number"
-            },
-            {
-              "name": "max_retries",
-              "type": "number"
-            },
-            {
-              "name": "retry_count",
-              "type": "number"
-            },
-            {
-              "name": "retry_delays"
-            },
-            {
-              "name": "state_key"
-            },
-            {
-              "name": "service_model"
-            },
-            {
-              "name": "service_provider"
-            },
-            {
-              "name": "working_directory"
-            },
-            {
-              "name": "runner_url"
-            }
-          ]
-        }
+        "inputSource": "passthrough"
       },
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,

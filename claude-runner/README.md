@@ -80,7 +80,7 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 4. In n8n:
    * import `Claude_Code_Run_Manager_v1.json`, then `AHAWR_v13_ClaudeCode.json`;
    * create a **Bearer Auth** credential named `Claude Runner API` with the `CLAUDE_RUNNER_API_KEY` value (any value if the key is empty) and select it on the five HTTP nodes of the Run Manager;
-   * check that `Architect/Worker/Reviewer Start` point to the imported Run Manager.
+   * copy the Run Manager's workflow id from its URL (`/workflow/<id>`) into `hermes_config.run_manager_workflow_id` of the `claude-code` row. When the column is empty, `nhjwX1G7FiVTO2Ah` is used. The Start nodes need no editing: their inputs come from the `Build … Run Input` Code nodes, and the Run Manager accepts them as they are.
 5. Add the `runner_url` column and the `claude-code` row from `hermes_config.csv` to the `hermes_config` Data Table. Models are Claude Code aliases (`opus`, `sonnet`, `haiku`) or full model names. Missions keep their `state_namespace`; give Claude Code runs their own namespace if the Hermes version runs the same missions.
 
 The Hermes workflows (`AHAWR_v13.json`, `Hermes_Run_Manager_v5.json`) are untouched. Both variants can be imported side by side, since they have different workflow ids.

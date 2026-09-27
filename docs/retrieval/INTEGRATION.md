@@ -60,8 +60,10 @@ External documentation can be pushed with `POST /index` as inline documents:
 
 ## 3. Enable it in AHAWR v13
 
-1. Import `AHAWR_v13.json`. It has the same workflow id as v12 and replaces it. Check that
-   `Worker Start` / `Reviewer Start` still point at your `Hermes Run Manager v5` workflow id.
+1. Import `AHAWR_v13.json`. It has the same workflow id as v12 and replaces it. The Run Manager
+   is called by the id in `hermes_config.run_manager_workflow_id`, or `nhjwX1G7FiVTO2Ah` when the
+   column is empty. The `Build … Run Input` Code nodes prepare its inputs, so no Execute Workflow
+   node needs editing after an import.
 2. Add these optional columns to the `hermes_config` Data Table (see `hermes_config.csv`):
 
    | column | example | meaning |

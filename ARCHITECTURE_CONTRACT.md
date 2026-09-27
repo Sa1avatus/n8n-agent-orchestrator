@@ -322,6 +322,26 @@ the same.
    compaction, a `run_not_found` recovery now resumes with `resume_input` instead of resending
    the original input.
 
+
+## 11. Run Manager Calls Independent of Workflow Ids
+
+n8n assigns new workflow ids when workflows are imported through the UI. Before this change,
+re-selecting the sub-workflow in an Execute Workflow node reset its input mapping. Both AHAWR
+variants and both Run Managers are therefore wired as follows:
+
+- `Hermes Run Manager v5` and `Claude Code Run Manager v1` take their input with the trigger
+  set to *Accept all data* (`inputSource: passthrough`). `Normalize Request` validates the
+  fields as before.
+- `Build Architect/Worker/Reviewer Run Input` (Code, one item in, one item out) computes exactly
+  the values the Start nodes used to map: `role`, `input`, `resume_input`, `run_id`,
+  `session_id`, `model`, `provider`, `poll_seconds`, `max_polls`, `max_retries`,
+  `retry_delays`, `state_key`, `service_*`, and `runner_url` in the Claude Code variant.
+- `Architect/Worker/Reviewer Start` have no field mapping (empty schema, so items pass through
+  unchanged). They call the workflow id `Constants.run_manager_workflow_id`, which comes from
+  `hermes_config.run_manager_workflow_id` and defaults to `nhjwX1G7FiVTO2Ah`.
+
+The Data Table columns, identifiers and recovery paths are unchanged.
+
 ---
 
 **Contract Status**: AUTHORITATIVE — based solely on imported workflow JSON and Hermes source code. No README or stale documentation referenced.

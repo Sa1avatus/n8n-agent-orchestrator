@@ -57,185 +57,16 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "nhjwX1G7FiVTO2Ah",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/nhjwX1G7FiVTO2Ah",
-          "cachedResultName": "Hermes Run Manager v5"
+          "mode": "id",
+          "value": "={{ $('Constants').first().json.run_manager_workflow_id }}"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
-          "value": {
-            "role": "architect",
-            "input": "={{ $('Prompt Templates').first().json.architect_prompt + '\\n\\nBEGIN MISSION\\n' + $('Mission').first().json.original_goal + '\\nEND MISSION' }}",
-            "model": "={{ $('Constants').first().json.planner_model }}",
-            "provider": "={{ $('Constants').first().json.planner_provider }}",
-            "poll_seconds": "={{ $('Constants').first().json.architect_poll_seconds }}",
-            "max_polls": "={{ $('Constants').first().json.architect_max_polls }}",
-            "max_retries": "={{ $('Constants').first().json.architect_max_provider_retries }}",
-            "retry_delays": "={{ $('Constants').first().json.retry_delays }}",
-            "retry_count": 0,
-            "run_id": "={{ String($json.architect_run_id ?? '') }}",
-            "session_id": "={{ String($json.architect_session_id ?? '') }}",
-            "state_key": "={{ $('Constants').first().json.state_namespace }}",
-            "resume_input": "Continue the existing Architect task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.",
-            "service_provider": "={{ $('Constants').first().json.service_provider }}",
-            "service_model": "={{ $('Constants').first().json.service_model }}"
-          },
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "role",
-              "displayName": "role",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "run_id",
-              "displayName": "run_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "session_id",
-              "displayName": "session_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "input",
-              "displayName": "input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "resume_input",
-              "displayName": "resume_input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "model",
-              "displayName": "model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "provider",
-              "displayName": "provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "poll_seconds",
-              "displayName": "poll_seconds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_polls",
-              "displayName": "max_polls",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_retries",
-              "displayName": "max_retries",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_count",
-              "displayName": "retry_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_delays",
-              "displayName": "retry_delays",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "state_key",
-              "displayName": "state_key",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_model",
-              "displayName": "service_model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_provider",
-              "displayName": "service_provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
+          "schema": [],
           "attemptToConvertTypes": false,
-          "convertFieldsToString": false
+          "convertFieldsToString": true
         },
         "options": {}
       },
@@ -359,185 +190,16 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "nhjwX1G7FiVTO2Ah",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/nhjwX1G7FiVTO2Ah",
-          "cachedResultName": "Hermes Run Manager v5"
+          "mode": "id",
+          "value": "={{ $('Constants').first().json.run_manager_workflow_id }}"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
-          "value": {
-            "role": "worker",
-            "run_id": "={{ String($json.worker_run_id ?? '') }}",
-            "session_id": "={{ String($json.worker_session_id ?? '') }}",
-            "input": "={{ (() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const index = Number($json.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    $json.retrieval_worker_context ? String($json.retrieval_worker_context) : '',\n    '',\n    $json.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String($json.review_feedback) : ''\n  ].filter(Boolean).join('\\n');\n})() }}",
-            "resume_input": "Continue the existing Worker task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.",
-            "model": "={{ $('Constants').first().json.worker_model }}",
-            "provider": "={{ $('Constants').first().json.worker_provider }}",
-            "poll_seconds": "={{ $('Constants').first().json.worker_poll_seconds }}",
-            "max_polls": "={{ $('Constants').first().json.worker_max_polls }}",
-            "max_retries": "={{ $('Constants').first().json.worker_max_provider_retries }}",
-            "retry_count": 0,
-            "retry_delays": "={{ $('Constants').first().json.retry_delays }}",
-            "state_key": "={{ $('Constants').first().json.state_namespace }}",
-            "service_provider": "={{ $('Constants').first().json.service_provider }}",
-            "service_model": "={{ $('Constants').first().json.service_model }}"
-          },
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "role",
-              "displayName": "role",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "run_id",
-              "displayName": "run_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "session_id",
-              "displayName": "session_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "input",
-              "displayName": "input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "resume_input",
-              "displayName": "resume_input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "model",
-              "displayName": "model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "provider",
-              "displayName": "provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "poll_seconds",
-              "displayName": "poll_seconds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_polls",
-              "displayName": "max_polls",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_retries",
-              "displayName": "max_retries",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_count",
-              "displayName": "retry_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_delays",
-              "displayName": "retry_delays",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "state_key",
-              "displayName": "state_key",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_model",
-              "displayName": "service_model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_provider",
-              "displayName": "service_provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
+          "schema": [],
           "attemptToConvertTypes": false,
-          "convertFieldsToString": false
+          "convertFieldsToString": true
         },
         "options": {}
       },
@@ -601,185 +263,16 @@
       "parameters": {
         "workflowId": {
           "__rl": true,
-          "value": "nhjwX1G7FiVTO2Ah",
-          "mode": "list",
-          "cachedResultUrl": "/workflow/nhjwX1G7FiVTO2Ah",
-          "cachedResultName": "Hermes Run Manager v5"
+          "mode": "id",
+          "value": "={{ $('Constants').first().json.run_manager_workflow_id }}"
         },
         "workflowInputs": {
           "mappingMode": "defineBelow",
-          "value": {
-            "role": "reviewer",
-            "run_id": "={{ String($('Reviewer State').first().json.reviewer_run_id ?? '') }}",
-            "session_id": "={{ String($('Reviewer State').first().json.reviewer_session_id ?? '') }}",
-            "input": "={{ (() => {\n  const state = $('Reviewer State').first().json ?? {};\n  const tasks = Array.isArray(state.tasks) ? state.tasks : [];\n  const index = Number(state.task_index ?? 0);\n  const task = tasks[index] ?? state.current_task ?? {};\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})() }}",
-            "resume_input": "Continue the existing Reviewer task from the saved Hermes session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.",
-            "model": "={{ $('Constants').first().json.reviewer_model }}",
-            "provider": "={{ $('Constants').first().json.reviewer_provider }}",
-            "poll_seconds": "={{ $('Constants').first().json.reviewer_poll_seconds }}",
-            "max_polls": "={{ $('Constants').first().json.reviewer_max_polls }}",
-            "max_retries": "={{ $('Constants').first().json.reviewer_max_provider_retries }}",
-            "retry_count": 0,
-            "retry_delays": "={{ $('Constants').first().json.retry_delays }}",
-            "state_key": "={{ String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '') }}",
-            "service_model": "={{ $('Constants').first().json.service_model }}",
-            "service_provider": "={{ $('Constants').first().json.service_provider }}"
-          },
+          "value": {},
           "matchingColumns": [],
-          "schema": [
-            {
-              "id": "role",
-              "displayName": "role",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "run_id",
-              "displayName": "run_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "session_id",
-              "displayName": "session_id",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "input",
-              "displayName": "input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "resume_input",
-              "displayName": "resume_input",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "model",
-              "displayName": "model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "provider",
-              "displayName": "provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "poll_seconds",
-              "displayName": "poll_seconds",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_polls",
-              "displayName": "max_polls",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "max_retries",
-              "displayName": "max_retries",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_count",
-              "displayName": "retry_count",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "number",
-              "removed": false
-            },
-            {
-              "id": "retry_delays",
-              "displayName": "retry_delays",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "state_key",
-              "displayName": "state_key",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_model",
-              "displayName": "service_model",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            },
-            {
-              "id": "service_provider",
-              "displayName": "service_provider",
-              "required": false,
-              "defaultMatch": false,
-              "display": true,
-              "canBeUsedToMatch": true,
-              "type": "string",
-              "removed": false
-            }
-          ],
+          "schema": [],
           "attemptToConvertTypes": false,
-          "convertFieldsToString": false
+          "convertFieldsToString": true
         },
         "options": {}
       },
@@ -1035,7 +528,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\nconst row = rows.find(r => (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test' || String(r.profile_id ?? '').trim() === 'openrouter') && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')) || rows[0];\nif (!row) throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13): the ahawr-retrieval container of this compose stack.\n// Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context: it never\n// replaces or restores persisted execution state.\nfunction parseCorpora(value) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');\n    return parsed;\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)\n  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);\nconst retrievalCorpora = corpusEntries\n  .map(e => String((e && typeof e === 'object') ? (e.corpus_id ?? '') : e).trim())\n  .filter(Boolean);\nconst retrievalUrl = (String(row.retrieval_url ?? '').trim() || 'http://ahawr-retrieval:8500').replace(/\\/+$/, '');\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\nreturn [{ json: {\n  retrieval_enabled: retrievalRequested && retrievalCorpora.length > 0,\n  retrieval_url: retrievalUrl,\n  retrieval_corpora: retrievalCorpora,\n  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
+        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\nconst row = rows.find(r => (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test' || String(r.profile_id ?? '').trim() === 'openrouter') && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')) || rows[0];\nif (!row) throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13): the ahawr-retrieval container of this compose stack.\n// Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context: it never\n// replaces or restores persisted execution state.\nfunction parseCorpora(value) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');\n    return parsed;\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)\n  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);\nconst retrievalCorpora = corpusEntries\n  .map(e => String((e && typeof e === 'object') ? (e.corpus_id ?? '') : e).trim())\n  .filter(Boolean);\nconst retrievalUrl = (String(row.retrieval_url ?? '').trim() || 'http://ahawr-retrieval:8500').replace(/\\/+$/, '');\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\n// Run Manager sub-workflow to execute (n8n assigns new ids on import, so it is\n// configurable): hermes_config.run_manager_workflow_id, default nhjwX1G7FiVTO2Ah.\nconst runManagerWorkflowId = String(row.run_manager_workflow_id ?? '').trim() || 'nhjwX1G7FiVTO2Ah';\nreturn [{ json: {\n  run_manager_workflow_id: runManagerWorkflowId,\n  retrieval_enabled: retrievalRequested && retrievalCorpora.length > 0,\n  retrieval_url: retrievalUrl,\n  retrieval_corpora: retrievalCorpora,\n  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4358,6 +3851,48 @@
       ],
       "id": "51830589-4954-4ebf-9f28-47050c837ee4",
       "name": "Build Reviewer Retrieval Request"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Inputs of the Hermes Run Manager for the Architect (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"architect\",\n  input: ($('Prompt Templates').first().json.architect_prompt + '\\n\\nBEGIN MISSION\\n' + $('Mission').first().json.original_goal + '\\nEND MISSION'),\n  model: ($('Constants').first().json.planner_model),\n  provider: ($('Constants').first().json.planner_provider),\n  poll_seconds: ($('Constants').first().json.architect_poll_seconds),\n  max_polls: ($('Constants').first().json.architect_max_polls),\n  max_retries: ($('Constants').first().json.architect_max_provider_retries),\n  retry_delays: ($('Constants').first().json.retry_delays),\n  retry_count: 0,\n  run_id: (String($json.architect_run_id ?? '')),\n  session_id: (String($json.architect_session_id ?? '')),\n  state_key: ($('Constants').first().json.state_namespace),\n  resume_input: \"Continue the existing Architect task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.\",\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model)\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16412,
+        2852
+      ],
+      "id": "fec0f8ea-2458-4327-b8d6-f4784d6d4f09",
+      "name": "Build Architect Run Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Inputs of the Hermes Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"worker\",\n  run_id: (String($json.worker_run_id ?? '')),\n  session_id: (String($json.worker_session_id ?? '')),\n  input: ((() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const index = Number($json.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    $json.retrieval_worker_context ? String($json.retrieval_worker_context) : '',\n    '',\n    $json.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String($json.review_feedback) : ''\n  ].filter(Boolean).join('\\n');\n})()),\n  resume_input: \"Continue the existing Worker task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.\",\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model)\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14188,
+        2356
+      ],
+      "id": "de5d44e5-b01d-44a3-a141-30a0a324f143",
+      "name": "Build Worker Run Input"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Inputs of the Hermes Run Manager for the Reviewer (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"reviewer\",\n  run_id: (String($('Reviewer State').first().json.reviewer_run_id ?? '')),\n  session_id: (String($('Reviewer State').first().json.reviewer_session_id ?? '')),\n  input: ((() => {\n  const state = $('Reviewer State').first().json ?? {};\n  const tasks = Array.isArray(state.tasks) ? state.tasks : [];\n  const index = Number(state.task_index ?? 0);\n  const task = tasks[index] ?? state.current_task ?? {};\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})()),\n  resume_input: \"Continue the existing Reviewer task from the saved Hermes session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.\",\n  model: ($('Constants').first().json.reviewer_model),\n  provider: ($('Constants').first().json.reviewer_provider),\n  poll_seconds: ($('Constants').first().json.reviewer_poll_seconds),\n  max_polls: ($('Constants').first().json.reviewer_max_polls),\n  max_retries: ($('Constants').first().json.reviewer_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: (String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),\n  service_model: ($('Constants').first().json.service_model),\n  service_provider: ($('Constants').first().json.service_provider)\n} };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -12812,
+        1860
+      ],
+      "id": "d8d6e685-2e3b-495f-805c-dd3ac306162e",
+      "name": "Build Reviewer Run Input"
     }
   ],
   "pinData": {
@@ -4655,7 +4190,7 @@
         ],
         [
           {
-            "node": "Architect Start",
+            "node": "Build Architect Run Input",
             "type": "main",
             "index": 0
           }
@@ -5028,7 +4563,7 @@
       "main": [
         [
           {
-            "node": "Worker Start",
+            "node": "Build Worker Run Input",
             "type": "main",
             "index": 0
           }
@@ -5272,7 +4807,7 @@
       "main": [
         [
           {
-            "node": "Worker Start",
+            "node": "Build Worker Run Input",
             "type": "main",
             "index": 0
           }
@@ -5312,7 +4847,7 @@
       "main": [
         [
           {
-            "node": "Reviewer Start",
+            "node": "Build Reviewer Run Input",
             "type": "main",
             "index": 0
           }
@@ -5335,6 +4870,39 @@
         [
           {
             "node": "Retrieve Reviewer Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Architect Run Input": {
+      "main": [
+        [
+          {
+            "node": "Architect Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Worker Run Input": {
+      "main": [
+        [
+          {
+            "node": "Worker Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reviewer Run Input": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Start",
             "type": "main",
             "index": 0
           }

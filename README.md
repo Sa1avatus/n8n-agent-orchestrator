@@ -486,7 +486,7 @@ Import:
 AHAWR_v11.json
 ```
 
-After importing, verify that the Execute Workflow nodes reference the imported `Hermes_Run_Manager_v4` workflow.
+After importing, open the imported Run Manager and copy its workflow id from the URL (`/workflow/<id>`). If it is not `nhjwX1G7FiVTO2Ah`, put it into the `run_manager_workflow_id` column of `hermes_config`. `Architect/Worker/Reviewer Start` take the id from there. Their inputs are built by the `Build … Run Input` Code nodes, so re-selecting or re-importing the Run Manager never resets them.
 
 If n8n assigns a different workflow ID after import, update the corresponding references.
 
@@ -1196,7 +1196,7 @@ state_namespace: test
 AHAWR_v11.json
 ```
 
-После импорта проверьте Execute Workflow nodes и убедитесь, что они вызывают импортированный `Hermes_Run_Manager_v4`.
+После импорта откройте импортированный Run Manager и скопируйте его ID из адреса (`/workflow/<id>`). Если ID не `nhjwX1G7FiVTO2Ah`, впишите его в колонку `run_manager_workflow_id` таблицы `hermes_config`. `Architect/Worker/Reviewer Start` берут ID оттуда. Входы для них собирают Code-узлы `Build … Run Input`, поэтому повторный выбор или переимпорт Run Manager их не сбрасывает.
 
 Если после импорта n8n назначил другой workflow ID, обновите соответствующие ссылки.
 
