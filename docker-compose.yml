@@ -60,7 +60,8 @@ services:
       - "host.docker.internal:host-gateway"
 
   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
-  # behind a Hermes-compatible /v1/runs API. Opt-in: `docker compose --profile claude-code up -d`.
+  # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
+  # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
   # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published.
   claude-runner:
     build:
@@ -70,7 +71,6 @@ services:
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
         EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
 
-    profiles: ["claude-code"]
     container_name: claude-runner
     restart: unless-stopped
 
@@ -99,13 +99,14 @@ services:
     depends_on:
       litellm:
         condition: service_started
-        # Only with the local-llm profile; with the Claude API directly there is no LiteLLM.
+        # claude-runner still starts if LiteLLM is down (Claude API used directly).
         required: false
 
     stop_grace_period: 60s
 
   # LiteLLM: lets Claude Code (Anthropic Messages API) use a local llama.cpp server
-  # (OpenAI-compatible). Opt-in: `docker compose --profile claude-code --profile local-llm up -d`.
+  # (OpenAI-compatible). Built and started with the rest of the stack; used only when
+  # ANTHROPIC_BASE_URL=http://litellm:4000 is set for claude-runner.
   # claude-runner reaches it at http://litellm:4000; no port is published.
   litellm:
     build:
@@ -114,7 +115,6 @@ services:
       args:
         LITELLM_VERSION: ${LITELLM_VERSION:-1.102.1}
 
-    profiles: ["local-llm"]
     container_name: ahawr-litellm
     restart: unless-stopped
 
