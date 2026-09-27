@@ -85,6 +85,20 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 
 The Hermes workflows (`AHAWR_v13.json`, `Hermes_Run_Manager_v5.json`) are untouched. Both variants can be imported side by side, since they have different workflow ids.
 
+## Several projects
+
+Mount the parent folder of your projects and name the project per mission:
+
+1. `.env`: `AHAWR_WORKSPACE_DIR=D:\projects`, with the projects in `D:\projects\my-app`, `D:\projects\shop` and so on. Then run `docker compose up -d ahawr-retrieval claude-runner`.
+2. `missions` Data Table: add a `project` column and set it to the folder name, e.g. `my-app`. Also give every project's missions their own `state_namespace`.
+
+For a mission with `project=my-app`:
+* Architect, Worker and Reviewer run in `/workspace/my-app`.
+* Retrieval uses the corpus `my-app`. On first use it is indexed from `/workspace/my-app` (`RETRIEVAL_AUTO_CORPORA_ROOT=/workspace`), and later syncs keep it up to date. `missions.retrieval_corpora_json` still overrides the corpus list, for example to add a docs corpus.
+* Only folder names are accepted, no `/` or `..`. A folder that does not exist fails the run visibly (`invalid_working_directory`).
+
+Missions without `project` keep the old behaviour: Claude Code runs in `/workspace`, with the `hermes_config` corpora.
+
 ## Providers per role (like Hermes): Claude and a local llama.cpp model
 
 Every run carries the role's `provider` from `hermes_config` (`architect_provider`, `worker_provider`, `reviewer_provider`), exactly as with Hermes. claude-runner looks up a provider block `CLAUDE_RUNNER_PROVIDER_<NAME>__<VARIABLE>` (note the double `_`):

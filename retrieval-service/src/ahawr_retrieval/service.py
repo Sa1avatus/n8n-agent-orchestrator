@@ -8,9 +8,11 @@ rerank → deterministic ranking layer → budgeted context assembly → cache s
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -45,6 +47,10 @@ from .text import content_terms, extract_identifiers, sha256_hex
 from .vector_index import VectorIndex
 
 MAX_FTS_TERMS = 64
+
+
+# Folder-name corpus ids: no path separators, no "." / "..".
+PROJECT_ID_RE = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$")
 
 
 class RetrievalError(ValueError):
@@ -428,7 +434,7 @@ class RetrievalService:
         missing = []
         for corpus_id in corpus_ids:
             corpus = self.store.get_corpus(corpus_id)
-            root = self.settings.bootstrap_corpora.get(corpus_id)
+            root = self.settings.bootstrap_corpora.get(corpus_id) or self._project_root(corpus_id)
             if corpus is None and root:
                 # First use of a corpus declared by the deployment: index it now.
                 self.index(IndexRequest(corpus_id=corpus_id, root=root))
@@ -440,6 +446,16 @@ class RetrievalService:
         if missing:
             raise RetrievalError(f"unknown corpora: {missing}; index them first", 404)
         return corpora
+
+    def _project_root(self, corpus_id: str) -> str | None:
+        """``<auto_corpora_root>/<corpus_id>`` when that is an existing direct subdirectory."""
+        base = self.settings.auto_corpora_root
+        if not base or not PROJECT_ID_RE.match(corpus_id):
+            return None
+        root = (Path(base) / corpus_id).resolve()
+        if root.parent != Path(base).resolve() or not root.is_dir():
+            return None
+        return str(root)
 
     def _candidate_lists(
         self,

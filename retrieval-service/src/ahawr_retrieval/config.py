@@ -64,6 +64,9 @@ class Settings:
     rag_fresh_window_seconds: float = 120.0
     # corpus_id -> workspace root, indexed automatically on first use
     bootstrap_corpora: dict[str, str] = field(default_factory=dict)
+    # one corpus per project folder: an unknown corpus id that names a direct subdirectory of
+    # this root is indexed from <root>/<corpus_id> on first use (e.g. AHAWR missions.project)
+    auto_corpora_root: str | None = None
 
     @property
     def rag_configured(self) -> bool:
@@ -119,4 +122,5 @@ class Settings:
             rag_mirror=_bool(e.get("RETRIEVAL_RAG_MIRROR"), True),
             rag_fresh_window_seconds=float(e.get("RETRIEVAL_RAG_FRESH_WINDOW_SECONDS", "120")),
             bootstrap_corpora=_pairs(e.get("RETRIEVAL_BOOTSTRAP_CORPORA")),
+            auto_corpora_root=(e.get("RETRIEVAL_AUTO_CORPORA_ROOT") or "").strip() or None,
         )

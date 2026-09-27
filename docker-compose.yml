@@ -49,6 +49,8 @@ services:
       - RETRIEVAL_DATA_DIR=/data
       - RETRIEVAL_ALLOWED_ROOTS=/workspace
       - RETRIEVAL_BOOTSTRAP_CORPORA=${RETRIEVAL_BOOTSTRAP_CORPORA:-ahawr-workspace=/workspace}
+      # One corpus per project folder: missions.project=my-app → corpus my-app from /workspace/my-app.
+      - RETRIEVAL_AUTO_CORPORA_ROOT=/workspace
 
     volumes:
       # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).

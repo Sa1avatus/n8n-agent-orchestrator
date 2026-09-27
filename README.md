@@ -613,6 +613,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
   - Worker: `bypassPermissions`, but it cannot read `.env` and cannot `git commit` or `git push`;
   - Architect and Reviewer: read-only.
 - Model access: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), or Bedrock/Vertex/Foundry.
+- Several projects: mount the parent folder (`AHAWR_WORKSPACE_DIR=D:\projects`) and set `missions.project` to the project folder. Claude Code runs in `/workspace/<project>`, and retrieval indexes that folder as its own corpus.
 - Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`.
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
 
@@ -1292,6 +1293,7 @@ worker_provider
   - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`;
   - Architect и Reviewer: только чтение.
 - Доступ к модели: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (из `claude setup-token`) или Bedrock/Vertex/Foundry.
+- Несколько проектов: подключи общую папку (`AHAWR_WORKSPACE_DIR=D:\projects`) и укажи папку проекта в колонке `missions.project`. Claude Code работает в `/workspace/<project>`, а retrieval индексирует эту папку как отдельный корпус.
 - Провайдеры по ролям, как в Hermes: роли с `*_provider=anthropic` идут в Anthropic, а роль с `*_provider=local` — через контейнер `litellm` в локальный llama.cpp. См. `litellm/config.yaml` и блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`.
 - Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
 
