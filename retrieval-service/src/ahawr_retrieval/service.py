@@ -115,7 +115,7 @@ class RetrievalService:
         )
         self.verifier = WorkspaceVerifier()
         self.rag: RagPlatformClient | None = (
-            RagPlatformClient(settings) if settings.rag_configured else None
+            RagPlatformClient(settings, state=self.store) if settings.rag_configured else None
         )
         self.mirror = RagMirror(self.store, self.rag) if self.rag and settings.rag_mirror else None
 

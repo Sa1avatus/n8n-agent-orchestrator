@@ -42,7 +42,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const row = $json ?? {};\n\nconst missionId = String(row.mission_id ?? '').trim();\nif (!missionId) {\n  throw new Error('Mission not found: Data Table returned no mission_id.');\n}\n\nconst enabled = row.enabled === true || String(row.enabled ?? '').toLowerCase() === 'true';\nif (!enabled) {\n  throw new Error(`Mission '${missionId}' is disabled.`);\n}\n\nfunction parseJsonArray(value, fieldName) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error(`${fieldName} must be a JSON array.`);\n    return parsed.map(String);\n  } catch (error) {\n    throw new Error(`Invalid ${fieldName} for mission '${missionId}': ${error.message}`);\n  }\n}\n\nconst objective = String(row.objective ?? '').trim();\nif (!objective) {\n  throw new Error(`Mission '${missionId}' has empty objective.`);\n}\n\nconst rules = parseJsonArray(row.rules_json, 'rules_json');\nconst acceptance = parseJsonArray(row.acceptance_criteria_json, 'acceptance_criteria_json');\n\nconst stateNamespace = String(row.state_namespace ?? '').trim();\n\nif (!stateNamespace) {\n  throw new Error(`Mission \"${missionId}\" does not define state_namespace.`);\n}\n\n// Optional (AHAWR v13): corpora for the Context Retrieval Layer. Empty means \"use hermes_config\".\nconst retrievalCorpora = parseJsonArray(row.retrieval_corpora_json, 'retrieval_corpora_json');\n\nconst originalGoal = [\n  `MISSION: ${String(row.name ?? missionId).trim()}`,\n  '',\n  'OBJECTIVE:',\n  objective,\n  '',\n  'RULES:',\n  rules.length ? rules.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)',\n  '',\n  'ACCEPTANCE CRITERIA:',\n  acceptance.length ? acceptance.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)'\n].join('\\\\n');\n\nreturn [{ json: {\n  mission_id: missionId,\n  mission_version: Number(row.version ?? 1),\n  mission_name: String(row.name ?? missionId),\n  mission_enabled: enabled,\n  state_namespace: stateNamespace,\n  objective,\n  rules,\n  acceptance_criteria: acceptance,\n  retrieval_corpora: retrievalCorpora,\n  original_goal: originalGoal\n} }];"
+        "jsCode": "const row = $json ?? {};\n\nconst missionId = String(row.mission_id ?? '').trim();\nif (!missionId) {\n  throw new Error('Mission not found: Data Table returned no mission_id.');\n}\n\nconst enabled = row.enabled === true || String(row.enabled ?? '').toLowerCase() === 'true';\nif (!enabled) {\n  throw new Error(`Mission '${missionId}' is disabled.`);\n}\n\nfunction parseJsonArray(value, fieldName) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error(`${fieldName} must be a JSON array.`);\n    return parsed.map(String);\n  } catch (error) {\n    throw new Error(`Invalid ${fieldName} for mission '${missionId}': ${error.message}`);\n  }\n}\n\nconst objective = String(row.objective ?? '').trim();\nif (!objective) {\n  throw new Error(`Mission '${missionId}' has empty objective.`);\n}\n\nconst rules = parseJsonArray(row.rules_json, 'rules_json');\nconst acceptance = parseJsonArray(row.acceptance_criteria_json, 'acceptance_criteria_json');\n\nconst stateNamespace = String(row.state_namespace ?? '').trim();\n\nif (!stateNamespace) {\n  throw new Error(`Mission \"${missionId}\" does not define state_namespace.`);\n}\n\n// Optional (AHAWR v13): corpora for the Context Retrieval Layer. Empty means \"use hermes_config\".\n// Accepts a JSON array of ids / {\"corpus_id\",\"root\"} objects, or comma-separated ids.\nfunction parseCorpora(value) {\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be an array');\n    return parsed;\n  } catch (error) {\n    throw new Error(`Invalid retrieval_corpora_json for mission '${missionId}': ${error.message}`);\n  }\n}\nconst retrievalCorpora = parseCorpora(row.retrieval_corpora_json);\n\nconst originalGoal = [\n  `MISSION: ${String(row.name ?? missionId).trim()}`,\n  '',\n  'OBJECTIVE:',\n  objective,\n  '',\n  'RULES:',\n  rules.length ? rules.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)',\n  '',\n  'ACCEPTANCE CRITERIA:',\n  acceptance.length ? acceptance.map((x, i) => `${i + 1}. ${x}`).join('\\\\n') : '(none)'\n].join('\\\\n');\n\nreturn [{ json: {\n  mission_id: missionId,\n  mission_version: Number(row.version ?? 1),\n  mission_name: String(row.name ?? missionId),\n  mission_enabled: enabled,\n  state_namespace: stateNamespace,\n  objective,\n  rules,\n  acceptance_criteria: acceptance,\n  retrieval_corpora: retrievalCorpora,\n  original_goal: originalGoal\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1035,7 +1035,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\nconst row = rows.find(r => (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test' || String(r.profile_id ?? '').trim() === 'openrouter') && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')) || rows[0];\nif (!row) throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13). Optional columns; absent/false keeps v12 behaviour.\n// Retrieval is read-only context: it never replaces or restores persisted execution state.\nlet retrievalCorpora = Array.isArray(mission.retrieval_corpora) ? mission.retrieval_corpora.map(String).filter(Boolean) : [];\nif (!retrievalCorpora.length && String(row.retrieval_corpora_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retrieval_corpora_json));\n    if (!Array.isArray(parsed)) throw new Error('retrieval_corpora_json must be a JSON array');\n    retrievalCorpora = parsed.map(String).filter(Boolean);\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst retrievalUrl = String(row.retrieval_url ?? '').trim().replace(/\\/+$/, '');\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\nreturn [{ json: {\n  retrieval_enabled: retrievalRequested && retrievalUrl !== '' && retrievalCorpora.length > 0,\n  retrieval_url: retrievalUrl,\n  retrieval_corpora: retrievalCorpora,\n  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 60000, 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
+        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\nconst row = rows.find(r => (String(r.profile_id ?? '').trim() === 'default' || String(r.profile_id ?? '').trim() === 'test' || String(r.profile_id ?? '').trim() === 'openrouter') && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true')) || rows[0];\nif (!row) throw new Error('No enabled Hermes configuration found in Data Table hermes_config.');\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13), embedded in this n8n container and run through Execute\n// Command. Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context:\n// it never replaces or restores persisted execution state.\nfunction parseCorpora(value) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');\n    return parsed;\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst retrievalRoot = String(row.retrieval_workspace_root ?? '').trim() || '/workspace';\nconst corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)\n  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);\nconst retrievalBootstrap = corpusEntries\n  .map(e => (e && typeof e === 'object')\n    ? { corpus_id: String(e.corpus_id ?? '').trim(), root: String(e.root ?? retrievalRoot).trim() }\n    : { corpus_id: String(e).trim(), root: retrievalRoot })\n  .filter(e => e.corpus_id);\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\nreturn [{ json: {\n  retrieval_enabled: retrievalRequested && retrievalBootstrap.length > 0,\n  retrieval_corpora: retrievalBootstrap.map(e => e.corpus_id),\n  retrieval_bootstrap: retrievalBootstrap,\n  retrieval_timeout_seconds: Math.ceil(optNum(row.retrieval_timeout_ms, 120000, 1000) / 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4219,35 +4219,23 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $('Constants').first().json.retrieval_url + '/retrieve' }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const c = $('Constants').first().json;\n  const m = $('Mission').first().json;\n  const sources = [];\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) sources.push($(n).last().json ?? {}); } catch (_) {}\n  }\n  sources.push($json ?? {});\n  let task = {}; let feedback = '';\n  for (const s of sources) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const candidate = tasks[Number(s.task_index ?? 0)] ?? s.current_task;\n    if (candidate && candidate.id) { task = candidate; feedback = String(s.review_feedback ?? ''); break; }\n  }\n  const list = v => Array.isArray(v) ? v.map(String) : (v ? [String(v)] : []);\n  return JSON.stringify({\n    profile: 'worker',\n    corpora: c.retrieval_corpora,\n    task: { mission_id: String(m.mission_id ?? ''), task_id: String(task.id ?? ''), title: String(task.title ?? ''), objective: String(task.objective ?? ''), instructions: String(task.instructions ?? ''), acceptance_criteria: list(task.acceptance_criteria), verification: list(task.verification), scope: list(task.scope) },\n    review: feedback ? { feedback } : null,\n    budget: { max_tokens: c.retrieval_worker_max_tokens },\n    trace: { mission_id: String(m.mission_id ?? ''), state_namespace: String(c.state_namespace ?? ''), task_id: String(task.id ?? ''), role: 'worker', label: c.retrieval_label || null }\n  });\n})() }}",
-        "options": {
-          "timeout": "={{ $('Constants').first().json.retrieval_timeout_ms }}",
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
+        "command": "={{ 'timeout ' + String($('Constants').first().json.retrieval_timeout_seconds) + ' python3 -m ahawr_retrieval.cli exec \\'' + String($json.retrieval_payload ?? '') + '\\'; exit 0' }}"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
       "position": [
         -13856,
         2416
       ],
-      "id": "da8ed7f6-2b03-4898-bebe-9daa55dc237f",
+      "id": "5171e0e5-b8ed-4dd7-ad5f-c75364da06f2",
       "name": "Retrieve Worker Context",
       "onError": "continueRegularOutput",
       "alwaysOutputData": true,
-      "notes": "Context Retrieval Layer (read-only). Fail-open: errors or timeouts yield no context and never block the task. If RETRIEVAL_API_KEY is set on the service, switch Authentication to a Header Auth credential."
+      "notes": "Embedded Context Retrieval Layer (python3 -m ahawr_retrieval.cli exec). Read-only and fail-open: a timeout or error yields no context and never blocks the task."
     },
     {
       "parameters": {
-        "jsCode": "// Fail-open merge of retrieved context into the current item. Nothing here is persisted:\n// all Data Table writes use explicitly mapped columns (execution state stays authoritative).\nconst base = $('All Tasks Completed?').last().json ?? {};\nconst resp = $json ?? {};\nconst ok = Array.isArray(resp.chunks) && typeof resp.context === 'string';\nlet status = 'disabled';\nif ($('Constants').first().json.retrieval_enabled === true) status = ok ? (resp.degraded ? 'degraded' : 'ok') : 'unavailable';\nreturn [{ json: {\n  ...base,\n  retrieval_worker_context: ok ? resp.context : '',\n  retrieval_worker_status: status,\n  retrieval_worker_request_id: ok ? String(resp.request_id ?? '') : '',\n  retrieval_worker_cache: ok ? String(resp.cache?.status ?? '') : '',\n  retrieval_worker_chunks: ok ? resp.chunks.length : 0,\n  retrieval_worker_degraded: ok ? (resp.degraded_reasons ?? []) : [],\n} }];"
+        "jsCode": "// Fail-open merge of retrieved context into the current item. Nothing here is persisted:\n// all Data Table writes use explicitly mapped columns (execution state stays authoritative).\nconst base = $('All Tasks Completed?').last().json ?? {};\nconst enabled = $('Constants').first().json.retrieval_enabled === true;\nlet result = {};\nif (enabled) {\n  const lines = String($json.stdout ?? '').trim().split('\\n').filter(Boolean);\n  try { result = JSON.parse(lines[lines.length - 1] ?? '{}'); } catch (_) { result = {}; }\n}\nconst resp = result.ok ? (result.response ?? {}) : {};\nconst ok = Array.isArray(resp.chunks) && typeof resp.context === 'string';\nconst error = ok ? '' : String(\n  typeof result.error === 'string' ? result.error : (result.error ? JSON.stringify(result.error) : ($json.stderr || ($json.exitCode ? `exit ${$json.exitCode}` : '')))\n).slice(0, 500);\nreturn [{ json: {\n  ...base,\n  retrieval_worker_context: ok ? resp.context : '',\n  retrieval_worker_status: !enabled ? 'disabled' : (ok ? (resp.degraded ? 'degraded' : 'ok') : 'unavailable'),\n  retrieval_worker_request_id: ok ? String(resp.request_id ?? '') : '',\n  retrieval_worker_cache: ok ? String(resp.cache?.status ?? '') : '',\n  retrieval_worker_chunks: ok ? resp.chunks.length : 0,\n  retrieval_worker_degraded: ok ? (resp.degraded_reasons ?? []) : [],\n  retrieval_worker_error: error,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4294,35 +4282,23 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $('Constants').first().json.retrieval_url + '/retrieve' }}",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const c = $('Constants').first().json;\n  const m = $('Mission').first().json;\n  const sources = [];\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) sources.push($(n).last().json ?? {}); } catch (_) {}\n  }\n  sources.push($json ?? {});\n  let task = {}; let feedback = '';\n  for (const s of sources) {\n    const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n    const candidate = tasks[Number(s.task_index ?? 0)] ?? s.current_task;\n    if (candidate && candidate.id) { task = candidate; feedback = String(s.review_feedback ?? ''); break; }\n  }\n  const list = v => Array.isArray(v) ? v.map(String) : (v ? [String(v)] : []);\n  return JSON.stringify({\n    profile: 'reviewer',\n    corpora: c.retrieval_corpora,\n    task: { mission_id: String(m.mission_id ?? ''), task_id: String(task.id ?? ''), title: String(task.title ?? ''), objective: String(task.objective ?? ''), instructions: String(task.instructions ?? ''), acceptance_criteria: list(task.acceptance_criteria), verification: list(task.verification), scope: list(task.scope) },\n    review: { worker_output: String($('Load Worker Result').first().json.worker_output ?? '').slice(0, 20000), feedback },\n    budget: { max_tokens: c.retrieval_reviewer_max_tokens },\n    trace: { mission_id: String(m.mission_id ?? ''), state_namespace: String(c.state_namespace ?? ''), task_id: String(task.id ?? ''), role: 'reviewer', label: c.retrieval_label || null }\n  });\n})() }}",
-        "options": {
-          "timeout": "={{ $('Constants').first().json.retrieval_timeout_ms }}",
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
+        "command": "={{ 'timeout ' + String($('Constants').first().json.retrieval_timeout_seconds) + ' python3 -m ahawr_retrieval.cli exec \\'' + String($json.retrieval_payload ?? '') + '\\'; exit 0' }}"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
       "position": [
         -12480,
         1264
       ],
-      "id": "658ca2cf-8499-4cec-b52f-1ea697539d29",
+      "id": "893d2fab-aef6-4e02-a81a-a5fddc93182c",
       "name": "Retrieve Reviewer Context",
       "onError": "continueRegularOutput",
       "alwaysOutputData": true,
-      "notes": "Context Retrieval Layer (read-only). Fail-open: errors or timeouts yield no context and never block the task. If RETRIEVAL_API_KEY is set on the service, switch Authentication to a Header Auth credential."
+      "notes": "Embedded Context Retrieval Layer (python3 -m ahawr_retrieval.cli exec). Read-only and fail-open: a timeout or error yields no context and never blocks the task."
     },
     {
       "parameters": {
-        "jsCode": "// Fail-open merge of retrieved context into the current item. Nothing here is persisted:\n// all Data Table writes use explicitly mapped columns (execution state stays authoritative).\nconst base = $('Reviewer State').first().json ?? {};\nconst resp = $json ?? {};\nconst ok = Array.isArray(resp.chunks) && typeof resp.context === 'string';\nlet status = 'disabled';\nif ($('Constants').first().json.retrieval_enabled === true) status = ok ? (resp.degraded ? 'degraded' : 'ok') : 'unavailable';\nreturn [{ json: {\n  ...base,\n  retrieval_reviewer_context: ok ? resp.context : '',\n  retrieval_reviewer_status: status,\n  retrieval_reviewer_request_id: ok ? String(resp.request_id ?? '') : '',\n  retrieval_reviewer_cache: ok ? String(resp.cache?.status ?? '') : '',\n  retrieval_reviewer_chunks: ok ? resp.chunks.length : 0,\n  retrieval_reviewer_degraded: ok ? (resp.degraded_reasons ?? []) : [],\n} }];"
+        "jsCode": "// Fail-open merge of retrieved context into the current item. Nothing here is persisted:\n// all Data Table writes use explicitly mapped columns (execution state stays authoritative).\nconst base = $('Reviewer State').first().json ?? {};\nconst enabled = $('Constants').first().json.retrieval_enabled === true;\nlet result = {};\nif (enabled) {\n  const lines = String($json.stdout ?? '').trim().split('\\n').filter(Boolean);\n  try { result = JSON.parse(lines[lines.length - 1] ?? '{}'); } catch (_) { result = {}; }\n}\nconst resp = result.ok ? (result.response ?? {}) : {};\nconst ok = Array.isArray(resp.chunks) && typeof resp.context === 'string';\nconst error = ok ? '' : String(\n  typeof result.error === 'string' ? result.error : (result.error ? JSON.stringify(result.error) : ($json.stderr || ($json.exitCode ? `exit ${$json.exitCode}` : '')))\n).slice(0, 500);\nreturn [{ json: {\n  ...base,\n  retrieval_reviewer_context: ok ? resp.context : '',\n  retrieval_reviewer_status: !enabled ? 'disabled' : (ok ? (resp.degraded ? 'degraded' : 'ok') : 'unavailable'),\n  retrieval_reviewer_request_id: ok ? String(resp.request_id ?? '') : '',\n  retrieval_reviewer_cache: ok ? String(resp.cache?.status ?? '') : '',\n  retrieval_reviewer_chunks: ok ? resp.chunks.length : 0,\n  retrieval_reviewer_degraded: ok ? (resp.degraded_reasons ?? []) : [],\n  retrieval_reviewer_error: error,\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4332,6 +4308,32 @@
       ],
       "id": "82100a43-9fe4-425e-b614-aedc17f6874c",
       "name": "Attach Reviewer Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the read-only retrieval request for the embedded Context Retrieval Layer.\n// Only task text and opaque correlation keys are sent: never run/session ids, attempts or statuses.\nconst c = $('Constants').first().json;\nconst m = $('Mission').first().json;\nconst sources = [];\nfor (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n  try { if ($(n).isExecuted) sources.push($(n).last().json ?? {}); } catch (_) {}\n}\nsources.push($json ?? {});\nlet task = {}; let feedback = '';\nfor (const s of sources) {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const candidate = tasks[Number(s.task_index ?? 0)] ?? s.current_task;\n  if (candidate && candidate.id) { task = candidate; feedback = String(s.review_feedback ?? ''); break; }\n}\nconst list = v => Array.isArray(v) ? v.map(String) : (v ? [String(v)] : []);\nconst payload = {\n  action: 'retrieve',\n  bootstrap: c.retrieval_bootstrap,\n  request: {\n    profile: 'worker',\n    corpora: c.retrieval_corpora,\n    task: { mission_id: String(m.mission_id ?? ''), task_id: String(task.id ?? ''), title: String(task.title ?? ''), objective: String(task.objective ?? ''), instructions: String(task.instructions ?? ''), acceptance_criteria: list(task.acceptance_criteria), verification: list(task.verification), scope: list(task.scope) },\n    review: feedback ? { feedback } : null,\n    budget: { max_tokens: c.retrieval_worker_max_tokens },\n    trace: { mission_id: String(m.mission_id ?? ''), state_namespace: String(c.state_namespace ?? ''), task_id: String(task.id ?? ''), role: 'worker', label: c.retrieval_label || null }\n  }\n};\nreturn [{ json: { retrieval_payload: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13872,
+        2272
+      ],
+      "id": "55d10242-bf87-4b78-8dc5-13cf5d76103f",
+      "name": "Build Worker Retrieval Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the read-only retrieval request for the embedded Context Retrieval Layer.\n// Only task text and opaque correlation keys are sent: never run/session ids, attempts or statuses.\nconst c = $('Constants').first().json;\nconst m = $('Mission').first().json;\nconst sources = [];\nfor (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n  try { if ($(n).isExecuted) sources.push($(n).last().json ?? {}); } catch (_) {}\n}\nsources.push($json ?? {});\nlet task = {}; let feedback = '';\nfor (const s of sources) {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const candidate = tasks[Number(s.task_index ?? 0)] ?? s.current_task;\n  if (candidate && candidate.id) { task = candidate; feedback = String(s.review_feedback ?? ''); break; }\n}\nconst list = v => Array.isArray(v) ? v.map(String) : (v ? [String(v)] : []);\nconst payload = {\n  action: 'retrieve',\n  bootstrap: c.retrieval_bootstrap,\n  request: {\n    profile: 'reviewer',\n    corpora: c.retrieval_corpora,\n    task: { mission_id: String(m.mission_id ?? ''), task_id: String(task.id ?? ''), title: String(task.title ?? ''), objective: String(task.objective ?? ''), instructions: String(task.instructions ?? ''), acceptance_criteria: list(task.acceptance_criteria), verification: list(task.verification), scope: list(task.scope) },\n    review: { worker_output: String($('Load Worker Result').first().json.worker_output ?? '').slice(0, 8000), feedback },\n    budget: { max_tokens: c.retrieval_reviewer_max_tokens },\n    trace: { mission_id: String(m.mission_id ?? ''), state_namespace: String(c.state_namespace ?? ''), task_id: String(task.id ?? ''), role: 'reviewer', label: c.retrieval_label || null }\n  }\n};\nreturn [{ json: { retrieval_payload: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -12496,
+        1120
+      ],
+      "id": "51830589-4954-4ebf-9f28-47050c837ee4",
+      "name": "Build Reviewer Retrieval Payload"
     }
   ],
   "pinData": {
@@ -5217,7 +5219,7 @@
       "main": [
         [
           {
-            "node": "Retrieve Worker Context",
+            "node": "Build Worker Retrieval Payload",
             "type": "main",
             "index": 0
           }
@@ -5257,7 +5259,7 @@
       "main": [
         [
           {
-            "node": "Retrieve Reviewer Context",
+            "node": "Build Reviewer Retrieval Payload",
             "type": "main",
             "index": 0
           }
@@ -5287,6 +5289,28 @@
         [
           {
             "node": "Reviewer Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Worker Retrieval Payload": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Worker Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reviewer Retrieval Payload": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Reviewer Context",
             "type": "main",
             "index": 0
           }

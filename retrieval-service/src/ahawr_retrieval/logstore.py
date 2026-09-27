@@ -125,6 +125,7 @@ class RetrievalLog:
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()
         with self._lock:
+            self._conn.execute("PRAGMA busy_timeout=30000")
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.executescript(_SCHEMA)
 

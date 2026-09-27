@@ -256,14 +256,17 @@ Specifically forbidden:
 
 ## 9. Retrieval Layer Integration (AHAWR v13, Retrieval Service 0.1)
 
-`AHAWR_v13.json` is `AHAWR_v12.json` plus six nodes; every other node, the Data Table
-schemas and all recovery paths are unchanged.
+`AHAWR_v13.json` is `AHAWR_v12.json` plus eight nodes. Every other node, the Data Table
+schemas and all recovery paths are unchanged. The retrieval layer runs inside the n8n container
+(`ahawr_retrieval` package in the n8n image, executed per call); its index lives in the n8n data
+volume under `ahawr-retrieval/`, separate from and never mixed with Data Tables.
 
 | Node | Role |
 |------|------|
 | `Worker Retrieval Enabled?` / `Reviewer Retrieval Enabled?` | IF on `Constants.retrieval_enabled` (optional `hermes_config` columns; default off) |
-| `Retrieve Worker Context` / `Retrieve Reviewer Context` | `POST {retrieval_url}/retrieve`, `neverError` + `continueRegularOutput` (fail-open) |
-| `Attach Worker Context` / `Attach Reviewer Context` | merge `retrieval_*` fields into the in-flight item only |
+| `Build Worker Retrieval Payload` / `Build Reviewer Retrieval Payload` | Code: base64 request (task text + opaque trace keys) |
+| `Retrieve Worker Context` / `Retrieve Reviewer Context` | Execute Command `timeout <s> python3 -m ahawr_retrieval.cli exec '<payload>'; exit 0`, `continueRegularOutput` (fail-open) |
+| `Attach Worker Context` / `Attach Reviewer Context` | parse the JSON result; merge `retrieval_*` fields into the in-flight item only |
 
 Guarantees (verified against the workflow source):
 
@@ -274,7 +277,7 @@ Guarantees (verified against the workflow source):
 - **Read-only trace.** Requests carry only `mission_id`, `state_namespace`, `task_id`, `role`
   and `label` as opaque log correlation keys — never `run_id`, `session_id`, `task_index`,
   `task_attempt` or statuses (§5.1).
-- **Fail-open.** Service unavailable, HTTP error or timeout → empty context, task continues.
+- **Fail-open.** Command error, timeout or missing package → empty context, task continues.
 - **Precedence.** The injected block states that the current workspace and deterministic
   validation override documentation, which overrides retrieved text; historical evidence is
   observed evidence only.

@@ -1,4 +1,4 @@
-"""Operator CLI: serve the API, index a corpus, run an ad-hoc retrieval, export feature logs."""
+"""CLI: ``exec`` (n8n embedded mode), index, ad-hoc retrieval, log export, optional HTTP API."""
 
 from __future__ import annotations
 
@@ -16,7 +16,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ahawr-retrieval")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    serve = sub.add_parser("serve", help="run the HTTP API")
+    run = sub.add_parser("exec", help="n8n embedded mode: base64/JSON payload in, JSON out")
+    run.add_argument("payload", help="base64 JSON, raw JSON, or '-' to read stdin")
+
+    serve = sub.add_parser("serve", help="run the optional HTTP API (needs the [server] extra)")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8500)
 
@@ -38,6 +41,17 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     settings = Settings.from_env()
+
+    if args.command == "exec":
+        from .embedded import decode_payload, execute
+
+        try:
+            token = sys.stdin.read() if args.payload == "-" else args.payload
+            outcome = execute(decode_payload(token), settings)
+        except ValueError as exc:
+            outcome = {"ok": False, "action": None, "error": str(exc), "status_code": 400}
+        sys.stdout.write(json.dumps(outcome, ensure_ascii=False) + "\n")
+        return 0
 
     if args.command == "serve":
         import uvicorn

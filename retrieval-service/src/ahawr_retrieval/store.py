@@ -259,6 +259,8 @@ class Store:
         self._conn.row_factory = sqlite3.Row
         self.lock = threading.RLock()
         with self.lock:
+            # Several processes may share the index (n8n Execute Command runs one per call).
+            self._conn.execute("PRAGMA busy_timeout=30000")
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(_SCHEMA)
@@ -266,6 +268,14 @@ class Store:
                 "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+
+    def get_meta(self, key: str) -> str | None:
+        rows = self._query("SELECT value FROM meta WHERE key = ?", (key,))
+        return str(rows[0]["value"]) if rows else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.transaction() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, value))
 
     def close(self) -> None:
         with self.lock:

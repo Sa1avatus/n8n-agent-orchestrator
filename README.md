@@ -591,7 +591,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 ### Context Retrieval Layer (AHAWR v13)
 
-`retrieval-service/` is an optional, separate, read-only service that gives the Worker and the Reviewer relevant, current, provenance-aware context from repository code and project documentation. It does not take over orchestration (n8n), execution (Hermes) or persistent state (Data Tables), and it is never used for recovery.
+`retrieval-service/` is an optional, read-only Context Retrieval Layer embedded in the n8n container (installed into the n8n image by the `Dockerfile`, executed from Execute Command nodes — no extra container). It gives the Worker and the Reviewer relevant, current, provenance-aware context from repository code and project documentation. It does not take over orchestration (n8n), execution (Hermes) or persistent state (Data Tables), and it is never used for recovery.
 
 - Hybrid retrieval: BM25 + vectors + symbol search, reciprocal-rank fusion, text-only cross-encoder reranking through `reranker-service`, deterministic filters and ranking.
 - Separate Worker and Reviewer retrieval profiles.
@@ -600,7 +600,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 - Its own local index by default; `rag-platform` can be attached as an external backend, with automatic fallback to the local index.
 - An Eval Harness (gold/silver datasets, retrieval, system and AHAWR-level metrics) decides on every later extension.
 
-`AHAWR_v13.json` calls `POST /retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
+`AHAWR_v13.json` runs `python3 -m ahawr_retrieval.cli exec` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
 ### Hermes session compression
 
@@ -1253,7 +1253,7 @@ worker_provider
 
 ### Context Retrieval Layer (AHAWR v13)
 
-`retrieval-service/` — опциональный отдельный read-only сервис. Он даёт Worker и Reviewer релевантный, актуальный контекст из кода репозитория и документации проекта, с provenance для каждого фрагмента. Сервис не заменяет orchestration (n8n), выполнение (Hermes) и persistent state (Data Tables) и никогда не используется для восстановления состояния.
+`retrieval-service/` — опциональный read-only Context Retrieval Layer внутри контейнера n8n: пакет ставится в образ n8n через `Dockerfile` и вызывается из Execute Command, отдельного контейнера нет. Он даёт Worker и Reviewer релевантный, актуальный контекст из кода репозитория и документации проекта, с provenance для каждого фрагмента. Сервис не заменяет orchestration (n8n), выполнение (Hermes) и persistent state (Data Tables) и никогда не используется для восстановления состояния.
 
 - Hybrid retrieval: BM25 + векторы + поиск по символам, RRF, text-only cross-encoder через `reranker-service`, детерминированные фильтры и ранжирование.
 - Отдельные профили Worker и Reviewer.
@@ -1262,7 +1262,7 @@ worker_provider
 - По умолчанию используется собственный локальный индекс. `rag-platform` можно подключить как внешний бэкенд; если он недоступен, сервис автоматически переходит на локальный индекс.
 - Все дальнейшие расширения принимаются по данным Eval Harness (gold/silver наборы; метрики retrieval, системы и AHAWR).
 
-`AHAWR_v13.json` вызывает `POST /retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка сервиса не останавливает задачу. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
+`AHAWR_v13.json` запускает `python3 -m ahawr_retrieval.cli exec` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
 ### Компрессия Hermes-сессий
 

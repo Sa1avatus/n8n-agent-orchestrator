@@ -396,12 +396,12 @@
       ],
       "task": {
         "title": "Enable the retrieval layer for a mission in n8n",
-        "objective": "Describe which hermes_config columns turn on retrieval for the Worker and Reviewer, where the retrieval URL and corpora are configured and how an API key is supplied."
+        "objective": "Describe which hermes_config columns turn on retrieval for the Worker and Reviewer, how corpora and the workspace root are configured, and where reranker and rag-platform settings are supplied."
       },
       "relevant": [
         {
           "path": "docs/retrieval/INTEGRATION.md",
-          "section": "3. Enable it in n8n",
+          "section": "Enable it in AHAWR v13",
           "grade": 3
         },
         {
@@ -410,7 +410,7 @@
         },
         {
           "path": "docs/retrieval/INTEGRATION.md",
-          "section": "1. Run the service",
+          "section": "Build n8n with the retrieval layer",
           "grade": 1
         },
         {

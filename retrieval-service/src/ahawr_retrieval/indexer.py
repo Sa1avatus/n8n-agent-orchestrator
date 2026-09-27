@@ -43,6 +43,8 @@ from .text import estimate_tokens, expand_for_index, sha256_hex, short_hash, spl
 from .vector_index import VectorIndex
 
 CHUNKER_VERSION = "chunker-v1"
+EMBED_BACKFILL_LIMIT = 2000
+EMBED_BACKOFF_SECONDS = 60.0
 
 EXCLUDED_DIRS = frozenset(
     {
@@ -880,10 +882,28 @@ class Indexer:
             )
 
     def _embed(self, corpus_id: str, stats: _Stats) -> None:
-        hashes = stats.embed_hashes
+        """Embed new content plus a bounded backlog of active chunks still lacking vectors
+        (e.g. after an embedder outage or an interrupted run), with a persisted back-off so an
+        unavailable embedder does not stall every call."""
+        model_id = self.embedder.model_id
+        backoff_key = f"embed_backoff_until:{model_id}"
+        hashes = dict(stats.embed_hashes)
+        if time.time() < float(self.store.get_meta(backoff_key) or 0.0):
+            pending = len(hashes) - len(self.store.get_embeddings(model_id, hashes.keys()))
+            if pending:
+                stats.embeddings["pending"] += pending
+                stats.degraded.append("embedding_unavailable")
+            return
+        backlog = {
+            h: content
+            for h, content in self.store.chunks_missing_embeddings(
+                model_id, corpus_id, EMBED_BACKFILL_LIMIT
+            )
+            if h not in hashes
+        }
+        hashes.update(backlog)
         if not hashes:
             return
-        model_id = self.embedder.model_id
         existing = self.store.get_embeddings(model_id, hashes.keys())
         missing = [h for h in hashes if h not in existing]
         stats.embeddings["reused"] += len(hashes) - len(missing)
@@ -898,9 +918,9 @@ class Indexer:
         except EmbeddingError:
             stats.embeddings["pending"] += len(missing) - stats.embeddings["computed"]
             stats.degraded.append("embedding_unavailable")
-        # New vectors for content that already had active chunks elsewhere are picked up via the
-        # change log; this reload covers back-filled embeddings for unchanged chunk rows.
-        if stats.embeddings["computed"] and not stats.changed_types:
+            self.store.set_meta(backoff_key, str(time.time() + EMBED_BACKOFF_SECONDS))
+        # Vectors for rows that did not change (back-fill) are not in the change log.
+        if stats.embeddings["computed"] and (backlog or not stats.changed_types):
             self.vector_index.invalidate(corpus_id)
 
     def _response(self, corpus_id: str, stats: _Stats, started: float) -> IndexResponse:

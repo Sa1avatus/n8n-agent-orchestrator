@@ -10,6 +10,11 @@ services:
     ports:
       - "5678:5678"
 
+    # Optional: RETRIEVAL_* settings and secrets for the embedded retrieval layer.
+    env_file:
+      - path: .env
+        required: false
+
     environment:
       - N8N_HOST=localhost
       - N8N_PORT=5678
@@ -19,7 +24,12 @@ services:
       - TZ=Asia/Ho_Chi_Minh
       - N8N_SECURE_COOKIE=false
       - NODES_EXCLUDE=[]
+      # Embedded Context Retrieval Layer: index/cache/logs live in the n8n data volume.
+      - RETRIEVAL_DATA_DIR=/home/node/.n8n/ahawr-retrieval
+      - RETRIEVAL_ALLOWED_ROOTS=/workspace
 
     volumes:
       - D:\n8n\data:/home/node/.n8n
       - D:\n8n\scripts:/home/node/scripts
+      # Workspace Hermes works in, mounted read-only for retrieval (set AHAWR_WORKSPACE_DIR in .env).
+      - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro

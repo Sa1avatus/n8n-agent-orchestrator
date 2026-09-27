@@ -3,7 +3,10 @@
 Status: **MVP (phase 1 + phase 2 mechanisms)**, service version 0.1.0, workflow `AHAWR_v13.json`.
 
 The Context Retrieval Layer gives the Worker and the Reviewer relevant, current and
-provenance-aware context. It is a separate, read-only service. It does **not** replace
+provenance-aware context. It is a read-only component **embedded in the n8n container**: the
+`ahawr_retrieval` package is installed into the n8n image and each call runs as a short-lived
+process from an Execute Command node (no extra container). `rag-platform` remains a separate,
+optional external service. The layer does **not** replace
 orchestration (n8n), execution (Hermes), the Architect/Worker/Reviewer roles, persistent
 execution state (n8n Data Tables) or recovery. It is never used to restore run/task state
 (see [`ARCHITECTURE_CONTRACT.md`](../../ARCHITECTURE_CONTRACT.md) §5 and §9).
@@ -12,27 +15,29 @@ execution state (n8n Data Tables) or recovery. It is never used to restore run/t
 
 ```mermaid
 flowchart LR
-    subgraph n8n["n8n — orchestration (unchanged ownership)"]
-        AT["All Tasks Completed?"] --> WI{"Worker Retrieval Enabled?"}
-        WI -- yes --> WR["Retrieve Worker Context<br/>POST /retrieve (fail-open)"] --> WA["Attach Worker Context"]
-        WI -- no --> WA
-        WA --> WS["Worker Start → Hermes"]
-        RS["Reviewer State"] --> RI{"Reviewer Retrieval Enabled?"}
-        RI -- yes --> RR["Retrieve Reviewer Context<br/>POST /retrieve (fail-open)"] --> RA["Attach Reviewer Context"]
-        RI -- no --> RA
-        RA --> RVS["Reviewer Start → Hermes"]
+    subgraph N8N["n8n container"]
+        subgraph WF["AHAWR v13 — orchestration (unchanged ownership)"]
+            AT["All Tasks Completed?"] --> WI{"Worker Retrieval Enabled?"}
+            WI -- yes --> WB["Build Worker Retrieval Payload"] --> WR["Retrieve Worker Context<br/>Execute Command (fail-open)"] --> WA["Attach Worker Context"]
+            WI -- no --> WA
+            WA --> WS["Worker Start → Hermes"]
+            RS["Reviewer State"] --> RI{"Reviewer Retrieval Enabled?"}
+            RI -- yes --> RB["Build Reviewer Retrieval Payload"] --> RR["Retrieve Reviewer Context<br/>Execute Command (fail-open)"] --> RA["Attach Reviewer Context"]
+            RI -- no --> RA
+            RA --> RVS["Reviewer Start → Hermes"]
+        end
+        CLI["python3 -m ahawr_retrieval.cli exec<br/>retrieval pipeline (per-call process)"]
+        LOCAL[("n8n data volume: ahawr-retrieval/<br/>index.sqlite — manifest · chunks · FTS5 · symbols ·<br/>embeddings · change log · cache · breaker state<br/>retrieval_logs.sqlite — features for eval / LTR")]
+        WSP[("/workspace — Hermes workspace<br/>(read-only mount)")]
+        DT[("n8n Data Tables<br/>AUTHORITATIVE execution state")]
     end
-    subgraph RL["ahawr-retrieval (this service)"]
-        API["FastAPI<br/>/retrieve /index /invalidate"] --> PIPE["Retrieval pipeline"]
-        PIPE --> LOCAL[("Local index — SQLite<br/>manifest · chunks · FTS5 · symbols ·<br/>embeddings · change log · cache")]
-        PIPE --> LOG[("Retrieval log — SQLite<br/>features for eval / LTR")]
-    end
-    WR --> API
-    RR --> API
-    PIPE -- "optional, text-only" --> RER["reranker-service<br/>POST /v1/rerank"]
-    PIPE -- "optional external backend" --> RAG["rag-platform<br/>/v1/retrieval/search · /v1/documents"]
-    WSP[("Hermes workspace<br/>(read-only mount)")] --> PIPE
-    DT[("n8n Data Tables<br/>AUTHORITATIVE state")] -. "never read or written by retrieval" .- RL
+    WR --> CLI
+    RR --> CLI
+    CLI <--> LOCAL
+    WSP --> CLI
+    CLI -- "optional, text-only" --> RER["reranker-service<br/>POST /v1/rerank"]
+    CLI -- "optional external backend" --> RAG["rag-platform container<br/>/v1/retrieval/search · /v1/documents"]
+    DT -. "never read or written by retrieval" .- CLI
 ```
 
 The Worker/Reviewer prompts receive a delimited block
@@ -158,8 +163,8 @@ keys for offline joins and never influence retrieval or recovery.
 
 ## 8. Backends
 
-The local SQLite index is always maintained: it is the source of truth for provenance,
-freshness, symbols, the change log and the cache, and it is the fallback backend.
+The local SQLite index (in the n8n data volume) is always maintained: it is the source of truth
+for provenance, freshness, symbols, the change log and the cache, and it is the fallback backend.
 
 `rag-platform` can be connected as an **external** backend without any change to rag-platform:
 
@@ -174,19 +179,21 @@ freshness, symbols, the change log and the cache, and it is the fallback backend
   store (`remote_stale` otherwise); chunks changed within the async-indexing window are also
   searched locally.
 * **Fallback**: `RETRIEVAL_BACKEND=auto` uses rag-platform when configured and reachable. Any
-  transport error or 5xx opens a circuit breaker (30 s) and the request is served from the
-  local index with `rag_platform_unavailable:fallback_local` in `degraded_reasons`.
+  transport error or 5xx opens a circuit breaker (30 s, persisted across per-call processes) and
+  the request is served from the local index with `rag_platform_unavailable:fallback_local` in
+  `degraded_reasons`.
 
 ## 9. Failure behaviour
 
 | Failure | Behaviour |
 |---|---|
-| Retrieval service down / timeout | n8n continues without context (`retrieval_*_status = unavailable`) |
+| Retrieval command fails / times out / package missing | n8n continues without context (`retrieval_*_status = unavailable`, reason in `retrieval_*_error`) |
 | Reranker down | fused order, `reranker_unavailable:*` |
 | Embedding endpoint down | lexical + symbol only, `vector_unavailable`; embeddings back-filled later |
 | rag-platform down | local backend, `rag_platform_unavailable:fallback_local` |
 | Workspace file changed after indexing | chunk filtered (`file_changed`) or re-synced first |
-| Unknown corpus | HTTP 404 (n8n fail-open) |
+| Unknown corpus | `{"ok": false, "status_code": 404}` (n8n fail-open); configured corpora are bootstrapped on first use |
+| Concurrent calls | one process per call over a shared SQLite index (WAL, 30 s busy timeout); breaker and embedder back-off persisted in the index |
 
 ## 10. Out of scope for the MVP
 

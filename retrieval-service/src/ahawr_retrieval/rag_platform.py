@@ -48,7 +48,12 @@ class RemoteHits:
 
 
 class RagPlatformClient:
-    def __init__(self, settings: Settings, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: httpx.Client | None = None,
+        state: Store | None = None,
+    ) -> None:
         if not settings.rag_configured:
             raise ValueError("rag-platform backend is not fully configured")
         assert settings.rag_url and settings.rag_api_key and settings.rag_owner_id
@@ -63,9 +68,14 @@ class RagPlatformClient:
                 "X-Owner-User-Id": settings.rag_owner_id,
             },
         )
+        # With ``state`` the breaker survives process boundaries (one CLI process per n8n call).
+        self._state = state
         self._open_until = 0.0
         self._last_error: str | None = None
         self._lock = threading.Lock()
+        if state is not None:
+            self._open_until = float(state.get_meta("rag_circuit_open_until") or 0.0)
+            self._last_error = state.get_meta("rag_last_error") or None
 
     # ------------------------------------------------------- circuit breaker
 
@@ -76,11 +86,19 @@ class RagPlatformClient:
         with self._lock:
             self._open_until = time.time() + self.cooldown
             self._last_error = f"{type(exc).__name__}: {exc}"[:300]
+            self._persist()
         return RagPlatformUnavailable(self._last_error)
 
     def _ok(self) -> None:
         with self._lock:
-            self._open_until = 0.0
+            if self._open_until:
+                self._open_until = 0.0
+                self._persist()
+
+    def _persist(self) -> None:
+        if self._state is not None:
+            self._state.set_meta("rag_circuit_open_until", str(self._open_until))
+            self._state.set_meta("rag_last_error", self._last_error or "")
 
     def status(self) -> dict[str, Any]:
         return {
