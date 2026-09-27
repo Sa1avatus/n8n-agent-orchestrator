@@ -89,13 +89,14 @@ The Hermes workflows (`AHAWR_v13.json`, `Hermes_Run_Manager_v5.json`) are untouc
 
 The `working_directory` column of the `missions` Data Table (e.g. `D:\OpenAIProjects\job-searching-assistant`, `D:\ClaudeProjects\...`) chooses the project:
 
-* The drive (`AHAWR_HOST_DRIVE`, default `D:\`) is mounted at `/host/drive`: read-write for claude-runner, read-only for ahawr-retrieval. `CLAUDE_RUNNER_PATH_MAP` and `RETRIEVAL_PATH_MAP` map a mission's Windows path onto that mount.
+* The drive (`AHAWR_HOST_DRIVE`, default `D:\`) is mounted at `/d`: read-write for claude-runner, read-only for ahawr-retrieval. `CLAUDE_RUNNER_PATH_MAP` and `RETRIEVAL_PATH_MAP` map a mission's Windows path onto that mount.
 * Architect, Worker and Reviewer run in that folder.
+* The folder is also written into the prompts as `WORKING DIRECTORY: D:\… (shell: /d/…)`: into the mission text for the Architect and Reviewer, and at the top of each Worker task. Plans and reviews therefore use the real paths. The shell form equals the path inside the container, because drive D: is mounted at `/d`, and it also matches Git Bash/MSYS on Windows.
 * Retrieval uses a corpus named after the path (`d-openaiprojects-job-searching-assistant`). It is indexed from that folder on first use and synced on every later request. `missions.retrieval_corpora_json` still overrides the corpus list.
 * Missions without `working_directory` (`Null`) run in `/workspace` with the `hermes_config` corpora, as before.
 * A folder that does not exist fails the run visibly (`invalid_working_directory`).
 
-Give missions of different projects different `state_namespace` values. The Worker can reach the whole mounted drive. To narrow that, replace the drive mount in `docker-compose.yml` by bind mounts of the project folders at the matching `/host/drive/...` paths.
+Give missions of different projects different `state_namespace` values. The Worker can reach the whole mounted drive. To narrow that, replace the drive mount in `docker-compose.yml` by bind mounts of the project folders at the matching `/d/...` paths.
 
 ## Providers per role (like Hermes): Claude and a local llama.cpp model
 
