@@ -18,6 +18,8 @@ def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:
             "CLAUDE_RUNNER_BARE": "true",
             "CLAUDE_RUNNER_MAX_BUDGET_USD": "2.5",
             "CLAUDE_RUNNER_PATH_MAP": "D:\\a=/w,D:\\a\\b=/x,broken",
+            "CLAUDE_RUNNER_TOOLS": "Bash,Read,Edit",
+            "CLAUDE_RUNNER_REVIEWER_TOOLS": "Read,Grep,Glob",
         }
     )
     assert s.profile("reviewer").permission_mode == "plan"
@@ -29,6 +31,11 @@ def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:
     assert cmd[-2:] == ["--effort", "high"]
     assert "--bare" in cmd and cmd[cmd.index("--max-turns") + 1] == "40"
     assert cmd[cmd.index("--max-budget-usd") + 1] == "2.5"
+    assert cmd[cmd.index("--tools") + 1] == "Bash,Read,Edit"
+    reviewer = build_command(
+        s, s.profile("reviewer"), model="m", claude_session_id="id", resume=False
+    )
+    assert reviewer[reviewer.index("--tools") + 1] == "Read,Grep,Glob"
     compact = build_command(
         s, s.profile("worker"), model="", claude_session_id="id", resume=True, compact=True
     )
@@ -91,3 +98,24 @@ def test_main_starts_uvicorn(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLAUDE_RUNNER_DATA_DIR", "/tmp/claude-runner-test")
     assert main(["--port", "8799"]) == 0
     assert seen["port"] == 8799
+
+
+def test_context_size_fallback_for_gateways_without_streamed_usage() -> None:
+    state = StreamState()
+    state.feed(
+        '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[],'
+        '"usage":{"input_tokens":0,"output_tokens":0}}}'
+    )
+    assert state.final_context_tokens() is None
+    state.feed(
+        '{"type":"result","subtype":"success","is_error":false,"num_turns":2,'
+        '"usage":{"input_tokens":2400,"cache_read_input_tokens":0}}'
+    )
+    assert state.final_context_tokens() == 1200
+    direct = StreamState()
+    direct.feed(
+        '{"type":"assistant","parent_tool_use_id":null,"message":{"content":[],'
+        '"usage":{"input_tokens":5,"cache_read_input_tokens":900}}}'
+    )
+    direct.feed('{"type":"result","subtype":"success","num_turns":3,"usage":{"input_tokens":1}}')
+    assert direct.final_context_tokens() == 905

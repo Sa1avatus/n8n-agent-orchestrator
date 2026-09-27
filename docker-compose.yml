@@ -92,7 +92,48 @@ services:
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
 
+    extra_hosts:
+      # model endpoints on the host (e.g. ANTHROPIC_BASE_URL=http://host.docker.internal:4000)
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      litellm:
+        condition: service_started
+        # Only with the local-llm profile; with the Claude API directly there is no LiteLLM.
+        required: false
+
     stop_grace_period: 60s
+
+  # LiteLLM: lets Claude Code (Anthropic Messages API) use a local llama.cpp server
+  # (OpenAI-compatible). Opt-in: `docker compose --profile claude-code --profile local-llm up -d`.
+  # claude-runner reaches it at http://litellm:4000; no port is published.
+  litellm:
+    build:
+      context: ./litellm
+      dockerfile: Dockerfile
+      args:
+        LITELLM_VERSION: ${LITELLM_VERSION:-1.102.1}
+
+    profiles: ["local-llm"]
+    container_name: ahawr-litellm
+    restart: unless-stopped
+
+    # Only the variables LiteLLM needs (not the whole .env).
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-ahawr-local-change-me}
+      - LLAMACPP_API_BASE=${LLAMACPP_API_BASE:-http://host.docker.internal:8080/v1}
+      - LLAMACPP_API_KEY=${LLAMACPP_API_KEY:-none}
+      - LLAMACPP_MODEL=${LLAMACPP_MODEL:-openai/local}
+      # used only by the optional Claude / OpenRouter entries in litellm/config.yaml
+      - ANTHROPIC_API_KEY=${LITELLM_ANTHROPIC_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+
+    extra_hosts:
+      # llama-server running on the Docker host
+      - "host.docker.internal:host-gateway"
 
 volumes:
   ahawr-retrieval-data:

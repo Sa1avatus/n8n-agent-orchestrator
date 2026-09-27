@@ -29,3 +29,8 @@ data/
 Thumbs.db
 
 data/ARCHITECTURE_CONTRACT.md
+
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

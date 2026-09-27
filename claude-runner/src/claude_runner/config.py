@@ -36,6 +36,8 @@ class RoleProfile:
     disallowed_tools: list[str] = field(default_factory=list)
     append_system_prompt: str = ""
     max_turns: int = 0
+    # Built-in tool set offered to the model (`--tools`); empty = Claude Code's default set.
+    tools: str = ""
 
 
 DEFAULT_PROFILES: dict[str, RoleProfile] = {
@@ -131,6 +133,7 @@ class Settings:
                 disallowed_tools=base.disallowed_tools if disallowed is None else disallowed,
                 append_system_prompt=env.get(prefix + "APPEND_SYSTEM_PROMPT", "").strip(),
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
+                tools=(env.get(prefix + "TOOLS") or env.get("CLAUDE_RUNNER_TOOLS") or "").strip(),
             )
         return cls(
             data_dir=Path(env.get("CLAUDE_RUNNER_DATA_DIR", "/data")),

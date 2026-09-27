@@ -1,0 +1,49 @@
+# LiteLLM for claude-runner: Claude Code speaks the Anthropic Messages API (/v1/messages);
+# LiteLLM translates it to the OpenAI-compatible /v1/chat/completions of a local llama.cpp
+# server (llama-server). Values come from the container environment (see ../.env.example).
+
+model_list:
+  # The name Claude Code asks for (hermes_config *_model, ANTHROPIC_DEFAULT_*_MODEL).
+  - model_name: local-coder
+    litellm_params:
+      # "openai/<name>": any OpenAI-compatible server; llama-server serves its loaded model
+      # whatever the name.
+      model: os.environ/LLAMACPP_MODEL
+      api_base: os.environ/LLAMACPP_API_BASE
+      api_key: os.environ/LLAMACPP_API_KEY
+      # Claude Code-specific fields that an OpenAI-compatible server does not need.
+      additional_drop_params: ["prompt_cache_key"]
+    model_info:
+      supports_function_calling: true
+
+  # Any other model name (e.g. a Claude alias used for background tasks) also goes to the
+  # local server, so a missed ANTHROPIC_DEFAULT_*_MODEL setting cannot fail a run.
+  - model_name: "*"
+    litellm_params:
+      model: os.environ/LLAMACPP_MODEL
+      api_base: os.environ/LLAMACPP_API_BASE
+      api_key: os.environ/LLAMACPP_API_KEY
+      additional_drop_params: ["prompt_cache_key"]
+
+  # Optional: real Claude models next to the local one (needs ANTHROPIC_API_KEY for LiteLLM).
+  # Put these entries ABOVE the "*" entry.
+  # - model_name: opus
+  #   litellm_params:
+  #     model: anthropic/claude-opus-4-8
+  #     api_key: os.environ/ANTHROPIC_API_KEY
+  # Optional: an OpenRouter model (needs OPENROUTER_API_KEY).
+  # - model_name: nemotron
+  #   litellm_params:
+  #     model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free
+  #     api_key: os.environ/OPENROUTER_API_KEY
+
+litellm_settings:
+  # Drop request parameters the backend does not support instead of failing the call.
+  drop_params: true
+  # LiteLLM routes /v1/messages for "openai/*" models to the OpenAI Responses API by default;
+  # llama.cpp only has /v1/chat/completions.
+  use_chat_completions_url_for_anthropic_messages: true
+  request_timeout: 1800
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

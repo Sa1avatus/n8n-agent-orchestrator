@@ -325,14 +325,14 @@ class RunManager:
             http_code=outcome.http_code,
             cost_usd=details.get("total_cost_usd"),
             num_turns=details.get("num_turns"),
-            context_tokens=state.context_tokens if state else None,
+            context_tokens=state.final_context_tokens() if state else None,
             details=details,
             finished_at=now(),
         )
         run = self.store.get_run(run_id)
         if run:
             self.store.touch_session(
-                run["session_id"], run_id, state.context_tokens if state else None
+                run["session_id"], run_id, state.final_context_tokens() if state else None
             )
 
     async def _stop(self, proc: asyncio.subprocess.Process) -> None:

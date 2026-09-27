@@ -57,6 +57,10 @@ def build_command(
             cmd += ["--allowedTools", ",".join(profile.allowed_tools)]
         if profile.disallowed_tools:
             cmd += ["--disallowedTools", ",".join(profile.disallowed_tools)]
+        if profile.tools:
+            # A smaller tool set shrinks the system prompt (~15k → ~4k tokens), which matters
+            # for local models with small context windows.
+            cmd += ["--tools", profile.tools]
         if profile.append_system_prompt:
             cmd += ["--append-system-prompt", profile.append_system_prompt]
         max_turns = profile.max_turns or settings.max_turns
@@ -119,16 +123,9 @@ class StreamState:
                 ]
                 if any(texts):
                     self.last_text = "".join(texts)
-                usage = message.get("usage") or {}
-                if usage:
-                    self.context_tokens = sum(
-                        int(usage.get(key) or 0)
-                        for key in (
-                            "input_tokens",
-                            "cache_read_input_tokens",
-                            "cache_creation_input_tokens",
-                        )
-                    )
+                size = _prompt_tokens(message.get("usage") or {})
+                if size:  # gateways that stream usage only at the end report 0 here
+                    self.context_tokens = size
             self.model = str(message.get("model") or self.model)
         elif kind == "system" and subtype == "api_retry":
             self.last_retry = event
@@ -139,6 +136,25 @@ class StreamState:
                 self.context_tokens = post
         elif kind == "system" and subtype == "status" and event.get("compact_result"):
             self.compact_result = str(event.get("compact_result"))
+
+    def final_context_tokens(self) -> int | None:
+        """Context size after the run: the last main-thread request, or — when a gateway
+        (e.g. LiteLLM in front of llama.cpp) reports no per-request usage — the average
+        prompt size per turn from the run totals."""
+        if self.context_tokens or self.compact is not None:
+            return self.context_tokens
+        result = self.result or {}
+        total = _prompt_tokens(result.get("usage") or {})
+        if not total:
+            return self.context_tokens
+        return total // max(int(result.get("num_turns") or 1), 1)
+
+
+def _prompt_tokens(usage: dict[str, Any]) -> int:
+    return sum(
+        int(usage.get(key) or 0)
+        for key in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+    )
 
 
 @dataclass

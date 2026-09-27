@@ -85,6 +85,45 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 
 The Hermes workflows (`AHAWR_v13.json`, `Hermes_Run_Manager_v5.json`) are untouched. Both variants can be imported side by side, since they have different workflow ids.
 
+## Local models: LiteLLM + llama.cpp
+
+Claude Code speaks only the Anthropic Messages API (`/v1/messages`), while llama.cpp's `llama-server` is OpenAI-compatible (`/v1/chat/completions`). The `litellm` container (profile `local-llm`, config in [`../litellm/config.yaml`](../litellm/config.yaml)) translates between them:
+
+```
+claude-runner ──Anthropic /v1/messages──▶ litellm:4000 ──OpenAI /v1/chat/completions──▶ llama-server (host :8080)
+```
+
+1. Run llama.cpp on the host with tool calling (`--jinja`) and a context window of at least 32k:
+   `llama-server -m model.gguf --jinja -c 32768 --host 0.0.0.0 --port 8080`
+2. In `.env`, uncomment the *Local model* block of `.env.example`:
+   * `LLAMACPP_*` and `LITELLM_MASTER_KEY` for LiteLLM;
+   * `ANTHROPIC_BASE_URL=http://litellm:4000` and `ANTHROPIC_AUTH_TOKEN` (the same value as the master key) for Claude Code;
+   * the model and token settings listed below.
+3. `docker compose --profile claude-code --profile local-llm up -d --build`
+4. In the `claude-code` row of `hermes_config`, set the models to `local-coder`. Only the roles you want to run locally need it, but see *mixing* below.
+
+What the settings do, verified with Claude Code 2.1.283 → LiteLLM 1.102.1 → an OpenAI-compatible server, including tool calls, resume and `/compact`:
+
+| Setting | Why |
+|---|---|
+| `use_chat_completions_url_for_anthropic_messages: true` (LiteLLM) | LiteLLM otherwise sends `openai/*` models to the Responses API (`/v1/responses`), which llama.cpp lacks. |
+| `drop_params`, `additional_drop_params: [prompt_cache_key]` (LiteLLM) | Anthropic-only fields are not forwarded to llama.cpp. |
+| `"*"` model entry (LiteLLM) | Any other model name, such as a Claude alias used for a background task, also goes to the local server. |
+| `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` | Aliases, background tasks and subagents use the local model. |
+| `CLAUDE_CODE_MAX_CONTEXT_TOKENS` = llama-server `-c` | Claude Code assumes 200k for unknown models and would compact too late. |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192` | The default for unknown models is 32000. |
+| `CLAUDE_CODE_DISABLE_THINKING=1`, `DISABLE_PROMPT_CACHING=1` | No `reasoning_effort` or cache fields for the local model. |
+| `CLAUDE_RUNNER_TOOLS=Bash,Read,Edit,Write,Glob,Grep` | Cuts the system prompt from about 15k to about 4k tokens: the tool definitions alone are about 12k. |
+| `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` ≈ half the window | Session compaction before resuming. Through LiteLLM the runner estimates the context size from run totals, because per-request usage is not streamed. |
+
+**Mixing Claude and local models.** For example, a local Worker with the Architect and Reviewer on Claude:
+* add Claude entries to `litellm/config.yaml` above `"*"` (commented examples are there) and give LiteLLM `LITELLM_ANTHROPIC_API_KEY`;
+* keep the `ANTHROPIC_DEFAULT_*_MODEL` values that should stay Claude.
+
+The `CLAUDE_CODE_*` settings above apply to the whole runner container, so thinking would be off for the Claude roles as well.
+
+**Expectations.** Anthropic does not support running Claude Code on non-Claude models. Quality depends on how reliably the model makes tool calls in long agent sessions. Test a model on a few Worker tasks before relying on it.
+
 ## Development
 
 ```bash
@@ -118,4 +157,12 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
   2. Импортируй в n8n `Claude_Code_Run_Manager_v1.json` и `AHAWR_v13_ClaudeCode.json`.
   3. Создай credential Bearer Auth с именем `Claude Runner API`.
   4. Добавь в `hermes_config` колонку `runner_url` и строку `claude-code` из `hermes_config.csv`.
+- **Локальная модель (llama.cpp).**
+  - Claude Code понимает только Anthropic API, а llama.cpp — OpenAI-совместимый. Между ними ставится контейнер `litellm`: профиль `local-llm`, конфиг в `litellm/config.yaml`.
+  - Запусти `llama-server` с `--jinja` и `-c 32768` или больше.
+  - Раскомментируй в `.env` блок *Local model* из `.env.example`.
+  - Запусти стек: `docker compose --profile claude-code --profile local-llm up -d --build`.
+  - В строке `claude-code` таблицы `hermes_config` укажи модели `local-coder`.
+  - `CLAUDE_RUNNER_TOOLS` сокращает системный промпт примерно с 15 тыс. до 4 тыс. токенов.
+  - Официально Anthropic такую схему не поддерживает, а качество зависит от того, насколько надёжно модель вызывает инструменты.
 - **Совместимость.** Воркфлоу для Hermes не изменены. Обе версии можно держать в n8n одновременно.
