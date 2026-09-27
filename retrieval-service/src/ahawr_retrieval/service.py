@@ -8,11 +8,9 @@ rerank → deterministic ranking layer → budgeted context assembly → cache s
 from __future__ import annotations
 
 import json
-import re
 import time
 import uuid
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -20,7 +18,7 @@ import numpy as np
 from . import __version__
 from .cache import CacheLookup, RetrievalCache, scope_key
 from .candidates import Candidate, fuse
-from .config import Settings
+from .config import Settings, map_host_path
 from .context import render_context, select_context
 from .embeddings import Embedder, EmbeddingError, HashingEmbedder, OpenAICompatibleEmbedder
 from .filters import apply_hard_filters
@@ -47,10 +45,6 @@ from .text import content_terms, extract_identifiers, sha256_hex
 from .vector_index import VectorIndex
 
 MAX_FTS_TERMS = 64
-
-
-# Folder-name corpus ids: no path separators, no "." / "..".
-PROJECT_ID_RE = re.compile(r"^(?!\.{1,2}$)[A-Za-z0-9._-]{1,128}$")
 
 
 class RetrievalError(ValueError):
@@ -132,6 +126,10 @@ class RetrievalService:
     # ------------------------------------------------------------- index API
 
     def index(self, request: IndexRequest) -> IndexResponse:
+        if request.root and self.settings.path_map:
+            request = request.model_copy(
+                update={"root": map_host_path(request.root, self.settings.path_map)}
+            )
         response = self.indexer.index(request)
         response.degraded_reasons = sorted(
             set(response.degraded_reasons) | set(self._push_mirror(request.corpus_id))
@@ -222,7 +220,7 @@ class RetrievalService:
         degraded: list[str] = []
 
         mark = time.perf_counter()
-        corpora = self._corpora(request.corpora)
+        corpora = self._corpora(request.corpora, request.corpus_roots)
         if freshness_mode == "sync":
             for corpus_id, corpus in list(corpora.items()):
                 if not corpus.root:
@@ -234,7 +232,7 @@ class RetrievalService:
                         degraded.extend(self._push_mirror(corpus_id))
                 except IndexingError as exc:
                     degraded.append(f"sync_failed:{corpus_id}:{exc}")
-            corpora = self._corpora(request.corpora)
+            corpora = self._corpora(request.corpora, request.corpus_roots)
         timings["sync"] = _ms(mark)
 
         mark = time.perf_counter()
@@ -429,12 +427,14 @@ class RetrievalService:
 
     # -------------------------------------------------------------- helpers
 
-    def _corpora(self, corpus_ids: list[str]) -> dict[str, CorpusRecord]:
+    def _corpora(
+        self, corpus_ids: list[str], roots: dict[str, str] | None = None
+    ) -> dict[str, CorpusRecord]:
         corpora: dict[str, CorpusRecord] = {}
         missing = []
         for corpus_id in corpus_ids:
             corpus = self.store.get_corpus(corpus_id)
-            root = self.settings.bootstrap_corpora.get(corpus_id) or self._project_root(corpus_id)
+            root = self.settings.bootstrap_corpora.get(corpus_id) or (roots or {}).get(corpus_id)
             if corpus is None and root:
                 # First use of a corpus declared by the deployment: index it now.
                 self.index(IndexRequest(corpus_id=corpus_id, root=root))
@@ -446,16 +446,6 @@ class RetrievalService:
         if missing:
             raise RetrievalError(f"unknown corpora: {missing}; index them first", 404)
         return corpora
-
-    def _project_root(self, corpus_id: str) -> str | None:
-        """``<auto_corpora_root>/<corpus_id>`` when that is an existing direct subdirectory."""
-        base = self.settings.auto_corpora_root
-        if not base or not PROJECT_ID_RE.match(corpus_id):
-            return None
-        root = (Path(base) / corpus_id).resolve()
-        if root.parent != Path(base).resolve() or not root.is_dir():
-            return None
-        return str(root)
 
     def _candidate_lists(
         self,

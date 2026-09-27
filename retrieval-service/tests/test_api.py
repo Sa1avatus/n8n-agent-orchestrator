@@ -133,23 +133,31 @@ def test_settings_parse_bootstrap_pairs() -> None:
     assert parsed.bootstrap_corpora == {"ws": "/workspace", "docs": "/docs"}
 
 
-def test_project_folders_become_corpora_automatically(settings: Settings, workspace: Path) -> None:
-    configured = replace(settings, auto_corpora_root=str(workspace.parent))
+def test_corpus_roots_from_host_paths_are_indexed_on_first_use(
+    settings: Settings, workspace: Path
+) -> None:
+    host = "D:\\OpenAIProjects\\" + workspace.name
+    configured = replace(settings, path_map={"D:\\OpenAIProjects": str(workspace.parent)})
     with client_for(configured) as client:
-        ok = client.post("/retrieve", json={"corpora": [workspace.name], "query": "compute_total"})
+        body = {
+            "corpora": ["d-openaiprojects-app"],
+            "corpus_roots": {"d-openaiprojects-app": host},
+            "query": "compute_total",
+        }
+        ok = client.post("/retrieve", json=body)
         assert ok.status_code == 200, ok.text
         assert ok.json()["chunks"][0]["symbol"] == "compute_total"
-        corpora = client.get("/corpora").json()
-        assert any(c["corpus_id"] == workspace.name for c in corpora)
-        for bad in ("..", "no-such-project", "a/b"):
-            assert client.post("/retrieve", json={"corpora": [bad], "query": "x"}).status_code in (
-                404,
-                422,
-            )
+        # outside RETRIEVAL_ALLOWED_ROOTS is refused
+        bad = {"corpora": ["etc"], "corpus_roots": {"etc": "/etc"}, "query": "x"}
+        assert client.post("/retrieve", json=bad).status_code in (400, 404)
 
 
-def test_settings_parse_auto_corpora_root() -> None:
-    assert Settings.from_env({"RETRIEVAL_AUTO_CORPORA_ROOT": " /workspace "}).auto_corpora_root == (
-        "/workspace"
-    )
-    assert Settings.from_env({}).auto_corpora_root is None
+def test_map_host_path() -> None:
+    from ahawr_retrieval.config import map_host_path
+
+    table = {"D:\\": "/host/d", "D:\\n8n\\workspace": "/workspace"}
+    assert map_host_path("D:\\OpenAIProjects\\foo", table) == "/host/d/OpenAIProjects/foo"
+    assert map_host_path("d:/n8n/workspace/app", table) == "/workspace/app"
+    assert map_host_path("D:\\", table) == "/host/d"
+    assert map_host_path("/already/linux", table) == "/already/linux"
+    assert Settings.from_env({"RETRIEVAL_PATH_MAP": "D:\\=/host/d"}).path_map == {"D:\\": "/host/d"}

@@ -97,6 +97,10 @@ class RetrieveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     profile: str = "worker"
     corpora: list[str] = Field(min_length=1, max_length=16)
+    # Optional roots for corpora that do not exist yet (e.g. an AHAWR mission's working
+    # directory): indexed on first use, within RETRIEVAL_ALLOWED_ROOTS, host paths mapped
+    # through RETRIEVAL_PATH_MAP.
+    corpus_roots: dict[str, str] = Field(default_factory=dict, max_length=16)
     task: TaskContext = Field(default_factory=TaskContext)
     review: ReviewContext | None = None
     query: str | None = Field(None, max_length=20_000)

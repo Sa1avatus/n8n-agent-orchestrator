@@ -29,6 +29,23 @@ def _pairs(value: str | None) -> dict[str, str]:
     return pairs
 
 
+def map_host_path(raw: str, path_map: dict[str, str]) -> str:
+    """``D:\\Projects\\app`` → ``/host/d/Projects/app`` with ``{"D:\\": "/host/d"}``.
+
+    Host (e.g. Windows) paths from AHAWR missions become container paths; the longest matching
+    prefix wins, comparison is case-insensitive, and unmapped paths are returned unchanged.
+    """
+    text = raw.strip().replace("\\", "/")
+    lowered = text.lower()
+    for source in sorted(path_map, key=len, reverse=True):
+        prefix = source.strip().replace("\\", "/").rstrip("/").lower()
+        if prefix and (lowered == prefix or lowered.startswith(prefix + "/")):
+            rest = text[len(prefix) :].lstrip("/")
+            target = path_map[source].rstrip("/") or "/"
+            return f"{target}/{rest}" if rest else target
+    return raw.strip()
+
+
 @dataclass
 class Settings:
     data_dir: Path = Path("./var")
@@ -64,9 +81,8 @@ class Settings:
     rag_fresh_window_seconds: float = 120.0
     # corpus_id -> workspace root, indexed automatically on first use
     bootstrap_corpora: dict[str, str] = field(default_factory=dict)
-    # one corpus per project folder: an unknown corpus id that names a direct subdirectory of
-    # this root is indexed from <root>/<corpus_id> on first use (e.g. AHAWR missions.project)
-    auto_corpora_root: str | None = None
+    # host path prefix -> container path, e.g. {"D:\\": "/host/d"}
+    path_map: dict[str, str] = field(default_factory=dict)
 
     @property
     def rag_configured(self) -> bool:
@@ -122,5 +138,5 @@ class Settings:
             rag_mirror=_bool(e.get("RETRIEVAL_RAG_MIRROR"), True),
             rag_fresh_window_seconds=float(e.get("RETRIEVAL_RAG_FRESH_WINDOW_SECONDS", "120")),
             bootstrap_corpora=_pairs(e.get("RETRIEVAL_BOOTSTRAP_CORPORA")),
-            auto_corpora_root=(e.get("RETRIEVAL_AUTO_CORPORA_ROOT") or "").strip() or None,
+            path_map=_pairs(e.get("RETRIEVAL_PATH_MAP")),
         )

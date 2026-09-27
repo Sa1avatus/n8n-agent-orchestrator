@@ -85,19 +85,17 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 
 The Hermes workflows (`AHAWR_v13.json`, `Hermes_Run_Manager_v5.json`) are untouched. Both variants can be imported side by side, since they have different workflow ids.
 
-## Several projects
+## Mission working directories
 
-Mount the parent folder of your projects and name the project per mission:
+The `working_directory` column of the `missions` Data Table (e.g. `D:\OpenAIProjects\job-searching-assistant`, `D:\ClaudeProjects\...`) chooses the project:
 
-1. `.env`: `AHAWR_WORKSPACE_DIR=D:\projects`, with the projects in `D:\projects\my-app`, `D:\projects\shop` and so on. Then run `docker compose up -d ahawr-retrieval claude-runner`.
-2. `missions` Data Table: add a `project` column and set it to the folder name, e.g. `my-app`. Also give every project's missions their own `state_namespace`.
+* The drive (`AHAWR_HOST_DRIVE`, default `D:\`) is mounted at `/host/drive`: read-write for claude-runner, read-only for ahawr-retrieval. `CLAUDE_RUNNER_PATH_MAP` and `RETRIEVAL_PATH_MAP` map a mission's Windows path onto that mount.
+* Architect, Worker and Reviewer run in that folder.
+* Retrieval uses a corpus named after the path (`d-openaiprojects-job-searching-assistant`). It is indexed from that folder on first use and synced on every later request. `missions.retrieval_corpora_json` still overrides the corpus list.
+* Missions without `working_directory` (`Null`) run in `/workspace` with the `hermes_config` corpora, as before.
+* A folder that does not exist fails the run visibly (`invalid_working_directory`).
 
-For a mission with `project=my-app`:
-* Architect, Worker and Reviewer run in `/workspace/my-app`.
-* Retrieval uses the corpus `my-app`. On first use it is indexed from `/workspace/my-app` (`RETRIEVAL_AUTO_CORPORA_ROOT=/workspace`), and later syncs keep it up to date. `missions.retrieval_corpora_json` still overrides the corpus list, for example to add a docs corpus.
-* Only folder names are accepted, no `/` or `..`. A folder that does not exist fails the run visibly (`invalid_working_directory`).
-
-Missions without `project` keep the old behaviour: Claude Code runs in `/workspace`, with the `hermes_config` corpora.
+Give missions of different projects different `state_namespace` values. The Worker can reach the whole mounted drive. To narrow that, replace the drive mount in `docker-compose.yml` by bind mounts of the project folders at the matching `/host/drive/...` paths.
 
 ## Providers per role (like Hermes): Claude and a local llama.cpp model
 

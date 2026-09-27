@@ -47,14 +47,19 @@ services:
 
     environment:
       - RETRIEVAL_DATA_DIR=/data
-      - RETRIEVAL_ALLOWED_ROOTS=/workspace
+      - RETRIEVAL_ALLOWED_ROOTS=/workspace,/host/drive
       - RETRIEVAL_BOOTSTRAP_CORPORA=${RETRIEVAL_BOOTSTRAP_CORPORA:-ahawr-workspace=/workspace}
-      # One corpus per project folder: missions.project=my-app → corpus my-app from /workspace/my-app.
-      - RETRIEVAL_AUTO_CORPORA_ROOT=/workspace
+      # missions.working_directory (e.g. D:\OpenAIProjects\app) → /host/drive/OpenAIProjects/app
+      - RETRIEVAL_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/host/drive
 
     volumes:
       # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
+      # The drive with the missions' working directories (AHAWR_HOST_DRIVE), read-only.
+      - type: bind
+        source: ${AHAWR_HOST_DRIVE:-D:\}
+        target: /host/drive
+        read_only: true
       - ahawr-retrieval-data:/data
 
     extra_hosts:
@@ -83,13 +88,18 @@ services:
 
     environment:
       - CLAUDE_RUNNER_WORKSPACE=/workspace
-      - CLAUDE_RUNNER_ALLOWED_ROOTS=/workspace
-      # Host paths a workflow may still send as working_directory are mapped into the container.
-      - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace
+      - CLAUDE_RUNNER_ALLOWED_ROOTS=/workspace,/host/drive
+      # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
+      # container (/host/drive/OpenAIProjects/app) and Claude Code runs there.
+      - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/host/drive
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace
+      # The drive with the missions' working directories (AHAWR_HOST_DRIVE); the Worker edits there.
+      - type: bind
+        source: ${AHAWR_HOST_DRIVE:-D:\}
+        target: /host/drive
       # Claude Code sessions (transcripts) survive container restarts and rebuilds.
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
