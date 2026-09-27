@@ -254,4 +254,34 @@ Specifically forbidden:
 
 ---
 
+## 9. Retrieval Layer Integration (AHAWR v13, Retrieval Service 0.1)
+
+`AHAWR_v13.json` is `AHAWR_v12.json` plus six nodes; every other node, the Data Table
+schemas and all recovery paths are unchanged.
+
+| Node | Role |
+|------|------|
+| `Worker Retrieval Enabled?` / `Reviewer Retrieval Enabled?` | IF on `Constants.retrieval_enabled` (optional `hermes_config` columns; default off) |
+| `Retrieve Worker Context` / `Retrieve Reviewer Context` | `POST {retrieval_url}/retrieve`, `neverError` + `continueRegularOutput` (fail-open) |
+| `Attach Worker Context` / `Attach Reviewer Context` | merge `retrieval_*` fields into the in-flight item only |
+
+Guarantees (verified against the workflow source):
+
+- **No persistence.** All Data Table writes use `mappingMode: defineBelow`; no `retrieval_*`
+  field is written to `Autonomous Agent Task State` or `Autonomous Agent Task Attempts`.
+- **No recovery role.** Resume paths (`Resume Worker?`, `Resume Reviewer?`) are unchanged; the
+  Worker resume path skips retrieval.
+- **Read-only trace.** Requests carry only `mission_id`, `state_namespace`, `task_id`, `role`
+  and `label` as opaque log correlation keys — never `run_id`, `session_id`, `task_index`,
+  `task_attempt` or statuses (§5.1).
+- **Fail-open.** Service unavailable, HTTP error or timeout → empty context, task continues.
+- **Precedence.** The injected block states that the current workspace and deterministic
+  validation override documentation, which overrides retrieved text; historical evidence is
+  observed evidence only.
+
+Design, freshness model, cache, ranking and evaluation: `docs/retrieval/ARCHITECTURE.md`,
+`docs/retrieval/EVALUATION.md`, `docs/retrieval/ROADMAP.md`.
+
+---
+
 **Contract Status**: AUTHORITATIVE — based solely on imported workflow JSON and Hermes source code. No README or stale documentation referenced.

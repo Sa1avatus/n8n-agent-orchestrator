@@ -1,0 +1,16 @@
+{
+  "name": "hybrid-symbol-e5",
+  "description": "hybrid-symbol with a real embedding model behind an OpenAI-compatible endpoint.",
+  "options": {
+    "rerank": {
+      "enabled": false
+    }
+  },
+  "embedder": {
+    "kind": "openai",
+    "url": "${RETRIEVAL_EMBEDDING_URL}",
+    "model": "${RETRIEVAL_EMBEDDING_MODEL:-multilingual-e5-small}",
+    "query_prefix": "query: ",
+    "passage_prefix": "passage: "
+  }
+}

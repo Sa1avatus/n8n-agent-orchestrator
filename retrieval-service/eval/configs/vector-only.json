@@ -1,0 +1,13 @@
+{
+  "name": "vector-only",
+  "description": "Dense retrieval only (configured embedder).",
+  "options": {
+    "retrievers": {
+      "lexical": false,
+      "symbol": false
+    },
+    "rerank": {
+      "enabled": false
+    }
+  }
+}

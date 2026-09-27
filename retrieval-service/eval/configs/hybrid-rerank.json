@@ -1,0 +1,7 @@
+{
+  "name": "hybrid-rerank",
+  "description": "Default MVP configuration: hybrid-symbol + text-only cross-encoder (reranker-service).",
+  "options": {},
+  "reranker_url": "${RETRIEVAL_RERANKER_URL}",
+  "reranker_api_key": "${RETRIEVAL_RERANKER_API_KEY}"
+}

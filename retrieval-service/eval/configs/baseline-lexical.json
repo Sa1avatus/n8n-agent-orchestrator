@@ -1,0 +1,13 @@
+{
+  "name": "baseline-lexical",
+  "description": "BM25 only (FTS5). Baseline.",
+  "options": {
+    "retrievers": {
+      "vector": false,
+      "symbol": false
+    },
+    "rerank": {
+      "enabled": false
+    }
+  }
+}

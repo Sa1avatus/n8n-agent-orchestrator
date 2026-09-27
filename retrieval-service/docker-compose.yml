@@ -1,0 +1,27 @@
+# AHAWR Context Retrieval Layer.
+#   docker compose -f retrieval-service/docker-compose.yml up -d --build
+# The Hermes workspace is mounted read-only: the service never writes to it.
+services:
+  ahawr-retrieval:
+    build:
+      context: .
+    container_name: ahawr-retrieval
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RETRIEVAL_DATA_DIR: /data
+      RETRIEVAL_ALLOWED_ROOTS: /workspace
+    ports:
+      # Loopback only. n8n on Docker Desktop reaches it via http://host.docker.internal:8500.
+      # Set RETRIEVAL_API_KEY before publishing it to a LAN.
+      - "127.0.0.1:8500:8500"
+    volumes:
+      - ${AHAWR_WORKSPACE_DIR:-./workspace}:/workspace:ro
+      - retrieval-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  retrieval-data:

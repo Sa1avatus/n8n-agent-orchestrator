@@ -1,0 +1,5 @@
+var/
+eval/runs/
+*.sqlite
+*.sqlite-*
+.coverage

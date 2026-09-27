@@ -1,0 +1,9 @@
+{
+  "name": "hybrid-symbol",
+  "description": "BM25 + vectors + symbol/path search, RRF, deterministic ranking, no reranker.",
+  "options": {
+    "rerank": {
+      "enabled": false
+    }
+  }
+}

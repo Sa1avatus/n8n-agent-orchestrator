@@ -1,0 +1,12 @@
+{
+  "name": "hybrid",
+  "description": "BM25 + vectors, RRF, deterministic ranking, no symbol search, no reranker.",
+  "options": {
+    "retrievers": {
+      "symbol": false
+    },
+    "rerank": {
+      "enabled": false
+    }
+  }
+}

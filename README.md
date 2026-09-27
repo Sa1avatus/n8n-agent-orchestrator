@@ -58,7 +58,7 @@ The workflow therefore behaves more like a small autonomous engineering pipeline
 
 ### Components
 
-#### `AHAWR_v12.json`
+#### `AHAWR_v13.json`
 
 The main orchestration workflow.
 
@@ -589,6 +589,19 @@ Keep the workflow JSON, prompt definitions, and non-secret configuration under v
 
 Keep runtime data, credentials, local model files, and temporary state outside Git.
 
+### Context Retrieval Layer (AHAWR v13)
+
+`retrieval-service/` is an optional, separate, read-only service that gives the Worker and the Reviewer relevant, current, provenance-aware context from repository code and project documentation. It does not take over orchestration (n8n), execution (Hermes) or persistent state (Data Tables), and it is never used for recovery.
+
+- Hybrid retrieval: BM25 + vectors + symbol search, reciprocal-rank fusion, text-only cross-encoder reranking through `reranker-service`, deterministic filters and ranking.
+- Separate Worker and Reviewer retrieval profiles.
+- Every chunk carries provenance: source type, path, symbol/section, chunk id, content hash, snapshot/version, scores and rank.
+- Incremental indexing with chunk-level invalidation, and a retrieval cache with semantic query fingerprints for retries.
+- Its own local index by default; `rag-platform` can be attached as an external backend, with automatic fallback to the local index.
+- An Eval Harness (gold/silver datasets, retrieval, system and AHAWR-level metrics) decides on every later extension.
+
+`AHAWR_v13.json` calls `POST /retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
+
 ### Hermes session compression
 
 The Run Manager includes a dedicated Hermes TUI WebSocket compression path for long-running sessions. Compression is performed by `hermes_compress.py` through the Hermes WebSocket endpoint rather than through `/v1/runs`.
@@ -771,7 +784,7 @@ AHAWR:
 
 То есть n8n здесь выступает именно как **оркестратор**, а Hermes — как execution gateway для AI-run'ов.
 
-### `AHAWR_v12.json`
+### `AHAWR_v13.json`
 
 Это основной workflow проекта.
 
@@ -1237,6 +1250,19 @@ worker_provider
 в `hermes_config`.
 
 Для смены задачи достаточно изменить соответствующую запись в `missions`.
+
+### Context Retrieval Layer (AHAWR v13)
+
+`retrieval-service/` — опциональный отдельный read-only сервис. Он даёт Worker и Reviewer релевантный, актуальный контекст из кода репозитория и документации проекта, с provenance для каждого фрагмента. Сервис не заменяет orchestration (n8n), выполнение (Hermes) и persistent state (Data Tables) и никогда не используется для восстановления состояния.
+
+- Hybrid retrieval: BM25 + векторы + поиск по символам, RRF, text-only cross-encoder через `reranker-service`, детерминированные фильтры и ранжирование.
+- Отдельные профили Worker и Reviewer.
+- У каждого чанка есть provenance: тип источника, путь, символ/секция, chunk id, content hash, snapshot/version, scores и rank.
+- Инкрементальная индексация, инвалидация на уровне чанков, кэш с семантическим fingerprint для повторных попыток.
+- По умолчанию используется собственный локальный индекс. `rag-platform` можно подключить как внешний бэкенд; если он недоступен, сервис автоматически переходит на локальный индекс.
+- Все дальнейшие расширения принимаются по данным Eval Harness (gold/silver наборы; метрики retrieval, системы и AHAWR).
+
+`AHAWR_v13.json` вызывает `POST /retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка сервиса не останавливает задачу. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
 ### Компрессия Hermes-сессий
 
