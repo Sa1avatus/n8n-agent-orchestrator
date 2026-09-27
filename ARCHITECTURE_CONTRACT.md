@@ -285,6 +285,43 @@ Guarantees (verified against the workflow source):
 Design, freshness model, cache, ranking and evaluation: `docs/retrieval/ARCHITECTURE.md`,
 `docs/retrieval/EVALUATION.md`, `docs/retrieval/ROADMAP.md`.
 
+
+## 10. Claude Code Execution Variant (AHAWR v13 — Claude Code, claude-runner 0.1)
+
+`AHAWR_v13_ClaudeCode.json` differs from `AHAWR_v13.json` only in how it reaches the executor:
+
+- `Load Config`/`Constants` select the `claude-code` profile and expose `runner_url`.
+- `Architect/Worker/Reviewer Start` call `Claude Code Run Manager v1` (and pass `runner_url`).
+- The resume prompts name the Claude Code session.
+
+Data Table schemas, identifiers (`run_id`, `session_id`, `state_key`) and all recovery paths are
+the same.
+
+`claude-runner` implements the §3.1 run contract over the Claude Code CLI:
+
+- **Run.** `POST /v1/runs` → `{run_id, session_id, status}`. `GET /v1/runs/{id}` → `{status,
+  output, error:{code,message}, http_code}`.
+- **Session.** `session_id` is a resumable Claude Code session. At most one turn runs per session:
+  a repeated start attaches to the active run.
+- **Recovery.** A run lost to a runner restart answers `404 run_not_found`. The Run Manager then
+  resumes the saved session (§2.3).
+- **Transient failures.** `http_code` carries only transient upstream statuses (408/429/5xx/529),
+  so the retry rules keep their meaning. An upstream 404 (for example an unknown model) never
+  reads as "run not found".
+- **Compression.** The Hermes TUI/WebSocket path (§3.2) is replaced by
+  `POST /v1/sessions/{id}/compact`. It returns `completed`, `skipped` or `failed`. Only `failed`
+  starts the fresh-session handoff, and an unreachable runner counts as `skipped`.
+
+`Claude Code Run Manager v1` also corrects two state-selection issues present in
+`Hermes_Run_Manager_v5.json`:
+
+1. `Evaluate Status` now reads the in-flight state from `Poll Wait` instead of its own previous
+   run. Previously `retry_count` reset after each retry, so a persistent transient error retried
+   forever.
+2. `Evaluate Compression` picks the most recent compression target. After a start-side
+   compaction, a `run_not_found` recovery now resumes with `resume_input` instead of resending
+   the original input.
+
 ---
 
 **Contract Status**: AUTHORITATIVE — based solely on imported workflow JSON and Hermes source code. No README or stale documentation referenced.

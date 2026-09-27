@@ -602,6 +602,21 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 `AHAWR_v13.json` calls `POST http://ahawr-retrieval:8500/retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only into the retrieval container at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
+### AHAWR on Claude Code (`claude-runner`)
+
+`AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `claude-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
+
+- Container `claude-runner` in the same compose stack, opt-in: `docker compose --profile claude-code up -d --build`. n8n reaches it at `http://claude-runner:8700`; no host port is published.
+- `Claude_Code_Run_Manager_v1.json` is `Hermes_Run_Manager_v5.json` with the runner endpoints and a role field. The Hermes TUI/WebSocket compression is replaced by `POST /v1/sessions/{id}/compact`, which runs Claude Code `/compact` only above a context threshold.
+- Sessions are resumable Claude Code sessions (`--resume`), kept in a volume. A run interrupted by a runner restart is reported as `run_not_found`, so the Run Manager continues the saved session.
+- Per-role permissions:
+  - Worker: `bypassPermissions`, but it cannot read `.env` and cannot `git commit` or `git push`;
+  - Architect and Reviewer: read-only.
+- Model access: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), or Bedrock/Vertex/Foundry.
+- Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
+
+The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md).
+
 ### Hermes session compression
 
 The Run Manager includes a dedicated Hermes TUI WebSocket compression path for long-running sessions. Compression is performed by `hermes_compress.py` through the Hermes WebSocket endpoint rather than through `/v1/runs`.
@@ -1264,6 +1279,21 @@ worker_provider
 
 `AHAWR_v13.json` вызывает `POST http://ahawr-retrieval:8500/retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется в контейнер retrieval только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
+
+### AHAWR на Claude Code (`claude-runner`)
+
+`AHAWR_v13_ClaudeCode.json` — это AHAWR v13, в котором вместо Hermes работает **Claude Code**. Своего HTTP API для запусков у Claude Code нет. `claude-runner/` запускает Claude Code CLI без интерактива и отдаёт тот же контракт `/v1/runs`, что и Hermes Gateway. Поэтому оркестрация, состояние в Data Tables, ретраи и восстановление не меняются.
+
+- Контейнер `claude-runner` входит в тот же compose-стек и включается профилем: `docker compose --profile claude-code up -d --build`. n8n обращается к нему по адресу `http://claude-runner:8700`.
+- `Claude_Code_Run_Manager_v1.json` — это `Hermes_Run_Manager_v5.json` с адресами runner. Компрессия через Hermes WebSocket заменена на `POST /v1/sessions/{id}/compact`: это `/compact` Claude Code, который запускается только при большом контексте.
+- Сессии Claude Code продолжаются через `--resume` и хранятся в томе. Прогон, прерванный рестартом runner, возвращает `run_not_found`, и Run Manager продолжает сессию.
+- Права по ролям:
+  - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`;
+  - Architect и Reviewer: только чтение.
+- Доступ к модели: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (из `claude setup-token`) или Bedrock/Vertex/Foundry.
+- Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
+
+Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md).
 ### Компрессия Hermes-сессий
 
 Для длинных Worker/Reviewer-сессий Run Manager использует отдельный TUI WebSocket путь Hermes:

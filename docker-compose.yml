@@ -59,5 +59,42 @@ services:
       # reranker-service / rag-platform / embedding endpoints running on the host
       - "host.docker.internal:host-gateway"
 
+  # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
+  # behind a Hermes-compatible /v1/runs API. Opt-in: `docker compose --profile claude-code up -d`.
+  # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published.
+  claude-runner:
+    build:
+      context: ./claude-runner
+      dockerfile: Dockerfile
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
+
+    profiles: ["claude-code"]
+    container_name: claude-runner
+    restart: unless-stopped
+
+    # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_RUNNER_* settings. See .env.example.
+    env_file:
+      - path: .env
+        required: false
+
+    environment:
+      - CLAUDE_RUNNER_WORKSPACE=/workspace
+      - CLAUDE_RUNNER_ALLOWED_ROOTS=/workspace
+      # Host paths a workflow may still send as working_directory are mapped into the container.
+      - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace
+
+    volumes:
+      # The same workspace the retrieval container indexes; the Worker edits it (read-write).
+      - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace
+      # Claude Code sessions (transcripts) survive container restarts and rebuilds.
+      - claude-runner-home:/home/node/.claude
+      - claude-runner-data:/data
+
+    stop_grace_period: 60s
+
 volumes:
   ahawr-retrieval-data:
+  claude-runner-home:
+  claude-runner-data:
