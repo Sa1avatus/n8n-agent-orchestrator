@@ -239,3 +239,11 @@ def test_shutdown_leaves_runs_resumable(settings: Settings) -> None:
         again = start(client, session_id=run["session_id"], input="Continue")
         assert again["session_created"] is False
         assert wait_for(client, again["run_id"])["status"] == "completed"
+
+
+def test_empty_authorization_header_without_api_key(client: TestClient) -> None:
+    # The Run Manager always sends the header; it is empty when runner_api_key is not set.
+    response = client.post(
+        "/v1/runs", json={"input": "x", "model": "m"}, headers={"Authorization": ""}
+    )
+    assert response.status_code == 200

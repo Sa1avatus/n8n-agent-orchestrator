@@ -79,7 +79,7 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 
 4. In n8n:
    * import `Claude_Code_Run_Manager_v1.json`, then `AHAWR_v13_ClaudeCode.json`;
-   * create a **Bearer Auth** credential named `Claude Runner API` with the `CLAUDE_RUNNER_API_KEY` value (any value if the key is empty) and select it on the five HTTP nodes of the Run Manager;
+   * no n8n credential is needed: the Run Manager's HTTP nodes send `Authorization: Bearer <hermes_config.runner_api_key>` only when that column is set. Leave both `CLAUDE_RUNNER_API_KEY` and `runner_api_key` empty (the runner has no host port), or set both to the same value;
    * copy the Run Manager's workflow id from its URL (`/workflow/<id>`) into `hermes_config.run_manager_workflow_id` of the `claude-code` row. When the column is empty, `nhjwX1G7FiVTO2Ah` is used. The Start nodes need no editing: their inputs come from the `Build … Run Input` Code nodes, and the Run Manager accepts them as they are.
 5. Add the `runner_url` column and the `claude-code` row from `hermes_config.csv` to the `hermes_config` Data Table. Models are Claude Code aliases (`opus`, `sonnet`, `haiku`) or full model names. Missions keep their `state_namespace`; give Claude Code runs their own namespace if the Hermes version runs the same missions.
 
@@ -165,7 +165,7 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
 - **Запуск и настройка n8n.**
   1. Запусти стек: `docker compose up -d --build`. Эта команда собирает и запускает все контейнеры.
   2. Импортируй в n8n `Claude_Code_Run_Manager_v1.json` и `AHAWR_v13_ClaudeCode.json`.
-  3. Создай credential Bearer Auth с именем `Claude Runner API`.
+  3. Credential в n8n не нужен. Если задаёшь `CLAUDE_RUNNER_API_KEY`, впиши то же значение в `hermes_config.runner_api_key`.
   4. Добавь в `hermes_config` колонку `runner_url` и строку `claude-code` из `hermes_config.csv`.
 - **Провайдеры по ролям, как в Hermes.** Каждая роль передаёт свой `*_provider` из `hermes_config`.
   - Если для провайдера нет блока `CLAUDE_RUNNER_PROVIDER_<ИМЯ>__…` (например, `anthropic`), роль идёт напрямую в Anthropic с `CLAUDE_CODE_OAUTH_TOKEN` или `ANTHROPIC_API_KEY`.

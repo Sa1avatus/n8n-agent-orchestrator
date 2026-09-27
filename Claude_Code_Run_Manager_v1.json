@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  working_directory: String(i.working_directory ?? '').trim(),\n  runner_url: String(i.runner_url ?? '').trim().replace(/\\/+$/, '') || 'http://claude-runner:8700',\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\n// Claude Code: an empty model means the runner/CLI default model; provider is informational.\nif (!state.provider) state.provider = 'anthropic';\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Claude Code Run Manager: input is required.');\nreturn [{ json: state }];"
+        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  working_directory: String(i.working_directory ?? '').trim(),\n  runner_api_key: String(i.runner_api_key ?? '').trim(),\n  runner_url: String(i.runner_url ?? '').trim().replace(/\\/+$/, '') || 'http://claude-runner:8700',\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\n// Claude Code: an empty model means the runner/CLI default model; provider is informational.\nif (!state.provider) state.provider = 'anthropic';\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Claude Code Run Manager: input is required.');\nreturn [{ json: state }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -31,8 +31,7 @@
       "parameters": {
         "method": "POST",
         "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/runs' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -43,6 +42,10 @@
             {
               "name": "X-AHAWR-Role",
               "value": "={{ String($('Normalize Request').first().json.role ?? '') }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
             }
           ]
         },
@@ -65,13 +68,7 @@
         1184
       ],
       "id": "1ad98af5-c3c0-445c-afa7-80453d18f2ad",
-      "name": "Start / Resume Run",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "",
-          "name": "Claude Runner API"
-        }
-      }
+      "name": "Start / Resume Run"
     },
     {
       "parameters": {
@@ -89,11 +86,15 @@
     {
       "parameters": {
         "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/runs/' + encodeURIComponent(String($json.run_id ?? '')) }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": []
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
+            }
+          ]
         },
         "options": {
           "response": {
@@ -111,13 +112,7 @@
         1440
       ],
       "id": "db26dcbb-e4f2-4ba4-ace4-94ba11ae895d",
-      "name": "Get Run Status",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "",
-          "name": "Claude Runner API"
-        }
-      }
+      "name": "Get Run Status"
     },
     {
       "parameters": {
@@ -180,8 +175,7 @@
       "parameters": {
         "method": "POST",
         "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/runs' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -192,6 +186,10 @@
             {
               "name": "X-AHAWR-Role",
               "value": "={{ String($('Normalize Request').first().json.role ?? '') }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
             }
           ]
         },
@@ -214,13 +212,7 @@
         1312
       ],
       "id": "9fb68ff6-b0da-4a5f-90e6-98d1d8f55f52",
-      "name": "Resume Existing Session",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "",
-          "name": "Claude Runner API"
-        }
-      }
+      "name": "Resume Existing Session"
     },
     {
       "parameters": {
@@ -1166,8 +1158,7 @@
       "parameters": {
         "method": "POST",
         "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/runs' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -1178,6 +1169,10 @@
             {
               "name": "X-AHAWR-Role",
               "value": "={{ String($('Normalize Request').first().json.role ?? '') }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
             }
           ]
         },
@@ -1200,26 +1195,23 @@
         480
       ],
       "id": "37a08ed4-cd6e-4f67-a4b3-59acb3eeef52",
-      "name": "Start New Session from Handoff",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "",
-          "name": "Claude Runner API"
-        }
-      }
+      "name": "Start New Session from Handoff"
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/sessions/' + encodeURIComponent(String($json.session_id || $json.requested_session_id || '').trim()) + '/compact' }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpBearerAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
             }
           ]
         },
@@ -1244,12 +1236,6 @@
       ],
       "id": "f4381338-5829-4ec5-9f5b-12e8428f2a7e",
       "name": "Compact Session",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "",
-          "name": "Claude Runner API"
-        }
-      },
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
     }
