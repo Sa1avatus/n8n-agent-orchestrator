@@ -1,0 +1,6 @@
+{
+  "name": "hybrid-local-rerank",
+  "description": "hybrid-symbol + the built-in CPU cross-encoder (no reranker-service needed).",
+  "options": {},
+  "reranker_model": "jinaai/jina-reranker-v1-tiny-en"
+}

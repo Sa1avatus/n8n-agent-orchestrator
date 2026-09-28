@@ -26,7 +26,8 @@ Validate labels after repository changes: `ahawr-retrieval-eval validate-dataset
 ## Configurations
 
 `retrieval-service/eval/configs/*.json` — each is a name, profile `options`, an embedder spec
-(`hashing` or `openai`) and optionally `reranker_url` / `rag` settings. `${VAR}` and
+(`hashing`, `local` for the built-in CPU model, or `openai`) and optionally `reranker_url`,
+`reranker_model` (built-in CPU cross-encoder) / `rag` settings. `${VAR}` and
 `${VAR:-default}` are resolved from the environment so secrets stay out of files.
 Configurations sharing embedder and backend are evaluated on one byte-identical index.
 
@@ -69,6 +70,9 @@ ahawr-retrieval export-logs --out features.jsonl
 
 `hybrid-rerank` needs `RETRIEVAL_RERANKER_URL` pointing at a running `reranker-service`;
 without it the configuration runs unreranked and reports the degradation.
+`hybrid-local-rerank` and `hybrid-symbol-e5-local` use the models baked into the container image;
+run them inside it (`RETRIEVAL_RERANKER_MODEL_DIR=/models`). `ahawr-gold-ru` repeats the gold
+tasks in Russian. Results for both: `eval/results/2026-09-28-local-models.md`.
 
 ## Decision rule
 

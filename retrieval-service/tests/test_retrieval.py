@@ -5,10 +5,14 @@ import httpx
 import pytest
 import respx
 
+from ahawr_retrieval.candidates import Candidate
 from ahawr_retrieval.config import Settings
+from ahawr_retrieval.context import select_context
 from ahawr_retrieval.models import IndexDocument, IndexRequest, RetrieveRequest
+from ahawr_retrieval.profiles import BudgetConfig
 from ahawr_retrieval.reranker import HttpReranker
 from ahawr_retrieval.service import RetrievalError, RetrievalService
+from ahawr_retrieval.store import ChunkRecord
 
 from .conftest import make_service
 
@@ -75,7 +79,48 @@ def test_budget_limits_are_enforced(indexed: RetrievalService) -> None:
     per_path: dict[str, int] = {}
     for chunk in retrieve(indexed).chunks:
         per_path[chunk.path] = per_path.get(chunk.path, 0) + 1
-    assert max(per_path.values()) <= 3
+    assert max(per_path.values()) <= BudgetConfig().per_path_limit
+
+
+def _chunk_candidate(n: int, path: str) -> Candidate:
+    record = ChunkRecord(
+        id=n,
+        chunk_id=f"ch{n}",
+        corpus_id="ws",
+        path=path,
+        source_type="code",
+        anchor=f"a{n}",
+        symbol=f"f{n}",
+        symbol_kind="function",
+        section=None,
+        language="python",
+        start_line=n * 10 + 1,
+        end_line=n * 10 + 5,
+        content=f"def f{n}(): ...",
+        content_hash=f"h{n}",
+        file_hash="fh",
+        version="v",
+        snapshot_id=None,
+        token_count=50,
+        status="active",
+        status_reason=None,
+        generation=1,
+        indexed_at=0.0,
+        updated_at=0.0,
+    )
+    return Candidate(chunk_id=f"ch{n}", record=record)
+
+
+def test_per_path_limit_keeps_several_chunks_of_one_file() -> None:
+    # A task centred on one large module needs more than a few of its chunks.
+    ranked = [_chunk_candidate(n, "app/api/main.py") for n in range(10)]
+    ranked.append(_chunk_candidate(10, "app/config.py"))
+    budget = BudgetConfig()
+    selected = select_context(ranked, budget, max_chunks=12, max_tokens=6000)
+    main = [c for c in selected if c.record and c.record.path == "app/api/main.py"]
+    assert len(main) == budget.per_path_limit == 8
+    assert [c.selection_reason for c in ranked[8:10]] == ["per_path_limit"] * 2
+    assert ranked[10].selected
 
 
 def test_options_switch_retrievers_and_change_config_id(indexed: RetrievalService) -> None:

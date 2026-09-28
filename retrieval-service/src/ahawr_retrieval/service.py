@@ -20,7 +20,14 @@ from .cache import CacheLookup, RetrievalCache, scope_key
 from .candidates import Candidate, fuse
 from .config import Settings, map_host_path
 from .context import render_context, select_context
-from .embeddings import Embedder, EmbeddingError, HashingEmbedder, OpenAICompatibleEmbedder
+from .embeddings import (
+    DEFAULT_LOCAL_EMBEDDING_MODEL,
+    Embedder,
+    EmbeddingError,
+    HashingEmbedder,
+    LocalEmbedder,
+    OpenAICompatibleEmbedder,
+)
 from .filters import apply_hard_filters
 from .indexer import Indexer, IndexingError, WorkspaceVerifier
 from .logstore import RetrievalLog
@@ -39,7 +46,7 @@ from .profiles import Profile, load_profiles
 from .query_builder import BuiltQuery, build_query
 from .rag_platform import RagMirror, RagPlatformClient, RagPlatformUnavailable
 from .ranking import AUTHORITY, rank_candidates
-from .reranker import HttpReranker, NoopReranker, Reranker
+from .reranker import HttpReranker, LocalReranker, NoopReranker, Reranker
 from .store import CorpusRecord, FileRecord, Store
 from .text import content_terms, extract_identifiers, sha256_hex
 from .vector_index import VectorIndex
@@ -67,11 +74,35 @@ def build_embedder(settings: Settings) -> Embedder:
         )
     if settings.embedder == "hashing":
         return HashingEmbedder(settings.embedding_dim)
+    if settings.embedder == "local":
+        return LocalEmbedder(
+            settings.embedding_model or DEFAULT_LOCAL_EMBEDDING_MODEL,
+            cache_dir=settings.reranker_model_dir,
+            threads=settings.reranker_threads,
+            # e5 models expect these prefixes
+            query_prefix=settings.embedding_query_prefix or "query: ",
+            passage_prefix=settings.embedding_passage_prefix or "passage: ",
+            batch_size=settings.embedding_batch_size,
+        )
     raise ValueError(f"unknown embedder {settings.embedder!r}")
 
 
+RERANKER_MODES = ("auto", "local", "http", "none")
+
+
 def build_reranker(settings: Settings) -> Reranker:
-    if not settings.reranker_url:
+    mode = settings.reranker
+    if mode not in RERANKER_MODES:
+        raise ValueError(f"RETRIEVAL_RERANKER must be one of {RERANKER_MODES}, got {mode!r}")
+    if mode == "local":
+        return LocalReranker(
+            settings.reranker_model,
+            cache_dir=settings.reranker_model_dir,
+            threads=settings.reranker_threads,
+            max_chars=settings.reranker_local_max_chars,
+        )
+    # "auto" and "http": reranker-service when a URL is set, otherwise no reranking.
+    if mode == "none" or not settings.reranker_url:
         return NoopReranker()
     return HttpReranker(
         settings.reranker_url,

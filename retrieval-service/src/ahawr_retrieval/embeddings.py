@@ -2,8 +2,11 @@
 
 * ``hashing`` — deterministic feature-hashing embedder with no model download. It is a lexical-ish
   baseline that keeps the vector path testable and reproducible; it is *not* a semantic model.
+* ``local`` — a small ONNX embedding model run in-process on the CPU (fastembed/onnxruntime, no
+  GPU); multilingual-e5-small by default. The container bakes the model into the image, so the
+  stack gets semantic vectors without any external service.
 * ``openai`` — any OpenAI-compatible ``/v1/embeddings`` endpoint (llama.cpp server, TEI, Ollama,
-  vLLM, hosted APIs). This is the production path.
+  vLLM, hosted APIs).
 
 Embeddings are cached by ``(model_id, content_hash)`` in the store, so unchanged chunks are never
 re-embedded after an edit elsewhere in the corpus.
@@ -11,8 +14,10 @@ re-embedded after an edit elsewhere in the corpus.
 
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict
-from typing import Protocol
+from collections.abc import Callable, Iterable
+from typing import Any, Protocol
 
 import httpx
 import numpy as np
@@ -136,6 +141,114 @@ class OpenAICompatibleEmbedder:
             self._query_cache.move_to_end(key)
             return cached
         vector: np.ndarray = self._post([self.query_prefix + text[: self.max_chars]])[0]
+        self._query_cache[key] = vector
+        if len(self._query_cache) > 512:
+            self._query_cache.popitem(last=False)
+        return vector
+
+
+DEFAULT_LOCAL_EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
+
+# Models fastembed does not list itself: name -> (Hugging Face repo with ONNX weights, file, dim).
+_CUSTOM_MODELS: dict[str, tuple[str, str, int]] = {
+    "intfloat/multilingual-e5-small": ("Xenova/multilingual-e5-small", "onnx/model.onnx", 384),
+}
+
+# texts -> vectors, one per text, in order.
+EmbedFn = Callable[[list[str]], Iterable[Any]]
+
+
+def _fastembed_embedder(
+    model: str, cache_dir: str | None, threads: int | None, batch_size: int
+) -> EmbedFn:
+    try:
+        from fastembed import TextEmbedding
+        from fastembed.common.model_description import ModelSource, PoolingType
+    except ImportError as exc:  # the [local-rerank] extra is not installed
+        raise EmbeddingError("fastembed is not installed (pip install '.[local-rerank]')") from exc
+    if model in _CUSTOM_MODELS:
+        known = {m["model"] for m in TextEmbedding.list_supported_models()}
+        if model not in known:
+            repo, model_file, dim = _CUSTOM_MODELS[model]
+            TextEmbedding.add_custom_model(
+                model=model,
+                pooling=PoolingType.MEAN,
+                normalization=True,
+                sources=ModelSource(hf=repo),
+                dim=dim,
+                model_file=model_file,
+            )
+    # CPU only: onnxruntime without CUDA, and the CPU provider is pinned explicitly.
+    encoder = TextEmbedding(
+        model_name=model,
+        cache_dir=cache_dir,
+        threads=threads,
+        providers=["CPUExecutionProvider"],
+        cuda=False,
+    )
+
+    def embed(texts: list[str]) -> Iterable[Any]:
+        vectors: Iterable[Any] = encoder.embed(texts, batch_size=batch_size)
+        return vectors
+
+    return embed
+
+
+class LocalEmbedder:
+    """In-process ONNX embedding model on the CPU (fastembed); loaded on first use."""
+
+    def __init__(
+        self,
+        model: str = DEFAULT_LOCAL_EMBEDDING_MODEL,
+        cache_dir: str | None = None,
+        threads: int | None = None,
+        query_prefix: str = "query: ",
+        passage_prefix: str = "passage: ",
+        batch_size: int = 32,
+        max_chars: int = 2000,
+        embed_fn: EmbedFn | None = None,
+    ) -> None:
+        self.model = model
+        self.cache_dir = cache_dir
+        self.threads = threads
+        self.query_prefix = query_prefix
+        self.passage_prefix = passage_prefix
+        self.batch_size = batch_size
+        self.max_chars = max_chars
+        self._embed_fn = embed_fn
+        self._lock = threading.Lock()
+        self._query_cache: OrderedDict[str, np.ndarray] = OrderedDict()
+
+    @property
+    def model_id(self) -> str:
+        return f"local:{self.model}:{sha256_hex(self.query_prefix + '|' + self.passage_prefix)[:8]}"
+
+    def _embed(self, texts: list[str]) -> np.ndarray:
+        with self._lock:
+            if self._embed_fn is None:
+                self._embed_fn = _fastembed_embedder(
+                    self.model, self.cache_dir, self.threads, self.batch_size
+                )
+            try:
+                matrix = np.asarray(list(self._embed_fn(texts)), dtype=np.float32)
+            except Exception as exc:
+                raise EmbeddingError(f"local embedding failed: {exc}") from exc
+        if matrix.ndim != 2 or matrix.shape[0] != len(texts):
+            raise EmbeddingError("local embedding size mismatch")
+        return _normalize(matrix)
+
+    def embed_documents(self, texts: list[str]) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, 0), dtype=np.float32)
+        return self._embed([self.passage_prefix + t[: self.max_chars] for t in texts])
+
+    def embed_query(self, text: str) -> np.ndarray:
+        key = sha256_hex(text)
+        cached = self._query_cache.get(key)
+        if cached is not None:
+            self._query_cache.move_to_end(key)
+            return cached
+        vector: np.ndarray = self._embed([self.query_prefix + text[: self.max_chars]])[0]
         self._query_cache[key] = vector
         if len(self._query_cache) > 512:
             self._query_cache.popitem(last=False)

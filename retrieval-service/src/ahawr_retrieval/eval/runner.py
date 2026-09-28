@@ -9,21 +9,33 @@ decisions match the expected ones (``reuse`` vs ``reretrieve``).
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from ..config import Settings
-from ..embeddings import Embedder, HashingEmbedder, OpenAICompatibleEmbedder
+from ..embeddings import (
+    DEFAULT_LOCAL_EMBEDDING_MODEL,
+    Embedder,
+    HashingEmbedder,
+    LocalEmbedder,
+    OpenAICompatibleEmbedder,
+)
 from ..models import IndexRequest, RetrieveRequest
-from ..reranker import HttpReranker, NoopReranker, Reranker
+from ..reranker import HttpReranker, LocalReranker, NoopReranker, Reranker
 from ..service import RetrievalService
 from ..text import short_hash
 from .datasets import EvalConfig, EvalDataset, EvalTask
 from .metrics import DEFAULT_KS, label_ranking, mean, percentile, ranking_metrics
 
 CACHE_HITS = {"hit", "semantic_hit", "revalidated_hit"}
+
+
+def _model_dir() -> str | None:
+    # the built-in CPU models baked into the container image (see Dockerfile)
+    return os.environ.get("RETRIEVAL_RERANKER_MODEL_DIR") or None
 
 
 def _embedder(spec: dict[str, Any]) -> Embedder:
@@ -38,12 +50,21 @@ def _embedder(spec: dict[str, Any]) -> Embedder:
             query_prefix=spec.get("query_prefix", ""),
             passage_prefix=spec.get("passage_prefix", ""),
         )
+    if kind == "local":
+        return LocalEmbedder(
+            spec.get("model", DEFAULT_LOCAL_EMBEDDING_MODEL),
+            cache_dir=_model_dir(),
+            query_prefix=spec.get("query_prefix", "query: "),
+            passage_prefix=spec.get("passage_prefix", "passage: "),
+        )
     raise ValueError(f"unknown embedder kind {kind!r}")
 
 
 def _reranker(config: EvalConfig) -> Reranker:
     if config.reranker_url:
         return HttpReranker(config.reranker_url, api_key=config.reranker_api_key)
+    if config.reranker_model:
+        return LocalReranker(config.reranker_model, cache_dir=_model_dir())
     return NoopReranker()
 
 

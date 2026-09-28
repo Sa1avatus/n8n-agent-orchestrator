@@ -13,6 +13,7 @@ flowchart LR
         WS[("/workspace (read-only)")] --> P
     end
     P -->|optional| R["reranker-service /v1/rerank"]
+    P -->|opt-in, CPU| L["built-in ONNX models<br/>multilingual-e5-small, jina-reranker-v1-tiny"]
     P -->|optional backend + fallback| RAG["rag-platform /v1"]
 ```
 
@@ -54,7 +55,7 @@ mypy src
 pytest                     # coverage gate: 80 %
 ```
 
-The tests need no network access and download no models. HTTP backends (reranker, embeddings, rag-platform) are mocked with `respx`.
+The tests need no network access and download no models. HTTP backends (reranker, embeddings, rag-platform) are mocked with `respx`, and the built-in ONNX models are replaced by fakes.
 
 ---
 
@@ -65,7 +66,7 @@ Context Retrieval Layer для AHAWR работает как контейнер 
 - Запуск: `docker compose up -d --build` из корня репозитория поднимает n8n и `ahawr-retrieval` вместе. n8n обращается к сервису по адресу `http://ahawr-retrieval:8500`, наружу порт не публикуется. Workspace монтируется только на чтение, индекс хранится в отдельном томе.
 - API: `POST /retrieve`, `POST /index`, `POST /invalidate`, а также `GET /corpora` и `GET /health`.
 - Профили: `worker` и `reviewer`.
-- Retrieval: BM25 (FTS5), векторы, поиск по символам, RRF, text-only cross-encoder (`reranker-service`), детерминированные фильтры и детерминированное ранжирование.
+- Retrieval: BM25 (FTS5), векторы, поиск по символам, RRF, text-only cross-encoder (`reranker-service` или встроенная CPU-модель, `RETRIEVAL_RERANKER=local`), эмбеддинги hashing, встроенный multilingual-e5-small (`RETRIEVAL_EMBEDDER=local`) или OpenAI-совместимый endpoint, детерминированные фильтры и детерминированное ранжирование.
 - Версионирование: у кода и документации раздельные модели версий и свежести. Content hash хранится для каждого чанка, индексация инкрементальная, инвалидация — на уровне чанков.
 - Кэш с семантическим fingerprint запроса. Логи содержат признаки кандидатов для будущего LTR.
 - `rag-platform` — внешний контейнер, подключаемый как бэкенд. Если он недоступен, используется локальный индекс.

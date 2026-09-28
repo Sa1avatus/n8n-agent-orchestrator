@@ -1,0 +1,13 @@
+{
+  "name": "hybrid-symbol-e5-local",
+  "description": "hybrid-symbol with the built-in CPU embedder (multilingual-e5-small, no embedding endpoint needed).",
+  "options": {
+    "rerank": {
+      "enabled": false
+    }
+  },
+  "embedder": {
+    "kind": "local",
+    "model": "intfloat/multilingual-e5-small"
+  }
+}

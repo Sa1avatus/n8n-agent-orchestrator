@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .reranker import DEFAULT_LOCAL_MODEL
+
 
 def _bool(value: str | None, default: bool) -> bool:
     if value is None or value == "":
@@ -59,10 +61,17 @@ class Settings:
     embedding_query_prefix: str = ""
     embedding_passage_prefix: str = ""
     embedding_batch_size: int = 32
+    # auto/http: reranker-service when RETRIEVAL_RERANKER_URL is set, otherwise no reranking |
+    # local: the built-in CPU cross-encoder (RETRIEVAL_RERANKER_MODEL) | none
+    reranker: str = "auto"
     reranker_url: str | None = None
     reranker_api_key: str | None = None
     reranker_timeout_seconds: float = 10.0
     reranker_max_chars: int = 4000
+    reranker_model: str = DEFAULT_LOCAL_MODEL
+    reranker_model_dir: str | None = None
+    reranker_threads: int | None = None
+    reranker_local_max_chars: int = 2000
     profiles_file: str | None = None
     max_file_bytes: int = 512 * 1024
     cache_ttl_seconds: float = 24 * 3600
@@ -117,10 +126,17 @@ class Settings:
             embedding_query_prefix=e.get("RETRIEVAL_EMBEDDING_QUERY_PREFIX", ""),
             embedding_passage_prefix=e.get("RETRIEVAL_EMBEDDING_PASSAGE_PREFIX", ""),
             embedding_batch_size=int(e.get("RETRIEVAL_EMBEDDING_BATCH_SIZE", "32")),
+            reranker=e.get("RETRIEVAL_RERANKER", "auto").strip().lower() or "auto",
             reranker_url=e.get("RETRIEVAL_RERANKER_URL") or None,
             reranker_api_key=e.get("RETRIEVAL_RERANKER_API_KEY") or None,
             reranker_timeout_seconds=float(e.get("RETRIEVAL_RERANKER_TIMEOUT_SECONDS", "10")),
             reranker_max_chars=int(e.get("RETRIEVAL_RERANKER_MAX_CHARS", "4000")),
+            reranker_model=e.get("RETRIEVAL_RERANKER_MODEL") or DEFAULT_LOCAL_MODEL,
+            reranker_model_dir=e.get("RETRIEVAL_RERANKER_MODEL_DIR") or None,
+            reranker_threads=int(e["RETRIEVAL_RERANKER_THREADS"])
+            if e.get("RETRIEVAL_RERANKER_THREADS")
+            else None,
+            reranker_local_max_chars=int(e.get("RETRIEVAL_RERANKER_LOCAL_MAX_CHARS", "2000")),
             profiles_file=e.get("RETRIEVAL_PROFILES_FILE") or None,
             max_file_bytes=int(e.get("RETRIEVAL_MAX_FILE_BYTES", str(512 * 1024))),
             cache_ttl_seconds=float(e.get("RETRIEVAL_CACHE_TTL_SECONDS", str(24 * 3600))),

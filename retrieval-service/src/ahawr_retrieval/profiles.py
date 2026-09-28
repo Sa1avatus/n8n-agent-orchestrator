@@ -69,7 +69,9 @@ class RankingConfig(_Strict):
 class BudgetConfig(_Strict):
     max_chunks: int = Field(12, ge=1, le=100)
     max_tokens: int = Field(6000, ge=100, le=100_000)
-    per_path_limit: int = Field(3, ge=1, le=50)
+    # A task usually centres on one large file (e.g. an API module with many endpoints and
+    # dependencies); 3 chunks per file dropped needed ones in favour of weaker files.
+    per_path_limit: int = Field(8, ge=1, le=50)
     min_final_score: float = 0.0
     history_max_share: float = Field(0.2, ge=0, le=1)
     overlap_threshold: float = Field(0.5, ge=0, le=1)
@@ -141,7 +143,7 @@ def default_profiles() -> dict[str, Profile]:
             test_file=0.06,
             source_prior={"code": 0.02, "doc": 0.02, "history": 0.0},
         ),
-        budget=BudgetConfig(max_chunks=10, max_tokens=5000, per_path_limit=3),
+        budget=BudgetConfig(max_chunks=10, max_tokens=5000, per_path_limit=8),
     )
     return {"worker": worker, "reviewer": reviewer}
 

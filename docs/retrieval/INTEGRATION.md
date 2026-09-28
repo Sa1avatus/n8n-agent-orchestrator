@@ -12,6 +12,7 @@ docker compose stack
 └── ahawr-retrieval
       reads  /workspace         (Hermes workspace, read-only bind mount)
       keeps  /data              (named volume: index, cache, retrieval logs)
+      ├─ built-in → CPU models in /models (RETRIEVAL_EMBEDDER=local, RETRIEVAL_RERANKER=local)
       ├─ optional → reranker-service  (RETRIEVAL_RERANKER_URL, e.g. host.docker.internal:8200)
       └─ optional → rag-platform      (RETRIEVAL_RAG_*), local index on failure
 n8n Data Tables: execution state, untouched by retrieval

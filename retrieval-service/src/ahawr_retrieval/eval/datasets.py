@@ -102,6 +102,8 @@ class EvalConfig(BaseModel):
     embedder: dict[str, Any] = Field(default_factory=lambda: {"kind": "hashing"})
     reranker_url: str | None = None
     reranker_api_key: str | None = None
+    # built-in CPU cross-encoder (fastembed model name); used when reranker_url is empty
+    reranker_model: str | None = None
     rag: dict[str, Any] | None = None
 
     @classmethod

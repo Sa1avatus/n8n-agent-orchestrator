@@ -593,7 +593,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 `retrieval-service/` is an optional, read-only Context Retrieval Layer that runs as its own container, `ahawr-retrieval`, inside the n8n compose stack (`docker compose up` starts both; n8n reaches it at `http://ahawr-retrieval:8500`, no host port). It gives the Worker and the Reviewer relevant, current, provenance-aware context from repository code and project documentation. It does not take over orchestration (n8n), execution (Hermes) or persistent state (Data Tables), and it is never used for recovery.
 
-- Hybrid retrieval: BM25 + vectors + symbol search, reciprocal-rank fusion, text-only cross-encoder reranking through `reranker-service`, deterministic filters and ranking.
+- Hybrid retrieval: BM25 + vectors + symbol search, reciprocal-rank fusion, text-only cross-encoder reranking through `reranker-service`, deterministic filters and ranking. Built-in CPU models (no GPU, baked into the image, opt-in): the multilingual-e5-small embedder, which clearly helps on Russian task text, and a small cross-encoder.
 - Separate Worker and Reviewer retrieval profiles.
 - Every chunk carries provenance: source type, path, symbol/section, chunk id, content hash, snapshot/version, scores and rank.
 - Incremental indexing with chunk-level invalidation, and a retrieval cache with semantic query fingerprints for retries.
@@ -1284,7 +1284,7 @@ worker_provider
 
 `retrieval-service/` — опциональный read-only Context Retrieval Layer. Он работает в собственном контейнере `ahawr-retrieval` внутри compose-стека n8n: `docker compose up` поднимает оба контейнера, n8n обращается к нему по адресу `http://ahawr-retrieval:8500`, наружу порт не публикуется. Он даёт Worker и Reviewer релевантный, актуальный контекст из кода репозитория и документации проекта, с provenance для каждого фрагмента. Сервис не заменяет orchestration (n8n), выполнение (Hermes) и persistent state (Data Tables) и никогда не используется для восстановления состояния.
 
-- Hybrid retrieval: BM25 + векторы + поиск по символам, RRF, text-only cross-encoder через `reranker-service`, детерминированные фильтры и ранжирование.
+- Hybrid retrieval: BM25 + векторы + поиск по символам, RRF, text-only cross-encoder через `reranker-service`, детерминированные фильтры и ранжирование. Встроенные CPU-модели (без GPU, запечены в образ, включаются явно): эмбеддер multilingual-e5-small, который заметно помогает на русских формулировках задач, и небольшой cross-encoder.
 - Отдельные профили Worker и Reviewer.
 - У каждого чанка есть provenance: тип источника, путь, символ/секция, chunk id, content hash, snapshot/version, scores и rank.
 - Инкрементальная индексация, инвалидация на уровне чанков, кэш с семантическим fingerprint для повторных попыток.

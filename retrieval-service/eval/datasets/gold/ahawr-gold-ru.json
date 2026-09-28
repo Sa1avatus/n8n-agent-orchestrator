@@ -1,0 +1,746 @@
+{
+  "dataset_id": "ahawr-gold-ru",
+  "version": "1",
+  "kind": "gold",
+  "description": "Russian wording of ahawr-gold v1: the same 17 tasks and relevance judgments, with titles, objectives, acceptance criteria and verification translated to Russian (identifiers, paths and Reviewer inputs unchanged), as AHAWR missions are often phrased. Measures cross-lingual retrieval.",
+  "provenance": {
+    "created_by": "translation of ahawr-gold v1 (2026-09-28)",
+    "judgments": "copied unchanged from ahawr-gold v1",
+    "status": "seed: translation not reviewed by a native speaker"
+  },
+  "corpora": [
+    {
+      "corpus_id": "ahawr-repo",
+      "root": "../../../..",
+      "exclude_globs": [
+        "retrieval-service/eval/*"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "G01",
+      "profile": "worker",
+      "tags": [
+        "code",
+        "compression",
+        "hermes",
+        "ru",
+        "scoped"
+      ],
+      "task": {
+        "title": "Сжатие должно выполняться для сессии нужной роли Hermes",
+        "objective": "RPC сжатия TUI должен получать сессию, выбранную путём compression-target (worker_session_id или reviewer_session_id), и никогда молча не подставлять сессию Architect.",
+        "acceptance_criteria": [
+          "session.compress вызывается с запрошенным session_id",
+          "Нет подстановки architect_session_id"
+        ],
+        "verification": [
+          "Запустить hermes_compress.py для сессии Worker и проверить id возобновлённой сессии"
+        ],
+        "scope": [
+          "scripts/hermes_compress.py",
+          "Hermes_Run_Manager_v5.json"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "scripts/hermes_compress.py",
+          "symbol": "compress_session",
+          "grade": 3
+        },
+        {
+          "path": "scripts/hermes_compress.py",
+          "symbol": "main",
+          "grade": 1
+        },
+        {
+          "path": "Hermes_Run_Manager_v5.json",
+          "grade": 2
+        },
+        {
+          "path": "README.md",
+          "section": "Hermes session compression",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G02",
+      "profile": "worker",
+      "tags": [
+        "compression",
+        "docs",
+        "hermes",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Объяснить сбои сжатия с ошибкой неподдерживаемой модели",
+        "objective": "Результат сжатия показывает status aborted, compression_failed true, removed 0 и 'Model ... is not supported'. Описать причину и где настраивается модель сжатия."
+      },
+      "relevant": [
+        {
+          "path": "README.md",
+          "section": "Compression troubleshooting",
+          "grade": 3
+        },
+        {
+          "path": "README.md",
+          "section": "Hermes session compression",
+          "grade": 2
+        },
+        {
+          "path": "README.md",
+          "section": "Компрессия Hermes-сессий",
+          "grade": 1
+        },
+        {
+          "path": "scripts/hermes_compress.py",
+          "symbol": "compress_session",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G03",
+      "profile": "worker",
+      "tags": [
+        "config",
+        "docs",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Проверять retry_delays_json в конфигурации",
+        "objective": "retry_delays_json в hermes_config должен быть JSON-массивом неотрицательных чисел; описать последовательность задержек по умолчанию для повторов провайдера.",
+        "acceptance_criteria": [
+          "Некорректный retry_delays_json падает с понятной ошибкой",
+          "Значение по умолчанию [15, 30, 60, 120, 300] описано"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "README.md",
+          "section": "Retry strategy",
+          "grade": 3
+        },
+        {
+          "path": "hermes_config.csv",
+          "grade": 2
+        },
+        {
+          "path": "AHAWR_v13.json",
+          "grade": 2
+        },
+        {
+          "path": "README.md",
+          "section": "Configuration architecture > `hermes_config`",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G04",
+      "profile": "worker",
+      "tags": [
+        "cache",
+        "code",
+        "retrieval",
+        "ru",
+        "scoped"
+      ],
+      "task": {
+        "title": "Сделать повторное использование семантического кэша строже для замечаний Reviewer",
+        "objective": "Семантическая эквивалентность отпечатков запроса должна требовать одинаковых якорей (пути, идентификаторы) и настраиваемого порога Жаккара в профиле, прежде чем переиспользовать закэшированный retrieval.",
+        "acceptance_criteria": [
+          "compare() отклоняет новый якорь",
+          "Порог берётся из cache config профиля"
+        ],
+        "scope": [
+          "retrieval-service/src/ahawr_retrieval/fingerprint.py",
+          "retrieval-service/src/ahawr_retrieval/cache.py"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/fingerprint.py",
+          "symbol": "compare",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/fingerprint.py",
+          "symbol": "_anchors_covered",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/cache.py",
+          "symbol": "RetrievalCache.lookup",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/profiles.py",
+          "symbol": "CacheConfig",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/tests/test_fingerprint.py",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/fingerprint.py",
+          "symbol": "<module>",
+          "grade": 1,
+          "note": "module docstring defines the equivalence levels (added in pooled review)"
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/cache.py",
+          "symbol": "<module>",
+          "grade": 1,
+          "note": "module docstring defines cache key dimensions (added in pooled review)"
+        }
+      ],
+      "variants": [
+        {
+          "id": "reformatted",
+          "feedback": "",
+          "expect": "reuse"
+        }
+      ]
+    },
+    {
+      "id": "G05",
+      "profile": "worker",
+      "tags": [
+        "code",
+        "indexing",
+        "retrieval",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Ручная инвалидация должна переживать обычные инкрементальные синхронизации",
+        "objective": "Фрагменты, инвалидированные через endpoint invalidate, должны оставаться инвалидированными при повторной синхронизации workspace, если содержимое файла не изменилось; снова активными они становятся только после изменения содержимого или явной переиндексации."
+      },
+      "review": {
+        "feedback": "Invalidated chunks come back after the next sync; the unchanged-hash shortcut revalidates them."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "symbol": "Indexer._sync_workspace",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "symbol": "Indexer._apply_file",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "symbol": "Indexer.invalidate",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/tests/test_indexer.py",
+          "symbol": "test_invalidation_survives_routine_sync_until_content_changes",
+          "grade": 1
+        }
+      ],
+      "variants": [
+        {
+          "id": "reformatted",
+          "feedback": "invalidated chunks come back after the next sync -- the unchanged hash shortcut revalidates them!",
+          "expect": "reuse"
+        },
+        {
+          "id": "reworded",
+          "feedback": "After the next sync the invalidated chunks come back, because the unchanged-hash shortcut revalidates them.",
+          "expect": "reuse"
+        },
+        {
+          "id": "new-file",
+          "feedback": "Invalidated chunks come back after the next sync; also check retrieval-service/src/ahawr_retrieval/store.py deactivate_chunk.",
+          "expect": "reretrieve"
+        },
+        {
+          "id": "different-problem",
+          "feedback": "Embeddings are recomputed for every chunk of a changed file instead of only the modified chunk.",
+          "expect": "reretrieve"
+        }
+      ]
+    },
+    {
+      "id": "G06",
+      "profile": "worker",
+      "tags": [
+        "code",
+        "filters",
+        "retrieval",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Детерминированно отбрасывать устаревшие фрагменты документации",
+        "objective": "Фрагменты документации, у которых valid_until в прошлом или версия отличается от закреплённой записи doc_versions, должны удаляться жёсткими фильтрами до reranking."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/filters.py",
+          "symbol": "_check",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/filters.py",
+          "symbol": "apply_hard_filters",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/models.py",
+          "symbol": "WorkspaceState",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/tests/test_retrieval.py",
+          "symbol": "test_expired_and_pinned_docs_are_filtered",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G07",
+      "profile": "worker",
+      "tags": [
+        "code",
+        "rag-platform",
+        "retrieval",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Переходить на локальный индекс, когда rag-platform недоступна",
+        "objective": "Ошибка транспорта или 5xx от rag-platform должна открывать circuit breaker на настроенный cooldown и обслуживать запрос локальным backend с указанием причины деградации."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/rag_platform.py",
+          "symbol": "RagPlatformClient",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/service.py",
+          "symbol": "RetrievalService._candidate_lists",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/config.py",
+          "symbol": "Settings",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/tests/test_rag_platform.py",
+          "symbol": "test_rag_outage_falls_back_to_local_and_opens_circuit",
+          "grade": 1
+        },
+        {
+          "path": "docs/retrieval/ARCHITECTURE.md",
+          "section": "8. Backends",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G08",
+      "profile": "worker",
+      "tags": [
+        "code",
+        "reranker",
+        "retrieval",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Cross-encoder должен оценивать только запрос и текст фрагмента",
+        "objective": "Запрос к reranker-service должен содержать только запрос и текст фрагмента; путь, символ, свежесть и другие метаданные не должны передаваться в cross-encoder."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/reranker.py",
+          "symbol": "HttpReranker.rerank",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/service.py",
+          "symbol": "RetrievalService._rerank_text",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/profiles.py",
+          "symbol": "RerankConfig",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/tests/test_retrieval.py",
+          "symbol": "test_http_reranker_scores_drive_final_order",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/reranker.py",
+          "symbol": "<module>",
+          "grade": 2,
+          "note": "module docstring states the text-only rule (added in pooled review)"
+        }
+      ]
+    },
+    {
+      "id": "G09",
+      "profile": "worker",
+      "tags": [
+        "config",
+        "docs",
+        "n8n",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Включить слой retrieval для миссии в n8n",
+        "objective": "Описать, какие колонки hermes_config включают retrieval для Worker и Reviewer, где настраиваются URL сервиса retrieval и корпуса, и где задаются настройки reranker и rag-platform."
+      },
+      "relevant": [
+        {
+          "path": "docs/retrieval/INTEGRATION.md",
+          "section": "Enable it in AHAWR v13",
+          "grade": 3
+        },
+        {
+          "path": "hermes_config.csv",
+          "grade": 2
+        },
+        {
+          "path": "docs/retrieval/INTEGRATION.md",
+          "section": "Start the stack",
+          "grade": 1
+        },
+        {
+          "path": "README.md",
+          "section": "Context Retrieval Layer (AHAWR v13)",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G10",
+      "profile": "worker",
+      "tags": [
+        "missions",
+        "state",
+        "docs",
+        "russian",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Проверить state_namespace у новой миссии",
+        "objective": "Новая миссия должна иметь непустой state_namespace, чтобы persistent state разных миссий не пересекался. Найти, где это проверяется и описано."
+      },
+      "relevant": [
+        {
+          "path": "README.md",
+          "section": "Проверить `state_namespace`",
+          "grade": 3
+        },
+        {
+          "path": "README.md",
+          "section": "Check `state_namespace`",
+          "grade": 2
+        },
+        {
+          "path": "README.md",
+          "section": "Mission has no `state_namespace`",
+          "grade": 2
+        },
+        {
+          "path": "AHAWR_v13.json",
+          "grade": 2
+        },
+        {
+          "path": "missions.csv",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G11",
+      "profile": "reviewer",
+      "tags": [
+        "indexing",
+        "retrieval",
+        "review",
+        "ru"
+      ],
+      "task": {
+        "title": "Ручная инвалидация должна переживать обычные инкрементальные синхронизации",
+        "objective": "Инвалидированные фрагменты остаются инвалидированными при синхронизации неизменённых файлов и снова активируются только при изменении содержимого или явной переиндексации.",
+        "acceptance_criteria": [
+          "Тест покрывает touch() инвалидированного файла и последующий sync",
+          "Изменённый фрагмент становится активным, неизменённый остаётся инвалидированным"
+        ],
+        "verification": [
+          "pytest retrieval-service/tests/test_indexer.py"
+        ]
+      },
+      "review": {
+        "worker_output": "FIX APPLIED\nChanged Indexer._sync_workspace and Indexer._apply_file in retrieval-service/src/ahawr_retrieval/indexer.py to keep INVALIDATED status unless revalidate is requested. Added test_invalidation_survives_routine_sync_until_content_changes. Checks run: pytest.",
+        "changed_files": [
+          "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "retrieval-service/tests/test_indexer.py"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/tests/test_indexer.py",
+          "symbol": "test_invalidation_survives_routine_sync_until_content_changes",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "symbol": "Indexer._sync_workspace",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/indexer.py",
+          "symbol": "Indexer._apply_file",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/tests/test_indexer.py",
+          "symbol": "test_invalidate_and_reindex_revalidates_without_reembedding",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G12",
+      "profile": "reviewer",
+      "tags": [
+        "chunking",
+        "retrieval",
+        "review",
+        "ru"
+      ],
+      "task": {
+        "title": "Python-чанкер держит декораторы вместе с методами",
+        "objective": "Строки декораторов прямо над def относятся к фрагменту этого символа, а символ сохраняет квалифицированное имя Class.method.",
+        "acceptance_criteria": [
+          "Строки @property входят в диапазон строк метода",
+          "Появляются квалифицированные имена вроде InvoiceCache.size"
+        ],
+        "verification": [
+          "pytest retrieval-service/tests/test_text_and_chunking.py"
+        ]
+      },
+      "review": {
+        "worker_output": "FIX APPLIED: _python_symbols now walks decorator lines upwards before recording start_line. File: retrieval-service/src/ahawr_retrieval/chunking.py",
+        "changed_files": [
+          "retrieval-service/src/ahawr_retrieval/chunking.py"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/chunking.py",
+          "symbol": "_python_symbols",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/tests/test_text_and_chunking.py",
+          "symbol": "test_python_chunks_follow_symbols_with_qualnames",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/chunking.py",
+          "symbol": "_python_block_end",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G13",
+      "profile": "worker",
+      "tags": [
+        "logging",
+        "ltr",
+        "retrieval",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Экспортировать признаки ранжирования кандидатов для Learning-to-Rank",
+        "objective": "Сделать JSONL-экспорт признаков retrieval по каждому кандидату (lexical, vector, оценки reranker, точное совпадение, ранг, selected) вместе с контекстом запроса."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/logstore.py",
+          "symbol": "RetrievalLog.iter_feature_rows",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/cli.py",
+          "symbol": "main",
+          "grade": 2
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/candidates.py",
+          "symbol": "Candidate.log_row",
+          "grade": 2
+        },
+        {
+          "path": "docs/retrieval/ARCHITECTURE.md",
+          "section": "7. Retrieval logging",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G14",
+      "profile": "worker",
+      "tags": [
+        "eval",
+        "ru",
+        "silver",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Собрать silver-задачи для оценки из истории AHAWR",
+        "objective": "Генерировать задачи со слабой разметкой из экспортированных попыток и состояния задач: только принятые задачи, релевантные файлы из явной карты изменений или из принятого вывода Worker."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/eval/silver.py",
+          "symbol": "build_silver",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/eval/ahawr_metrics.py",
+          "symbol": "review_status",
+          "grade": 1
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/eval/cli.py",
+          "symbol": "main",
+          "grade": 1
+        },
+        {
+          "path": "docs/retrieval/EVALUATION.md",
+          "section": "Datasets",
+          "grade": 2
+        }
+      ]
+    },
+    {
+      "id": "G15",
+      "profile": "worker",
+      "tags": [
+        "prompts",
+        "reviewer",
+        "russian",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Reviewer постоянно возвращает needs_changes",
+        "objective": "Разобраться, почему Reviewer раз за разом требует изменений: проверить reviewer prompt, формат JSON-ответа и acceptance criteria задачи."
+      },
+      "relevant": [
+        {
+          "path": "agent_prompts.csv",
+          "grade": 3
+        },
+        {
+          "path": "README.md",
+          "section": "Reviewer keeps requesting changes",
+          "grade": 3
+        },
+        {
+          "path": "AHAWR_v13.json",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G16",
+      "profile": "worker",
+      "tags": [
+        "eval",
+        "metrics",
+        "ru",
+        "unscoped"
+      ],
+      "task": {
+        "title": "Посчитать first-pass rate и число повторов на задачу по экспорту AHAWR",
+        "objective": "По экспортированной таблице Autonomous Agent Task Attempts посчитать first-pass rate, долю повторов, среднее число повторов на задачу и итоговую долю успешных задач для каждой метки конфигурации retrieval."
+      },
+      "relevant": [
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/eval/ahawr_metrics.py",
+          "symbol": "task_outcomes",
+          "grade": 3
+        },
+        {
+          "path": "retrieval-service/src/ahawr_retrieval/eval/ahawr_metrics.py",
+          "symbol": "aggregate",
+          "grade": 3
+        },
+        {
+          "path": "docs/retrieval/EVALUATION.md",
+          "section": "Metrics",
+          "grade": 1
+        }
+      ]
+    },
+    {
+      "id": "G17",
+      "profile": "reviewer",
+      "tags": [
+        "fail-open",
+        "n8n",
+        "review",
+        "ru"
+      ],
+      "task": {
+        "title": "Узлы retrieval в AHAWR должны быть fail-open и без состояния",
+        "objective": "Проверить, что новые HTTP-узлы retrieval никогда не блокируют Worker или Reviewer и что ни одно поле retrieval не сохраняется в таблицы состояния задач.",
+        "acceptance_criteria": [
+          "HTTP-узлы используют neverError и continueRegularOutput",
+          "Записи в Data Table сохраняют явно заданные колонки",
+          "Выключенный retrieval воспроизводит промпты v12"
+        ]
+      },
+      "review": {
+        "worker_output": "FIX APPLIED: added Worker/Reviewer retrieval nodes to AHAWR_v13.json and documented them in ARCHITECTURE_CONTRACT.md section 9.",
+        "changed_files": [
+          "AHAWR_v13.json",
+          "ARCHITECTURE_CONTRACT.md"
+        ]
+      },
+      "relevant": [
+        {
+          "path": "AHAWR_v13.json",
+          "grade": 3
+        },
+        {
+          "path": "ARCHITECTURE_CONTRACT.md",
+          "section": "9. Retrieval Layer Integration",
+          "grade": 3
+        },
+        {
+          "path": "docs/retrieval/INTEGRATION.md",
+          "section": "What changes in the workflow",
+          "grade": 2
+        },
+        {
+          "path": "ARCHITECTURE_CONTRACT.md",
+          "section": "5.1 PROHIBITED",
+          "grade": 1
+        }
+      ]
+    }
+  ]
+}
