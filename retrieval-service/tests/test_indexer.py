@@ -30,6 +30,33 @@ def test_initial_index_excludes_secrets_ignored_and_vendor(
     assert result.docs_snapshot and result.docs_snapshot.startswith("docs:")
 
 
+def test_build_files_are_indexed_and_agent_plans_and_backups_are_not(
+    service: RetrievalService, workspace: Path
+) -> None:
+    files = {
+        "Dockerfile.llama": "FROM ubuntu:24.04\nRUN patch -p1 < /tmp/a.patch\n",
+        "patches/a.patch": "diff --git a/x.c b/x.c\n--- a/x.c\n+++ b/x.c\n@@ -1 +1 @@\n-a\n+b\n",
+        "task-plan.json": '{"tasks": []}\n',
+        ".hermes/plans/task_plan.json": '{"tasks": []}\n',
+        ".claude/settings.json": "{}\n",
+        "docker-compose_backup13092026.yml": "services: {}\n",
+        "app/parser.py.orig": "old = 1\n",
+    }
+    for rel, text in files.items():
+        (workspace / rel).parent.mkdir(parents=True, exist_ok=True)
+        (workspace / rel).write_text(text, encoding="utf-8")
+    service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
+    indexed = paths(service)
+    assert {"Dockerfile.llama", "patches/a.patch"} <= indexed
+    assert not indexed & {
+        "task-plan.json",
+        ".hermes/plans/task_plan.json",
+        ".claude/settings.json",
+        "docker-compose_backup13092026.yml",
+        "app/parser.py.orig",
+    }
+
+
 def test_root_outside_allowed_roots_is_rejected(service: RetrievalService) -> None:
     with pytest.raises(IndexingError):
         service.index(IndexRequest(corpus_id="ws", root="/etc"))

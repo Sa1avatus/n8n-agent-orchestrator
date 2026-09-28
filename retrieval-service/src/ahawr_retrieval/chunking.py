@@ -66,8 +66,25 @@ CODE_LANGUAGES = {
     ".proto": "proto",
     ".graphql": "graphql",
     ".tf": "hcl",
+    ".dockerfile": "dockerfile",
+    ".mk": "make",
+    ".cmake": "cmake",
+    ".patch": "diff",
+    ".diff": "diff",
 }
-SPECIAL_FILENAMES = {"dockerfile": "dockerfile", "makefile": "make", "containerfile": "dockerfile"}
+SPECIAL_FILENAMES = {
+    "dockerfile": "dockerfile",
+    "containerfile": "dockerfile",
+    "makefile": "make",
+    "gnumakefile": "make",
+    "cmakelists.txt": "cmake",
+}
+# Variants named by a prefix, e.g. Dockerfile.llama, Dockerfile.dashboard, Makefile.cuda.
+SPECIAL_PREFIXES = {
+    "dockerfile.": "dockerfile",
+    "containerfile.": "dockerfile",
+    "makefile.": "make",
+}
 
 BRACE_LANGUAGES = {
     "javascript",
@@ -127,6 +144,9 @@ def classify_path(path: str) -> tuple[str, str] | None:
     name = pure.name.lower()
     if name in SPECIAL_FILENAMES:
         return "code", SPECIAL_FILENAMES[name]
+    for prefix, language in SPECIAL_PREFIXES.items():
+        if name.startswith(prefix):
+            return "code", language
     suffix = pure.suffix.lower()
     if suffix in DOC_LANGUAGES:
         return "doc", DOC_LANGUAGES[suffix]

@@ -36,6 +36,24 @@ def test_classify_path() -> None:
     assert classify_path("app/x.py") == ("code", "python")
     assert classify_path("Dockerfile") == ("code", "dockerfile")
     assert classify_path("image.png") is None
+    # variants and build files the llama.cpp missions work on
+    assert classify_path("Dockerfile.llama") == ("code", "dockerfile")
+    assert classify_path("docker/Containerfile.cuda") == ("code", "dockerfile")
+    assert classify_path("app.dockerfile") == ("code", "dockerfile")
+    assert classify_path("Makefile.cuda") == ("code", "make")
+    assert classify_path("CMakeLists.txt") == ("code", "cmake")
+    assert classify_path("patches/gdn-override-dev.patch") == ("code", "diff")
+    assert classify_path("notes.txt") == ("doc", "text")
+
+
+def test_patch_files_are_chunked_by_lines() -> None:
+    diff = "".join(
+        f"diff --git a/f{i}.c b/f{i}.c\n--- a/f{i}.c\n+++ b/f{i}.c\n@@ -1 +1 @@\n-old\n+new\n"
+        for i in range(40)
+    )
+    chunks = chunk_file("patches/x.patch", diff).chunks
+    assert len(chunks) > 1
+    assert chunks[0].start_line == 1 and chunks[0].language == "diff"
 
 
 def test_python_chunks_follow_symbols_with_qualnames() -> None:

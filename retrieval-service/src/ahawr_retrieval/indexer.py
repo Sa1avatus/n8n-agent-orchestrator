@@ -42,7 +42,7 @@ from .store import ACTIVE, DELETED, INVALIDATED, ChunkRecord, CorpusRecord, File
 from .text import estimate_tokens, expand_for_index, sha256_hex, short_hash, split_identifier
 from .vector_index import VectorIndex
 
-CHUNKER_VERSION = "chunker-v1"
+CHUNKER_VERSION = "chunker-v2"  # v2: Dockerfile.*, patches, CMake; agent plans and backups excluded
 EMBED_BACKFILL_LIMIT = 2000
 EMBED_BACKOFF_SECONDS = 60.0
 
@@ -76,6 +76,9 @@ EXCLUDED_DIRS = frozenset(
         "tokens",
         ".eggs",
         "htmlcov",
+        # agent working state (Hermes plans, Claude Code settings), not project sources
+        ".hermes",
+        ".claude",
     }
 )
 # Never index secrets or generated artefacts (the Worker prompt forbids reading .env and secrets).
@@ -109,6 +112,15 @@ EXCLUDED_FILES = (
     "*.min.js",
     "*.min.css",
     "*.map",
+    # Agent task plans and backups: stale copies that retrieval kept offering as current code.
+    "task-plan.json",
+    "task_plan.json",
+    "*_backup*",
+    "*.backup",
+    "*.bak",
+    "*.orig",
+    "*.rej",
+    "*~",
 )
 ALLOWED_DOTFILES = frozenset({".env.example"})
 
