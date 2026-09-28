@@ -3457,7 +3457,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ '📋 PLAN RECEIVED\\n' + String($json.plan_summary ?? '') }}",
+        "text": "={{ (() => { const t = String('📋 PLAN RECEIVED\\n' + String($json.plan_summary ?? '')); return t.length > 4000 ? t.slice(0, 4000) + '\\n…' : t; })() }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -3515,10 +3515,8 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{\n  '▶️ TASK STARTED\\n' +\n  String($json.current_task_id ?? '') +\n  ': ' +\n  String($json.current_task?.title ?? '') +\n  '\\n\\n' +\n  String($json.worker_prompt ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n}}",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
+        "text": "={{ (() => { const t = String('▶️ TASK STARTED\\n' +\n  String($json.current_task_id ?? '') +\n  ': ' +\n  String($json.current_task?.title ?? '') +\n  '\\n\\n' +\n  String($json.worker_prompt ?? '')\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')); return t.length > 4000 ? t.slice(0, 4000) + '\\n…' : t; })() }}",
+        "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -3609,10 +3607,8 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ String($json.review_message ?? 'Review result unavailable') }}",
-        "additionalFields": {
-          "parse_mode": "HTML"
-        }
+        "text": "={{ (() => { const t = String(String($json.review_message ?? 'Review result unavailable')); return t.length > 4000 ? t.slice(0, 4000) + '\\n…' : t; })() }}",
+        "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
@@ -3635,7 +3631,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ '❌ WORKFLOW FAILED\\nStatus: ' + String($json.status ?? '') + '\\nRole: ' + String($json.role ?? '') + '\\nTask: ' + String($json.task_id ?? '') + '\\nAttempt: ' + String($json.task_attempt ?? '') + '\\n' + String($json.reason ?? '') }}",
+        "text": "={{ (() => { const t = String('❌ WORKFLOW FAILED\\nStatus: ' + String($json.status ?? '') + '\\nRole: ' + String($json.role ?? '') + '\\nTask: ' + String($json.task_id ?? '') + '\\nAttempt: ' + String($json.task_attempt ?? '') + '\\n' + String($json.reason ?? '')); return t.length > 4000 ? t.slice(0, 4000) + '\\n…' : t; })() }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
@@ -3659,7 +3655,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ '✅ WORKFLOW APPROVED\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + String($json.reason ?? '') }}",
+        "text": "={{ (() => { const t = String('✅ WORKFLOW APPROVED\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + String($json.reason ?? '')); return t.length > 4000 ? t.slice(0, 4000) + '\\n…' : t; })() }}",
         "additionalFields": {}
       },
       "type": "n8n-nodes-base.telegram",
