@@ -10,7 +10,7 @@
   --line: #e6e8ee; --hover: #f2f4f8; --sel: #e9f0fd; --code: #f3f5f8; --accent: #2f6fde;
   --user: #2f6fde; --system: #6b7280; --init: #15803d; --think: #9b6bdc; --assistant: #6d3fc0;
   --tool: #c56a06; --ok: #16803c; --err: #d03b30; --retry: #b98900; --compact: #0f8f84;
-  --model-wait: #cdbcf0; --model-gen: #8a5cd6; --tool-bar: #e0892a;
+  --model-wait: #cdbcf0; --model-gen: #8a5cd6; --tool-bar: #e0892a; --rag: #0e7490;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
@@ -19,7 +19,7 @@
     --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
     --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
     --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
-    --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a;
+    --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
   }
 }
 :root[data-theme="dark"] {
@@ -27,7 +27,7 @@
   --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
   --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
   --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
-  --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a;
+  --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -75,6 +75,15 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 .stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
 .stat { border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; font-size: 12px; color: var(--muted); background: var(--bg); }
 .stat b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.exports { display: flex; gap: 6px; align-items: center; margin-left: auto; font-size: 12px; color: var(--muted); }
+.exports a { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--bg); }
+.exports a:hover { border-color: var(--accent); }
+.stat.none { color: var(--retry); border-color: color-mix(in srgb, var(--retry) 40%, var(--line)); }
+.stat.rag b { color: var(--rag); }
+table.chunks { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.chunks td, table.chunks th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.chunks th { color: var(--muted); font-weight: 600; }
+table.chunks td.mono { overflow-wrap: anywhere; }
 .errline { margin-top: 7px; color: var(--err); font-size: 12.5px; }
 #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 18px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--muted); }
 #toolbar label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
@@ -115,7 +124,7 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 .sum.think { color: var(--muted); font-style: italic; }
 .k-prompt { --c: var(--user); } .k-user { --c: var(--user); } .k-init { --c: var(--init); } .k-system { --c: var(--system); }
 .k-thinking { --c: var(--think); } .k-text { --c: var(--assistant); } .k-tool_use { --c: var(--tool); } .k-error { --c: var(--err); }
-.k-retry { --c: var(--retry); } .k-compact { --c: var(--compact); } .k-result { --c: var(--ok); } .k-result.bad, .k-end.bad { --c: var(--err); } .k-end { --c: var(--ok); }
+.k-rag { --c: var(--rag); } .k-retry { --c: var(--retry); } .k-compact { --c: var(--compact); } .k-result { --c: var(--ok); } .k-result.bad, .k-end.bad { --c: var(--err); } .k-end { --c: var(--ok); }
 .steprow { display: grid; grid-template-columns: 58px 50px 58px 1fr; align-items: center; min-height: 22px; background: var(--bg); border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--muted); cursor: pointer; }
 .steprow:hover { background: var(--hover); }
 .steprow.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
@@ -276,9 +285,28 @@ async function poll() {
   S.timer = setTimeout(poll, isActive(S.run) ? 1000 : 8000);
 }
 
+// ---------------------------------------------------------------- RAG (ahawr-retrieval context blocks in prompts)
+function ragBlocks(text) {
+  const out = [], re = /^=== RETRIEVED CONTEXT profile=(\S+) request=(\S+) chunks=(\d+) ===$/gm;
+  let m;
+  while ((m = re.exec(String(text || "")))) {
+    const end = text.indexOf("=== END RETRIEVED CONTEXT ===", m.index);
+    const body = text.slice(m.index + m[0].length, end < 0 ? undefined : end);
+    const chunks = [];
+    for (const line of body.split("\n")) {
+      if (!line.startsWith("--- [")) continue;
+      const parts = line.slice(4).split(" | "), c = { authority: parts[0].split("] ").pop() };
+      for (const p of parts.slice(1)) { const i = p.indexOf("="); if (i > 0) c[p.slice(0, i)] = p.slice(i + 1); }
+      chunks.push(c);
+    }
+    out.push({ profile: m[1], request: m[2], chunks, chars: body.length, body });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- model
 function build(entries) {
-  const steps = {}, tools = {}, rows = [];
+  const steps = {}, tools = {}, rows = [], rags = {};
   let turn = 0, lastStep = null, t0 = Infinity, t1 = 0;
   for (const e of entries) {
     if (e.t) { t0 = Math.min(t0, e.t); t1 = Math.max(t1, e.t); }
@@ -298,8 +326,15 @@ function build(entries) {
     if (q && !searchText(e, tools).toLowerCase().includes(q)) continue;
     if (e.step && !e.agent && e.step !== lastStep) { rows.push({ step: e.step, turn, key: "s" + e.step }); lastStep = e.step; }
     rows.push({ e, turn, key: "e" + e.seq });
+    if (e.kind === "prompt") ragBlocks(e.text).forEach((block, i) => {
+      const key = `r${e.seq}-${i}`;
+      rags[key] = block;
+      rows.push({ rag: block, e, turn, key });
+    });
   }
-  return { steps, tools, rows, turns: turn, t0: isFinite(t0) ? t0 : null, t1 };
+  // every prompt's RAG blocks, also those hidden by the search, for the summary strip
+  for (const e of entries) if (e.kind === "prompt") ragBlocks(e.text).forEach((b, i) => { rags[`r${e.seq}-${i}`] ||= b; });
+  return { steps, tools, rows, rags, turns: turn, t0: isFinite(t0) ? t0 : null, t1 };
 }
 function searchText(e, tools) {
   if (e.kind === "tool_use") return e.name + " " + JSON.stringify(e.input) + " " + ((tools[e.id] || {}).result || {}).text;
@@ -358,6 +393,9 @@ function renderHead(m) {
       ${t.cost ? `<span class="stat">cost <b>$${Number(t.cost).toFixed(4)}</b></span>` : ""}
       ${r.context_tokens ? `<span class="stat">context <b>${tok(r.context_tokens)}</b></span>` : ""}
       <span class="stat">tools <b>${Object.keys(m.tools).length}</b></span>
+      ${ragStat(m, r)}
+      <span class="exports">export run <a href="api/runs/${encodeURIComponent(r.run_id)}/export?format=md" download>.md</a><a href="api/runs/${encodeURIComponent(r.run_id)}/export?format=json" download>.json</a>
+        · session <a href="api/sessions/${encodeURIComponent(sessionKey)}/export?format=md" download>.md</a><a href="api/sessions/${encodeURIComponent(sessionKey)}/export?format=json" download>.json</a></span>
     </div>
     ${r.error ? `<div class="errline">${esc(r.error.code)}: ${esc(r.error.message)}</div>` : ""}`);
 }
@@ -389,6 +427,13 @@ function renderOverview(m) {
     <span class="lab">Model</span><div class="lane">${model.join("")}</div>
     <span class="lab">Tools</span><div class="lane">${tools.join("")}</div>
     <div id="axis"><span>${clock(m.t0).slice(0, 8)}</span><span>${ms(span * 500)}</span><span>${ms(span * 1000)}</span></div>`);
+}
+function ragStat(m, r) {
+  const blocks = Object.values(m.rags || {});
+  const chunks = blocks.reduce((n, b) => n + b.chunks.length, 0);
+  if (chunks) return `<span class="stat rag" title="retrieval context found in the prompt">RAG <b>${chunks}</b> chunks</span>`;
+  if (r.role === "worker" || r.role === "reviewer") return `<span class="stat none" title="no ahawr-retrieval context in this run's prompt(s): retrieval disabled in hermes_config, no corpus, or the request failed">RAG none</span>`;
+  return "";
 }
 function badgeFor(e, tools) {
   switch (e.kind) {
@@ -457,6 +502,12 @@ function renderLedger(m) {
       html.push(`<div class="steprow ${S.pick === row.key ? "sel" : ""}" data-key="${row.key}"><span class="gut">step ${row.step}</span><span class="off">${off(s.started)}</span><span class="dur ${durClass(s.duration_ms)}">${s.approximate && s.duration_ms != null ? "≈" : ""}${ms(s.duration_ms)}</span><span class="info">${bits}</span></div>`);
       continue;
     }
+    if (row.rag) {
+      const b = row.rag, files = [...new Set(b.chunks.map((c) => `${c.path}:${c.lines}`))];
+      html.push(`<div class="row k-rag ${S.pick === row.key ? "sel" : ""}" data-key="${row.key}"><span class="gut"></span><span class="off">${off(row.e.t)}</span><span class="dur"></span>
+        <span class="badge">RAG</span><span class="sum"><b>${b.chunks.length} chunks</b> <span class="arg">${esc(files.slice(0, 6).join(", "))}${files.length > 6 ? " …" : ""}</span></span></div>`);
+      continue;
+    }
     const e = row.e, [cls, label] = badgeFor(e, m.tools);
     let dur = "";
     if (e.kind === "tool_use") { const r = (m.tools[e.id] || {}).result; dur = e.t ? ms(((r ? r.t : now) - e.t) * 1000) : ""; }
@@ -494,7 +545,15 @@ function renderInspector(m) {
   box.hidden = false;
   let head = "", tabs = [], body = "";
   const kv = (pairs) => `<dl class="kv">${pairs.filter((p) => p[1] !== "" && p[1] != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
-  if (S.pick.startsWith("s")) {
+  if (S.pick.startsWith("r")) {
+    const b = (m.rags || {})[S.pick];
+    if (!b) { box.hidden = true; return; }
+    head = `<span class="badge k-rag">RAG</span><span class="where">request ${esc(b.request)} · profile ${esc(b.profile)}</span>`;
+    tabs = ["summary", "context"];
+    if (S.tab === "summary") body = kv([["Chunks", b.chunks.length], ["Context size", tok(b.chars) + " chars"], ["Request id", `<span class="mono">${esc(b.request)}</span>`]]) +
+      `<div class="sect"><table class="chunks"><tr><th>#</th><th>Source</th><th>Location</th><th>Score</th></tr>${b.chunks.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.authority)}${c.freshness ? `<br><span style="color:var(--muted)">${esc(c.freshness)}</span>` : ""}</td><td class="mono">${esc(c.path)}:${esc(c.lines)}${c.symbol ? `<br>${esc(c.symbol)}` : ""}${c.section ? `<br>${esc(c.section)}` : ""}</td><td>${esc(c.score || "")}</td></tr>`).join("")}</table></div>`;
+    else body = `<div class="sect"><pre>${esc(b.body)}</pre></div>`;
+  } else if (S.pick.startsWith("s")) {
     const n = Number(S.pick.slice(1)), s = m.steps[n] || { step: n };
     const blocks = S.entries.filter((e) => e.step === n && !e.agent);
     head = `<span class="badge k-text">STEP</span><span class="where">Turn ${blocks[0] ? blocks[0]._turn : "?"} · Request #${n}</span>`;

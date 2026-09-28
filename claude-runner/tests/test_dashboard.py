@@ -393,3 +393,127 @@ def test_dashboard_main_runs_uvicorn(monkeypatch: Any) -> None:
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
     assert module.main(["--port", "9999"]) == 0
     assert seen["port"] == 9999
+
+
+# ------------------------------------------------------------------ RAG and export
+RAG_PROMPT = """TASK T001: Fix calc
+OBJECTIVE:
+fix
+=== RETRIEVED CONTEXT profile=worker request=req123 chunks=2 ===
+Current files outrank retrieved text.
+--- [1] code | path=app/calc.py | lines=1-2 | symbol=sub | chunk=c1 | sha256=ab | version=v | snapshot=- | freshness=fresh | score=0.912
+def sub(a, b): return a + b
+--- [2] doc | path=README.md | lines=3-9 | section=Usage | chunk=c2 | sha256=cd | version=v | snapshot=- | freshness=stale | score=0.400
+Usage text with ``` fences
+=== END RETRIEVED CONTEXT ===
+[[tools]]"""
+
+
+def test_rag_blocks_are_parsed() -> None:
+    from claude_runner.export import rag_blocks
+
+    (block,) = rag_blocks(RAG_PROMPT)
+    assert block["profile"] == "worker" and block["request_id"] == "req123"
+    first, second = block["chunks"]
+    assert first == {
+        "authority": "code", "path": "app/calc.py", "lines": "1-2", "symbol": "sub",
+        "chunk": "c1", "freshness": "fresh", "score": "0.912",
+    }  # fmt: skip
+    assert second["section"] == "Usage" and second["authority"] == "doc"
+    assert rag_blocks("no context here") == []
+
+
+def test_export_run_and_session(client: TestClient) -> None:
+    first = start(client, role="worker", input=RAG_PROMPT)
+    wait_for(client, first["run_id"])
+    second = start(client, role="worker", session_id=first["session_id"], input="continue")
+    wait_for(client, second["run_id"])
+    with dashboard(client) as dash:
+        md = dash.get(f"/api/runs/{first['run_id']}/export", params={"format": "md"})
+        assert md.status_code == 200 and md.headers["content-type"].startswith("text/markdown")
+        assert (
+            'attachment; filename="ahawr-worker-TASK-T001-Fix-calc-'
+            in md.headers["content-disposition"]
+        )
+        text = md.text
+        assert text.startswith("# TASK T001: Fix calc")
+        assert "**RAG context:** 2 chunks" in text and "`app/calc.py:1-2` code · sub" in text
+        assert "#### Step 1" in text and "> 💭 *thinking*" in text
+        assert "**Tool `Read`**" in text and "return a + b" in text
+        assert "````" in text  # a fence longer than the ``` inside the prompt
+        assert "**Result:** success" in text and "**Run completed**" in text
+
+        js = dash.get(f"/api/runs/{first['run_id']}/export", params={"format": "json"}).json()
+        assert js["run"]["run_id"] == first["run_id"] and js["events"][0]["kind"] == "prompt"
+
+        session_md = dash.get(f"/api/sessions/{first['session_id']}/export").text
+        assert session_md.startswith(f"# Session {first['session_id']}")
+        assert session_md.index("TASK T001") < session_md.index("## continue")
+        session_js = dash.get(
+            f"/api/sessions/{first['session_id']}/export", params={"format": "json"}
+        ).json()
+        assert [r["run"]["run_id"] for r in session_js["runs"]] == [
+            first["run_id"],
+            second["run_id"],
+        ]
+
+        hermes_md = dash.get("/api/sessions/hermes:w1/export").text
+        assert hermes_md.startswith("# TASK T001: Fix calc") and "- **Source:** Hermes" in hermes_md
+        assert "**Tool `read_file`**" in hermes_md and "#### Step 1 · ≈10.00 s" in hermes_md
+        assert "(no result recorded)" in hermes_md  # the terminal call never answered
+
+        assert dash.get("/api/sessions/nope/export").status_code == 404
+        assert dash.get("/api/runs/run_nope/export").status_code == 404
+
+
+def test_export_errors() -> None:
+    def failing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    app = create_dashboard_app(
+        DashboardSettings(hermes_url="http://hermes:8642"),
+        transport=httpx.MockTransport(failing),
+    )
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/sessions/s1/export").status_code == 502
+        assert dash.get("/api/sessions/hermes:s1/export").status_code == 502
+    no_runner = create_dashboard_app(DashboardSettings(runner_url=""))
+    with TestClient(no_runner, base_url="http://localhost") as dash:
+        assert dash.get("/api/sessions/s1/export").status_code == 404
+
+
+def test_markdown_covers_every_entry_kind() -> None:
+    from claude_runner.export import filename, run_markdown, session_markdown
+
+    run = {"run_id": "r1", "title": "T", "role": "worker", "source": "claude-code",
+           "error": {"code": "timeout", "message": "too slow"}}  # fmt: skip
+    entries = [
+        {"kind": "prompt", "text": "go", "seq": 1},
+        {"kind": "init", "version": "2", "model": "m", "tools": ["Read"], "permission_mode": "dontAsk", "cwd": "/w"},
+        {"kind": "retry", "attempt": 1, "max_retries": 3, "status": 529, "error": "overloaded"},
+        {"kind": "compact", "trigger": "auto", "pre_tokens": 20000, "post_tokens": 900},
+        {"kind": "thinking", "text": "hm", "step": 1, "agent": "toolu_x"},
+        {"kind": "tool_result", "id": "orphan", "text": "late"},
+        {"kind": "step", "step": 1, "model": "m", "duration_ms": 65_000, "ttft_ms": 500,
+         "generation_ms": 64_500, "input_tokens": 12, "cache_read_tokens": 20_000,
+         "output_tokens": 30, "tokens_per_s": 0.5, "finish_reason": "stop"},
+        {"kind": "text", "text": "done", "step": 1},
+        {"kind": "result", "subtype": "error_max_turns", "is_error": True, "text": "stopped",
+         "num_turns": 3, "duration_ms": 900, "cost_usd": 0.5,
+         "usage": {"input_tokens": 1, "cache_read_input_tokens": 2, "output_tokens": 3}},
+        {"kind": "end", "status": "failed", "error_code": "timeout", "error": "too slow", "stderr_tail": "trace"},
+    ]  # fmt: skip
+    text = run_markdown(run, entries)
+    for expected in (
+        "- **Error:** timeout: too slow", "*Claude Code 2 · m · 1 tools · dontAsk · /w*",
+        "⚠️ API retry 1/3: 529 overloaded", "🗜 Context compacted (auto): 20.0K → 900 tokens",
+        "> ↳ subagent", "<summary>Tool result</summary>",
+        "#### Step 1 · m · 1m05s · TTFT 500 ms · gen 1m04s · in 20.0K (cache 20.0K) · out 30 · 0.5 tok/s · stop",
+        "**Result:** error_max_turns · 3 turns · 900 ms · $0.5000 · tokens in 1 / cache read 2 / out 3",
+        "**Run failed**: timeout: too slow", "<summary>stderr</summary>",
+    ):  # fmt: skip
+        assert expected in text, expected
+    assert session_markdown("s", [{"run": run, "events": entries}]) == text
+    assert (
+        filename({"title": "", "run_id": "hermes:abc"}, "md") == "ahawr-run-untitled-hermes-abc.md"
+    )

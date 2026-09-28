@@ -602,6 +602,17 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 `AHAWR_v13.json` calls `POST http://ahawr-retrieval:8500/retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only into the retrieval container at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
+**Turning retrieval on (checklist).**
+1. In the `hermes_config` row the workflow uses (`claude-code` for AHAWR v13 — Claude Code, the Hermes profile row for `AHAWR_v13.json`), set `retrieval_enabled = true`. It is `false` by default, and then no request is sent at all.
+2. Give the mission a `working_directory` (for example `D:\ClaudeProjects\app`). Its corpus is created from that folder on the first request. Without it, the `retrieval_corpora_json` corpora of `hermes_config` are used (`ahawr-workspace` = `/workspace`).
+3. Import the current workflow (older imports do not send `corpus_roots`).
+4. Check it:
+   * the dashboard (`http://localhost:8701`) shows a **RAG** row under the Worker's and the Reviewer's prompt and `RAG N chunks` in the summary; `RAG none` means no context arrived;
+   * `docker exec n8n-autonomous-agents wget -qO- http://ahawr-retrieval:8500/corpora` lists the mission's corpus;
+   * when retrieval is on but the context is missing, the n8n execution shows the reason in `retrieval_worker_status` / `retrieval_worker_error` (node *Attach Worker Context*).
+
+The Architect gets no retrieved context; only the Worker and the Reviewer do.
+
 ### AHAWR on Claude Code (`claude-runner`)
 
 `AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `claude-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
@@ -1281,6 +1292,17 @@ worker_provider
 - Все дальнейшие расширения принимаются по данным Eval Harness (gold/silver наборы; метрики retrieval, системы и AHAWR).
 
 `AHAWR_v13.json` вызывает `POST http://ahawr-retrieval:8500/retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется в контейнер retrieval только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
+
+**Как включить retrieval (чек-лист).**
+1. В строке `hermes_config`, которую использует воркфлоу, поставь `retrieval_enabled = true`. Для AHAWR v13 — Claude Code это строка `claude-code`, для `AHAWR_v13.json` — строка профиля Hermes. По умолчанию там `false`, и тогда запросы в RAG вообще не отправляются.
+2. Заполни у миссии `working_directory` (например, `D:\ClaudeProjects\app`). Корпус создаётся из этой папки при первом запросе. Без неё используются корпуса из `retrieval_corpora_json` в `hermes_config` (`ahawr-workspace` = `/workspace`).
+3. Импортируй текущую версию воркфлоу: старые импорты не передают `corpus_roots`.
+4. Проверь:
+   * в дашборде (`http://localhost:8701`) под промптом Worker'а и Reviewer'а есть строка **RAG**, а в сводке «RAG N chunks». «RAG none» значит, что контекст не пришёл;
+   * `docker exec n8n-autonomous-agents wget -qO- http://ahawr-retrieval:8500/corpora` показывает корпус миссии;
+   * если retrieval включён, а контекста нет, причина видна в исполнении n8n в полях `retrieval_worker_status` / `retrieval_worker_error` (узел *Attach Worker Context*).
+
+Architect контекст из RAG не получает, только Worker и Reviewer.
 
 
 ### AHAWR на Claude Code (`claude-runner`)

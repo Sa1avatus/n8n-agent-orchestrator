@@ -123,6 +123,8 @@ The layout follows DeepSeek Harness' *Trajectory* view:
   * **Tools:** payload (a diff for edits, the command for shell calls), result, duration.
   * **Any record:** raw JSON.
 * **Session:** clicking the session id lists all runs of that session, for example the Architect's across a mission.
+* **RAG:** when a prompt carries ahawr-retrieval context (`=== RETRIEVED CONTEXT … ===`), a RAG row follows it in the ledger. It lists the chunks with their source, file, lines, symbol and score, and the inspector shows the full context. The summary strip shows `RAG N chunks`. A Worker or Reviewer run without context shows `RAG none`: retrieval is off in `hermes_config`, there is no corpus, or the request failed (see the main README).
+* **Export:** the header links download the run, or the whole session with all its runs oldest first, as Markdown or JSON (`GET /api/runs/{id}/export?format=md|json`, `GET /api/sessions/{id}/export?format=md|json`). The Markdown mirrors the ledger: turns, steps with timings and tokens, thinking, answers, tool calls with results, the RAG chunk list, retries and the outcome. The JSON keeps every entry.
 
 What each source can show:
 
@@ -222,7 +224,9 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
   - сводка: ходы, шаги, время, токены, доля кэша, ток/с, стоимость;
   - таймлайн: промпты, запросы к модели (ожидание первого токена и генерация), выполнение тулов;
   - журнал: цветные метки, смещение и длительность каждой записи, заголовки шагов с TTFT и токенами, вызов тула и его результат в одной строке, поиск;
-  - инспектор записи: токены, тайминги, аргументы, результат, raw JSON.
+  - инспектор записи: токены, тайминги, аргументы, результат, raw JSON;
+  - RAG: если в промпте есть контекст ahawr-retrieval, под промптом идёт строка RAG со списком фрагментов (файл, строки, оценка). В сводке видно «RAG N chunks» или «RAG none»;
+  - экспорт прогона или всей сессии в Markdown и JSON (ссылки в шапке).
 
   Для Claude Code тайминги точные, по потоку токенов. Для Hermes они приблизительные (`≈`): считаются по времени записи сообщений, а токены берутся как итог по сессии. Размышления видны для любого провайдера: Anthropic, локальный llama.cpp, сторонняя модель через LiteLLM. Дашборд только для чтения, опубликован только на `127.0.0.1`. Ключ Hermes есть только в `ahawr-dashboard`, в claude-runner с Worker'ом его нет.
 - **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS`.

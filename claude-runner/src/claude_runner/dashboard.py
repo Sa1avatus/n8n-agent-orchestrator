@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -25,8 +26,9 @@ from typing import Any
 import httpx
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
+from . import export
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
 
@@ -126,8 +128,8 @@ def create_dashboard_app(
         runs.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
         return {"runs": runs[:limit], "sources": states}
 
-    @app.get("/api/runs/{run_id}/events")
-    async def run_events(request: Request, run_id: str, after: int = Query(0, ge=0)) -> Any:
+    async def fetch_events(request: Request, run_id: str, after: int = 0) -> Any:
+        """The run's activity, or a JSONResponse error."""
         src = (
             request.app.state.hermes
             if run_id.startswith(HERMES_PREFIX)
@@ -143,7 +145,73 @@ def create_dashboard_app(
             return JSONResponse({"error": f"run {run_id} not found"}, status_code=404)
         return body
 
+    @app.get("/api/runs/{run_id}/events")
+    async def run_events(request: Request, run_id: str, after: int = Query(0, ge=0)) -> Any:
+        return await fetch_events(request, run_id, after)
+
+    @app.get("/api/runs/{run_id}/export")
+    async def export_run(request: Request, run_id: str, format: str = "md") -> Any:
+        body = await fetch_events(request, run_id)
+        if isinstance(body, JSONResponse):
+            return body
+        return _download(body["run"], [body], format, body["run"].get("session_id", ""))
+
+    @app.get("/api/sessions/{session_id}/export")
+    async def export_session(request: Request, session_id: str, format: str = "md") -> Any:
+        """Every run of a session, oldest first (a Hermes session is one run)."""
+        if session_id.startswith(HERMES_PREFIX):
+            ids = [session_id]
+        else:
+            runner = request.app.state.runner
+            if runner is None:
+                return JSONResponse({"error": "source not configured"}, status_code=404)
+            try:
+                runs = await runner.list_runs(500, session_id, "", "")
+            except (SourceError, httpx.HTTPError) as exc:
+                return JSONResponse({"error": _describe_error(exc)}, status_code=502)
+            # claude-runner lists newest first (by creation, then insertion order)
+            ids = [r["run_id"] for r in reversed(runs)]
+        if not ids:
+            return JSONResponse({"error": f"session {session_id} not found"}, status_code=404)
+        items = []
+        for run_id in ids:
+            body = await fetch_events(request, run_id)
+            if isinstance(body, JSONResponse):
+                return body
+            items.append(body)
+        return _download(items[-1]["run"], items, format, session_id, whole_session=True)
+
     return app
+
+
+def _download(
+    run: dict[str, Any],
+    items: list[dict[str, Any]],
+    fmt: str,
+    session_id: str,
+    whole_session: bool = False,
+) -> Response:
+    """Markdown or JSON export as a file download."""
+    prefix = "session-" if whole_session else ""
+    runs = [{"run": item["run"], "events": item["events"]} for item in items]
+    if fmt == "json":
+        payload: dict[str, Any] = (
+            {"session_id": session_id, "runs": runs} if whole_session else runs[0]
+        )
+        content = json.dumps(payload, ensure_ascii=False, indent=2)
+        name, media = export.filename(run, "json", prefix), "application/json"
+    else:
+        content = (
+            export.session_markdown(session_id, runs)
+            if whole_session
+            else export.run_markdown(runs[0]["run"], runs[0]["events"])
+        )
+        name, media = export.filename(run, "md", prefix), "text/markdown; charset=utf-8"
+    return Response(
+        content,
+        media_type=media,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 def _describe_error(exc: BaseException) -> str:
