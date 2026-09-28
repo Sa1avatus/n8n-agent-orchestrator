@@ -3937,7 +3937,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Inputs of the Hermes Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String($json.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String($json.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const task = tasks[Number($json.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\n  const index = Number($json.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    $json.retrieval_worker_context ? String($json.retrieval_worker_context) : '',\n    '',\n    $json.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String($json.review_feedback) : ''\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String($json.worker_run_id ?? '')),\n  session_id: (String($json.worker_session_id ?? '')),\n  input: unfinished ? resumeText : fullInput,\n  resume_input: \"Continue the existing Worker task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.\",\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
+        "jsCode": "// Inputs of the Hermes Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// The item is either the task state (resume path) or the previous report row read by\n// Load Previous Worker Report (the state then comes from Attach Worker Context).\nconst fromReport = !Array.isArray(($json ?? {}).tasks) && $('Attach Worker Context').isExecuted;\nconst s = fromReport ? ($('Attach Worker Context').last().json ?? {}) : ($json ?? {});\nconst previous = fromReport ? ($json ?? {}) : {};\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String(s.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String(s.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const task = tasks[Number(s.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const index = Number(s.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    s.retrieval_worker_context ? String(s.retrieval_worker_context) : '',\n    '',\n    s.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String(s.review_feedback) : '',\n    (() => {\n      // A retry after a review: the reviewer scores the final report on its own, so the\n      // Worker must hand back the whole report, not only the fixes.\n      const text = String(previous.worker_output ?? '').trim();\n      if (!s.review_feedback || !text || String(previous.task_id ?? '') !== String(task.id ?? '')) return '';\n      const report = text.length > 16000 ? text.slice(0, 16000) + '\\n…(truncated)' : text;\n      return [\n        '',\n        `YOUR PREVIOUS REPORT FOR THIS TASK (attempt ${previous.task_attempt ?? '?'}, the review above refers to it):`,\n        report,\n        '',\n        'Return the COMPLETE updated report: keep every part of the previous report that is correct, fix and add what the review asks, and re-check anything you change. Do not return only the changes: the reviewer scores your final report on its own.'\n      ].join('\\n');\n    })()\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String(s.worker_run_id ?? '')),\n  session_id: (String(s.worker_session_id ?? '')),\n  input: unfinished ? resumeText : fullInput,\n  resume_input: \"Continue the existing Worker task from the saved Hermes session. Do not start over. Use the existing session context and return the complete result for the current task.\",\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3951,7 +3951,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Inputs of the Hermes Run Manager for the Reviewer (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"reviewer\",\n  run_id: (String($('Reviewer State').first().json.reviewer_run_id ?? '')),\n  session_id: (String($('Reviewer State').first().json.reviewer_session_id ?? '')),\n  input: ((() => {\n  // Reviewer State keeps only its own fields (no tasks/current_task): read the task\n  // from the state nodes it takes current_task_id and task_index from.\n  const state = $('Reviewer State').first().json ?? {};\n  const task = (() => {\n    for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n      try {\n        if (!$(n).isExecuted) continue;\n        const s = $(n).last().json ?? {};\n        const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n        const t = tasks[Number(state.task_index ?? s.task_index ?? 0)] ?? s.current_task;\n        if (t && (t.id ?? t.task_id ?? t.title)) return t;\n      } catch (_) {}\n    }\n    return {};\n  })();\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    ...($('Mission').first().json.working_directory_block ? [$('Mission').first().json.working_directory_block + '\\nInspect the Worker\\'s changes in this folder before scoring; a file you cannot find elsewhere is not evidence that it is missing.', ''] : []),\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})()),\n  resume_input: \"Continue the existing Reviewer task from the saved Hermes session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.\",\n  model: ($('Constants').first().json.reviewer_model),\n  provider: ($('Constants').first().json.reviewer_provider),\n  poll_seconds: ($('Constants').first().json.reviewer_poll_seconds),\n  max_polls: ($('Constants').first().json.reviewer_max_polls),\n  max_retries: ($('Constants').first().json.reviewer_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: (String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),\n  service_model: ($('Constants').first().json.service_model),\n  service_provider: ($('Constants').first().json.service_provider),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
+        "jsCode": "// Inputs of the Hermes Run Manager for the Reviewer (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"reviewer\",\n  run_id: (String($('Reviewer State').first().json.reviewer_run_id ?? '')),\n  session_id: (String($('Reviewer State').first().json.reviewer_session_id ?? '')),\n  input: ((() => {\n  // Reviewer State keeps only its own fields (no tasks/current_task): read the task\n  // from the state nodes it takes current_task_id and task_index from.\n  const state = $('Reviewer State').first().json ?? {};\n  const task = (() => {\n    for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n      try {\n        if (!$(n).isExecuted) continue;\n        const s = $(n).last().json ?? {};\n        const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n        const t = tasks[Number(state.task_index ?? s.task_index ?? 0)] ?? s.current_task;\n        if (t && (t.id ?? t.task_id ?? t.title)) return t;\n      } catch (_) {}\n    }\n    return {};\n  })();\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    ...($('Mission').first().json.working_directory_block ? [$('Mission').first().json.working_directory_block + '\\nInspect the Worker\\'s changes in this folder before scoring; a file you cannot find elsewhere is not evidence that it is missing.', ''] : []),\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    ...(() => {\n      // The previous review of this task (a retry): the Worker was asked to return the whole\n      // report, so check that parts accepted before are still there.\n      for (const n of ['Restore Retry State','Restore Task After State Save','Restore Saved Task State','Restore Plan After State Save','Prepare Current Task']) {\n        try {\n          if (!$(n).isExecuted) continue;\n          const s = $(n).last().json ?? {};\n          const feedback = String(s.review_feedback ?? '').trim();\n          if (!feedback || Number(s.task_index ?? -1) !== Number(state.task_index ?? -2)) continue;\n          return [\n            `PREVIOUS REVIEW OF THIS TASK (score ${Number(s.last_review_score ?? 0)}):`,\n            String(s.last_review_reason ?? '').trim(),\n            'Asked next: ' + feedback,\n            'Score the WORKER RESULT below as a complete report: check that these points were addressed and that parts which were correct before were not lost.',\n            ''\n          ];\n        } catch (_) {}\n      }\n      return [];\n    })(),\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})()),\n  resume_input: \"Continue the existing Reviewer task from the saved Hermes session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.\",\n  model: ($('Constants').first().json.reviewer_model),\n  provider: ($('Constants').first().json.reviewer_provider),\n  poll_seconds: ($('Constants').first().json.reviewer_poll_seconds),\n  max_polls: ($('Constants').first().json.reviewer_max_polls),\n  max_retries: ($('Constants').first().json.reviewer_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: (String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),\n  service_model: ($('Constants').first().json.service_model),\n  service_provider: ($('Constants').first().json.service_provider),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3961,6 +3961,49 @@
       ],
       "id": "d8d6e685-2e3b-495f-805c-dd3ac306162e",
       "name": "Build Reviewer Run Input"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "ceJ7PFzVJvPN0LsV",
+          "mode": "list",
+          "cachedResultName": "Autonomous Agent Task Attempts",
+          "cachedResultUrl": "/projects/lkeKbYsk8F0BLGrz/datatables/ceJ7PFzVJvPN0LsV"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ String($('Constants').first().json.state_namespace) }}"
+            },
+            {
+              "keyName": "task_id",
+              "keyValue": "={{ (() => { const t = Array.isArray($json.tasks) ? $json.tasks[Number($json.task_index ?? 0)] : null; return String(t?.id ?? $json.current_task_id ?? ''); })() }}"
+            },
+            {
+              "keyName": "event_type",
+              "keyValue": "worker_completed"
+            }
+          ]
+        },
+        "limit": 1,
+        "orderBy": true,
+        "orderByColumn": "id",
+        "orderByDirection": "DESC"
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -13918,
+        2656
+      ],
+      "id": "9483779b-de6d-4103-8d10-a44b08ada466",
+      "name": "Load Previous Worker Report",
+      "alwaysOutputData": true,
+      "executeOnce": false
     }
   ],
   "pinData": {
@@ -4875,7 +4918,7 @@
       "main": [
         [
           {
-            "node": "Build Worker Run Input",
+            "node": "Load Previous Worker Report",
             "type": "main",
             "index": 0
           }
@@ -4971,6 +5014,17 @@
         [
           {
             "node": "Reviewer Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Previous Worker Report": {
+      "main": [
+        [
+          {
+            "node": "Build Worker Run Input",
             "type": "main",
             "index": 0
           }
