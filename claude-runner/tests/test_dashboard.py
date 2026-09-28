@@ -271,8 +271,12 @@ def dashboard(runner_app: TestClient, **overrides: Any) -> TestClient:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "hermes":
             return hermes_handler(request)
-        response = runner_app.get(
-            request.url.path, params=dict(request.url.params), headers=dict(request.headers)
+        response = runner_app.request(
+            request.method,
+            request.url.path,
+            params=dict(request.url.params),
+            headers=dict(request.headers),
+            content=request.content,
         )
         return httpx.Response(
             response.status_code,
@@ -326,13 +330,41 @@ def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:
         assert claude_events["events"][-1]["kind"] == "end"
         assert dash.get("/api/runs/hermes:nope/events").status_code == 404
         assert dash.get("/api/runs/run_nope/events").status_code == 404
-        # read-only: nothing to start or change runs with
+        # nothing to start or change runs with (stopping one is tested below)
         assert dash.post("/api/runs", json={"input": "x"}).status_code == 405
         assert dash.post("/v1/runs", json={"input": "x"}).status_code == 404
 
     with dashboard(client, hermes_api_key="wrong") as dash:
         states = dash.get("/api/runs").json()["sources"]
         assert states == {"claude-runner": "ok", "hermes": "Hermes: 401 (check the API key)"}
+
+
+def test_dashboard_stops_a_run(client: TestClient) -> None:
+    run = start(client, input="[[sleep:30]]")
+    wait_for(client, run["run_id"], lambda r: r["status"] == "running", timeout=5)
+    stop = {"X-AHAWR-Dashboard": "1"}
+    with dashboard(client) as dash:
+        url = f"/api/runs/{run['run_id']}/cancel"
+        # a plain cross-site form post carries no custom header
+        assert dash.post(url).status_code == 403
+        assert client.get(f"/v1/runs/{run['run_id']}").json()["status"] == "running"
+        body = dash.post(url, headers=stop).json()
+        assert body["status"] == "cancelled" and body["source"] == "claude-code"
+        # stopping a finished run is a no-op that reports its status
+        assert dash.post(url, headers=stop).json()["status"] == "cancelled"
+        assert dash.post("/api/runs/run_nope/cancel", headers=stop).status_code == 404
+        assert dash.post("/api/runs/hermes:w1/cancel", headers=stop).status_code == 400
+        assert dash.get(url).status_code == 405
+
+    def failing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={})
+
+    app = create_dashboard_app(DashboardSettings(), transport=httpx.MockTransport(failing))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.post("/api/runs/run_x/cancel", headers=stop).status_code == 502
+    app = create_dashboard_app(DashboardSettings(runner_url=""))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.post("/api/runs/run_x/cancel", headers=stop).status_code == 404
 
 
 def test_dashboard_reports_source_problems() -> None:

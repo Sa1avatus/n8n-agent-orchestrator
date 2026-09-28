@@ -2,12 +2,14 @@
 """Stand-in for the Claude Code CLI in tests: same flags, same stream-json event shapes.
 
 Directives in the prompt drive the scenario: [[sleep:N]], [[fail:overloaded]],
-[[fail:rate_limit]], [[fail:model]], [[max_turns]], [[garbage]], [[crash]].
+[[fail:rate_limit]], [[fail:model]], [[max_turns]], [[garbage]], [[crash]],
+[[child:FILE]] (start a long tool process and write its pid to FILE).
 """
 
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -135,6 +137,9 @@ def main() -> int:
     # like the real CLI, the prompt is recorded in the transcript before the turn runs
     history.append(json.dumps({"prompt": prompt}))
     transcript.write_text("\n".join(history) + "\n")
+    if m := re.search(r"\[\[child:([^\]]+)\]\]", prompt):
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        Path(m.group(1)).write_text(str(child.pid))
     if m := re.search(r"\[\[sleep:(\d+(?:\.\d+)?)\]\]", prompt):
         time.sleep(float(m.group(1)))
     if "[[crash]]" in prompt:

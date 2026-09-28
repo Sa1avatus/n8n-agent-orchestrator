@@ -101,6 +101,16 @@ class RunnerSource:
             body["run"]["source"] = "claude-code"
         return body  # type: ignore[no-any-return]
 
+    async def cancel(self, run_id: str) -> dict[str, Any] | None:
+        """Stop a queued or running run (the Claude Code process and its tools)."""
+        response = await self.client.post(
+            f"{self.url}/v1/runs/{run_id}/cancel", headers=self.headers, timeout=60
+        )
+        body = _check(response, "claude-runner")
+        if body:
+            body["source"] = "claude-code"
+        return body  # type: ignore[no-any-return]
+
 
 def _parse_arguments(raw: Any) -> Any:
     if isinstance(raw, str):

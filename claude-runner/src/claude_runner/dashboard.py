@@ -1,4 +1,4 @@
-"""AHAWR dashboard: every agent run in one place, read-only.
+"""AHAWR dashboard: every agent run in one place.
 
 It merges two sources:
 
@@ -7,8 +7,10 @@ It merges two sources:
   Hermes sessions of the Hermes variant of AHAWR.
 
 It runs in its own container: the Hermes key must not sit in claude-runner, whose Worker runs
-arbitrary commands. It can only read, and it answers only to ``DASHBOARD_HOSTS`` (publish it
-on 127.0.0.1 only).
+arbitrary commands. Besides reading, it can only stop a claude-runner run (cancelling an n8n
+execution leaves the run going). It answers only to ``DASHBOARD_HOSTS`` (publish it on
+127.0.0.1 only), and the stop request must carry the ``X-AHAWR-Dashboard`` header, which a
+page on another site cannot send without a CORS preflight that the dashboard never allows.
 """
 
 from __future__ import annotations
@@ -148,6 +150,25 @@ def create_dashboard_app(
     @app.get("/api/runs/{run_id}/events")
     async def run_events(request: Request, run_id: str, after: int = Query(0, ge=0)) -> Any:
         return await fetch_events(request, run_id, after)
+
+    @app.post("/api/runs/{run_id}/cancel")
+    async def cancel_run(request: Request, run_id: str) -> Any:
+        if request.headers.get("x-ahawr-dashboard") != "1":
+            return JSONResponse({"error": "missing X-AHAWR-Dashboard header"}, status_code=403)
+        if run_id.startswith(HERMES_PREFIX):
+            return JSONResponse(
+                {"error": "Hermes sessions are stopped in Hermes itself"}, status_code=400
+            )
+        runner = request.app.state.runner
+        if runner is None:
+            return JSONResponse({"error": "source not configured"}, status_code=404)
+        try:
+            body = await runner.cancel(run_id)
+        except (SourceError, httpx.HTTPError) as exc:
+            return JSONResponse({"error": _describe_error(exc)}, status_code=502)
+        if body is None:
+            return JSONResponse({"error": f"run {run_id} not found"}, status_code=404)
+        return body
 
     @app.get("/api/runs/{run_id}/export")
     async def export_run(request: Request, run_id: str, format: str = "md") -> Any:

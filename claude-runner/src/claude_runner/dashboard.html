@@ -78,6 +78,9 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 .exports { display: flex; gap: 6px; align-items: center; margin-left: auto; font-size: 12px; color: var(--muted); }
 .exports a { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--bg); }
 .exports a:hover { border-color: var(--accent); }
+.stop { font: inherit; font-size: 12px; font-weight: 600; color: var(--err); background: var(--bg); border: 1px solid color-mix(in srgb, var(--err) 45%, var(--line)); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
+.stop:hover { background: color-mix(in srgb, var(--err) 12%, var(--bg)); }
+.stop:disabled { opacity: .55; cursor: default; }
 .stat.none { color: var(--retry); border-color: color-mix(in srgb, var(--retry) 40%, var(--line)); }
 .stat.rag b { color: var(--rag); }
 table.chunks { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -264,6 +267,8 @@ function select(id) {
   $("#ledger").addEventListener("click", onLedgerClick);
   $("#overview").addEventListener("click", onLedgerClick);
   $("#head").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-stop]");
+    if (b) { stopRun(b.dataset.stop); return; }
     const a = e.target.closest("[data-session]");
     if (!a) return;
     S.session = a.dataset.session; $("#sessionid").textContent = a.textContent; $("#sessionchip").hidden = false; S.known = null; loadRuns();
@@ -271,6 +276,18 @@ function select(id) {
   renderList();
   clearTimeout(S.timer);
   poll();
+}
+async function stopRun(id) {
+  if (!confirm("Stop this run? The Claude Code process and every tool it started are killed. The n8n workflow is not stopped by this.")) return;
+  S.stopping = id; render();
+  try {
+    const res = await fetch(`api/runs/${encodeURIComponent(id)}/cancel`, { method: "POST", headers: { "X-AHAWR-Dashboard": "1" } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || res.status);
+  } catch (e) { alert("Stop failed: " + e.message); }
+  S.stopping = null;
+  if (id === S.sel) { clearTimeout(S.timer); poll(); }
+  loadRuns();
 }
 async function poll() {
   const id = S.sel;
@@ -379,6 +396,7 @@ function renderHead(m) {
   setHTML($("#head"), `
     <h2>${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</h2>
     <div class="meta"><span><span class="dot ${esc(r.status)}"></span> <b>${esc(r.status)}</b></span>
+      ${isActive(r) && r.source === "claude-code" ? `<button class="stop" data-stop="${esc(r.run_id)}" title="Stop the Claude Code process and its tools (cancelling the n8n execution does not)"${S.stopping === r.run_id ? " disabled" : ""}>${S.stopping === r.run_id ? "stopping…" : "■ Stop"}</button>` : ""}
       <span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE CODE"}</span>
       <span class="role ${esc(r.role)}">${esc(r.role)}</span>
       <span>model <b>${esc(r.model || "default")}</b></span>${r.provider ? `<span>provider <b>${esc(r.provider)}</b></span>` : ""}

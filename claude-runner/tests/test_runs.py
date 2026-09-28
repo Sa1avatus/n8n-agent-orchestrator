@@ -129,11 +129,31 @@ def test_timeout_and_cancel(settings: Settings) -> None:
         assert done["status"] == "failed" and done["error"]["code"] == "timeout"
         assert "timed out" in done["error"]["message"]
     object.__setattr__(settings, "max_run_seconds", 60)
+    pid_file = settings.data_dir / "child.pid"
     with TestClient(create_app(settings)) as client:
-        run = start(client, input="[[sleep:30]]")
+        run = start(client, input=f"[[child:{pid_file}]] [[sleep:30]]")
         wait_for(client, run["run_id"], lambda r: r["status"] == "running", timeout=5)
+        deadline = time.monotonic() + 5
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        child = int(pid_file.read_text())
+        assert _alive(child)
         cancelled = client.post(f"/v1/runs/{run['run_id']}/cancel").json()
         assert cancelled["status"] == "cancelled"
+        # the tool process the CLI started does not outlive the cancelled run
+        deadline = time.monotonic() + 5
+        while _alive(child) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _alive(child)
+
+
+def _alive(pid: int) -> bool:
+    """Running, not a zombie waiting to be reaped."""
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return False
+    return state != "Z"
 
 
 def test_unknown_run_and_restart_recovery(settings: Settings) -> None:

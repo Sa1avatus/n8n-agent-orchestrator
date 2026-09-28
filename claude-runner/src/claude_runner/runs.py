@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 import signal
 import uuid
 from dataclasses import dataclass
@@ -357,14 +358,21 @@ class RunManager:
             )
 
     async def _stop(self, proc: asyncio.subprocess.Process) -> None:
-        """SIGINT ends the turn cleanly (the transcript stays resumable); then escalate."""
+        """SIGINT ends the turn cleanly (the transcript stays resumable); then escalate to the
+        whole process group (the CLI runs in its own session), so tool processes it started do
+        not outlive it."""
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
             if proc.returncode is not None:
-                return
-            with contextlib.suppress(ProcessLookupError):
-                proc.send_signal(sig)
+                break
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                if sig == signal.SIGINT:
+                    proc.send_signal(sig)
+                else:
+                    os.killpg(proc.pid, sig)
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(proc.wait(), self.settings.interrupt_grace_seconds)
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(proc.pid, signal.SIGKILL)  # tools left behind by a CLI that exited
 
     def get(self, run_id: str) -> dict[str, Any]:
         run = self.store.get_run(run_id)
