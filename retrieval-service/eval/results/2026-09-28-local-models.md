@@ -49,3 +49,27 @@ gold v1, hashing, no reranker: ranking metrics identical, ContextRecall 0.719 �
 On the live JSA task T001 (one large `app/api/main.py`), the limit of 3 dropped
 `discover_greenhouse_vacancies`, the three client dependencies and `build_user_model_providers`;
 with 8 the context holds 10 of the 11 needed chunks.
+
+## Line numbers and min_final_score (frozen snapshot)
+
+The gold corpus is this repository, so every run below indexed a `git archive HEAD` copy (commit
+35dee91): an earlier threshold run had compared configurations on a working tree that was being
+edited, and its numbers were discarded. (The `hybrid-local-rerank` column of the gold-ru run
+above was also measured on a different snapshot than the other two columns; its conclusion does
+not depend on it.) Line numbers were on in every configuration; they add ~6% tokens on their own.
+
+| config | gold-ru ContextRecall | gold-ru tokens | gold v1 ContextRecall | gold v1 tokens |
+|---|---|---|---|---|
+| e5, no threshold | 0.636 | 3979 | 0.709 | 4215 |
+| e5, min 0.5 | 0.613 | 3744 | 0.692 | 4109 |
+| e5, min 0.6 | 0.567 | 3342 | 0.651 | 3792 |
+| hashing, no threshold | 0.553 | 4521 | 0.709 | 4804 |
+| hashing, min 0.5 | 0.539 | 4066 | 0.694 | 4522 |
+| hashing, min 0.6 | 0.539 | 3640 | 0.694 | 4048 |
+
+Ranking metrics are identical across thresholds (the threshold only trims the context).
+In 12 live AHAWR runs, chunks scored below 0.6 were used by the model in 4 of 28 cases and took
+23% of the retrieved tokens.
+
+**Decision.** `min_final_score` 0.5 by default: at most −0.023 ContextRecall with either
+embedder. 0.6 would cost e5 −0.06 to −0.07.

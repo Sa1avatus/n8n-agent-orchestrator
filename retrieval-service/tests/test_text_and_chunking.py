@@ -44,6 +44,10 @@ def test_classify_path() -> None:
     assert classify_path("CMakeLists.txt") == ("code", "cmake")
     assert classify_path("patches/gdn-override-dev.patch") == ("code", "diff")
     assert classify_path("notes.txt") == ("doc", "text")
+    # anything else is plain text, known binary formats are skipped by name
+    assert classify_path("LLAMA_CPP_BASE_COMMIT") == ("code", "text")
+    assert classify_path("config/app.conf") == ("code", "text")
+    assert classify_path("models/model.gguf") is None
 
 
 def test_patch_files_are_chunked_by_lines() -> None:

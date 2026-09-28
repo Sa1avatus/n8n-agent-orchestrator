@@ -1,9 +1,11 @@
+import shutil
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from ahawr_retrieval.indexer import IndexingError
+from ahawr_retrieval.indexer import IndexingError, git_files
 from ahawr_retrieval.models import IndexDocument, IndexRequest, InvalidateRequest
 from ahawr_retrieval.service import RetrievalService
 from ahawr_retrieval.store import ACTIVE, DELETED, INVALIDATED
@@ -22,6 +24,7 @@ def test_initial_index_excludes_secrets_ignored_and_vendor(
         "tests/test_parser.py",
         "web/client.ts",
         "docs/guide.md",
+        ".gitignore",
     }
     assert result.chunks["added"] > 5
     assert result.embeddings["computed"] > 0
@@ -30,31 +33,71 @@ def test_initial_index_excludes_secrets_ignored_and_vendor(
     assert result.docs_snapshot and result.docs_snapshot.startswith("docs:")
 
 
-def test_build_files_are_indexed_and_agent_plans_and_backups_are_not(
+def _write(root: Path, files: dict[str, str | bytes]) -> None:
+    for rel, content in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            (root / rel).write_bytes(content)
+        else:
+            (root / rel).write_text(content, encoding="utf-8")
+
+
+BUILD_AND_JUNK: dict[str, str | bytes] = {
+    "Dockerfile.llama": "FROM ubuntu:24.04\nRUN patch -p1 < /tmp/a.patch\n",
+    "patches/a.patch": "diff --git a/x.c b/x.c\n--- a/x.c\n+++ b/x.c\n@@ -1 +1 @@\n-a\n+b\n",
+    "LLAMA_CPP_BASE_COMMIT": "c060ca974c773c7c3d17fd1b66dc9d312bc292c0\n",
+    ".hermes/plans/task_plan.json": '{"tasks": []}\n',
+    "docker-compose_backup13092026.yml": "services: {}\n",
+    "model.gguf": b"GGUF\x00\x00binary",
+    "blob.dat": b"\x00\x01\x02binary",
+}
+
+
+def test_every_text_file_is_indexed_except_what_gitignore_excludes(
     service: RetrievalService, workspace: Path
 ) -> None:
-    files = {
-        "Dockerfile.llama": "FROM ubuntu:24.04\nRUN patch -p1 < /tmp/a.patch\n",
-        "patches/a.patch": "diff --git a/x.c b/x.c\n--- a/x.c\n+++ b/x.c\n@@ -1 +1 @@\n-a\n+b\n",
-        "task-plan.json": '{"tasks": []}\n',
-        ".hermes/plans/task_plan.json": '{"tasks": []}\n',
-        ".claude/settings.json": "{}\n",
-        "docker-compose_backup13092026.yml": "services: {}\n",
-        "app/parser.py.orig": "old = 1\n",
-    }
-    for rel, text in files.items():
-        (workspace / rel).parent.mkdir(parents=True, exist_ok=True)
-        (workspace / rel).write_text(text, encoding="utf-8")
+    _write(workspace, BUILD_AND_JUNK)
+    (workspace / ".gitignore").write_text(
+        "generated/\n*.tmp\n.hermes/\n*_backup*\n", encoding="utf-8"
+    )
     service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
     indexed = paths(service)
-    assert {"Dockerfile.llama", "patches/a.patch"} <= indexed
+    assert {"Dockerfile.llama", "patches/a.patch", "LLAMA_CPP_BASE_COMMIT"} <= indexed
     assert not indexed & {
-        "task-plan.json",
-        ".hermes/plans/task_plan.json",
-        ".claude/settings.json",
-        "docker-compose_backup13092026.yml",
-        "app/parser.py.orig",
+        ".hermes/plans/task_plan.json",  # .gitignore
+        "docker-compose_backup13092026.yml",  # .gitignore
+        "model.gguf",  # binary by name
+        "blob.dat",  # binary by content
+        ".env",  # secrets are never indexed, ignored or not
+        "server.pem",
+        "node_modules/lib/index.js",  # vendor directories are never indexed
     }
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_git_work_tree_uses_git_ignore_rules(service: RetrievalService, workspace: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+    _write(
+        workspace,
+        {
+            "docs/.gitignore": "draft-*.md\n!draft-keep.md\n",  # nested file with a negation
+            "docs/draft-old.md": "# Old draft\n\nstale text\n",
+            "docs/draft-keep.md": "# Kept draft\n\ncurrent text\n",
+        },
+    )
+    listed = git_files(workspace)
+    assert listed is not None
+    assert "docs/draft-keep.md" in listed and "docs/draft-old.md" not in listed
+    assert "generated/out.py" not in listed  # root .gitignore
+    service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
+    indexed = paths(service)
+    assert "docs/draft-keep.md" in indexed and "docs/draft-old.md" not in indexed
+    assert "app/parser.py" in indexed and ".env" not in indexed
+    assert not any(p.startswith("node_modules/") for p in indexed)
+
+
+def test_git_files_is_none_outside_a_work_tree(workspace: Path) -> None:
+    assert git_files(workspace) is None
 
 
 def test_root_outside_allowed_roots_is_rejected(service: RetrievalService) -> None:
@@ -64,7 +107,7 @@ def test_root_outside_allowed_roots_is_rejected(service: RetrievalService) -> No
 
 def test_unchanged_sync_is_a_noop(indexed: RetrievalService) -> None:
     result = indexed.index(IndexRequest(corpus_id="ws"))
-    assert result.files["unchanged"] == 4
+    assert result.files["unchanged"] == 5  # the four sources and .gitignore
     assert sum(result.chunks.values()) == 0
     assert result.code_generation == 1
 

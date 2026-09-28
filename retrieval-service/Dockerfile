@@ -11,13 +11,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     RETRIEVAL_RERANKER_MODEL=${RETRIEVAL_RERANKER_MODEL} \
     RETRIEVAL_RERANKER_MODEL_DIR=/models
 
+# git lists a work tree's files with its own .gitignore rules (all levels, negations).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir ".[server,local-rerank]" \
     && useradd --uid 10001 --create-home retrieval \
     && mkdir -p /data /models \
-    && python -c "import os; from fastembed.rerank.cross_encoder import TextCrossEncoder as T; T(os.environ['RETRIEVAL_RERANKER_MODEL'], cache_dir='/models', providers=['CPUExecutionProvider'], cuda=False)"     && python -c "from ahawr_retrieval.embeddings import LocalEmbedder; LocalEmbedder('${RETRIEVAL_LOCAL_EMBEDDING_MODEL}', cache_dir='/models').embed_query('warm up')" \
+    && python -c "import os; from fastembed.rerank.cross_encoder import TextCrossEncoder as T; T(os.environ['RETRIEVAL_RERANKER_MODEL'], cache_dir='/models', providers=['CPUExecutionProvider'], cuda=False)" \
+    && python -c "from ahawr_retrieval.embeddings import LocalEmbedder; LocalEmbedder('${RETRIEVAL_LOCAL_EMBEDDING_MODEL}', cache_dir='/models').embed_query('warm up')" \
     && chown -R retrieval /data /models
 
 # The model is in /models: never reach Hugging Face at run time.

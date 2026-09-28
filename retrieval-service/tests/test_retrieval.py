@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,7 @@ import respx
 
 from ahawr_retrieval.candidates import Candidate
 from ahawr_retrieval.config import Settings
-from ahawr_retrieval.context import select_context
+from ahawr_retrieval.context import chunk_cost, render_context, select_context
 from ahawr_retrieval.models import IndexDocument, IndexRequest, RetrieveRequest
 from ahawr_retrieval.profiles import BudgetConfig
 from ahawr_retrieval.reranker import HttpReranker
@@ -108,7 +109,7 @@ def _chunk_candidate(n: int, path: str) -> Candidate:
         indexed_at=0.0,
         updated_at=0.0,
     )
-    return Candidate(chunk_id=f"ch{n}", record=record)
+    return Candidate(chunk_id=f"ch{n}", record=record, final=1.0)
 
 
 def test_per_path_limit_keeps_several_chunks_of_one_file() -> None:
@@ -121,6 +122,51 @@ def test_per_path_limit_keeps_several_chunks_of_one_file() -> None:
     assert len(main) == budget.per_path_limit == 8
     assert [c.selection_reason for c in ranked[8:10]] == ["per_path_limit"] * 2
     assert ranked[10].selected
+
+
+def test_weak_chunks_are_left_out_of_the_context() -> None:
+    strong, weak = _chunk_candidate(1, "app/a.py"), _chunk_candidate(2, "app/b.py")
+    weak.final = 0.45
+    selected = select_context([strong, weak], BudgetConfig(), max_chunks=12, max_tokens=6000)
+    assert selected == [strong]
+    assert weak.selection_reason == "below_min_score"
+    kept = select_context(
+        [strong, weak], BudgetConfig(min_final_score=0.0), max_chunks=12, max_tokens=6000
+    )
+    assert kept == [strong, weak]
+
+
+def test_context_numbers_code_lines_with_their_file_line_numbers(
+    indexed: RetrievalService, workspace: Path
+) -> None:
+    response = retrieve(indexed)
+    source = (workspace / "app/parser.py").read_text(encoding="utf-8").splitlines()
+    chunk = next(c for c in response.chunks if c.symbol == "compute_total")
+    first = chunk.start_line
+    assert source[first - 1].startswith("def compute_total")
+    width = len(str(chunk.end_line))
+    assert f"{first:>{width}}| def compute_total" in response.context
+    assert response.context_tokens > sum(c.token_count for c in response.chunks)
+
+    plain = retrieve(indexed, options={"render": {"line_numbers": False}})
+    assert "| def compute_total" not in plain.context
+    assert "\ndef compute_total" in plain.context
+    assert plain.context_tokens == sum(c.token_count for c in plain.chunks)
+    assert plain.config_id != response.config_id
+
+
+def test_line_numbers_are_skipped_when_content_does_not_map_to_lines() -> None:
+    exact = _chunk_candidate(1, "app/a.py")  # lines 11-15, one content line
+    assert exact.record is not None
+    exact.record = replace(exact.record, content="a\nb\nc\nd\ne")
+    trimmed = _chunk_candidate(2, "docs/b.md")  # a doc chunk whose blank edges were trimmed
+    assert trimmed.record is not None
+    trimmed.record = replace(trimmed.record, content="heading\ntext")
+    context = render_context([exact, trimmed], "worker", "rr_1", line_numbers=True)
+    assert "11| a\n12| b\n13| c\n14| d\n15| e" in context
+    assert "\nheading\ntext\n" in context
+    assert chunk_cost(exact.record, True) > chunk_cost(exact.record, False) == 50
+    assert chunk_cost(trimmed.record, True) == 50
 
 
 def test_options_switch_retrievers_and_change_config_id(indexed: RetrievalService) -> None:

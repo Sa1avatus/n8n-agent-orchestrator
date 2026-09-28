@@ -22,6 +22,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -76,9 +77,6 @@ EXCLUDED_DIRS = frozenset(
         "tokens",
         ".eggs",
         "htmlcov",
-        # agent working state (Hermes plans, Claude Code settings), not project sources
-        ".hermes",
-        ".claude",
     }
 )
 # Never index secrets or generated artefacts (the Worker prompt forbids reading .env and secrets).
@@ -112,15 +110,6 @@ EXCLUDED_FILES = (
     "*.min.js",
     "*.min.css",
     "*.map",
-    # Agent task plans and backups: stale copies that retrieval kept offering as current code.
-    "task-plan.json",
-    "task_plan.json",
-    "*_backup*",
-    "*.backup",
-    "*.bak",
-    "*.orig",
-    "*.rej",
-    "*~",
 )
 ALLOWED_DOTFILES = frozenset({".env.example"})
 
@@ -162,6 +151,36 @@ def is_excluded(rel_path: str, extra_excludes: list[str] | None = None) -> bool:
         fnmatch.fnmatch(rel_path, pattern) or fnmatch.fnmatch(name, pattern)
         for pattern in extra_excludes or []
     )
+
+
+def git_files(root: Path) -> list[str] | None:
+    """Tracked and untracked-but-not-ignored files under ``root`` as git sees them, or None when
+    ``root`` is not inside a git work tree or git is unavailable."""
+    if not (root / ".git").exists():
+        return None
+    try:
+        result = subprocess.run(
+            # safe.directory: the workspace is a read-only mount owned by another user
+            [
+                "git",
+                "-c",
+                "safe.directory=*",
+                "-C",
+                str(root),
+                "ls-files",
+                "-z",
+                "--cached",
+                "--others",
+                "--exclude-standard",
+            ],
+            capture_output=True,
+            timeout=120,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    names = result.stdout.decode("utf-8", errors="replace").split("\0")
+    return sorted({name for name in names if name})
 
 
 def normalize_rel_path(path: str) -> str:
@@ -433,6 +452,20 @@ class Indexer:
         return self._response(corpus_id, stats, started)
 
     def _walk(self, root: Path, extra_excludes: list[str], includes: list[str]) -> list[str]:
+        """Every text file of the workspace except what .gitignore excludes. In a git work tree
+        git itself lists the files (all .gitignore levels, negations, .git/info/exclude);
+        otherwise the root .gitignore is applied approximately."""
+        listed = git_files(root)
+        if listed is not None:
+            return [
+                rel
+                for rel in listed
+                if not any(part in EXCLUDED_DIRS for part in rel.split("/")[:-1])
+                and not is_excluded(rel, extra_excludes)
+                and (not includes or any(fnmatch.fnmatch(rel, p) for p in includes))
+                and classify_path(rel) is not None
+                and not os.path.islink(root / rel)
+            ]
         ignore_patterns = self._gitignore(root)
         result: list[str] = []
         for dirpath, dirnames, filenames in os.walk(root):

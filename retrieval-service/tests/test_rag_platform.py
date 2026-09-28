@@ -114,7 +114,13 @@ def test_mirror_pushes_chunks_with_provenance(
         service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
         active = [
             c
-            for p in ("app/parser.py", "web/client.ts", "docs/guide.md", "tests/test_parser.py")
+            for p in (
+                "app/parser.py",
+                "web/client.ts",
+                "docs/guide.md",
+                "tests/test_parser.py",
+                ".gitignore",
+            )
             for c in service.store.chunks_for_path("ws", p).values()
         ]
         assert len(rag.documents) == len(active)

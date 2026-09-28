@@ -79,6 +79,77 @@ SPECIAL_FILENAMES = {
     "gnumakefile": "make",
     "cmakelists.txt": "cmake",
 }
+# Known binary formats, skipped without reading them.
+BINARY_SUFFIXES = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".bmp",
+        ".ico",
+        ".webp",
+        ".tiff",
+        ".psd",
+        ".pdf",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".ppt",
+        ".pptx",
+        ".odt",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".tgz",
+        ".bz2",
+        ".xz",
+        ".7z",
+        ".rar",
+        ".zst",
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".a",
+        ".o",
+        ".obj",
+        ".lib",
+        ".class",
+        ".jar",
+        ".pyc",
+        ".wasm",
+        ".bin",
+        ".gguf",
+        ".onnx",
+        ".pt",
+        ".pth",
+        ".safetensors",
+        ".ckpt",
+        ".npy",
+        ".npz",
+        ".mp3",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".mp4",
+        ".mkv",
+        ".mov",
+        ".avi",
+        ".webm",
+        ".ttf",
+        ".otf",
+        ".woff",
+        ".woff2",
+        ".eot",
+        ".sqlite",
+        ".sqlite3",
+        ".db",
+        ".parquet",
+        ".pkl",
+    }
+)
 # Variants named by a prefix, e.g. Dockerfile.llama, Dockerfile.dashboard, Makefile.cuda.
 SPECIAL_PREFIXES = {
     "dockerfile.": "dockerfile",
@@ -152,7 +223,11 @@ def classify_path(path: str) -> tuple[str, str] | None:
         return "doc", DOC_LANGUAGES[suffix]
     if suffix in CODE_LANGUAGES:
         return "code", CODE_LANGUAGES[suffix]
-    return None
+    if suffix in BINARY_SUFFIXES:
+        return None
+    # Any other file is indexed as plain text (what to leave out is .gitignore's job); the
+    # indexer still skips binary content it did not recognise by name.
+    return "code", "text"
 
 
 def chunk_file(path: str, text: str, config: ChunkingConfig | None = None) -> ChunkedFile:

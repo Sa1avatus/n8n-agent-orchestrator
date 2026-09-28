@@ -117,9 +117,17 @@ and every log row.
   results) and bumps only the affected generation. It persists across routine syncs until the
   content changes or the path is explicitly re-indexed (`reindex: true`, `paths`, `force`).
   Unrelated chunks, files and the other source type are untouched.
-* Secrets and generated artefacts are never indexed (`.env*`, keys, certificates, lockfiles,
-  `node_modules`, `.gitignore`d paths, …); workspace roots must be inside
-  `RETRIEVAL_ALLOWED_ROOTS`.
+* **What is indexed:** every text file of the workspace except what `.gitignore` excludes. In a
+  git work tree git lists the files (`git ls-files --cached --others --exclude-standard`: every
+  `.gitignore` level, negations, `.git/info/exclude`); elsewhere the root `.gitignore` is applied.
+  Files with an unknown extension are indexed as plain text; binaries are skipped by name or
+  content. To keep junk (agent plans, backup copies, scratch files) out of the context, add it to
+  the project's `.gitignore`. Regardless of `.gitignore`, secrets (`.env*`, keys, certificates),
+  lockfiles, minified files and vendor/build directories (`node_modules`, `.venv`, `build`, …)
+  are never indexed; workspace roots must be inside `RETRIEVAL_ALLOWED_ROOTS`.
+* **Rendered context:** code chunks carry their file line numbers (`594| …`, profile
+  `render.line_numbers`), so a role can cite `file:line` without re-reading the file; the numbers
+  count against the token budget.
 
 ## 5. Provenance returned per chunk
 

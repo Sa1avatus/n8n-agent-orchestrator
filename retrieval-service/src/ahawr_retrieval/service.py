@@ -19,7 +19,7 @@ from . import __version__
 from .cache import CacheLookup, RetrievalCache, scope_key
 from .candidates import Candidate, fuse
 from .config import Settings, map_host_path
-from .context import render_context, select_context
+from .context import chunk_cost, render_context, select_context
 from .embeddings import (
     DEFAULT_LOCAL_EMBEDDING_MODEL,
     Embedder,
@@ -404,16 +404,23 @@ class RetrievalService:
 
         mark = time.perf_counter()
         ranked = rank_candidates(valid, query, profile, reranked)
+        line_numbers = profile.render.line_numbers
         selected = select_context(
-            ranked, profile.budget, profile.budget.max_chunks, profile.budget.max_tokens
+            ranked,
+            profile.budget,
+            profile.budget.max_chunks,
+            profile.budget.max_tokens,
+            line_numbers=line_numbers,
         )
         timings["ranking"] = _ms(mark)
 
         chunks = [self._chunk_out(c, rank, corpora) for rank, c in enumerate(selected, 1)]
         context = (
-            render_context(selected, profile.name, request_id) if request.render_context else ""
+            render_context(selected, profile.name, request_id, line_numbers)
+            if request.render_context
+            else ""
         )
-        context_tokens = sum(c.token_count for c in chunks)
+        context_tokens = sum(chunk_cost(c.record, line_numbers) for c in selected if c.record)
         if use_cache and selected:
             cache_info.key = self.cache.put(
                 scope,
@@ -800,10 +807,14 @@ class RetrievalService:
             degraded=bool(reasons),
             degraded_reasons=reasons,
             chunks=chunks,
-            context=render_context(candidates, profile.name, request_id)
+            context=render_context(
+                candidates, profile.name, request_id, profile.render.line_numbers
+            )
             if request.render_context
             else "",
-            context_tokens=sum(c.token_count for c in chunks),
+            context_tokens=sum(
+                chunk_cost(c.record, profile.render.line_numbers) for c in candidates if c.record
+            ),
             stats={
                 "candidates": len(candidates),
                 "filtered": 0,

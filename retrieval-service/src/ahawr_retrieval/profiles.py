@@ -72,9 +72,18 @@ class BudgetConfig(_Strict):
     # A task usually centres on one large file (e.g. an API module with many endpoints and
     # dependencies); 3 chunks per file dropped needed ones in favour of weaker files.
     per_path_limit: int = Field(8, ge=1, le=50)
-    min_final_score: float = 0.0
+    # Chunks below this final score were rarely used by the models and cost ~1/4 of the context;
+    # 0.5 keeps ContextRecall within ~0.02 for both hashing and e5 (eval/results/2026-09-28-*).
+    min_final_score: float = 0.5
     history_max_share: float = Field(0.2, ge=0, le=1)
     overlap_threshold: float = Field(0.5, ge=0, le=1)
+
+
+class RenderConfig(_Strict):
+    # Prefix each line of a code chunk with its file line number ("594| ..."), so the model can
+    # cite file:line from the context instead of re-reading the file. Costs ~6 chars per line,
+    # which counts against the token budget.
+    line_numbers: bool = True
 
 
 class CacheConfig(_Strict):
@@ -96,6 +105,7 @@ class Profile(_Strict):
     rerank: RerankConfig = Field(default_factory=RerankConfig)
     ranking: RankingConfig = Field(default_factory=RankingConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    render: RenderConfig = Field(default_factory=RenderConfig)
     cache: CacheConfig = Field(default_factory=CacheConfig)
     exclude_globs: list[str] = Field(default_factory=list)
 
