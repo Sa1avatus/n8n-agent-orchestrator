@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from .claude_cli import child_env
 from .config import Settings
-from .dashboard import _EmbeddedServer, build_router, create_dashboard_app
+from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
 
 
@@ -66,8 +66,7 @@ def _auth_mode() -> str:
     return "stored_login_or_none"
 
 
-def create_app(settings: Settings | None = None, serve_dashboard: bool = False) -> FastAPI:
-    """``serve_dashboard`` also serves the read-only dashboard on ``settings.dashboard_port``."""
+def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -76,19 +75,9 @@ def create_app(settings: Settings | None = None, serve_dashboard: bool = False) 
         app.state.manager = manager
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
-        dashboard = None
-        if serve_dashboard and settings.dashboard_port:
-            dashboard = _EmbeddedServer(
-                create_dashboard_app(settings, lambda: app.state.manager),
-                "0.0.0.0",
-                settings.dashboard_port,
-            )
-            dashboard.start()
         try:
             yield
         finally:
-            if dashboard is not None:
-                await dashboard.stop()
             await manager.shutdown()
 
     app = FastAPI(title="claude-runner", version="0.1.0", lifespan=lifespan)

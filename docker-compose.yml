@@ -69,9 +69,7 @@ services:
   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
   # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
   # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
-  # n8n reaches it at http://claude-runner:8700 over the stack network (not published).
-  # Dashboard (read-only: every role's thinking, tool calls and results, live):
-  # http://localhost:8701 — published on 127.0.0.1 only.
+  # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published.
   claude-runner:
     build:
       context: ./claude-runner
@@ -82,9 +80,6 @@ services:
 
     container_name: claude-runner
     restart: unless-stopped
-
-    ports:
-      - "127.0.0.1:${AHAWR_DASHBOARD_PORT:-8701}:8701"
 
     # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_RUNNER_* settings. See .env.example.
     env_file:
@@ -97,8 +92,6 @@ services:
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
-      # the published dashboard port above (host port: AHAWR_DASHBOARD_PORT)
-      - CLAUDE_RUNNER_DASHBOARD_PORT=8701
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).
@@ -122,6 +115,50 @@ services:
         required: false
 
     stop_grace_period: 60s
+
+  # AHAWR dashboard: http://localhost:8701 (127.0.0.1 only, read-only). Every agent run with its
+  # thinking, tool calls and results, steps, timings and tokens: Claude Code runs from
+  # claude-runner and Hermes sessions from the Hermes API server (HERMES_API_URL/HERMES_API_KEY).
+  # Its own container, so the Hermes key never reaches claude-runner, where the Worker runs commands.
+  ahawr-dashboard:
+    build:
+      context: ./claude-runner
+      dockerfile: Dockerfile
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
+
+    container_name: ahawr-dashboard
+    restart: unless-stopped
+    command: ["ahawr-dashboard", "--host", "0.0.0.0", "--port", "8701"]
+
+    ports:
+      - "127.0.0.1:${AHAWR_DASHBOARD_PORT:-8701}:8701"
+
+    # Only what the dashboard needs (not the whole .env).
+    environment:
+      - DASHBOARD_RUNNER_URL=http://claude-runner:8700
+      - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
+      # Empty HERMES_API_URL= turns the Hermes source off.
+      - DASHBOARD_HERMES_URL=${HERMES_API_URL-http://host.docker.internal:8642}
+      - DASHBOARD_HERMES_API_KEY=${HERMES_API_KEY:-}
+      # Hermes sessions started through its API (AHAWR); empty = all sessions (Telegram, CLI, ...).
+      - DASHBOARD_HERMES_SOURCE=${HERMES_SESSION_SOURCE-api_server}
+
+    extra_hosts:
+      # the Hermes API server on the Docker host
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8701/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    depends_on:
+      claude-runner:
+        condition: service_started
+        required: false
 
   # LiteLLM: lets Claude Code (Anthropic Messages API) use a local llama.cpp server
   # (OpenAI-compatible). Built and started with the rest of the stack; used only when

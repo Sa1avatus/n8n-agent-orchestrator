@@ -215,8 +215,10 @@ def main() -> int:
                 "parent_tool_use_id": None,
                 "session_id": sid,
                 "message": {
+                    "id": "msg_tools",
                     "model": opts.get("--model", "default"),
                     "content": [{"type": "thinking", "thinking": "I should read calc.py."}],
+                    "usage": {"input_tokens": 50, "output_tokens": 7},
                 },
             }
         )
@@ -226,6 +228,7 @@ def main() -> int:
                 "parent_tool_use_id": None,
                 "session_id": sid,
                 "message": {
+                    "id": "msg_tools",
                     "model": opts.get("--model", "default"),
                     "content": [
                         {
@@ -257,6 +260,14 @@ def main() -> int:
         )
     if "--include-partial-messages" in opts:
         for event in (
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_answer",
+                    "model": opts.get("--model", "default"),
+                    "usage": {"input_tokens": 10, "cache_read_input_tokens": 1000 * turns},
+                },
+            },
             {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
             {
                 "type": "content_block_delta",
@@ -273,6 +284,7 @@ def main() -> int:
             "parent_tool_use_id": None,
             "session_id": sid,
             "message": {
+                "id": "msg_answer",
                 "model": opts.get("--model", "default"),
                 "content": [{"type": "text", "text": answer}],
                 "usage": {
@@ -284,7 +296,12 @@ def main() -> int:
         }
     )
     if "--include-partial-messages" in opts:
-        emit({"type": "stream_event", "event": {"type": "content_block_stop"}, "session_id": sid})
+        for event in (
+            {"type": "content_block_stop"},
+            {"type": "message_delta", "usage": {"output_tokens": 5}},
+            {"type": "message_stop"},
+        ):
+            emit({"type": "stream_event", "event": event, "session_id": sid})
     emit(
         {
             "type": "result",

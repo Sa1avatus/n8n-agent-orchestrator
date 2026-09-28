@@ -311,11 +311,13 @@ the same.
 - **Compression.** The Hermes TUI/WebSocket path (§3.2) is replaced by
   `POST /v1/sessions/{id}/compact`. It returns `completed`, `skipped` or `failed`. Only `failed`
   starts the fresh-session handoff, and an unreachable runner counts as `skipped`.
-- **Observability.** Each run's activity (thinking, text, tool calls and results, retries,
-  compaction, result) is logged from the CLI stream, independently of the model provider. It is
-  exposed read-only: `GET /v1/runs`, `GET /v1/runs/{id}/events`, and a dashboard on a separate
-  port bound to 127.0.0.1. The dashboard is not part of the run contract: AHAWR never reads it,
-  and it holds no execution state.
+- **Observability.** Each run's activity (thinking, text, tool calls and results, model requests
+  with timings and tokens, retries, compaction, result) is logged from the CLI stream,
+  independently of the model provider, and exposed read-only at `GET /v1/runs` and
+  `GET /v1/runs/{id}/events`. The `ahawr-dashboard` container shows it together with the Hermes
+  sessions from the Hermes API server (`/api/sessions`); it is bound to 127.0.0.1. The
+  dashboard is not part of the run contract: AHAWR never reads it, and it holds no execution
+  state.
 
 `Claude Code Run Manager v1` also corrects two state-selection issues present in
 `Hermes_Run_Manager_v5.json`:

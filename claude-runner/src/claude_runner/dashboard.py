@@ -1,162 +1,166 @@
-"""Read-only views of runs: the dashboard page and the JSON it polls.
+"""AHAWR dashboard: every agent run in one place, read-only.
 
-The same views are served twice: under ``/v1`` on the main API (bearer auth like the rest of
-it) and on the dashboard port (``CLAUDE_RUNNER_DASHBOARD_PORT``, default 8701), which has no
-way to start, cancel or compact runs and answers only to the hosts in
-``CLAUDE_RUNNER_DASHBOARD_HOSTS`` — publish it on 127.0.0.1 only.
+It merges two sources:
+
+* claude-runner (``DASHBOARD_RUNNER_URL``): Claude Code runs of every role and provider;
+* a Hermes Agent API server (``DASHBOARD_HERMES_URL`` + ``DASHBOARD_HERMES_API_KEY``): the
+  Hermes sessions of the Hermes variant of AHAWR.
+
+It runs in its own container: the Hermes key must not sit in claude-runner, whose Worker runs
+arbitrary commands. It can only read, and it answers only to ``DASHBOARD_HOSTS`` (publish it
+on 127.0.0.1 only).
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
-import contextlib
-import logging
-import re
-from collections.abc import Callable, Generator
+import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from importlib import resources
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Query
+import httpx
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from .config import Settings
-from .runs import RunManager, RunnerError
-
-log = logging.getLogger("claude_runner.dashboard")
-
-_TASK_RE = re.compile(r"^TASK\s+\S+.*$", re.MULTILINE)
-_REVIEW_RE = re.compile(r"^CURRENT TASK:\s*\n\s*(\S.*)$", re.MULTILINE)
-_MISSION_RE = re.compile(r"^MISSION:\s*(\S.*)$", re.MULTILINE)
+from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
 
-def title_of(text: str) -> str:
-    """A short label for a run from its AHAWR prompt."""
-    if match := _TASK_RE.search(text):
-        return match.group(0).strip()[:160]
-    if match := _REVIEW_RE.search(text):
-        return ("Review: " + match.group(1).strip())[:160]
-    if match := _MISSION_RE.search(text):
-        return ("Plan: " + match.group(1).strip())[:160]
-    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
-    return first[:160]
+@dataclass(frozen=True)
+class DashboardSettings:
+    runner_url: str = "http://claude-runner:8700"
+    runner_api_key: str = ""
+    hermes_url: str = ""
+    hermes_api_key: str = ""
+    hermes_session_source: str = ""
+    hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
+    timeout_seconds: float = 15.0
 
-
-def summary(run: dict[str, Any], manager: RunManager) -> dict[str, Any]:
-    details = run.get("details") or {}
-    active = run["status"] in ("queued", "running")
-    return {
-        "run_id": run["run_id"],
-        "kind": run.get("kind", "run"),
-        "title": title_of(run.get("input") or ""),
-        "status": run["status"],
-        "role": run["role"],
-        "model": details.get("model") or run["model"],
-        "requested_model": run["model"],
-        "provider": run.get("provider") or "",
-        "session_id": run["session_id"],
-        "claude_session_id": run["claude_session_id"],
-        "cwd": run["cwd"],
-        "created_at": run["created_at"],
-        "started_at": run["started_at"],
-        "finished_at": run["finished_at"],
-        "num_turns": run["num_turns"],
-        "cost_usd": run["cost_usd"],
-        "context_tokens": run["context_tokens"],
-        "error": {"code": run["error_code"], "message": run["error_message"]}
-        if run["error_code"] or run["error_message"]
-        else None,
-        "live": active and manager.events.is_live(run["run_id"]),
-    }
-
-
-def build_router(get_manager: Callable[[], RunManager]) -> APIRouter:
-    router = APIRouter()
-
-    @router.get("/runs")
-    async def list_runs(
-        limit: int = Query(50, ge=1, le=500),
-        session_id: str = "",
-        role: str = "",
-        status: str = "",
-    ) -> dict[str, Any]:
-        manager = get_manager()
-        runs = manager.store.list_runs(limit, session_id, role, status)
-        return {"runs": [summary(run, manager) for run in runs]}
-
-    @router.get("/runs/{run_id}/events")
-    async def run_events(run_id: str, after: int = Query(0, ge=0)) -> dict[str, Any]:
-        manager = get_manager()
-        run = manager.store.get_run(run_id)
-        if not run:
-            raise RunnerError("run_not_found", f"Run {run_id} not found.", 404)
-        entries, live = manager.events.read(run_id, after)
-        return {
-            "run": summary(run, manager),
-            "events": entries,
-            "next": after + len(entries),
-            "live": live,
-        }
-
-    return router
-
-
-def create_dashboard_app(settings: Settings, get_manager: Callable[[], RunManager]) -> FastAPI:
-    app = FastAPI(title="claude-runner dashboard", docs_url=None, redoc_url=None, openapi_url=None)
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.dashboard_hosts))
-
-    def manager() -> RunManager:
-        try:
-            return get_manager()
-        except (AttributeError, KeyError) as exc:
-            raise RunnerError("starting", "claude-runner is starting.", 503) from exc
-
-    @app.exception_handler(RunnerError)
-    async def runner_error(_: Any, exc: RunnerError) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code, content={"error": {"code": exc.code, "message": str(exc)}}
+    @classmethod
+    def from_env(cls, env: dict[str, str] | None = None) -> DashboardSettings:
+        env = dict(os.environ if env is None else env)
+        hosts = [h.strip() for h in env.get("DASHBOARD_HOSTS", "").split(",") if h.strip()]
+        return cls(
+            runner_url=env.get("DASHBOARD_RUNNER_URL", cls.runner_url).strip(),
+            runner_api_key=env.get("DASHBOARD_RUNNER_API_KEY", "").strip(),
+            hermes_url=env.get("DASHBOARD_HERMES_URL", "").strip(),
+            hermes_api_key=env.get("DASHBOARD_HERMES_API_KEY", "").strip(),
+            hermes_session_source=env.get("DASHBOARD_HERMES_SOURCE", "").strip(),
+            hosts=tuple(hosts) or cls.hosts,
         )
 
+
+def create_dashboard_app(
+    settings: DashboardSettings | None = None, transport: httpx.AsyncBaseTransport | None = None
+) -> FastAPI:
+    settings = settings or DashboardSettings.from_env()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        async with httpx.AsyncClient(
+            timeout=settings.timeout_seconds, transport=transport
+        ) as client:
+            app.state.runner = (
+                RunnerSource(client, settings.runner_url, settings.runner_api_key)
+                if settings.runner_url
+                else None
+            )
+            app.state.hermes = (
+                HermesSource(
+                    client,
+                    settings.hermes_url,
+                    settings.hermes_api_key,
+                    settings.hermes_session_source,
+                )
+                if settings.hermes_url
+                else None
+            )
+            yield
+
+    app = FastAPI(
+        title="AHAWR dashboard", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.hosts))
     page = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
+
+    def sources(request: Request) -> list[Any]:
+        return [s for s in (request.app.state.runner, request.app.state.hermes) if s]
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
         return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
-    app.include_router(build_router(manager), prefix="/api")
+    @app.get("/healthz")
+    async def healthz(request: Request) -> dict[str, Any]:
+        return {"status": "ok", "sources": [s.name for s in sources(request)]}
+
+    @app.get("/api/runs")
+    async def list_runs(
+        request: Request,
+        limit: int = Query(100, ge=1, le=500),
+        session_id: str = "",
+        role: str = "",
+        status: str = "",
+        source: str = "",
+    ) -> dict[str, Any]:
+        chosen = [s for s in sources(request) if not source or s.name == source]
+        if session_id:  # a session belongs to exactly one source
+            hermes = session_id.startswith(HERMES_PREFIX)
+            session_id = session_id.removeprefix(HERMES_PREFIX)
+            chosen = [s for s in chosen if isinstance(s, HermesSource) == hermes]
+        results = await asyncio.gather(
+            *(s.list_runs(limit, session_id, role, status) for s in chosen), return_exceptions=True
+        )
+        runs: list[dict[str, Any]] = []
+        states: dict[str, str] = {}
+        for src, result in zip(chosen, results, strict=True):
+            if isinstance(result, BaseException):
+                states[src.name] = _describe_error(result)
+            else:
+                states[src.name] = "ok"
+                runs += result
+        runs.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
+        return {"runs": runs[:limit], "sources": states}
+
+    @app.get("/api/runs/{run_id}/events")
+    async def run_events(request: Request, run_id: str, after: int = Query(0, ge=0)) -> Any:
+        src = (
+            request.app.state.hermes
+            if run_id.startswith(HERMES_PREFIX)
+            else request.app.state.runner
+        )
+        if src is None:
+            return JSONResponse({"error": "source not configured"}, status_code=404)
+        try:
+            body = await src.events(run_id, after)
+        except (SourceError, httpx.HTTPError) as exc:
+            return JSONResponse({"error": _describe_error(exc)}, status_code=502)
+        if body is None:
+            return JSONResponse({"error": f"run {run_id} not found"}, status_code=404)
+        return body
+
     return app
 
 
-class _EmbeddedServer:
-    """The dashboard's uvicorn server inside the main server's event loop (signals stay with
-    the main server; a port that cannot be bound only disables the dashboard)."""
+def _describe_error(exc: BaseException) -> str:
+    if isinstance(exc, httpx.ConnectError):
+        return f"unreachable ({exc.request.url.host}:{exc.request.url.port})"
+    if isinstance(exc, httpx.TimeoutException):
+        return "timed out"
+    return str(exc) or type(exc).__name__
 
-    def __init__(self, app: FastAPI, host: str, port: int) -> None:
-        import uvicorn
 
-        class Server(uvicorn.Server):
-            @contextlib.contextmanager
-            def capture_signals(self) -> Generator[None, None, None]:
-                yield
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="ahawr-dashboard")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8701)
+    args = parser.parse_args(argv)
 
-        self.server = Server(
-            uvicorn.Config(app, host=host, port=port, log_level="warning", lifespan="off")
-        )
-        self.task: asyncio.Task[None] | None = None
+    import uvicorn
 
-    async def _serve(self) -> None:
-        try:
-            await self.server.serve()
-        except (SystemExit, OSError) as exc:
-            log.warning(
-                "dashboard disabled: cannot serve on port %s (%r)", self.server.config.port, exc
-            )
-
-    def start(self) -> None:
-        self.task = asyncio.create_task(self._serve())
-
-    async def stop(self) -> None:
-        self.server.should_exit = True
-        if self.task is not None:
-            with contextlib.suppress(Exception):
-                await asyncio.wait_for(self.task, 10)
+    uvicorn.run(create_dashboard_app(), host=args.host, port=args.port, log_level="warning")
+    return 0

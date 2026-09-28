@@ -616,7 +616,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 - Projects: `missions.working_directory` (e.g. `D:\OpenAIProjects\app`) is where Claude Code runs and what retrieval indexes for that mission. The drive is mounted into the containers (`AHAWR_HOST_DRIVE`, default `D:\`).
 - Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`.
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
-- Dashboard at `http://localhost:8701` (read-only, 127.0.0.1 only): every role's runs with thinking, tool calls and their results, answers and errors, streamed live. It works for any provider: Claude, a local model or a third-party one.
+- Dashboard at `http://localhost:8701` (container `ahawr-dashboard`; read-only, 127.0.0.1 only). It shows the runs of every role in both variants: Claude Code runs and Hermes sessions (`HERMES_API_URL`, `HERMES_API_KEY`). The layout follows DeepSeek Harness' Trajectory view: a timeline, a colored ledger with thinking, tool calls and their results, steps with TTFT, generation time, tokens and tok/s, and an inspector for each record.
 
 The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md).
 
@@ -1297,7 +1297,7 @@ worker_provider
 - Проекты: в `missions.working_directory` (например, `D:\OpenAIProjects\app`) указывается папка, в которой работает Claude Code и которую индексирует retrieval для этой миссии. Диск подключается в контейнеры через `AHAWR_HOST_DRIVE` (по умолчанию `D:\`).
 - Провайдеры по ролям, как в Hermes: роли с `*_provider=anthropic` идут в Anthropic, а роль с `*_provider=local` — через контейнер `litellm` в локальный llama.cpp. См. `litellm/config.yaml` и блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`.
 - Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
-- Дашборд `http://localhost:8701` (только чтение, только 127.0.0.1): прогоны всех ролей с размышлениями, вызовами тулов, их результатами, ответами и ошибками, в реальном времени. Работает для любого провайдера: Claude, локальной или сторонней модели.
+- Дашборд `http://localhost:8701` (контейнер `ahawr-dashboard`, только чтение, только 127.0.0.1). Показывает прогоны всех ролей обоих вариантов: Claude Code и сессии Hermes (`HERMES_API_URL`, `HERMES_API_KEY`). Устроен как вкладка Trajectory в DeepSeek Harness: таймлайн, цветной журнал с размышлениями, тулами и их результатами, шаги с TTFT, временем генерации, токенами и ток/с, инспектор записи.
 
 Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md).
 ### Компрессия Hermes-сессий

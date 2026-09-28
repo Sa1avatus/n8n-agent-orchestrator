@@ -31,7 +31,7 @@ ENV PATH="/opt/claude-runner/venv/bin:${PATH}" \
 
 # Non-root: Claude Code refuses bypassPermissions (the Worker profile) as root.
 USER node
-# 8700: run API (stack network only); 8701: read-only dashboard
+# 8700: run API (stack network only); 8701: the read-only dashboard (ahawr-dashboard container)
 EXPOSE 8700 8701
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8700/health', timeout=3)"

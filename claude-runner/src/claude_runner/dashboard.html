@@ -3,363 +3,589 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AHAWR Runs</title>
+<title>AHAWR Trajectory</title>
 <style>
 :root {
-  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #677083; --line: #e3e6ec;
-  --accent: #2f6fde; --think: #7a5bd6; --tool: #0f7a6c; --ok: #1f8a4c; --warn: #b7791f;
-  --err: #c8372d; --code: #f1f3f7; --sel: #eaf1fd;
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2130; --muted: #6a7385; --faint: #9aa2b1;
+  --line: #e6e8ee; --hover: #f2f4f8; --sel: #e9f0fd; --code: #f3f5f8; --accent: #2f6fde;
+  --user: #2f6fde; --system: #6b7280; --init: #15803d; --think: #9b6bdc; --assistant: #6d3fc0;
+  --tool: #c56a06; --ok: #16803c; --err: #d03b30; --retry: #b98900; --compact: #0f8f84;
+  --model-wait: #cdbcf0; --model-gen: #8a5cd6; --tool-bar: #e0892a;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #11141a; --panel: #181c24; --ink: #e4e8ef; --muted: #8d96a8; --line: #2a303c;
-    --accent: #6e9ef5; --think: #a98cf2; --tool: #3fbfa9; --ok: #4cc07c; --warn: #e0a84a;
-    --err: #f06a5f; --code: #10131a; --sel: #1f2a3d;
+    --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #5f6878;
+    --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
+    --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
+    --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
+    --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #11141a; --panel: #181c24; --ink: #e4e8ef; --muted: #8d96a8; --line: #2a303c;
-  --accent: #6e9ef5; --think: #a98cf2; --tool: #3fbfa9; --ok: #4cc07c; --warn: #e0a84a;
-  --err: #f06a5f; --code: #10131a; --sel: #1f2a3d;
+  --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #5f6878;
+  --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
+  --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
+  --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
+  --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
-body { display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
-select, button, input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
-button { cursor: pointer; }
-.chip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-.chip button { border: 0; padding: 0; background: none; color: var(--muted); }
-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 380px) 1fr; }
-#list { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
-.run { padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.run:hover { background: var(--bg); }
-.run.sel { background: var(--sel); }
-.run .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.run .m { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-.role { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; background: var(--code); }
-.role.worker { color: var(--tool); } .role.architect { color: var(--accent); } .role.reviewer { color: var(--think); }
-.st { font-size: 12px; font-weight: 600; }
-.st.running, .st.queued { color: var(--accent); } .st.completed { color: var(--ok); }
-.st.failed, .st.interrupted { color: var(--err); } .st.cancelled { color: var(--warn); }
-.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px; animation: pulse 1.2s infinite; }
+body { display: flex; background: var(--bg); color: var(--ink); font: 13.5px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+button, select, input { font: inherit; color: inherit; }
+select, input[type=search] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; }
+.mono { font-family: var(--mono); }
+
+/* sidebar ------------------------------------------------------------ */
+#side { width: 330px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-width: 0; }
+#side header { padding: 12px 14px 8px; }
+#side h1 { font-size: 15px; margin: 0 0 8px; font-weight: 650; letter-spacing: -.01em; }
+#side h1 small { color: var(--muted); font-weight: 450; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.filters select { flex: 1 1 90px; min-width: 0; font-size: 12px; padding: 3px 4px; }
+#srcstate { font-size: 11.5px; color: var(--muted); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+#srcstate .bad { color: var(--err); }
+#sessionchip { margin-top: 6px; font-size: 12px; color: var(--muted); }
+#sessionchip button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0 0 0 4px; }
+#list { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); }
+.item { padding: 8px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.item:hover { background: var(--hover); }
+.item.sel { background: var(--sel); }
+.item .t { font-weight: 520; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .m { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.src { font: 600 10px/1 var(--mono); padding: 3px 5px; border-radius: 4px; letter-spacing: .03em; }
+.src.claude-code { color: var(--assistant); background: color-mix(in srgb, var(--assistant) 12%, transparent); }
+.src.hermes { color: var(--compact); background: color-mix(in srgb, var(--compact) 14%, transparent); }
+.role { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.role.architect { color: var(--user); } .role.worker { color: var(--tool); } .role.reviewer { color: var(--think); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.dot.running, .dot.queued { background: var(--accent); animation: pulse 1.2s infinite; }
+.dot.completed { background: var(--ok); } .dot.failed, .dot.interrupted { background: var(--err); } .dot.cancelled { background: var(--retry); }
 @keyframes pulse { 50% { opacity: .25; } }
-#detail { overflow-y: auto; padding: 16px 20px 60px; }
-#empty { color: var(--muted); padding: 40px; text-align: center; }
-.head h2 { font-size: 17px; margin: 0 0 6px; }
-.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
-.meta b { color: var(--ink); font-weight: 500; }
+
+/* main --------------------------------------------------------------- */
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#empty { margin: auto; color: var(--muted); }
+#head { padding: 12px 18px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#head h2 { margin: 0; font-size: 15.5px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px; font-size: 12px; color: var(--muted); }
+.meta b { color: var(--ink); font-weight: 520; }
 .meta a { color: var(--accent); cursor: pointer; }
-.ev { margin: 8px 0; }
-.ev .when { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-right: 6px; }
-.lbl { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-.thinking { border-left: 3px solid var(--think); padding: 4px 10px; }
-.thinking .lbl { color: var(--think); }
-.thinking .body { color: var(--muted); font-style: italic; white-space: pre-wrap; }
-.text .body { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-.tool { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
-.tool > .h { padding: 6px 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-.tool .name { font-family: var(--mono); font-weight: 600; color: var(--tool); }
-.tool .arg { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
-.tool .desc { color: var(--muted); font-size: 12.5px; }
-.tool.err { border-color: var(--err); }
-.tool .res { border-top: 1px solid var(--line); }
-pre { margin: 0; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code); padding: 8px 10px; border-radius: 6px; max-height: 420px; overflow-y: auto; }
-.res pre { border-radius: 0 0 8px 8px; }
-details > summary { cursor: pointer; padding: 4px 10px; font-size: 12.5px; color: var(--muted); list-style: revert; }
+.stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.stat { border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; font-size: 12px; color: var(--muted); background: var(--bg); }
+.stat b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.errline { margin-top: 7px; color: var(--err); font-size: 12.5px; }
+#toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 18px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; color: var(--muted); }
+#toolbar label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+#toolbar input[type=search] { margin-left: auto; width: 200px; }
+
+/* overview timeline */
+#overview { display: grid; grid-template-columns: 52px 1fr; gap: 3px 8px; padding: 8px 18px 8px 10px; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 10.5px; color: var(--faint); }
+#overview .lane { position: relative; height: 10px; }
+#overview .lab { text-align: right; line-height: 10px; }
+.span { position: absolute; top: 1px; height: 8px; border-radius: 2px; min-width: 2px; cursor: pointer; }
+.span:hover { outline: 1.5px solid var(--ink); z-index: 2; }
+.span.in { background: var(--user); width: 3px; }
+.span.wait { background: var(--model-wait); }
+.span.gen { background: var(--model-gen); }
+.span.tool { background: var(--tool-bar); }
+.span.tool.err { background: var(--err); }
+.span.run { background: repeating-linear-gradient(45deg, var(--tool-bar) 0 4px, transparent 4px 7px); }
+.span.retry { background: var(--retry); width: 3px; }
+.span.sel { outline: 2px solid var(--accent); z-index: 3; }
+#axis { grid-column: 2; display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+
+/* ledger */
+#body { flex: 1; display: flex; min-height: 0; }
+#ledger { flex: 1; overflow-y: auto; min-width: 0; }
+.row { display: grid; grid-template-columns: 58px 50px 58px 84px 1fr; align-items: center; min-height: 28px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover { background: var(--hover); }
+.row.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
+.row > * { padding: 0 6px; min-width: 0; }
+.gut { font: 10px var(--mono); color: var(--faint); white-space: nowrap; }
+.gut .turn { color: var(--user); background: color-mix(in srgb, var(--user) 12%, transparent); border-radius: 3px; padding: 1px 4px; }
+.off, .dur { font: 11px var(--mono); color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dur.slow { color: var(--retry); } .dur.vslow { color: var(--err); }
+.badge { justify-self: end; font: 650 10.5px/1 var(--mono); padding: 4px 6px; border-radius: 4px; letter-spacing: .04em; color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); white-space: nowrap; }
+.sum { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 14px !important; }
+.sum .arg { font: 12px var(--mono); color: var(--muted); }
+.sum .arrow { color: var(--faint); margin: 0 5px; }
+.sum .res { font: 12px var(--mono); }
+.sum.think { color: var(--muted); font-style: italic; }
+.k-prompt { --c: var(--user); } .k-user { --c: var(--user); } .k-init { --c: var(--init); } .k-system { --c: var(--system); }
+.k-thinking { --c: var(--think); } .k-text { --c: var(--assistant); } .k-tool_use { --c: var(--tool); } .k-error { --c: var(--err); }
+.k-retry { --c: var(--retry); } .k-compact { --c: var(--compact); } .k-result { --c: var(--ok); } .k-result.bad, .k-end.bad { --c: var(--err); } .k-end { --c: var(--ok); }
+.steprow { display: grid; grid-template-columns: 58px 50px 58px 1fr; align-items: center; min-height: 22px; background: var(--bg); border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--muted); cursor: pointer; }
+.steprow:hover { background: var(--hover); }
+.steprow.sel { background: var(--sel); box-shadow: inset 3px 0 var(--accent); }
+.steprow > * { padding: 0 6px; }
+.steprow .info { display: flex; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.steprow .info b { color: var(--ink); font-weight: 560; }
+.sub .sum { padding-left: 20px !important; }
+.sub .sum::before { content: "↳ subagent "; color: var(--faint); font-size: 11px; }
+.liverow { margin: 8px 18px; border: 1px dashed var(--accent); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
+.liverow .lbl { font: 650 10.5px var(--mono); color: var(--accent); letter-spacing: .04em; text-transform: uppercase; }
+.liverow .txt { white-space: pre-wrap; font-size: 12.5px; max-height: 180px; overflow-y: auto; margin-top: 3px; }
+.liverow.thinking .txt { color: var(--muted); font-style: italic; }
+.pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; animation: pulse 1.2s infinite; }
+
+/* inspector */
+#insp { width: 440px; flex: none; border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; }
+#insp .ih { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+#insp .ih .where { font: 11px var(--mono); color: var(--muted); }
+#insp .ih button { margin-left: auto; border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 16px; }
+.tabs { display: flex; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 8px 0; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.kv { display: grid; grid-template-columns: 118px 1fr; gap: 5px 10px; padding: 12px 14px; font-size: 12.5px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sect { padding: 4px 14px 12px; }
+.sect h4 { margin: 8px 0 5px; font-size: 11.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code); border-radius: 6px; padding: 8px 10px; max-height: 60vh; overflow-y: auto; }
+.prose { white-space: pre-wrap; font-size: 13px; }
+.prose.think { color: var(--muted); font-style: italic; }
 .del { color: var(--err); } .add { color: var(--ok); }
-.note { font-size: 12.5px; color: var(--muted); padding: 2px 0; }
-.note.warn { color: var(--warn); } .note.bad { color: var(--err); } .note.good { color: var(--ok); }
-.sub { margin-left: 18px; padding-left: 10px; border-left: 2px dashed var(--line); }
-.sub::before { content: "subagent"; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-.livebox { border: 1px dashed var(--accent); border-radius: 8px; padding: 6px 10px; }
-.livebox .body { white-space: pre-wrap; font-size: 13px; }
-.livebox.thinking .body { color: var(--muted); font-style: italic; }
-.todo { font-size: 13px; } .todo .done { text-decoration: line-through; color: var(--muted); } .todo .doing { font-weight: 600; }
+.bar { height: 8px; border-radius: 4px; background: var(--code); display: flex; overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; }
+@media (max-width: 1100px) { #insp { position: fixed; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 24px rgba(0,0,0,.15); z-index: 10; max-width: 100vw; } }
 @media (max-width: 760px) {
-  main { grid-template-columns: 1fr; grid-template-rows: 38% 62%; }
-  #list { border-right: 0; border-bottom: 1px solid var(--line); }
-  #detail { padding: 12px 16px 40px; }
+  body { flex-direction: column; overflow: auto; }
+  #side { width: auto; max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .row { grid-template-columns: 44px 50px 76px 1fr; } .gut { display: none; }
+  .steprow { grid-template-columns: 44px 50px 1fr; }
+  .steprow .info { gap: 8px; }
+  #toolbar input[type=search] { width: 120px; }
 }
 </style>
 </head>
 <body>
-<header>
-  <h1>AHAWR runs</h1>
-  <select id="f-role" aria-label="Role">
-    <option value="">all roles</option><option>architect</option><option>worker</option><option>reviewer</option><option>generic</option>
-  </select>
-  <select id="f-status" aria-label="Status">
-    <option value="">any status</option><option>running</option><option>queued</option><option>completed</option><option>failed</option><option>interrupted</option><option>cancelled</option>
-  </select>
-  <span id="f-session" class="chip" hidden>session <span id="f-session-id"></span><button id="f-session-x" title="Clear">✕</button></span>
-  <label class="chip"><input type="checkbox" id="f-follow" checked> follow new runs</label>
-  <span id="conn" class="note"></span>
-</header>
-<main>
+<aside id="side">
+  <header>
+    <h1>AHAWR <small>trajectory</small></h1>
+    <div class="filters">
+      <select id="f-source" aria-label="Source"><option value="">sources</option><option value="claude-runner">Claude Code</option><option value="hermes">Hermes</option></select>
+      <select id="f-role" aria-label="Role"><option value="">roles</option><option>architect</option><option>worker</option><option>reviewer</option><option>hermes</option><option>generic</option></select>
+      <select id="f-status" aria-label="Status"><option value="">status</option><option>running</option><option>idle</option><option>completed</option><option>failed</option><option>interrupted</option><option>cancelled</option><option>queued</option></select>
+    </div>
+    <div id="sessionchip" hidden>session <b id="sessionid"></b><button id="sessionx" title="Clear">✕ clear</button></div>
+    <div id="srcstate"></div>
+  </header>
   <nav id="list"></nav>
-  <section id="detail"><div id="empty">Select a run.</div></section>
-</main>
+</aside>
+<main id="main"><div id="empty">Select a run.</div></main>
 <script>
 "use strict";
-const $ = (s) => document.querySelector(s);
-const API = "api";
-const state = { runs: [], sel: null, session: "", after: 0, run: null, tools: {}, timer: null, listTimer: null, lastTop: null };
+const $ = (s, r = document) => r.querySelector(s);
+const S = { runs: [], sel: null, run: null, entries: [], next: 0, live: null, pick: null, tab: "summary",
+  session: "", known: null, timer: 0, show: { thinking: true, system: true }, q: "", model: null };
 
-function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-function el(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; }
+// ---------------------------------------------------------------- formatting
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const tok = (n) => n == null || isNaN(n) ? "–" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? (n / 1e3).toFixed(1) + "K" : n >= 1e3 ? (n / 1e3).toFixed(2) + "K" : String(Math.round(n));
+function ms(v) {
+  if (v == null || isNaN(v)) return "";
+  if (v < 1000) return Math.round(v) + "ms";
+  const s = v / 1000;
+  if (s < 60) return s.toFixed(s < 10 ? 2 : 1) + "s";
+  return Math.floor(s / 60) + "m" + String(Math.round(s % 60)).padStart(2, "0") + "s";
+}
+const clock = (t) => t ? new Date(t * 1000).toLocaleTimeString([], { hour12: false }) + "." + String(Math.floor((t % 1) * 1000)).padStart(3, "0") : "–";
+const epoch = (iso) => iso ? Date.parse(iso) / 1000 : null;
 function ago(iso) {
-  if (!iso) return "";
-  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
-  if (s < 60) return Math.round(s) + "s ago";
-  if (s < 3600) return Math.round(s / 60) + "m ago";
-  if (s < 86400) return Math.round(s / 3600) + "h ago";
-  return new Date(iso).toLocaleString();
+  const t = epoch(iso); if (!t) return "";
+  const s = Math.max(0, Date.now() / 1000 - t);
+  return s < 60 ? Math.round(s) + "s" : s < 3600 ? Math.round(s / 60) + "m" : s < 86400 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d";
 }
-function dur(a, b) {
-  if (!a) return "";
-  const s = Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 1000);
-  return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
-}
-function short(id) { return id ? String(id).slice(0, 8) : ""; }
-function status(r) {
-  const live = r.status === "running" || r.status === "queued";
-  return `<span class="st ${esc(r.status)}">${live ? '<span class="dot"></span>' : ""}${esc(r.status)}</span>`;
-}
-
+// replace a container's HTML only when it changed (keeps scroll and text selection)
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+const oneLine = (s, n = 400) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+const isActive = (r) => r && (r.status === "running" || r.status === "queued");
 async function getJSON(url) {
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(res.status + " " + (await res.text()).slice(0, 200));
-  return res.json();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.status);
+  return body;
 }
 
-// ------------------------------------------------------------------ run list
+// ---------------------------------------------------------------- run list
 async function loadRuns() {
   const q = new URLSearchParams({ limit: "150" });
-  if ($("#f-role").value) q.set("role", $("#f-role").value);
-  if ($("#f-status").value) q.set("status", $("#f-status").value);
-  if (state.session) q.set("session_id", state.session);
-  try {
-    const data = await getJSON(`${API}/runs?${q}`);
-    $("#conn").textContent = "";
-    const newest = data.runs[0];
-    if ($("#f-follow").checked && newest && state.lastTop && newest.run_id !== state.lastTop && !state.session) {
-      select(newest.run_id);
-    }
-    state.lastTop = newest ? newest.run_id : state.lastTop;
-    state.runs = data.runs;
-    renderList();
-  } catch (e) {
-    $("#conn").textContent = "offline: " + e.message;
+  for (const [k, id] of [["source", "#f-source"], ["role", "#f-role"], ["status", "#f-status"]]) if ($(id).value) q.set(k, $(id).value);
+  if (S.session) q.set("session_id", S.session);
+  let data;
+  try { data = await getJSON("api/runs?" + q); } catch (e) { $("#srcstate").innerHTML = `<span class="bad">dashboard offline: ${esc(e.message)}</span>`; return; }
+  $("#srcstate").innerHTML = Object.entries(data.sources || {}).map(([k, v]) => `<span class="${v === "ok" ? "" : "bad"}">${esc(k)}: ${esc(v)}</span>`).join("");
+  const ids = new Set(data.runs.map((r) => r.run_id));
+  if (S.known && !S.session) {
+    const fresh = data.runs.find((r) => !S.known.has(r.run_id));
+    if (fresh && (!S.run || !isActive(S.run))) select(fresh.run_id);  // follow a run that just started
   }
-}
-
-function renderList() {
-  const list = $("#list");
-  if (!state.runs.length) { list.innerHTML = '<div id="empty">No runs yet.</div>'; return; }
-  list.innerHTML = state.runs.map((r) => `
-    <div class="run ${r.run_id === state.sel ? "sel" : ""}" data-id="${esc(r.run_id)}">
-      <div class="t">${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</div>
-      <div class="m"><span class="role ${esc(r.role)}">${esc(r.role)}</span>${status(r)}
-        <span>${esc(r.model || "default model")}${r.provider ? " · " + esc(r.provider) : ""}</span>
-        <span>${esc(ago(r.created_at))}</span>${r.num_turns ? `<span>${r.num_turns} turns</span>` : ""}</div>
-    </div>`).join("");
-}
-
-$("#list").addEventListener("click", (e) => {
-  const row = e.target.closest(".run");
-  if (row) select(row.dataset.id);
-});
-
-// ------------------------------------------------------------------ run detail
-function select(id) {
-  if (state.sel === id) return;
-  state.sel = id; state.after = 0; state.run = null; state.tools = {};
-  if (location.hash !== "#run=" + id) history.replaceState(null, "", "#run=" + id);
-  $("#detail").innerHTML = '<div class="head"></div><div id="timeline"></div><div id="live"></div>';
+  S.known = ids;
+  S.runs = data.runs;
   renderList();
-  clearTimeout(state.timer);
+}
+function renderList() {
+  $("#list").innerHTML = S.runs.length ? S.runs.map((r) => `
+    <div class="item ${r.run_id === S.sel ? "sel" : ""}" data-id="${esc(r.run_id)}">
+      <div class="t">${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</div>
+      <div class="m"><span class="dot ${esc(r.status)}"></span><span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
+        <span class="role ${esc(r.role)}">${esc(r.role)}</span><span>${esc(r.model || "")}${r.provider && r.provider !== "hermes" ? " · " + esc(r.provider) : ""}</span>
+        <span>${esc(ago(r.updated_at || r.created_at))}</span></div>
+    </div>`).join("") : '<div class="item" style="cursor:default;color:var(--muted)">No runs yet.</div>';
+}
+$("#list").addEventListener("click", (e) => { const it = e.target.closest(".item[data-id]"); if (it) select(it.dataset.id); });
+for (const id of ["#f-source", "#f-role", "#f-status"]) $(id).addEventListener("change", () => { S.known = null; loadRuns(); });
+$("#sessionx").addEventListener("click", () => { S.session = ""; $("#sessionchip").hidden = true; S.known = null; loadRuns(); });
+
+// ---------------------------------------------------------------- selection + polling
+function select(id) {
+  if (S.sel === id) return;
+  Object.assign(S, { sel: id, run: null, entries: [], next: 0, live: null, pick: null, model: null });
+  if (location.hash !== "#run=" + encodeURIComponent(id)) history.replaceState(null, "", "#run=" + encodeURIComponent(id));
+  $("#main").innerHTML = `<section id="head"></section>
+    <div id="toolbar"><label><input type="checkbox" id="o-think" ${S.show.thinking ? "checked" : ""}> thinking</label>
+      <label><input type="checkbox" id="o-sys" ${S.show.system ? "checked" : ""}> system rows</label>
+      <input type="search" id="o-q" placeholder="Search" value="${esc(S.q)}"></div>
+    <section id="overview"></section>
+    <div id="body"><div id="ledger"></div><aside id="insp" hidden></aside></div>`;
+  $("#o-think").onchange = (e) => { S.show.thinking = e.target.checked; render(); };
+  $("#o-sys").onchange = (e) => { S.show.system = e.target.checked; render(); };
+  $("#o-q").oninput = (e) => { S.q = e.target.value; render(); };
+  $("#ledger").addEventListener("click", onLedgerClick);
+  $("#overview").addEventListener("click", onLedgerClick);
+  $("#head").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-session]");
+    if (!a) return;
+    S.session = a.dataset.session; $("#sessionid").textContent = a.textContent; $("#sessionchip").hidden = false; S.known = null; loadRuns();
+  });
+  renderList();
+  clearTimeout(S.timer);
   poll();
 }
-
 async function poll() {
-  const id = state.sel;
+  const id = S.sel;
   if (!id) return;
   let data;
-  try {
-    data = await getJSON(`${API}/runs/${encodeURIComponent(id)}/events?after=${state.after}`);
-  } catch (e) {
-    $("#conn").textContent = "offline: " + e.message;
-    state.timer = setTimeout(poll, 3000);
-    return;
-  }
-  if (id !== state.sel) return;
-  const box = $("#detail");
-  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
-  state.run = data.run;
-  renderHead(data.run);
-  const tl = $("#timeline");
-  for (const ev of data.events) renderEvent(tl, ev, data.run);
-  state.after = data.next;
-  renderLive(data.live);
-  if (nearBottom && (data.events.length || data.live)) box.scrollTop = box.scrollHeight;
-  const active = data.run.status === "running" || data.run.status === "queued";
-  state.timer = setTimeout(poll, active ? 1000 : 10000);
+  try { data = await getJSON(`api/runs/${encodeURIComponent(id)}/events?after=${S.next}`); }
+  catch (e) { if (id === S.sel) { $("#head").innerHTML = `<div class="errline">${esc(e.message)}</div>`; S.timer = setTimeout(poll, 4000); } return; }
+  if (id !== S.sel) return;
+  const grew = data.events.length > 0 || JSON.stringify(data.live) !== JSON.stringify(S.live) || JSON.stringify(data.run) !== JSON.stringify(S.run);
+  S.run = data.run; S.entries = S.entries.concat(data.events); S.next = data.next; S.live = data.live;
+  if (grew || isActive(S.run)) render();
+  S.timer = setTimeout(poll, isActive(S.run) ? 1000 : 8000);
 }
 
-function renderHead(r) {
-  const cost = r.cost_usd != null ? "$" + Number(r.cost_usd).toFixed(4) : "";
-  $("#detail .head").innerHTML = `
+// ---------------------------------------------------------------- model
+function build(entries) {
+  const steps = {}, tools = {}, rows = [];
+  let turn = 0, lastStep = null, t0 = Infinity, t1 = 0;
+  for (const e of entries) {
+    if (e.t) { t0 = Math.min(t0, e.t); t1 = Math.max(t1, e.t); }
+    if (e.kind === "step") {
+      steps[e.step] = e;
+      if (e.started) { t0 = Math.min(t0, e.started); t1 = Math.max(t1, e.started + (e.duration_ms || 0) / 1000); }
+    } else if (e.kind === "tool_use") (tools[e.id] ||= {}).use = e;
+    else if (e.kind === "tool_result") (tools[e.id] ||= {}).result = e;
+  }
+  const q = S.q.trim().toLowerCase();
+  for (const e of entries) {
+    if (e.kind === "prompt") turn++;
+    e._turn = turn;
+    if (e.kind === "step" || (e.kind === "tool_result" && tools[e.id] && tools[e.id].use)) continue;
+    if (e.kind === "thinking" && !S.show.thinking) continue;
+    if ((e.kind === "init" || e.kind === "end") && !S.show.system) continue;
+    if (q && !searchText(e, tools).toLowerCase().includes(q)) continue;
+    if (e.step && !e.agent && e.step !== lastStep) { rows.push({ step: e.step, turn, key: "s" + e.step }); lastStep = e.step; }
+    rows.push({ e, turn, key: "e" + e.seq });
+  }
+  return { steps, tools, rows, turns: turn, t0: isFinite(t0) ? t0 : null, t1 };
+}
+function searchText(e, tools) {
+  if (e.kind === "tool_use") return e.name + " " + JSON.stringify(e.input) + " " + ((tools[e.id] || {}).result || {}).text;
+  return (e.text || "") + " " + (e.error || "");
+}
+function totals(m) {
+  const t = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, gen: 0, genOut: 0, steps: 0 };
+  for (const s of Object.values(m.steps)) {
+    t.steps++; t.input += s.input_tokens || 0; t.cacheRead += s.cache_read_tokens || 0; t.cacheWrite += s.cache_write_tokens || 0; t.output += s.output_tokens || 0;
+    const g = s.generation_ms ?? (s.approximate ? null : null);
+    if (g && s.output_tokens) { t.gen += g; t.genOut += s.output_tokens; }
+    else if (s.tokens_per_s && s.output_tokens) { t.gen += (s.output_tokens / s.tokens_per_s) * 1000; t.genOut += s.output_tokens; }
+  }
+  const result = [...S.entries].reverse().find((e) => e.kind === "result");
+  const u = (result && result.usage) || null;
+  if (u) { t.input = u.input_tokens || 0; t.cacheRead = u.cache_read_input_tokens || 0; t.cacheWrite = u.cache_creation_input_tokens || 0; t.output = u.output_tokens || t.output; }
+  const rt = S.run && S.run.tokens;
+  if (rt && S.run.source === "hermes") { t.input = rt.input || t.input; t.output = rt.output || t.output; t.cacheRead = rt.cache_read || 0; t.cacheWrite = rt.cache_write || 0; t.reasoning = rt.reasoning; }
+  t.cost = result && result.cost_usd != null ? result.cost_usd : S.run && S.run.cost_usd;
+  t.durationMs = result && result.duration_ms;
+  t.apiMs = result && result.duration_api_ms;
+  return t;
+}
+
+// ---------------------------------------------------------------- render
+function render() {
+  if (!S.run) return;
+  const m = (S.model = build(S.entries));
+  renderHead(m);
+  renderOverview(m);
+  renderLedger(m);
+  renderInspector(m);
+}
+function renderHead(m) {
+  const r = S.run, t = totals(m);
+  const sessionKey = r.source === "hermes" ? "hermes:" + r.session_id : r.session_id;
+  const totalIn = t.input + t.cacheRead + t.cacheWrite;
+  const hit = totalIn ? Math.round((t.cacheRead / totalIn) * 100) : null;
+  const tps = t.gen ? t.genOut / (t.gen / 1000) : null;
+  const end = epoch(r.finished_at) || (isActive(r) ? Date.now() / 1000 : epoch(r.updated_at));
+  const wall = t.durationMs || (r.started_at && end ? (end - epoch(r.started_at)) * 1000 : null);
+  setHTML($("#head"), `
     <h2>${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</h2>
-    <div class="meta">
-      <span class="role ${esc(r.role)}">${esc(r.role)}</span>${status(r)}
-      <span>model <b>${esc(r.model || "default")}</b></span>
-      <span>provider <b>${esc(r.provider || "default")}</b></span>
-      <span>session <a data-session="${esc(r.session_id)}" title="Show all runs of this session">${esc(short(r.session_id))}</a></span>
-      <span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleTimeString() : "queued")}</b></span>
-      <span>duration <b>${esc(dur(r.started_at, r.finished_at))}</b></span>
-      ${r.num_turns != null ? `<span>turns <b>${r.num_turns}</b></span>` : ""}
-      ${cost ? `<span>cost <b>${cost}</b></span>` : ""}
-      ${r.context_tokens ? `<span>context <b>${Number(r.context_tokens).toLocaleString()}</b> tok</span>` : ""}
-      <span title="${esc(r.cwd)}">cwd <b>${esc(r.cwd)}</b></span>
-      <span>run <b>${esc(r.run_id)}</b></span>
+    <div class="meta"><span><span class="dot ${esc(r.status)}"></span> <b>${esc(r.status)}</b></span>
+      <span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE CODE"}</span>
+      <span class="role ${esc(r.role)}">${esc(r.role)}</span>
+      <span>model <b>${esc(r.model || "default")}</b></span>${r.provider ? `<span>provider <b>${esc(r.provider)}</b></span>` : ""}
+      <span>session <a data-session="${esc(sessionKey)}" title="All runs of this session">${esc(String(r.session_id).slice(0, 12))}</a></span>
+      ${r.cwd ? `<span>cwd <b>${esc(r.cwd)}</b></span>` : ""}<span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleString() : "queued")}</b></span></div>
+    <div class="stats">
+      <span class="stat"><b>${m.turns}</b> turns · <b>${t.steps}</b> steps</span>
+      ${wall ? `<span class="stat">wall <b>${ms(wall)}</b>${t.apiMs ? ` · api <b>${ms(t.apiMs)}</b>` : ""}</span>` : ""}
+      <span class="stat">in <b>${tok(totalIn)}</b> · out <b>${tok(t.output)}</b>${t.reasoning ? ` · reasoning <b>${tok(t.reasoning)}</b>` : ""}</span>
+      ${hit != null ? `<span class="stat">cache hit <b>${hit}%</b></span>` : ""}
+      ${tps ? `<span class="stat"><b>${tps.toFixed(1)}</b> tok/s</span>` : ""}
+      ${t.cost ? `<span class="stat">cost <b>$${Number(t.cost).toFixed(4)}</b></span>` : ""}
+      ${r.context_tokens ? `<span class="stat">context <b>${tok(r.context_tokens)}</b></span>` : ""}
+      <span class="stat">tools <b>${Object.keys(m.tools).length}</b></span>
     </div>
-    ${r.error ? `<div class="note bad">${esc(r.error.code)}: ${esc(r.error.message)}</div>` : ""}`;
+    ${r.error ? `<div class="errline">${esc(r.error.code)}: ${esc(r.error.message)}</div>` : ""}`);
 }
-
-$("#detail").addEventListener("click", (e) => {
-  const a = e.target.closest("[data-session]");
-  if (a) { state.session = a.dataset.session; $("#f-session-id").textContent = short(state.session); $("#f-session").hidden = false; loadRuns(); }
-});
-$("#f-session-x").addEventListener("click", () => { state.session = ""; $("#f-session").hidden = true; loadRuns(); });
-$("#f-role").addEventListener("change", loadRuns);
-$("#f-status").addEventListener("change", loadRuns);
-
-function when(ev, r) {
-  if (!r.started_at || !ev.t) return "";
-  const s = Math.max(0, Math.round(ev.t - Date.parse(r.started_at) / 1000));
-  return `<span class="when">+${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}</span>`;
+function renderOverview(m) {
+  const box = $("#overview");
+  if (!m.t0) { box.innerHTML = ""; return; }
+  const now = Date.now() / 1000, t1 = Math.max(m.t1, isActive(S.run) ? now : m.t1, m.t0 + 0.5);
+  const span = t1 - m.t0, pos = (t) => ((t - m.t0) / span) * 100;
+  const input = [], model = [], tools = [];
+  for (const e of S.entries) {
+    if (e.kind === "prompt" && e.t) input.push(`<i class="span in" style="left:${pos(e.t)}%" data-key="e${e.seq}" title="prompt ${clock(e.t)}"></i>`);
+    if (e.kind === "retry" && e.t) model.push(`<i class="span retry" style="left:${pos(e.t)}%" data-key="e${e.seq}" title="API retry ${esc(e.attempt)} · ${esc(e.status)} ${esc(e.error)}"></i>`);
+  }
+  for (const s of Object.values(m.steps)) {
+    if (!s.started) continue;
+    const dur = (s.duration_ms || 0) / 1000, wait = s.ttft_ms != null ? s.ttft_ms / 1000 : 0;
+    const tip = `step ${s.step} · ${ms(s.duration_ms)}${s.ttft_ms != null ? " · TTFT " + ms(s.ttft_ms) : ""} · out ${tok(s.output_tokens)}${s.tokens_per_s ? " · " + s.tokens_per_s + " tok/s" : ""}`;
+    const sel = S.pick === "s" + s.step ? " sel" : "";
+    if (wait) model.push(`<i class="span wait${sel}" style="left:${pos(s.started)}%;width:${(wait / span) * 100}%" data-key="s${s.step}" title="${esc(tip)}"></i>`);
+    model.push(`<i class="span gen${sel}" style="left:${pos(s.started + wait)}%;width:${(Math.max(dur - wait, 0) / span) * 100}%" data-key="s${s.step}" title="${esc(tip)}"></i>`);
+  }
+  for (const [id, pair] of Object.entries(m.tools)) {
+    const u = pair.use; if (!u || !u.t) continue;
+    const end = pair.result ? pair.result.t : now, running = !pair.result;
+    const cls = running ? "run" : pair.result.is_error ? "tool err" : "tool";
+    tools.push(`<i class="span ${cls}${S.pick === "e" + u.seq ? " sel" : ""}" style="left:${pos(u.t)}%;width:${((end - u.t) / span) * 100}%" data-key="e${u.seq}" title="${esc(u.name)} · ${ms((end - u.t) * 1000)}${running ? " (running)" : ""}"></i>`);
+  }
+  setHTML(box, `<span class="lab">Input</span><div class="lane">${input.join("")}</div>
+    <span class="lab">Model</span><div class="lane">${model.join("")}</div>
+    <span class="lab">Tools</span><div class="lane">${tools.join("")}</div>
+    <div id="axis"><span>${clock(m.t0).slice(0, 8)}</span><span>${ms(span * 500)}</span><span>${ms(span * 1000)}</span></div>`);
 }
-
-function toolSummary(name, input) {
+function badgeFor(e, tools) {
+  switch (e.kind) {
+    case "prompt": return ["k-prompt", "USER"];
+    case "user": return ["k-user", "USER"];
+    case "init": return ["k-init", "SYSTEM"];
+    case "thinking": return ["k-thinking", "THINK"];
+    case "text": return ["k-text", "ASSISTANT"];
+    case "tool_use": { const r = (tools[e.id] || {}).result; return r && r.is_error ? ["k-error", "TOOL ✕"] : ["k-tool_use", "TOOL"]; }
+    case "tool_result": return [e.is_error ? "k-error" : "k-tool_use", "RESULT"];
+    case "retry": return ["k-retry", "RETRY"];
+    case "compact": return ["k-compact", "COMPACT"];
+    case "result": return [e.is_error ? "k-result bad" : "k-result", "RESULT"];
+    case "end": return [e.status === "completed" ? "k-end" : "k-end bad", "END"];
+    default: return ["k-system", e.kind.toUpperCase()];
+  }
+}
+function toolArgs(name, input) {
   const i = input && typeof input === "object" ? input : {};
-  const code = (s) => `<span class="arg">${esc(s)}</span>`;
-  const n = String(name || "");
-  if (n === "Bash") return code("$ " + (i.command ?? "")) + (i.description ? ` <span class="desc">${esc(i.description)}</span>` : "");
-  if (["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"].includes(n)) {
-    const range = i.offset || i.limit ? ` [${i.offset ?? 1}${i.limit ? "+" + i.limit : ""}]` : "";
-    return code((i.file_path ?? i.notebook_path ?? "") + range);
-  }
-  if (n === "Grep") return code(`/${i.pattern ?? ""}/ ${i.path ?? ""} ${i.glob ?? i.type ?? ""}`);
-  if (n === "Glob") return code(`${i.pattern ?? ""} ${i.path ?? ""}`);
-  if (n === "WebFetch") return code(i.url ?? "");
-  if (n === "WebSearch") return code(i.query ?? "");
-  if (n === "Task" || n === "Agent") return `<span class="desc">${esc(i.description ?? "")}</span>`;
-  if (n === "TodoWrite") return `<span class="desc">${(i.todos || []).length} items</span>`;
-  return "";
+  const n = String(name || "").toLowerCase();
+  const pick = i.command ?? i.cmd ?? i.file_path ?? i.path ?? i.notebook_path ?? i.pattern ?? i.query ?? i.url ?? i.description ?? null;
+  if ((n === "bash" || n === "terminal") && i.command) return "$ " + i.command;
+  if (pick != null && typeof pick === "string") return pick + (i.offset || i.limit ? ` [${i.offset ?? 1}${i.limit ? "+" + i.limit : ""}]` : "");
+  return JSON.stringify(input);
 }
-
-function toolBody(name, input) {
-  const i = input && typeof input === "object" ? input : {};
-  if (name === "Edit") {
-    return `<pre>${String(i.old_string ?? "").split("\n").map((l) => `<span class="del">- ${esc(l)}</span>`).join("\n")}\n${String(i.new_string ?? "").split("\n").map((l) => `<span class="add">+ ${esc(l)}</span>`).join("\n")}</pre>`;
-  }
-  if (name === "MultiEdit") {
-    return (i.edits || []).map((e) => `<pre>${String(e.old_string ?? "").split("\n").map((l) => `<span class="del">- ${esc(l)}</span>`).join("\n")}\n${String(e.new_string ?? "").split("\n").map((l) => `<span class="add">+ ${esc(l)}</span>`).join("\n")}</pre>`).join("");
-  }
-  if (name === "Write") return `<details><summary>content (${String(i.content ?? "").length} chars)</summary><pre>${esc(i.content ?? "")}</pre></details>`;
-  if (name === "TodoWrite") {
-    return `<div class="todo">${(i.todos || []).map((t) => `<div class="${t.status === "completed" ? "done" : t.status === "in_progress" ? "doing" : ""}">${t.status === "completed" ? "☑" : "☐"} ${esc(t.content ?? t.activeForm ?? "")}</div>`).join("")}</div>`;
-  }
-  if (name === "Task" || name === "Agent") return `<details><summary>prompt</summary><pre>${esc(i.prompt ?? "")}</pre></details>`;
-  if (["Bash", "Read", "Grep", "Glob", "WebFetch", "WebSearch"].includes(name)) return "";
-  return `<details><summary>input</summary><pre>${esc(JSON.stringify(input, null, 2))}</pre></details>`;
-}
-
-function renderEvent(tl, ev, r) {
-  let node = null;
-  const t = when(ev, r);
-  switch (ev.kind) {
-    case "prompt":
-      node = el(`<div class="ev"><details><summary>${t}${ev.resume ? "prompt (continues the session)" : "prompt"} · ${String(ev.text || "").length} chars</summary><pre>${esc(ev.text)}</pre></details></div>`);
-      break;
-    case "init":
-      node = el(`<div class="ev note">${t}Claude Code ${esc(ev.version)} · model ${esc(ev.model)} · ${ev.tools ? ev.tools.length : 0} tools · ${esc(ev.permission_mode)} · ${esc(ev.cwd)}</div>`);
-      break;
-    case "thinking":
-      node = el(`<div class="ev thinking"><div class="lbl">${t}Thinking</div><div class="body">${esc(ev.text)}</div></div>`);
-      break;
-    case "text":
-      node = el(`<div class="ev text"><div class="lbl">${t}Answer</div><div class="body">${esc(ev.text)}</div></div>`);
-      break;
-    case "user":
-      node = el(`<div class="ev"><details><summary>${t}user message</summary><pre>${esc(ev.text)}</pre></details></div>`);
-      break;
+function summaryHTML(e, tools) {
+  switch (e.kind) {
+    case "prompt": case "user": return esc(oneLine(e.text));
+    case "init": return `Claude Code ${esc(e.version)} · ${esc(e.model)} · ${e.tools ? e.tools.length : 0} tools · ${esc(e.permission_mode)} · ${esc(e.cwd)}`;
+    case "thinking": return esc(oneLine(e.text));
+    case "text": return esc(oneLine(e.text));
     case "tool_use": {
-      node = el(`<div class="ev tool"><div class="h">${t}<span class="name">${esc(ev.name)}</span>${toolSummary(ev.name, ev.input)}</div>${toolBody(ev.name, ev.input)}<div class="res"><div class="note" style="padding:4px 10px">running…</div></div></div>`);
-      if (ev.id) state.tools[ev.id] = node;
-      break;
+      const r = (tools[e.id] || {}).result;
+      return `<span class="mono">${esc(e.name)}</span> <span class="arg">${esc(oneLine(toolArgs(e.name, e.input), 160))}</span>` +
+        (r ? `<span class="arrow">→</span><span class="res">${esc(oneLine(r.preview || r.text, 240))}</span>` : `<span class="arrow">→</span><span class="res" style="color:var(--accent)">running…</span>`);
     }
-    case "tool_result": {
-      const lines = String(ev.text || "").split("\n").length;
-      const html = `<details ${ev.is_error ? "open" : ""}><summary>${ev.is_error ? '<span class="del">error</span>' : "result"} · ${lines} lines</summary><pre>${esc(ev.text)}</pre></details>`;
-      const owner = state.tools[ev.id];
-      if (owner) {
-        owner.querySelector(".res").innerHTML = html;
-        if (ev.is_error) owner.classList.add("err");
-        return;
-      }
-      node = el(`<div class="ev tool"><div class="res">${html}</div></div>`);
-      break;
-    }
-    case "retry":
-      node = el(`<div class="ev note warn">${t}API retry ${esc(ev.attempt)}/${esc(ev.max_retries)} · ${esc(ev.status ?? "")} ${esc(ev.error ?? "")}</div>`);
-      break;
-    case "compact":
-      node = el(`<div class="ev note">${t}context compacted (${esc(ev.trigger)}): ${Number(ev.pre_tokens || 0).toLocaleString()} → ${Number(ev.post_tokens || 0).toLocaleString()} tokens</div>`);
-      break;
-    case "result": {
-      const bits = [ev.subtype, ev.num_turns != null ? ev.num_turns + " turns" : "", ev.duration_ms ? Math.round(ev.duration_ms / 1000) + "s" : "", ev.cost_usd != null ? "$" + Number(ev.cost_usd).toFixed(4) : ""].filter(Boolean).join(" · ");
-      node = el(`<div class="ev note ${ev.is_error ? "bad" : "good"}">${t}result: ${esc(bits)}${ev.is_error && ev.text ? " — " + esc(ev.text) : ""}</div>`);
-      break;
-    }
-    case "end":
-      node = el(`<div class="ev note ${ev.status === "completed" ? "good" : "bad"}">${t}run ${esc(ev.status)}${ev.error ? " — " + esc(ev.error_code) + ": " + esc(ev.error) : ""}${ev.stderr_tail && ev.status !== "completed" ? `<details><summary>stderr</summary><pre>${esc(ev.stderr_tail)}</pre></details>` : ""}</div>`);
-      break;
-    default:
-      return;
+    case "tool_result": return `<span class="res">${esc(oneLine(e.text))}</span>`;
+    case "retry": return `attempt ${esc(e.attempt)}/${esc(e.max_retries)} · ${esc(e.status ?? "")} ${esc(e.error ?? "")}${e.delay_ms ? " · wait " + ms(e.delay_ms) : ""}`;
+    case "compact": return `context compacted (${esc(e.trigger)}): ${tok(e.pre_tokens)} → ${tok(e.post_tokens)} tokens`;
+    case "result": return [e.subtype, e.num_turns != null ? e.num_turns + " turns" : "", e.duration_ms ? ms(e.duration_ms) : "", e.cost_usd != null ? "$" + Number(e.cost_usd).toFixed(4) : ""].filter(Boolean).map(esc).join(" · ") + (e.is_error && e.text ? " — " + esc(oneLine(e.text)) : "");
+    case "end": return `run ${esc(e.status)}${e.error ? " — " + esc(e.error_code) + ": " + esc(oneLine(e.error)) : ""}`;
+    default: return esc(oneLine(e.text || JSON.stringify(e)));
   }
-  if (ev.agent) {
-    const wrap = document.createElement("div");
-    wrap.className = "sub";
-    wrap.appendChild(node);
-    node = wrap;
+}
+function durClass(v) { return v > 60000 ? "vslow" : v > 10000 ? "slow" : ""; }
+function renderLedger(m) {
+  const box = $("#ledger");
+  const near = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  const now = Date.now() / 1000;
+  const html = [];
+  let lastTurn = 0;
+  for (const row of m.rows) {
+    const off = (t) => (t && m.t0 ? "+" + ms((t - m.t0) * 1000) : "");
+    if (row.step != null) {
+      const s = m.steps[row.step] || {};
+      const bits = [
+        s.model ? `<span>${esc(s.model)}</span>` : "",
+        s.ttft_ms != null ? `<span>TTFT <b>${ms(s.ttft_ms)}</b></span>` : "",
+        s.generation_ms != null ? `<span>gen <b>${ms(s.generation_ms)}</b></span>` : "",
+        s.input_tokens || s.cache_read_tokens ? `<span>in <b>${tok((s.input_tokens || 0) + (s.cache_read_tokens || 0) + (s.cache_write_tokens || 0))}</b>${s.cache_read_tokens ? ` (cache ${tok(s.cache_read_tokens)})` : ""}</span>` : "",
+        s.output_tokens ? `<span>out <b>${tok(s.output_tokens)}</b></span>` : "",
+        s.tokens_per_s ? `<span><b>${s.tokens_per_s}</b> tok/s</span>` : "",
+        s.finish_reason ? `<span>${esc(s.finish_reason)}</span>` : "",
+        s.step == null ? `<span style="color:var(--accent)">generating…</span>` : "",
+      ].filter(Boolean).join("");
+      html.push(`<div class="steprow ${S.pick === row.key ? "sel" : ""}" data-key="${row.key}"><span class="gut">step ${row.step}</span><span class="off">${off(s.started)}</span><span class="dur ${durClass(s.duration_ms)}">${s.approximate && s.duration_ms != null ? "≈" : ""}${ms(s.duration_ms)}</span><span class="info">${bits}</span></div>`);
+      continue;
+    }
+    const e = row.e, [cls, label] = badgeFor(e, m.tools);
+    let dur = "";
+    if (e.kind === "tool_use") { const r = (m.tools[e.id] || {}).result; dur = e.t ? ms(((r ? r.t : now) - e.t) * 1000) : ""; }
+    const durMs = e.kind === "tool_use" && e.t ? (((m.tools[e.id] || {}).result || {}).t || now) - e.t : 0;
+    const turnMark = row.turn !== lastTurn && e.kind === "prompt" ? `<span class="turn">Turn ${row.turn}</span>` : "";
+    lastTurn = row.turn;
+    html.push(`<div class="row ${cls} ${e.agent ? "sub" : ""} ${S.pick === row.key ? "sel" : ""}" data-key="${row.key}">
+      <span class="gut">${turnMark}</span><span class="off">${off(e.t)}</span><span class="dur ${durClass(durMs * 1000)}">${dur}</span>
+      <span class="badge">${label}</span><span class="sum ${e.kind === "thinking" ? "think" : ""}">${summaryHTML(e, m.tools)}</span></div>`);
   }
-  tl.appendChild(node);
+  if (S.live) {
+    const lb = S.live, label = lb.kind === "thinking" ? "thinking" : lb.kind === "tool_use" ? "calling " + lb.name : "writing";
+    html.push(`<div class="liverow ${lb.kind === "thinking" ? "thinking" : ""}"><div class="lbl"><span class="pulse"></span>${esc(label)} · ${ms((now - lb.started) * 1000)}</div><div class="txt">${esc(lb.text)}</div></div>`);
+  }
+  if (!html.length) html.push(`<div style="padding:30px;color:var(--muted)">${isActive(S.run) ? "Waiting for the first event…" : "No activity recorded."}</div>`);
+  setHTML(box, html.join(""));
+  if (near) box.scrollTop = box.scrollHeight;
+}
+function onLedgerClick(e) {
+  const el = e.target.closest("[data-key]");
+  if (!el) return;
+  S.pick = S.pick === el.dataset.key ? null : el.dataset.key;
+  S.tab = "summary";
+  render();
+  if (S.pick && e.currentTarget.id === "overview") {
+    const row = $(`#ledger [data-key="${S.pick}"]`);
+    if (row) row.scrollIntoView({ block: "center" });
+  }
 }
 
-function renderLive(block) {
-  const box = $("#live");
-  if (!box) return;
-  if (!block) { box.innerHTML = ""; return; }
-  const label = block.kind === "thinking" ? "Thinking…" : block.kind === "tool_use" ? `Calling ${block.name}…` : "Writing…";
-  box.innerHTML = `<div class="ev livebox ${block.kind === "thinking" ? "thinking" : ""}"><div class="lbl"><span class="dot"></span>${esc(label)}</div><div class="body">${esc(block.text)}</div></div>`;
+// ---------------------------------------------------------------- inspector
+function renderInspector(m) {
+  const box = $("#insp");
+  if (!S.pick) { box.hidden = true; return; }
+  box.hidden = false;
+  let head = "", tabs = [], body = "";
+  const kv = (pairs) => `<dl class="kv">${pairs.filter((p) => p[1] !== "" && p[1] != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  if (S.pick.startsWith("s")) {
+    const n = Number(S.pick.slice(1)), s = m.steps[n] || { step: n };
+    const blocks = S.entries.filter((e) => e.step === n && !e.agent);
+    head = `<span class="badge k-text">STEP</span><span class="where">Turn ${blocks[0] ? blocks[0]._turn : "?"} · Request #${n}</span>`;
+    tabs = ["summary", "content", "raw"];
+    const totalIn = (s.input_tokens || 0) + (s.cache_read_tokens || 0) + (s.cache_write_tokens || 0);
+    const bar = totalIn ? `<div class="bar" title="cache read / cache write / uncached"><i style="width:${(s.cache_read_tokens || 0) / totalIn * 100}%;background:var(--ok)"></i><i style="width:${(s.cache_write_tokens || 0) / totalIn * 100}%;background:var(--retry)"></i><i style="flex:1;background:var(--accent)"></i></div>` : "";
+    if (S.tab === "summary") body = kv([
+      ["Model", esc(s.model || S.run.model || "")],
+      ["Status", s.duration_ms != null || s.approximate ? "completed" : "generating"],
+      ["Input tokens", totalIn ? `${tok(totalIn)}${bar}` : ""],
+      ["  uncached", s.input_tokens != null && totalIn ? tok(s.input_tokens) : ""],
+      ["  cache read", s.cache_read_tokens ? tok(s.cache_read_tokens) : ""],
+      ["  cache write", s.cache_write_tokens ? tok(s.cache_write_tokens) : ""],
+      ["Output tokens", tok(s.output_tokens)],
+      ["Finish", esc(s.finish_reason || "")],
+      ["Started", s.started ? clock(s.started) : ""],
+      ["Total duration", s.duration_ms != null ? (s.approximate ? "≈ " : "") + ms(s.duration_ms) : ""],
+      ["TTFT", s.ttft_ms != null ? ms(s.ttft_ms) : ""],
+      ["Generation", s.generation_ms != null ? ms(s.generation_ms) : ""],
+      ["Throughput", s.tokens_per_s ? s.tokens_per_s + " tok/s" : ""],
+    ]) + (s.approximate ? `<div class="sect" style="color:var(--muted);font-size:12px">Hermes stores when each message was written, so a step is timed from the previous message to the answer.</div>` : "");
+    else if (S.tab === "content") body = blocks.map((b) => b.kind === "thinking" ? `<div class="sect"><h4>Thinking</h4><div class="prose think">${esc(b.text)}</div></div>` : b.kind === "text" ? `<div class="sect"><h4>Answer</h4><div class="prose">${esc(b.text)}</div></div>` : `<div class="sect"><h4>Tool call · ${esc(b.name)}</h4><pre>${esc(JSON.stringify(b.input, null, 2))}</pre></div>`).join("") || `<div class="sect">No content.</div>`;
+    else body = `<div class="sect"><pre>${esc(JSON.stringify({ step: s, blocks }, null, 2))}</pre></div>`;
+  } else {
+    const seq = Number(S.pick.slice(1)), e = S.entries.find((x) => x.seq === seq);
+    if (!e) { box.hidden = true; return; }
+    const [cls, label] = badgeFor(e, m.tools);
+    head = `<span class="badge ${cls}">${label}</span><span class="where">Turn ${e._turn || 0}${e.step ? " · Step " + e.step : ""}${e.agent ? " · subagent" : ""}</span>`;
+    if (e.kind === "tool_use") {
+      const r = (m.tools[e.id] || {}).result;
+      tabs = ["summary", "payload", "result", "raw"];
+      const end = r ? r.t : null;
+      if (S.tab === "summary") body = kv([
+        ["Tool", `<span class="mono">${esc(e.name)}</span>`],
+        ["Status", r ? (r.is_error ? `<span style="color:var(--err)">error</span>` : "completed") : "running"],
+        ["Started", clock(e.t)], ["Duration", end ? ms((end - e.t) * 1000) : ms((Date.now() / 1000 - e.t) * 1000) + " (running)"],
+        ["Call id", `<span class="mono">${esc(e.id)}</span>`],
+      ]) + `<div class="sect"><h4>Payload</h4>${toolPayload(e)}</div>` + (r ? `<div class="sect"><h4>Result · ${String(r.preview || r.text || "").split("\n").length} lines</h4><pre>${esc(pretty(r))}</pre></div>` : "");
+      else if (S.tab === "payload") body = `<div class="sect"><pre>${esc(JSON.stringify(e.input, null, 2))}</pre></div>`;
+      else if (S.tab === "result") body = `<div class="sect">${r ? `<pre>${esc(r.text)}</pre>` : "Still running."}</div>`;  // exact text
+      else body = `<div class="sect"><pre>${esc(JSON.stringify({ call: e, result: r }, null, 2))}</pre></div>`;
+    } else {
+      tabs = ["summary", "raw"];
+      if (S.tab === "summary") {
+        const step = e.step ? m.steps[e.step] : null;
+        body = kv([
+          ["Time", clock(e.t)],
+          ["Step", step ? `#${e.step} · ${ms(step.duration_ms)}${step.output_tokens ? " · out " + tok(step.output_tokens) : ""}` : ""],
+          e.kind === "result" ? ["Turns", e.num_turns] : ["", ""],
+          e.kind === "result" ? ["Cost", e.cost_usd != null ? "$" + Number(e.cost_usd).toFixed(4) : ""] : ["", ""],
+          e.kind === "result" ? ["Duration", ms(e.duration_ms) + (e.duration_api_ms ? ` (API ${ms(e.duration_api_ms)})` : "")] : ["", ""],
+          e.kind === "end" ? ["Status", esc(e.status)] : ["", ""],
+        ]) + `<div class="sect"><div class="prose ${e.kind === "thinking" ? "think" : ""}">${esc(e.text || e.error || summaryText(e))}</div></div>` +
+          (e.kind === "result" && e.model_usage ? `<div class="sect"><h4>Usage by model</h4><pre>${esc(JSON.stringify(e.model_usage, null, 2))}</pre></div>` : "") +
+          (e.stderr_tail ? `<div class="sect"><h4>stderr</h4><pre>${esc(e.stderr_tail)}</pre></div>` : "");
+      } else body = `<div class="sect"><pre>${esc(JSON.stringify(e, null, 2))}</pre></div>`;
+    }
+  }
+  if (!tabs.includes(S.tab)) S.tab = tabs[0];
+  setHTML(box, `<div class="ih">${head}<button title="Close" data-close>✕</button></div>
+    <div class="tabs">${tabs.map((t) => `<button class="${t === S.tab ? "on" : ""}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>${body}`);
+  box.onclick = (ev) => {
+    const tb = ev.target.closest("[data-tab]");
+    if (tb) { S.tab = tb.dataset.tab; renderInspector(S.model); }
+    if (ev.target.closest("[data-close]")) { S.pick = null; render(); }
+  };
+}
+// a JSON tool result (Hermes) reads better as its main field plus the rest, pretty-printed
+function pretty(r) {
+  if (!r.preview) return r.text;
+  try { const o = JSON.parse(r.text); for (const k of ["output", "content", "result"]) if (o[k] === r.preview) { delete o[k]; break; } return r.preview + "\n\n" + JSON.stringify(o, null, 2); } catch (_) { return r.text; }
+}
+function summaryText(e) { const d = document.createElement("div"); d.innerHTML = summaryHTML(e, (S.model || {}).tools || {}); return d.textContent; }
+function toolPayload(e) {
+  const i = e.input && typeof e.input === "object" ? e.input : {};
+  const diff = (a, b) => `<pre>${String(a ?? "").split("\n").map((l) => `<span class="del">- ${esc(l)}</span>`).join("\n")}\n${String(b ?? "").split("\n").map((l) => `<span class="add">+ ${esc(l)}</span>`).join("\n")}</pre>`;
+  if ("old_string" in i || "new_string" in i) return `<div class="mono" style="margin-bottom:4px">${esc(i.file_path || i.path || "")}</div>` + diff(i.old_string, i.new_string);
+  if (Array.isArray(i.edits)) return i.edits.map((x) => diff(x.old_string, x.new_string)).join("");
+  if (Array.isArray(i.todos)) return `<pre>${i.todos.map((t) => `${t.status === "completed" ? "☑" : t.status === "in_progress" ? "▶" : "☐"} ${esc(t.content ?? t.activeForm ?? "")}`).join("\n")}</pre>`;
+  if (i.command) return `<pre>$ ${esc(i.command)}</pre>`;
+  return `<pre>${esc(JSON.stringify(e.input, null, 2))}</pre>`;
 }
 
-// ------------------------------------------------------------------ start
-function fromHash() {
-  const m = location.hash.match(/run=([\w-]+)/);
-  if (m) select(m[1]);
-}
+// ---------------------------------------------------------------- start
+function fromHash() { const m = location.hash.match(/run=([^&]+)/); if (m) select(decodeURIComponent(m[1])); }
 window.addEventListener("hashchange", fromHash);
 (async () => {
   await loadRuns();
   fromHash();
-  if (!state.sel && state.runs[0]) select(state.runs[0].run_id);
-  state.listTimer = setInterval(loadRuns, 3000);
+  if (!S.sel && S.runs[0]) select(S.runs[0].run_id);
+  setInterval(loadRuns, 3000);
 })();
 </script>
 </body>
