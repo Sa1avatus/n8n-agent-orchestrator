@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AHAWR Runs</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #677083; --line: #e3e6ec;
+  --accent: #2f6fde; --think: #7a5bd6; --tool: #0f7a6c; --ok: #1f8a4c; --warn: #b7791f;
+  --err: #c8372d; --code: #f1f3f7; --sel: #eaf1fd;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11141a; --panel: #181c24; --ink: #e4e8ef; --muted: #8d96a8; --line: #2a303c;
+    --accent: #6e9ef5; --think: #a98cf2; --tool: #3fbfa9; --ok: #4cc07c; --warn: #e0a84a;
+    --err: #f06a5f; --code: #10131a; --sel: #1f2a3d;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11141a; --panel: #181c24; --ink: #e4e8ef; --muted: #8d96a8; --line: #2a303c;
+  --accent: #6e9ef5; --think: #a98cf2; --tool: #3fbfa9; --ok: #4cc07c; --warn: #e0a84a;
+  --err: #f06a5f; --code: #10131a; --sel: #1f2a3d;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
+select, button, input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+.chip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.chip button { border: 0; padding: 0; background: none; color: var(--muted); }
+main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(280px, 380px) 1fr; }
+#list { border-right: 1px solid var(--line); overflow-y: auto; background: var(--panel); }
+.run { padding: 9px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.run:hover { background: var(--bg); }
+.run.sel { background: var(--sel); }
+.run .t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run .m { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.role { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 4px; background: var(--code); }
+.role.worker { color: var(--tool); } .role.architect { color: var(--accent); } .role.reviewer { color: var(--think); }
+.st { font-size: 12px; font-weight: 600; }
+.st.running, .st.queued { color: var(--accent); } .st.completed { color: var(--ok); }
+.st.failed, .st.interrupted { color: var(--err); } .st.cancelled { color: var(--warn); }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px; animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+#detail { overflow-y: auto; padding: 16px 20px 60px; }
+#empty { color: var(--muted); padding: 40px; text-align: center; }
+.head h2 { font-size: 17px; margin: 0 0 6px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+.meta b { color: var(--ink); font-weight: 500; }
+.meta a { color: var(--accent); cursor: pointer; }
+.ev { margin: 8px 0; }
+.ev .when { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-right: 6px; }
+.lbl { font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.thinking { border-left: 3px solid var(--think); padding: 4px 10px; }
+.thinking .lbl { color: var(--think); }
+.thinking .body { color: var(--muted); font-style: italic; white-space: pre-wrap; }
+.text .body { white-space: pre-wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tool { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.tool > .h { padding: 6px 10px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tool .name { font-family: var(--mono); font-weight: 600; color: var(--tool); }
+.tool .arg { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.tool .desc { color: var(--muted); font-size: 12.5px; }
+.tool.err { border-color: var(--err); }
+.tool .res { border-top: 1px solid var(--line); }
+pre { margin: 0; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--code); padding: 8px 10px; border-radius: 6px; max-height: 420px; overflow-y: auto; }
+.res pre { border-radius: 0 0 8px 8px; }
+details > summary { cursor: pointer; padding: 4px 10px; font-size: 12.5px; color: var(--muted); list-style: revert; }
+.del { color: var(--err); } .add { color: var(--ok); }
+.note { font-size: 12.5px; color: var(--muted); padding: 2px 0; }
+.note.warn { color: var(--warn); } .note.bad { color: var(--err); } .note.good { color: var(--ok); }
+.sub { margin-left: 18px; padding-left: 10px; border-left: 2px dashed var(--line); }
+.sub::before { content: "subagent"; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.livebox { border: 1px dashed var(--accent); border-radius: 8px; padding: 6px 10px; }
+.livebox .body { white-space: pre-wrap; font-size: 13px; }
+.livebox.thinking .body { color: var(--muted); font-style: italic; }
+.todo { font-size: 13px; } .todo .done { text-decoration: line-through; color: var(--muted); } .todo .doing { font-weight: 600; }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; grid-template-rows: 38% 62%; }
+  #list { border-right: 0; border-bottom: 1px solid var(--line); }
+  #detail { padding: 12px 16px 40px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>AHAWR runs</h1>
+  <select id="f-role" aria-label="Role">
+    <option value="">all roles</option><option>architect</option><option>worker</option><option>reviewer</option><option>generic</option>
+  </select>
+  <select id="f-status" aria-label="Status">
+    <option value="">any status</option><option>running</option><option>queued</option><option>completed</option><option>failed</option><option>interrupted</option><option>cancelled</option>
+  </select>
+  <span id="f-session" class="chip" hidden>session <span id="f-session-id"></span><button id="f-session-x" title="Clear">✕</button></span>
+  <label class="chip"><input type="checkbox" id="f-follow" checked> follow new runs</label>
+  <span id="conn" class="note"></span>
+</header>
+<main>
+  <nav id="list"></nav>
+  <section id="detail"><div id="empty">Select a run.</div></section>
+</main>
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+const API = "api";
+const state = { runs: [], sel: null, session: "", after: 0, run: null, tools: {}, timer: null, listTimer: null, lastTop: null };
+
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function el(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; }
+function ago(iso) {
+  if (!iso) return "";
+  const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return Math.round(s) + "s ago";
+  if (s < 3600) return Math.round(s / 60) + "m ago";
+  if (s < 86400) return Math.round(s / 3600) + "h ago";
+  return new Date(iso).toLocaleString();
+}
+function dur(a, b) {
+  if (!a) return "";
+  const s = Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 1000);
+  return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m " + (s % 60) + "s" : Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
+}
+function short(id) { return id ? String(id).slice(0, 8) : ""; }
+function status(r) {
+  const live = r.status === "running" || r.status === "queued";
+  return `<span class="st ${esc(r.status)}">${live ? '<span class="dot"></span>' : ""}${esc(r.status)}</span>`;
+}
+
+async function getJSON(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status + " " + (await res.text()).slice(0, 200));
+  return res.json();
+}
+
+// ------------------------------------------------------------------ run list
+async function loadRuns() {
+  const q = new URLSearchParams({ limit: "150" });
+  if ($("#f-role").value) q.set("role", $("#f-role").value);
+  if ($("#f-status").value) q.set("status", $("#f-status").value);
+  if (state.session) q.set("session_id", state.session);
+  try {
+    const data = await getJSON(`${API}/runs?${q}`);
+    $("#conn").textContent = "";
+    const newest = data.runs[0];
+    if ($("#f-follow").checked && newest && state.lastTop && newest.run_id !== state.lastTop && !state.session) {
+      select(newest.run_id);
+    }
+    state.lastTop = newest ? newest.run_id : state.lastTop;
+    state.runs = data.runs;
+    renderList();
+  } catch (e) {
+    $("#conn").textContent = "offline: " + e.message;
+  }
+}
+
+function renderList() {
+  const list = $("#list");
+  if (!state.runs.length) { list.innerHTML = '<div id="empty">No runs yet.</div>'; return; }
+  list.innerHTML = state.runs.map((r) => `
+    <div class="run ${r.run_id === state.sel ? "sel" : ""}" data-id="${esc(r.run_id)}">
+      <div class="t">${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</div>
+      <div class="m"><span class="role ${esc(r.role)}">${esc(r.role)}</span>${status(r)}
+        <span>${esc(r.model || "default model")}${r.provider ? " · " + esc(r.provider) : ""}</span>
+        <span>${esc(ago(r.created_at))}</span>${r.num_turns ? `<span>${r.num_turns} turns</span>` : ""}</div>
+    </div>`).join("");
+}
+
+$("#list").addEventListener("click", (e) => {
+  const row = e.target.closest(".run");
+  if (row) select(row.dataset.id);
+});
+
+// ------------------------------------------------------------------ run detail
+function select(id) {
+  if (state.sel === id) return;
+  state.sel = id; state.after = 0; state.run = null; state.tools = {};
+  if (location.hash !== "#run=" + id) history.replaceState(null, "", "#run=" + id);
+  $("#detail").innerHTML = '<div class="head"></div><div id="timeline"></div><div id="live"></div>';
+  renderList();
+  clearTimeout(state.timer);
+  poll();
+}
+
+async function poll() {
+  const id = state.sel;
+  if (!id) return;
+  let data;
+  try {
+    data = await getJSON(`${API}/runs/${encodeURIComponent(id)}/events?after=${state.after}`);
+  } catch (e) {
+    $("#conn").textContent = "offline: " + e.message;
+    state.timer = setTimeout(poll, 3000);
+    return;
+  }
+  if (id !== state.sel) return;
+  const box = $("#detail");
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+  state.run = data.run;
+  renderHead(data.run);
+  const tl = $("#timeline");
+  for (const ev of data.events) renderEvent(tl, ev, data.run);
+  state.after = data.next;
+  renderLive(data.live);
+  if (nearBottom && (data.events.length || data.live)) box.scrollTop = box.scrollHeight;
+  const active = data.run.status === "running" || data.run.status === "queued";
+  state.timer = setTimeout(poll, active ? 1000 : 10000);
+}
+
+function renderHead(r) {
+  const cost = r.cost_usd != null ? "$" + Number(r.cost_usd).toFixed(4) : "";
+  $("#detail .head").innerHTML = `
+    <h2>${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</h2>
+    <div class="meta">
+      <span class="role ${esc(r.role)}">${esc(r.role)}</span>${status(r)}
+      <span>model <b>${esc(r.model || "default")}</b></span>
+      <span>provider <b>${esc(r.provider || "default")}</b></span>
+      <span>session <a data-session="${esc(r.session_id)}" title="Show all runs of this session">${esc(short(r.session_id))}</a></span>
+      <span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleTimeString() : "queued")}</b></span>
+      <span>duration <b>${esc(dur(r.started_at, r.finished_at))}</b></span>
+      ${r.num_turns != null ? `<span>turns <b>${r.num_turns}</b></span>` : ""}
+      ${cost ? `<span>cost <b>${cost}</b></span>` : ""}
+      ${r.context_tokens ? `<span>context <b>${Number(r.context_tokens).toLocaleString()}</b> tok</span>` : ""}
+      <span title="${esc(r.cwd)}">cwd <b>${esc(r.cwd)}</b></span>
+      <span>run <b>${esc(r.run_id)}</b></span>
+    </div>
+    ${r.error ? `<div class="note bad">${esc(r.error.code)}: ${esc(r.error.message)}</div>` : ""}`;
+}
+
+$("#detail").addEventListener("click", (e) => {
+  const a = e.target.closest("[data-session]");
+  if (a) { state.session = a.dataset.session; $("#f-session-id").textContent = short(state.session); $("#f-session").hidden = false; loadRuns(); }
+});
+$("#f-session-x").addEventListener("click", () => { state.session = ""; $("#f-session").hidden = true; loadRuns(); });
+$("#f-role").addEventListener("change", loadRuns);
+$("#f-status").addEventListener("change", loadRuns);
+
+function when(ev, r) {
+  if (!r.started_at || !ev.t) return "";
+  const s = Math.max(0, Math.round(ev.t - Date.parse(r.started_at) / 1000));
+  return `<span class="when">+${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}</span>`;
+}
+
+function toolSummary(name, input) {
+  const i = input && typeof input === "object" ? input : {};
+  const code = (s) => `<span class="arg">${esc(s)}</span>`;
+  const n = String(name || "");
+  if (n === "Bash") return code("$ " + (i.command ?? "")) + (i.description ? ` <span class="desc">${esc(i.description)}</span>` : "");
+  if (["Read", "Write", "Edit", "MultiEdit", "NotebookEdit"].includes(n)) {
+    const range = i.offset || i.limit ? ` [${i.offset ?? 1}${i.limit ? "+" + i.limit : ""}]` : "";
+    return code((i.file_path ?? i.notebook_path ?? "") + range);
+  }
+  if (n === "Grep") return code(`/${i.pattern ?? ""}/ ${i.path ?? ""} ${i.glob ?? i.type ?? ""}`);
+  if (n === "Glob") return code(`${i.pattern ?? ""} ${i.path ?? ""}`);
+  if (n === "WebFetch") return code(i.url ?? "");
+  if (n === "WebSearch") return code(i.query ?? "");
+  if (n === "Task" || n === "Agent") return `<span class="desc">${esc(i.description ?? "")}</span>`;
+  if (n === "TodoWrite") return `<span class="desc">${(i.todos || []).length} items</span>`;
+  return "";
+}
+
+function toolBody(name, input) {
+  const i = input && typeof input === "object" ? input : {};
+  if (name === "Edit") {
+    return `<pre>${String(i.old_string ?? "").split("\n").map((l) => `<span class="del">- ${esc(l)}</span>`).join("\n")}\n${String(i.new_string ?? "").split("\n").map((l) => `<span class="add">+ ${esc(l)}</span>`).join("\n")}</pre>`;
+  }
+  if (name === "MultiEdit") {
+    return (i.edits || []).map((e) => `<pre>${String(e.old_string ?? "").split("\n").map((l) => `<span class="del">- ${esc(l)}</span>`).join("\n")}\n${String(e.new_string ?? "").split("\n").map((l) => `<span class="add">+ ${esc(l)}</span>`).join("\n")}</pre>`).join("");
+  }
+  if (name === "Write") return `<details><summary>content (${String(i.content ?? "").length} chars)</summary><pre>${esc(i.content ?? "")}</pre></details>`;
+  if (name === "TodoWrite") {
+    return `<div class="todo">${(i.todos || []).map((t) => `<div class="${t.status === "completed" ? "done" : t.status === "in_progress" ? "doing" : ""}">${t.status === "completed" ? "☑" : "☐"} ${esc(t.content ?? t.activeForm ?? "")}</div>`).join("")}</div>`;
+  }
+  if (name === "Task" || name === "Agent") return `<details><summary>prompt</summary><pre>${esc(i.prompt ?? "")}</pre></details>`;
+  if (["Bash", "Read", "Grep", "Glob", "WebFetch", "WebSearch"].includes(name)) return "";
+  return `<details><summary>input</summary><pre>${esc(JSON.stringify(input, null, 2))}</pre></details>`;
+}
+
+function renderEvent(tl, ev, r) {
+  let node = null;
+  const t = when(ev, r);
+  switch (ev.kind) {
+    case "prompt":
+      node = el(`<div class="ev"><details><summary>${t}${ev.resume ? "prompt (continues the session)" : "prompt"} · ${String(ev.text || "").length} chars</summary><pre>${esc(ev.text)}</pre></details></div>`);
+      break;
+    case "init":
+      node = el(`<div class="ev note">${t}Claude Code ${esc(ev.version)} · model ${esc(ev.model)} · ${ev.tools ? ev.tools.length : 0} tools · ${esc(ev.permission_mode)} · ${esc(ev.cwd)}</div>`);
+      break;
+    case "thinking":
+      node = el(`<div class="ev thinking"><div class="lbl">${t}Thinking</div><div class="body">${esc(ev.text)}</div></div>`);
+      break;
+    case "text":
+      node = el(`<div class="ev text"><div class="lbl">${t}Answer</div><div class="body">${esc(ev.text)}</div></div>`);
+      break;
+    case "user":
+      node = el(`<div class="ev"><details><summary>${t}user message</summary><pre>${esc(ev.text)}</pre></details></div>`);
+      break;
+    case "tool_use": {
+      node = el(`<div class="ev tool"><div class="h">${t}<span class="name">${esc(ev.name)}</span>${toolSummary(ev.name, ev.input)}</div>${toolBody(ev.name, ev.input)}<div class="res"><div class="note" style="padding:4px 10px">running…</div></div></div>`);
+      if (ev.id) state.tools[ev.id] = node;
+      break;
+    }
+    case "tool_result": {
+      const lines = String(ev.text || "").split("\n").length;
+      const html = `<details ${ev.is_error ? "open" : ""}><summary>${ev.is_error ? '<span class="del">error</span>' : "result"} · ${lines} lines</summary><pre>${esc(ev.text)}</pre></details>`;
+      const owner = state.tools[ev.id];
+      if (owner) {
+        owner.querySelector(".res").innerHTML = html;
+        if (ev.is_error) owner.classList.add("err");
+        return;
+      }
+      node = el(`<div class="ev tool"><div class="res">${html}</div></div>`);
+      break;
+    }
+    case "retry":
+      node = el(`<div class="ev note warn">${t}API retry ${esc(ev.attempt)}/${esc(ev.max_retries)} · ${esc(ev.status ?? "")} ${esc(ev.error ?? "")}</div>`);
+      break;
+    case "compact":
+      node = el(`<div class="ev note">${t}context compacted (${esc(ev.trigger)}): ${Number(ev.pre_tokens || 0).toLocaleString()} → ${Number(ev.post_tokens || 0).toLocaleString()} tokens</div>`);
+      break;
+    case "result": {
+      const bits = [ev.subtype, ev.num_turns != null ? ev.num_turns + " turns" : "", ev.duration_ms ? Math.round(ev.duration_ms / 1000) + "s" : "", ev.cost_usd != null ? "$" + Number(ev.cost_usd).toFixed(4) : ""].filter(Boolean).join(" · ");
+      node = el(`<div class="ev note ${ev.is_error ? "bad" : "good"}">${t}result: ${esc(bits)}${ev.is_error && ev.text ? " — " + esc(ev.text) : ""}</div>`);
+      break;
+    }
+    case "end":
+      node = el(`<div class="ev note ${ev.status === "completed" ? "good" : "bad"}">${t}run ${esc(ev.status)}${ev.error ? " — " + esc(ev.error_code) + ": " + esc(ev.error) : ""}${ev.stderr_tail && ev.status !== "completed" ? `<details><summary>stderr</summary><pre>${esc(ev.stderr_tail)}</pre></details>` : ""}</div>`);
+      break;
+    default:
+      return;
+  }
+  if (ev.agent) {
+    const wrap = document.createElement("div");
+    wrap.className = "sub";
+    wrap.appendChild(node);
+    node = wrap;
+  }
+  tl.appendChild(node);
+}
+
+function renderLive(block) {
+  const box = $("#live");
+  if (!box) return;
+  if (!block) { box.innerHTML = ""; return; }
+  const label = block.kind === "thinking" ? "Thinking…" : block.kind === "tool_use" ? `Calling ${block.name}…` : "Writing…";
+  box.innerHTML = `<div class="ev livebox ${block.kind === "thinking" ? "thinking" : ""}"><div class="lbl"><span class="dot"></span>${esc(label)}</div><div class="body">${esc(block.text)}</div></div>`;
+}
+
+// ------------------------------------------------------------------ start
+function fromHash() {
+  const m = location.hash.match(/run=([\w-]+)/);
+  if (m) select(m[1]);
+}
+window.addEventListener("hashchange", fromHash);
+(async () => {
+  await loadRuns();
+  fromHash();
+  if (!state.sel && state.runs[0]) select(state.runs[0].run_id);
+  state.listTimer = setInterval(loadRuns, 3000);
+})();
+</script>
+</body>
+</html>

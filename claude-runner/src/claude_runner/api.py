@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from .claude_cli import child_env
 from .config import Settings
+from .dashboard import _EmbeddedServer, build_router, create_dashboard_app
 from .runs import RunManager, RunnerError, StartRequest
 
 
@@ -65,7 +66,8 @@ def _auth_mode() -> str:
     return "stored_login_or_none"
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, serve_dashboard: bool = False) -> FastAPI:
+    """``serve_dashboard`` also serves the read-only dashboard on ``settings.dashboard_port``."""
     settings = settings or Settings.from_env()
 
     @asynccontextmanager
@@ -74,9 +76,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.manager = manager
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
+        dashboard = None
+        if serve_dashboard and settings.dashboard_port:
+            dashboard = _EmbeddedServer(
+                create_dashboard_app(settings, lambda: app.state.manager),
+                "0.0.0.0",
+                settings.dashboard_port,
+            )
+            dashboard.start()
         try:
             yield
         finally:
+            if dashboard is not None:
+                await dashboard.stop()
             await manager.shutdown()
 
     app = FastAPI(title="claude-runner", version="0.1.0", lifespan=lifespan)
@@ -90,6 +102,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def manager(request: Request) -> RunManager:
         return request.app.state.manager  # type: ignore[no-any-return]
+
+    def manager_of(application: FastAPI) -> RunManager:
+        return application.state.manager  # type: ignore[no-any-return]
 
     @app.exception_handler(RunnerError)
     async def runner_error(_: Request, exc: RunnerError) -> JSONResponse:
@@ -154,6 +169,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 role=body.role or x_ahawr_role,
             )
         )
+
+    # Read-only run list and activity (the dashboard's data), e.g. for scripts or n8n.
+    app.include_router(
+        build_router(lambda: manager_of(app)), prefix="/v1", dependencies=[Depends(authorize)]
+    )
 
     @app.get("/v1/runs/{run_id}", dependencies=[Depends(authorize)])
     async def get_run(run_id: str, request: Request) -> dict[str, Any]:

@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from .api import create_app
 
-    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
+    uvicorn.run(create_app(serve_dashboard=True), host=args.host, port=args.port, log_level="info")
     return 0
 
 

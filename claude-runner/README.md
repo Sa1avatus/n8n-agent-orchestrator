@@ -39,6 +39,7 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 | `POST /v1/runs/{run_id}/cancel` | Interrupts the turn (SIGINT). The session stays resumable. |
 | `POST /v1/sessions/{session_id}/compact` `{mode?: auto\|always\|off}` | Runs Claude Code's `/compact` on the saved session when its context exceeds `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` → `completed` / `skipped` (with `reason`) / `failed`. This replaces the Hermes TUI WebSocket compression. |
 | `GET /v1/sessions/{session_id}`, `GET /health` | Session binding and context size; CLI version, auth mode, run counts. |
+| `GET /v1/runs?role=&status=&session_id=&limit=`, `GET /v1/runs/{run_id}/events?after=N` | Read-only run list and each run's activity (the dashboard's data, see below). |
 
 **Sessions.** The `session_id` AHAWR stores is the Claude Code session UUID. An id Claude Code does not know (for example one left over from Hermes in the Data Table) is bound to a fresh Claude Code session. The caller keeps its id and gets `session_created: true`. Transcripts live in the `claude-runner-home` volume, so sessions survive restarts and rebuilds.
 
@@ -79,7 +80,7 @@ Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_AL
 
 4. In n8n:
    * import `Claude_Code_Run_Manager_v1.json`, then `AHAWR_v13_ClaudeCode.json`;
-   * no n8n credential is needed: the Run Manager's HTTP nodes send `Authorization: Bearer <hermes_config.runner_api_key>` only when that column is set. Leave both `CLAUDE_RUNNER_API_KEY` and `runner_api_key` empty (the runner has no host port), or set both to the same value;
+   * no n8n credential is needed: the Run Manager's HTTP nodes send `Authorization: Bearer <hermes_config.runner_api_key>` only when that column is set. Leave both `CLAUDE_RUNNER_API_KEY` and `runner_api_key` empty (the run API has no host port), or set both to the same value;
    * copy the Run Manager's workflow id from its URL (`/workflow/<id>`) into `hermes_config.run_manager_workflow_id` of the `claude-code` row. When the column is empty, `nhjwX1G7FiVTO2Ah` is used. The Start nodes need no editing: their inputs come from the `Build … Run Input` Code nodes, and the Run Manager accepts them as they are.
 5. Add the `runner_url` column and the `claude-code` row from `hermes_config.csv` to the `hermes_config` Data Table. Models are Claude Code aliases (`opus`, `sonnet`, `haiku`) or full model names. Missions keep their `state_namespace`; give Claude Code runs their own namespace if the Hermes version runs the same missions.
 
@@ -97,6 +98,29 @@ The `working_directory` column of the `missions` Data Table (e.g. `D:\OpenAIProj
 * A folder that does not exist fails the run visibly (`invalid_working_directory`).
 
 Give missions of different projects different `state_namespace` values. The Worker can reach the whole mounted drive. To narrow that, replace the drive mount in `docker-compose.yml` by bind mounts of the project folders at the matching `/d/...` paths.
+
+## Dashboard: watch the agents work
+
+Open **http://localhost:8701** (host port `AHAWR_DASHBOARD_PORT`). This is the equivalent of watching a Hermes session: every Architect, Worker and Reviewer run is listed newest first. Each run shows, as it happens:
+
+* the model's thinking;
+* its answers;
+* every tool call (Bash command, file read, edit as a diff, TodoWrite list, subagent) and its result;
+* API retries, context compaction, the final result with turns, cost and duration, and errors with the CLI's stderr.
+
+A dashed box streams the block being generated token by token. Clicking the session id shows all runs of that session, for example the Architect's conversation across a mission.
+
+It works the same for every provider, because it reads Claude Code's own event stream (`stream-json`), not a provider API:
+
+* **Anthropic:** thinking arrives as Claude's thinking blocks.
+* **Local llama.cpp or a third-party model behind LiteLLM** (OpenRouter and others): the model's `reasoning_content` reaches Claude Code as thinking blocks. `CLAUDE_CODE_DISABLE_THINKING=1` does not hide it; it only stops Claude Code from requesting extended thinking.
+
+A model that returns no reasoning shows only answers and tool calls.
+
+* **Read-only.** The dashboard port cannot start, cancel or compact runs, and the run API (8700) stays unpublished. It is published on `127.0.0.1` only, and it answers only to the host names in `CLAUDE_RUNNER_DASHBOARD_HOSTS`, which guards against DNS rebinding. It shows prompts, code and command output, so do not publish it more widely.
+* **Storage.** Activity is kept in `/data/events/<run_id>.jsonl` in the `claude-runner-data` volume for `CLAUDE_RUNNER_EVENT_RETENTION_DAYS` days (default 14). Tool results are clipped to 20k characters per entry.
+* **Live tokens.** `CLAUDE_RUNNER_LIVE_TOKENS=false` turns off the token stream (`--include-partial-messages`); finished blocks still appear.
+* **Hermes runs** are not shown here: this dashboard covers the runs that go through claude-runner.
 
 ## Providers per role (like Hermes): Claude and a local llama.cpp model
 
@@ -167,6 +191,13 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
 - **Можно ли подключаться из n8n так же, как к Hermes?** Да, но через этот мост. Вызов `claude -p` из Execute Command блокирует исполнение n8n на всё время работы и отдаёт агенту контейнер n8n. Community-ноды сторонние и устроены так же. Routines и облачные сессии работают с GitHub-репозиторием в облаке, а не с локальным workspace. Managed Agents — отдельный хостинговый продукт.
 - **Сессии.** `session_id` в Data Tables — это UUID сессии Claude Code, транскрипты лежат в томе `claude-runner-home`. Неизвестный id (например, оставшийся от Hermes) привязывается к новой сессии, а id вызывающей стороны сохраняется.
 - **Ошибки.** Лимиты (429), перегрузка (529), 5xx и таймаут считаются transient, и Run Manager их ретраит. Неизвестная модель, `max_turns` и ошибки CLI считаются постоянными. Прогон, прерванный рестартом runner, возвращает `404 run_not_found`, и Run Manager продолжает сохранённую сессию.
+- **Дашборд: http://localhost:8701.** Здесь видно то же, что в сессии Hermes. Список всех прогонов Architect, Worker и Reviewer. По каждому прогону в реальном времени показаны:
+  - размышления модели;
+  - ответы;
+  - вызовы тулов (команда Bash, чтение файла, правка в виде diff, TodoWrite, субагенты) и их результаты;
+  - ретраи API, компакция, итог (ходы, стоимость, время) и ошибки со stderr.
+
+  Генерируемый блок идёт потоком токенов. Работает одинаково для любого провайдера: Anthropic, локальный llama.cpp или сторонняя модель через LiteLLM. Дашборд читает поток событий самого Claude Code, а `reasoning_content` локальной модели приходит как блоки размышлений. Дашборд только для чтения, опубликован только на `127.0.0.1`, API запусков (8700) наружу не выставлен. Журналы лежат в томе `claude-runner-data` (`/data/events`), хранятся `CLAUDE_RUNNER_EVENT_RETENTION_DAYS` дней.
 - **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS`.
 - **Права по ролям.**
   - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`.

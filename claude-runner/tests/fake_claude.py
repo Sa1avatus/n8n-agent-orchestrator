@@ -208,6 +208,65 @@ def main() -> int:
 
     turns = len(history)
     answer = f"echo[{turns}]: {prompt.strip()[:60]}"
+    if "[[tools]]" in prompt:
+        emit(
+            {
+                "type": "assistant",
+                "parent_tool_use_id": None,
+                "session_id": sid,
+                "message": {
+                    "model": opts.get("--model", "default"),
+                    "content": [{"type": "thinking", "thinking": "I should read calc.py."}],
+                },
+            }
+        )
+        emit(
+            {
+                "type": "assistant",
+                "parent_tool_use_id": None,
+                "session_id": sid,
+                "message": {
+                    "model": opts.get("--model", "default"),
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "Read",
+                            "input": {"file_path": "calc.py"},
+                        }
+                    ],
+                },
+            }
+        )
+        emit(
+            {
+                "type": "user",
+                "parent_tool_use_id": None,
+                "session_id": sid,
+                "message": {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": "1\tdef sub(a, b):\n2\t    return a + b",
+                        }
+                    ],
+                },
+            }
+        )
+    if "--include-partial-messages" in opts:
+        for event in (
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "ec"},
+            },
+        ):
+            emit({"type": "stream_event", "event": event, "session_id": sid})
+        if m := re.search(r"\[\[stream_sleep:(\d+(?:\.\d+)?)\]\]", prompt):
+            time.sleep(float(m.group(1)))
     emit(
         {
             "type": "assistant",
@@ -224,6 +283,8 @@ def main() -> int:
             },
         }
     )
+    if "--include-partial-messages" in opts:
+        emit({"type": "stream_event", "event": {"type": "content_block_stop"}, "session_id": sid})
     emit(
         {
             "type": "result",

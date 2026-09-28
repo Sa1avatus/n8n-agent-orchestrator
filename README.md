@@ -606,7 +606,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 `AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `claude-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
 
-- Container `claude-runner` in the same compose stack: `docker compose up -d --build` builds and starts it together with n8n, `ahawr-retrieval` and `litellm`. n8n reaches it at `http://claude-runner:8700`; no host port is published.
+- Container `claude-runner` in the same compose stack: `docker compose up -d --build` builds and starts it together with n8n, `ahawr-retrieval` and `litellm`. n8n reaches it at `http://claude-runner:8700`; the run API has no host port.
 - `Claude_Code_Run_Manager_v1.json` is `Hermes_Run_Manager_v5.json` with the runner endpoints and a role field. The Hermes TUI/WebSocket compression is replaced by `POST /v1/sessions/{id}/compact`, which runs Claude Code `/compact` only above a context threshold.
 - Sessions are resumable Claude Code sessions (`--resume`), kept in a volume. A run interrupted by a runner restart is reported as `run_not_found`, so the Run Manager continues the saved session.
 - Per-role permissions:
@@ -616,6 +616,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 - Projects: `missions.working_directory` (e.g. `D:\OpenAIProjects\app`) is where Claude Code runs and what retrieval indexes for that mission. The drive is mounted into the containers (`AHAWR_HOST_DRIVE`, default `D:\`).
 - Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`.
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
+- Dashboard at `http://localhost:8701` (read-only, 127.0.0.1 only): every role's runs with thinking, tool calls and their results, answers and errors, streamed live. It works for any provider: Claude, a local model or a third-party one.
 
 The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md).
 
@@ -1296,6 +1297,7 @@ worker_provider
 - Проекты: в `missions.working_directory` (например, `D:\OpenAIProjects\app`) указывается папка, в которой работает Claude Code и которую индексирует retrieval для этой миссии. Диск подключается в контейнеры через `AHAWR_HOST_DRIVE` (по умолчанию `D:\`).
 - Провайдеры по ролям, как в Hermes: роли с `*_provider=anthropic` идут в Anthropic, а роль с `*_provider=local` — через контейнер `litellm` в локальный llama.cpp. См. `litellm/config.yaml` и блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`.
 - Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
+- Дашборд `http://localhost:8701` (только чтение, только 127.0.0.1): прогоны всех ролей с размышлениями, вызовами тулов, их результатами, ответами и ошибками, в реальном времени. Работает для любого провайдера: Claude, локальной или сторонней модели.
 
 Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md).
 ### Компрессия Hermes-сессий

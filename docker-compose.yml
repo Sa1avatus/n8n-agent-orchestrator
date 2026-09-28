@@ -69,7 +69,9 @@ services:
   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
   # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
   # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
-  # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published.
+  # n8n reaches it at http://claude-runner:8700 over the stack network (not published).
+  # Dashboard (read-only: every role's thinking, tool calls and results, live):
+  # http://localhost:8701 — published on 127.0.0.1 only.
   claude-runner:
     build:
       context: ./claude-runner
@@ -80,6 +82,9 @@ services:
 
     container_name: claude-runner
     restart: unless-stopped
+
+    ports:
+      - "127.0.0.1:${AHAWR_DASHBOARD_PORT:-8701}:8701"
 
     # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_RUNNER_* settings. See .env.example.
     env_file:
@@ -92,6 +97,8 @@ services:
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
+      # the published dashboard port above (host port: AHAWR_DASHBOARD_PORT)
+      - CLAUDE_RUNNER_DASHBOARD_PORT=8701
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).

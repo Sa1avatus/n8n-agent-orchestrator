@@ -20,6 +20,7 @@ from .claude_cli import (
     transcript_exists,
 )
 from .config import ROLES, Settings
+from .events import EventLog
 from .store import Store, now
 
 STDERR_TAIL = 8000
@@ -52,6 +53,7 @@ class RunManager:
         self._cancelled: set[str] = set()
         self._shutting_down = False
         self._session_lock = asyncio.Lock()
+        self.events = EventLog(settings.data_dir / "events", settings.event_retention_days)
 
     async def startup(self) -> int:
         return self.store.interrupt_active_runs(
@@ -192,6 +194,8 @@ class RunManager:
         provider: str = "",
         compact: bool = False,
     ) -> asyncio.Task[None]:
+        self.events.open(run_id)
+        self.events.add(run_id, {"kind": "prompt", "text": prompt, "resume": resume})
         task = asyncio.create_task(
             self._execute(run_id, prompt, model, role, claude_id, resume, cwd, provider, compact)
         )
@@ -271,7 +275,9 @@ class RunManager:
                 async def pump_stdout() -> None:
                     assert proc.stdout
                     async for raw in proc.stdout:
-                        state.feed(raw.decode("utf-8", "replace"))
+                        event = state.feed(raw.decode("utf-8", "replace"))
+                        if event is not None:
+                            self.events.feed(run_id, event)
 
                 async def pump_stderr() -> None:
                     assert proc.stderr
@@ -333,6 +339,17 @@ class RunManager:
             details=details,
             finished_at=now(),
         )
+        self.events.add(
+            run_id,
+            {
+                "kind": "end",
+                "status": outcome.status,
+                "error_code": outcome.error_code,
+                "error": outcome.error_message,
+                "stderr_tail": str(details.get("stderr_tail") or "")[-2000:],
+            },
+        )
+        self.events.close(run_id)
         run = self.store.get_run(run_id)
         if run:
             self.store.touch_session(

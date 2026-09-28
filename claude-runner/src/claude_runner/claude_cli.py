@@ -47,6 +47,9 @@ def build_command(
     provider: ProviderProfile | None = None,
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
+    if settings.live_tokens and not compact:
+        # token deltas for the dashboard's live view of the block being generated
+        cmd.append("--include-partial-messages")
     if model:
         cmd += ["--model", model]
     cmd += ["--resume" if resume else "--session-id", claude_session_id]
@@ -119,17 +122,18 @@ class StreamState:
     bad_lines: int = 0
     permission_denials: list[Any] = field(default_factory=list)
 
-    def feed(self, line: str) -> None:
+    def feed(self, line: str) -> dict[str, Any] | None:
+        """Record one stream line; returns the parsed event (None for noise)."""
         line = line.strip()
         if not line:
-            return
+            return None
         try:
             event = json.loads(line)
         except json.JSONDecodeError:
             self.bad_lines += 1
-            return
+            return None
         if not isinstance(event, dict):
-            return
+            return None
         self.events += 1
         self.session_id = str(event.get("session_id") or self.session_id)
         kind, subtype = event.get("type"), event.get("subtype")
@@ -159,6 +163,7 @@ class StreamState:
                 self.context_tokens = post
         elif kind == "system" and subtype == "status" and event.get("compact_result"):
             self.compact_result = str(event.get("compact_result"))
+        return event
 
     def final_context_tokens(self) -> int | None:
         """Context size after the run: the last main-thread request, or — when a gateway

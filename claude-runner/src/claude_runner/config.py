@@ -165,6 +165,11 @@ class Settings:
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
     tools: str = ""
     providers: dict[str, ProviderProfile] = field(default_factory=dict)
+    # Dashboard: read-only view of runs (thinking, tool calls, results) on its own port.
+    dashboard_port: int = 8701
+    dashboard_hosts: tuple[str, ...] = ("localhost", "127.0.0.1", "claude-runner")
+    live_tokens: bool = True
+    event_retention_days: int = 14
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -212,6 +217,13 @@ class Settings:
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env),
+            dashboard_port=_int(env, "CLAUDE_RUNNER_DASHBOARD_PORT", 8701),
+            dashboard_hosts=tuple(
+                _list(env.get("CLAUDE_RUNNER_DASHBOARD_HOSTS"))
+                or ["localhost", "127.0.0.1", "claude-runner"]
+            ),
+            live_tokens=_bool(env, "CLAUDE_RUNNER_LIVE_TOKENS", True),
+            event_retention_days=_int(env, "CLAUDE_RUNNER_EVENT_RETENTION_DAYS", 14),
         )
 
     def profile(self, role: str) -> RoleProfile:

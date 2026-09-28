@@ -142,6 +142,23 @@ class Store:
             ).fetchone()
         return self.get_run(row["run_id"]) if row else None
 
+    def list_runs(
+        self, limit: int = 50, session_id: str = "", role: str = "", status: str = ""
+    ) -> list[dict[str, Any]]:
+        """Newest first, optionally filtered (for the dashboard)."""
+        where, params = [], []
+        for column, value in (("session_id", session_id), ("role", role), ("status", status)):
+            if value:
+                where.append(f"{column} = ?")
+                params.append(value)
+        sql = "SELECT run_id FROM runs"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        sql += " ORDER BY created_at DESC, rowid DESC LIMIT ?"
+        with self._lock:
+            ids = [row["run_id"] for row in self._db.execute(sql, (*params, limit))]
+        return [run for run in map(self.get_run, ids) if run]
+
     def interrupt_active_runs(self, reason: str) -> int:
         """Runs a previous runner process left behind can never finish: mark them."""
         with self._lock:
