@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from claude_runner.__main__ import main
@@ -119,3 +121,16 @@ def test_context_size_fallback_for_gateways_without_streamed_usage() -> None:
     )
     direct.feed('{"type":"result","subtype":"success","num_turns":3,"usage":{"input_tokens":1}}')
     assert direct.final_context_tokens() == 905
+
+
+def test_context_size_from_stream_events_of_a_run_that_timed_out() -> None:
+    def stream(inner: dict[str, object], agent: str | None = None) -> str:
+        return json.dumps({"type": "stream_event", "parent_tool_use_id": agent, "event": inner})
+
+    state = StreamState()
+    state.feed(stream({"type": "message_start", "message": {"usage": {"input_tokens": 41000}}}))
+    state.feed(stream({"type": "message_delta", "usage": {"input_tokens": 63824}}))
+    # a subagent's request is not the session's size
+    state.feed(stream({"type": "message_start", "message": {"usage": {"input_tokens": 9}}}, "t1"))
+    state.feed(stream({"type": "message_delta", "usage": {"output_tokens": 5}}))
+    assert state.final_context_tokens() == 63824  # no result event: the run was cut off

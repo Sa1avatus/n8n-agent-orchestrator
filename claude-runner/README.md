@@ -36,8 +36,9 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 |---|---|
 | `POST /v1/runs` `{input, model, provider, session_id?, working_directory?, role?}` | Starts a Claude Code turn asynchronously → `{run_id, session_id, status: "queued"\|"running"}`. With a `session_id` the saved session is resumed. If that session already has a run in flight, the same run is returned (`attached: true`), so there are never two concurrent turns in one session. |
 | `GET /v1/runs/{run_id}` | `{status: queued\|running\|completed\|failed\|cancelled, output, error: {code, message}, http_code, session_id, cost_usd, num_turns, context_tokens, permission_denials}` |
-| `POST /v1/runs/{run_id}/cancel` | Interrupts the turn (SIGINT). The session stays resumable. |
+| `POST /v1/runs/{run_id}/cancel` | Interrupts the turn (SIGINT), then stops the CLI's whole process group, so the tool processes it started stop too. The session stays resumable. |
 | `POST /v1/sessions/{session_id}/compact` `{mode?: auto\|always\|off}` | Runs Claude Code's `/compact` on the saved session when its context exceeds `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` → `completed` / `skipped` (with `reason`) / `failed`. This replaces the Hermes TUI WebSocket compression. |
+| `GET /v1/sessions/{session_id}/digest?max_chars=12000` | What the session already did, from its runs' activity logs: the model's text, each tool call with a shortened result, compactions and results; the newest entries are kept when it is cut. The Run Manager gives it to a fresh session when the old one cannot be compacted. |
 | `GET /v1/sessions/{session_id}`, `GET /health` | Session binding and context size; CLI version, auth mode, run counts. |
 | `GET /v1/runs?role=&status=&session_id=&limit=`, `GET /v1/runs/{run_id}/events?after=N` | Read-only run list and each run's activity (the dashboard's data, see below). |
 
@@ -138,8 +139,8 @@ For Claude Code runs, the thinking shown does not depend on the provider, becaus
 
 A model that returns no reasoning shows only answers and tool calls.
 
-* **Read-only, separate container.**
-  * The dashboard cannot start, cancel or compact runs, and the run API (8700) stays unpublished.
+* **Separate container, read-only except Stop.**
+  * The dashboard cannot start or compact runs; its Stop button cancels a queued or running Claude Code run (the request needs the `X-AHAWR-Dashboard` header, so another site cannot send it). The run API (8700) stays unpublished.
   * The Hermes key lives only in `ahawr-dashboard`. The claude-runner Worker runs arbitrary commands, and with that key it could drive Hermes on the host.
   * The dashboard is published on `127.0.0.1` only and answers only to the host names in `DASHBOARD_HOSTS` (default `localhost,127.0.0.1`), which guards against DNS rebinding.
   * It shows prompts, code and command output, so do not publish it more widely.
@@ -229,7 +230,11 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
   - экспорт прогона или всей сессии в Markdown и JSON (ссылки в шапке).
 
   Для Claude Code тайминги точные, по потоку токенов. Для Hermes они приблизительные (`≈`): считаются по времени записи сообщений, а токены берутся как итог по сессии. Размышления видны для любого провайдера: Anthropic, локальный llama.cpp, сторонняя модель через LiteLLM. Дашборд только для чтения, опубликован только на `127.0.0.1`. Ключ Hermes есть только в `ahawr-dashboard`, в claude-runner с Worker'ом его нет.
-- **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS`.
+- **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` (для провайдера — `…__COMPACT_MIN_TOKENS`). Размер контекста берётся из последнего запроса к модели, в том числе у run'а, оборванного таймаутом.
+- **Продолжение после сбоя.** Упавшая задача продолжается с места остановки, а не начинается заново:
+  - таймаут, 5xx или переполнение контекста: Run Manager сжимает сессию (после переполнения — принудительно) и продолжает её коротким сообщением о том, почему прервалась прошлая попытка, а не повторной отправкой всей задачи;
+  - если сжать не удалось, новая сессия получает исходную задачу и дайджест прошлой (`GET /v1/sessions/{id}/digest`): что уже прочитано, запущено и найдено;
+  - если workflow остановился на ошибке, сессия Worker'а текущей задачи сохраняется в Task State, и перезапуск продолжает её с `RESUME TASK …`.
 - **Права по ролям.**
   - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`.
   - Reviewer и Architect: `dontAsk` без `Edit` и `Write`, то есть только чтение.

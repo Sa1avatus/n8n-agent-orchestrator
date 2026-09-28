@@ -10,12 +10,13 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .claude_cli import child_env
 from .config import Settings
+from .handoff import session_digest
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
 
@@ -180,6 +181,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise RunnerError("session_not_found", f"Session {session_id} not found.", 404)
         active = runs.store.active_run(session_id)
         return {**session, "active_run_id": active["run_id"] if active else ""}
+
+    @app.get("/v1/sessions/{session_id}/digest", dependencies=[Depends(authorize)])
+    async def digest(
+        session_id: str, request: Request, max_chars: int = Query(12_000, ge=500, le=200_000)
+    ) -> dict[str, Any]:
+        """What the session already did, for continuing it in a fresh session."""
+        runs = manager(request)
+        if not runs.store.get_session(session_id):
+            raise RunnerError("session_not_found", f"Session {session_id} not found.", 404)
+        return session_digest(runs, session_id, max_chars)
 
     @app.post("/v1/sessions/{session_id}/compact", dependencies=[Depends(authorize)])
     async def compact(

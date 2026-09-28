@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  working_directory: String(i.working_directory ?? '').trim(),\n  runner_api_key: String(i.runner_api_key ?? '').trim(),\n  runner_url: String(i.runner_url ?? '').trim().replace(/\\/+$/, '') || 'http://claude-runner:8700',\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\n// Claude Code: an empty model means the runner/CLI default model; provider is informational.\nif (!state.provider) state.provider = 'anthropic';\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Claude Code Run Manager: input is required.');\nreturn [{ json: state }];"
+        "jsCode": "const i = $json ?? {};\nconst state = {\n  role: String(i.role ?? 'generic'),\n  state_key: String(i.state_key ?? '').trim(),\n  run_id: String(i.run_id ?? '').trim(),\n  session_id: String(i.session_id ?? '').trim(),\n  requested_session_id: String(i.session_id ?? '').trim(),\n  model: String(i.model ?? '').trim(),\n  provider: String(i.provider ?? '').trim(),\n  service_model: String(i.service_model ?? i.model ?? '').trim(),\n  service_provider: String(i.service_provider ?? i.provider ?? '').trim(),\n  working_directory: String(i.working_directory ?? '').trim(),\n  runner_api_key: String(i.runner_api_key ?? '').trim(),\n  runner_url: String(i.runner_url ?? '').trim().replace(/\\/+$/, '') || 'http://claude-runner:8700',\n  input: String(i.input ?? ''),\n  resume_input: String(i.resume_input ?? ''),\n  poll_seconds: Math.max(1, Number(i.poll_seconds ?? 3)),\n  max_polls: Math.max(1, Number(i.max_polls ?? 40)),\n  poll_count: 0,\n  max_retries: Math.max(0, Number(i.max_retries ?? 3)),\n  retry_count: Math.max(0, Number(i.retry_count ?? 0)),\n  retry_delays: (() => {\n  const raw = i.retry_delays;\n\n  if (Array.isArray(raw)) {\n    return raw.map(Number).filter(Number.isFinite);\n  }\n\n  if (typeof raw === 'string' && raw.trim()) {\n    try {\n      const parsed = JSON.parse(raw);\n      if (Array.isArray(parsed)) {\n        return parsed.map(Number).filter(Number.isFinite);\n      }\n    } catch (_) {\n      // fallback below\n    }\n  }\n\n  return [15, 30, 60, 120, 300];\n})(),\n  retry_delay_seconds: 0,\n  status: '', route: '', output: '', error: '', error_code: '', http_code: null,\n  run_not_found: false, transient_error: false, context_overflow: false, resumed: false,\n  compression_failed: false, compression_handoff: false, handoff_from_session_id: '',\n  session_verified: !String(i.session_id ?? '').trim(), session_mismatch: false\n};\n// Claude Code: an empty model means the runner/CLI default model; provider is informational.\nif (!state.provider) state.provider = 'anthropic';\nif (!state.service_model) state.service_model = state.model;\nif (!state.service_provider) state.service_provider = state.provider;\nif (!state.input && !state.resume_input && !state.run_id) throw new Error('Claude Code Run Manager: input is required.');\nreturn [{ json: state }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -51,7 +51,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ (() => {\n  const wd = String($json.working_directory ?? '').trim();\n  const sid = String($json.session_id ?? $json.requested_session_id ?? '').trim();\n  const body = {\n    input: String($json.input || $json.resume_input || ''),\n    model: String($json.model ?? ''),\n    provider: String($json.provider ?? ''),\n    role: String($('Normalize Request').first().json.role ?? '')\n  };\n  if (sid) body.session_id = sid;\n  if (wd) body.working_directory = wd;\n  return body;\n})() }}",
+        "jsonBody": "={{ (() => {\n  const wd = String($json.working_directory ?? '').trim();\n  const sid = String($json.session_id ?? $json.requested_session_id ?? '').trim();\n  // A retry after a failed attempt in this session: continue it, do not restart the task.\n  const resuming = Boolean(sid) && Number($json.retry_count ?? 0) > 0;\n  const stopped = [String($json.error_code ?? ''), String($json.error ?? '').slice(0, 300)].filter(Boolean).join(': ');\n  const resumeText = [\n    'The previous attempt in this session stopped before it finished' + (stopped ? ' (' + stopped + ')' : '') + '.',\n    $json.context_overflow ? 'The session was compacted to fit the model again: rely on the summary of your earlier work.' : '',\n    String($json.resume_input || 'Continue the task from where you stopped. Do not repeat work whose results you already have.')\n  ].filter(Boolean).join('\\n\\n');\n  const body = {\n    input: resuming ? resumeText : String($json.input || $json.resume_input || ''),\n    model: String($json.model ?? ''),\n    provider: String($json.provider ?? ''),\n    role: String($('Normalize Request').first().json.role ?? '')\n  };\n  if (sid) body.session_id = sid;\n  if (wd) body.working_directory = wd;\n  return body;\n})() }}",
         "options": {
           "response": {
             "response": {
@@ -116,7 +116,7 @@
     },
     {
       "parameters": {
-        "jsCode": "function parse(value) {\n  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {};\n  try { return JSON.parse(value); } catch (_) { return { error: value }; }\n}\nfunction baseState() {\n  // The item that reached Get Run Status (through Poll Wait) is the current runner state.\n  if ($('Poll Wait').isExecuted) return $('Poll Wait').last().json;\n  if ($('Capture Run Response').isExecuted) return $('Capture Run Response').last().json;\n  return $('Normalize Request').last().json;\n}\n\nconst envelope = $json ?? {};\nconst r = parse(envelope?.body ?? envelope?.data ?? envelope);\nconst prior = baseState();\nconst status = String(r.status ?? '').toLowerCase();\nconst raw = r.error ?? r.message ?? r.details ?? r.detail ?? '';\nconst errorText = typeof raw === 'string' ? raw : String(raw?.message ?? raw?.detail ?? r.details ?? '');\nconst errorCode = String(typeof raw === 'object' && raw ? (raw.code ?? r.code ?? '') : (r.code ?? '')).toLowerCase();\nconst lower = errorText.toLowerCase();\n\nconst envelopeHttp = Number(envelope.statusCode ?? envelope.status_code ?? envelope.httpCode ?? envelope.http_code ?? NaN);\nconst bodyHttp = Number(r.statusCode ?? r.status_code ?? r.httpCode ?? r.http_code ?? NaN);\nconst match = errorText.match(/\\b(4\\d\\d|5\\d\\d)\\b/);\nconst httpCode = Number.isFinite(envelopeHttp) ? envelopeHttp : Number.isFinite(bodyHttp) ? bodyHttp : (match ? Number(match[1]) : null);\n\nconst runNotFound = httpCode === 404 || errorCode === 'run_not_found' || errorCode === 'not_found' || lower.includes('run not found') || lower.includes('run_not_found');\n\nconst transientCodes = new Set([408,409,425,429,500,502,503,504,529]);\nconst transientWords = ['temporarily overloaded','upstream error','upstream request failed','service unavailable','overloaded','timeout','timed out','connection reset','connection refused','rate limit','too many requests'];\nconst transient = !runNotFound && status === 'failed' && (transientCodes.has(httpCode) || transientWords.some((x) => lower.includes(x)));\nconst polls = Number(prior.poll_count ?? 0) + 1;\n\nlet route = 'unknown';\nif (runNotFound) route = prior.requested_session_id ? 'restart_session' : 'start_new';\nelse if (status === 'completed') route = 'completed';\nelse if (status === 'cancelled' || status === 'canceled') route = 'cancelled';\nelse if (transient) route = 'transient_error';\nelse if (status === 'failed') route = 'permanent_failure';\nelse if (['running','started','queued','waiting_for_approval'].includes(status)) route = polls >= Number(prior.max_polls ?? 40) ? 'timeout' : 'running';\n\nconst nextRunId = runNotFound ? '' : String(r.run_id ?? prior.run_id ?? '').trim();\nconst nextSessionId = String(r.session_id ?? prior.session_id ?? prior.requested_session_id ?? '').trim();\n\nreturn [{ json: {\n  ...prior,\n  run_id: nextRunId,\n  session_id: nextSessionId,\n  status,\n  output: String(r.output ?? r.response ?? r.content ?? ''),\n  error: errorText,\n  error_code: errorCode,\n  http_code: httpCode,\n  run_not_found: runNotFound,\n  transient_error: transient,\n  poll_count: polls,\n  route\n} }];"
+        "jsCode": "function parse(value) {\n  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {};\n  try { return JSON.parse(value); } catch (_) { return { error: value }; }\n}\nfunction baseState() {\n  // The item that reached Get Run Status (through Poll Wait) is the current runner state.\n  if ($('Poll Wait').isExecuted) return $('Poll Wait').last().json;\n  if ($('Capture Run Response').isExecuted) return $('Capture Run Response').last().json;\n  return $('Normalize Request').last().json;\n}\n\nconst envelope = $json ?? {};\nconst r = parse(envelope?.body ?? envelope?.data ?? envelope);\nconst prior = baseState();\nconst status = String(r.status ?? '').toLowerCase();\nconst raw = r.error ?? r.message ?? r.details ?? r.detail ?? '';\nconst errorText = typeof raw === 'string' ? raw : String(raw?.message ?? raw?.detail ?? r.details ?? '');\nconst errorCode = String(typeof raw === 'object' && raw ? (raw.code ?? r.code ?? '') : (r.code ?? '')).toLowerCase();\nconst lower = errorText.toLowerCase();\n\nconst envelopeHttp = Number(envelope.statusCode ?? envelope.status_code ?? envelope.httpCode ?? envelope.http_code ?? NaN);\nconst bodyHttp = Number(r.statusCode ?? r.status_code ?? r.httpCode ?? r.http_code ?? NaN);\nconst match = errorText.match(/\\b(4\\d\\d|5\\d\\d)\\b/);\nconst httpCode = Number.isFinite(envelopeHttp) ? envelopeHttp : Number.isFinite(bodyHttp) ? bodyHttp : (match ? Number(match[1]) : null);\n\nconst runNotFound = httpCode === 404 || errorCode === 'run_not_found' || errorCode === 'not_found' || lower.includes('run not found') || lower.includes('run_not_found');\n\nconst transientCodes = new Set([408,409,425,429,500,502,503,504,529]);\nconst transientWords = ['temporarily overloaded','upstream error','upstream request failed','service unavailable','overloaded','timeout','timed out','connection reset','connection refused','rate limit','too many requests'];\n// The session outgrew the model's context: compacting it (forced) and resuming continues\n// the work; failing here would drop everything the session already did.\nconst contextOverflow = !runNotFound && status === 'failed' && (errorCode.includes('context_window')\n  || /context ?window ?exceeded|exceeds the available context|context length|prompt is too long|maximum context/.test(lower));\nconst transient = !runNotFound && status === 'failed' && (contextOverflow || transientCodes.has(httpCode) || transientWords.some((x) => lower.includes(x)));\nconst polls = Number(prior.poll_count ?? 0) + 1;\n\nlet route = 'unknown';\nif (runNotFound) route = prior.requested_session_id ? 'restart_session' : 'start_new';\nelse if (status === 'completed') route = 'completed';\nelse if (status === 'cancelled' || status === 'canceled') route = 'cancelled';\nelse if (transient) route = 'transient_error';\nelse if (status === 'failed') route = 'permanent_failure';\nelse if (['running','started','queued','waiting_for_approval'].includes(status)) route = polls >= Number(prior.max_polls ?? 40) ? 'timeout' : 'running';\n\nconst nextRunId = runNotFound ? '' : String(r.run_id ?? prior.run_id ?? '').trim();\nconst nextSessionId = String(r.session_id ?? prior.session_id ?? prior.requested_session_id ?? '').trim();\n\nreturn [{ json: {\n  ...prior,\n  run_id: nextRunId,\n  session_id: nextSessionId,\n  status,\n  output: String(r.output ?? r.response ?? r.content ?? ''),\n  error: errorText,\n  error_code: errorCode,\n  http_code: httpCode,\n  run_not_found: runNotFound,\n  transient_error: transient,\n  context_overflow: contextOverflow,\n  poll_count: polls,\n  route\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1143,7 +1143,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const current = $json ?? {};\nconst role = String(current.role ?? '').trim().toLowerCase();\nconst persisted = $('Load Task State — Run Context').isExecuted ? ($('Load Task State — Run Context').first().json ?? {}) : {};\n\nfunction roleSession(state, roleName) {\n  if (roleName === 'worker') return String(state.worker_session_id ?? '').trim();\n  if (roleName === 'reviewer') return String(state.reviewer_session_id ?? '').trim();\n  if (roleName === 'architect') return String(state.architect_session_id ?? '').trim();\n  return '';\n}\n\nconst previousSession =\n  String(current.compression_target_session_id ?? '').trim() ||\n  roleSession(persisted, role) ||\n  String(current.session_id ?? current.requested_session_id ?? '').trim();\n\nconst reason = String(\n  current.compression_error ||\n  current.compression_stderr ||\n  current.compression_stdout ||\n  `Compression failed with exit code ${current.compression_exit_code ?? 'unknown'}.`\n).trim();\n\nconst handoff = [\n  'SESSION HANDOFF — continue in a fresh Claude Code session.',\n  '',\n  'The previous Claude Code session could not be compacted, so continuation was moved to a new session.',\n  'Do NOT restart the task from scratch.',\n  'Preserve the existing task objective, constraints, progress and expected output format.',\n  '',\n  'PREVIOUS SESSION ID:',\n  previousSession || '(not available)',\n  '',\n  'COMPRESSION FAILURE:',\n  reason,\n  '',\n  'ORIGINAL TASK INPUT:',\n  String(current.input || current.resume_input || '(not available)').trim(),\n  '',\n  'CONTINUE:',\n  'Resume the task from the information above. Verify the current repository/workspace state before making changes.',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...current,\n    handoff_input: handoff,\n    handoff_from_session_id: previousSession,\n    compression_handoff: true,\n    working_directory: String(current.working_directory ?? $('Normalize Request').first().json.working_directory ?? ''),\n    run_id: '',\n    session_id: '',\n    requested_session_id: '',\n  },\n}];"
+        "jsCode": "const current = $('Evaluate Compression').last().json ?? {};\n// The old session's activity (claude-runner digest): what it already read, ran and found.\nconst digestBody = (() => {\n  const raw = $json?.data ?? $json?.body ?? $json;\n  if (raw && typeof raw === 'object') return raw;\n  try { return JSON.parse(String(raw ?? '')); } catch { return {}; }\n})();\nconst digest = String(digestBody.digest ?? '').trim();\nconst role = String(current.role ?? '').trim().toLowerCase();\nconst persisted = $('Load Task State — Run Context').isExecuted ? ($('Load Task State — Run Context').first().json ?? {}) : {};\n\nfunction roleSession(state, roleName) {\n  if (roleName === 'worker') return String(state.worker_session_id ?? '').trim();\n  if (roleName === 'reviewer') return String(state.reviewer_session_id ?? '').trim();\n  if (roleName === 'architect') return String(state.architect_session_id ?? '').trim();\n  return '';\n}\n\nconst previousSession =\n  String(current.compression_target_session_id ?? '').trim() ||\n  roleSession(persisted, role) ||\n  String(current.session_id ?? current.requested_session_id ?? '').trim();\n\nconst reason = String(\n  current.compression_error ||\n  current.compression_stderr ||\n  current.compression_stdout ||\n  `Compression failed with exit code ${current.compression_exit_code ?? 'unknown'}.`\n).trim();\n\nconst handoff = [\n  'SESSION HANDOFF — continue in a fresh Claude Code session.',\n  '',\n  'The previous Claude Code session could not be compacted, so continuation was moved to a new session.',\n  'Do NOT restart the task from scratch.',\n  'Preserve the existing task objective, constraints, progress and expected output format.',\n  '',\n  'PREVIOUS SESSION ID:',\n  previousSession || '(not available)',\n  '',\n  'COMPRESSION FAILURE:',\n  reason,\n  '',\n  'ORIGINAL TASK INPUT:',\n  String(current.input || current.resume_input || '(not available)').trim(),\n  '',\n  'PROGRESS SO FAR (activity log of the previous session, oldest first; tool results are shortened):',\n  digest || '(not available: verify the workspace to find out what was already done)',\n  '',\n  'CONTINUE:',\n  'Resume the task from the progress above: do not repeat reads and checks whose results are listed there.',\n  'Verify the current repository/workspace state before making changes.',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...current,\n    handoff_input: handoff,\n    handoff_from_session_id: previousSession,\n    compression_handoff: true,\n    working_directory: String(current.working_directory ?? $('Normalize Request').first().json.working_directory ?? ''),\n    run_id: '',\n    session_id: '',\n    requested_session_id: '',\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1217,7 +1217,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {} }}",
+        "jsonBody": "={{ $json.context_overflow ? { mode: 'always' } : {} }}",
         "options": {
           "timeout": 660000,
           "response": {
@@ -1238,6 +1238,47 @@
       "name": "Compact Session",
       "onError": "continueRegularOutput",
       "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "={{ String($('Normalize Request').first().json.runner_url || 'http://claude-runner:8700').replace(/\\/+$/, '') + '/v1/sessions/' + encodeURIComponent(String($json.compression_session_id || $json.session_id || $json.requested_session_id || '').trim()) + '/digest' }}",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "max_chars",
+              "value": "16000"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ String($('Normalize Request').first().json.runner_api_key ?? '').trim() ? 'Bearer ' + String($('Normalize Request').first().json.runner_api_key).trim() : '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "e06844ee-c6e2-4485-be57-d970b51f17d0",
+      "name": "Get Session Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -140,
+        640
+      ]
     }
   ],
   "pinData": {},
@@ -1406,7 +1447,7 @@
       "main": [
         [
           {
-            "node": "Start / Resume Run",
+            "node": "Has Session?",
             "type": "main",
             "index": 0
           }
@@ -1585,7 +1626,7 @@
       "main": [
         [
           {
-            "node": "Build Compression Handoff",
+            "node": "Get Session Digest",
             "type": "main",
             "index": 0
           }
@@ -1644,6 +1685,17 @@
         [
           {
             "node": "Evaluate Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Session Digest": {
+      "main": [
+        [
+          {
+            "node": "Build Compression Handoff",
             "type": "main",
             "index": 0
           }

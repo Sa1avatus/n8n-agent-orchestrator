@@ -154,6 +154,15 @@ class StreamState:
                 if size:  # gateways that stream usage only at the end report 0 here
                     self.context_tokens = size
             self.model = str(message.get("model") or self.model)
+        elif kind == "stream_event" and event.get("parent_tool_use_id") is None:
+            # LiteLLM reports a request's size only in its stream events; this is also the
+            # only size a run that timed out (no result) leaves behind
+            inner = event.get("event") or {}
+            if inner.get("type") in ("message_start", "message_delta"):
+                usage = inner.get("usage") or (inner.get("message") or {}).get("usage") or {}
+                size = _prompt_tokens(usage)
+                if size:
+                    self.context_tokens = size
         elif kind == "system" and subtype == "api_retry":
             self.last_retry = event
         elif kind == "system" and subtype == "compact_boundary":
