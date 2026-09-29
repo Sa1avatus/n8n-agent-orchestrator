@@ -397,3 +397,14 @@ def test_every_candidate_is_logged_with_features(indexed: RetrievalService) -> N
     assert requests[0]["cache_status"] == "miss" and requests[0]["n_selected"] == len(
         response.chunks
     )
+
+
+def test_context_names_the_file_under_the_corpus_root() -> None:
+    chunk = _chunk_candidate(1, "tools/server/server-context.cpp")
+    assert chunk.record is not None
+    corpus = chunk.record.corpus_id
+    with_root = render_context([chunk], "worker", "rr_1", roots={corpus: "/d/rag-tmp/src/"})
+    expected = "| file=/d/rag-tmp/src/tools/server/server-context.cpp | lines="
+    assert "| path=tools/server/server-context.cpp " + expected in with_root
+    assert "| file=" not in render_context([chunk], "worker", "rr_1")
+    assert "| file=" not in render_context([chunk], "worker", "rr_1", roots={corpus: None})

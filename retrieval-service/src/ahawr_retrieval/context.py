@@ -102,8 +102,15 @@ def _overlaps(candidate: Candidate, selected: list[Candidate], threshold: float)
 
 
 def render_context(
-    selected: list[Candidate], profile_name: str, request_id: str, line_numbers: bool = False
+    selected: list[Candidate],
+    profile_name: str,
+    request_id: str,
+    line_numbers: bool = False,
+    roots: dict[str, str | None] | None = None,
 ) -> str:
+    """``roots`` maps corpus ids to their root folder; each chunk then also names the file an
+    agent can open (``file=<root>/<path>``), since ``path`` is relative to a corpus root the
+    agent may not know (e.g. a corpus outside the mission's working directory)."""
     if not selected:
         return ""
     lines = [
@@ -117,6 +124,11 @@ def render_context(
         meta = [
             f"[{index}] {AUTHORITY.get(record.source_type, record.source_type)}",
             f"path={record.path}",
+        ]
+        root = (roots or {}).get(record.corpus_id)
+        if root and record.source_type in ("code", "doc"):
+            meta.append(f"file={root.rstrip('/')}/{record.path}")
+        meta += [
             f"lines={record.start_line}-{record.end_line}",
         ]
         if record.symbol:

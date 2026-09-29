@@ -416,7 +416,13 @@ class RetrievalService:
 
         chunks = [self._chunk_out(c, rank, corpora) for rank, c in enumerate(selected, 1)]
         context = (
-            render_context(selected, profile.name, request_id, line_numbers)
+            render_context(
+                selected,
+                profile.name,
+                request_id,
+                line_numbers,
+                roots={cid: c.root for cid, c in corpora.items()},
+            )
             if request.render_context
             else ""
         )
@@ -808,7 +814,11 @@ class RetrievalService:
             degraded_reasons=reasons,
             chunks=chunks,
             context=render_context(
-                candidates, profile.name, request_id, profile.render.line_numbers
+                candidates,
+                profile.name,
+                request_id,
+                profile.render.line_numbers,
+                roots={cid: c.root for cid, c in corpora.items()},
             )
             if request.render_context
             else "",
