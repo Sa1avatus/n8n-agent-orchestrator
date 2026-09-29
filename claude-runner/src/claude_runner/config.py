@@ -25,8 +25,47 @@ PERMISSION_MODES = {
 }
 COMPACT_MODES = {"auto", "always", "off"}
 
+# Compact-instruction text (delivered to Claude Code as custom compact instructions via the
+# PreCompact hook and the runner's /compact). It fixes the required summary sections, the
+# target volume (1500-2000 tokens, hard cap 2000) and forbids verbatim copying of tool
+# outputs, logs, diffs and code; it is short so it does not add to the compaction request's
+# prefill.
+DEFAULT_COMPACT_INSTRUCTIONS = """
+Compress the session into a short structured summary of 1500-2000 tokens (hard cap 2000).
+Do not copy tool outputs, logs, diffs, or code verbatim; use file:line references instead.
+
+## Task and acceptance criteria
+State the original task and its acceptance criteria verbatim.
+
+## Findings (file:line)
+List the key facts found, each with a file:line reference.
+
+## Changed files
+List the files that were changed.
+
+## Checks done / not done
+List each check with its result; separate done from not done.
+
+## Next step
+State the next step.
+"""
+
+
 _READ_ONLY_DENY = ["Edit", "Write", "NotebookEdit"]
-_SECRET_DENY = ["Read(./.env)", "Read(./.env.*)", "Read(**/.env)", "Read(**/.env.*)"]
+# Env files with real values. Named instead of `.env.*`, which would also hide `.env.example`
+# (Claude Code applies deny rules before allow rules, so it cannot be re-allowed).
+_SECRET_ENV_FILES = [
+    ".env",
+    ".env.local",
+    ".env.*.local",
+    ".env.development",
+    ".env.dev",
+    ".env.production",
+    ".env.prod",
+    ".env.staging",
+    ".env.test",
+]
+_SECRET_DENY = [f"Read({where}{name})" for where in ("./", "**/") for name in _SECRET_ENV_FILES]
 _GIT_DENY = ["Bash(git commit *)", "Bash(git push *)"]
 
 
@@ -53,6 +92,14 @@ PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # Keys of a provider block that configure the runner instead of the Claude Code process.
 PROVIDER_RUNNER_KEYS = {"TOOLS", "COMPACT_MIN_TOKENS"}
 
+# Context-window limits the local provider's compaction settings must stay inside. The local
+# model's window is 65536 tokens; the autocompact threshold must leave room for one large
+# tool output (~20K tokens, saved to a file by BASH_MAX_OUTPUT_LENGTH and similar limits)
+# plus the generation limit, or a run could exceed the window before the next compaction.
+AUTO_COMPACT_WINDOW = 65_536
+AUTO_COMPACT_TOOL_RESERVE = 20_000
+DEFAULT_MAX_OUTPUT_TOKENS = 8_192
+
 
 @dataclass(frozen=True)
 class ProviderProfile:
@@ -63,6 +110,11 @@ class ProviderProfile:
     env: dict[str, str] = field(default_factory=dict)
     tools: str = ""
     compact_min_tokens: int | None = None
+    # Autocompact threshold in tokens (from CLAUDE_AUTOCOMPACT_PCT_OVERRIDE or
+    # CLAUDE_CODE_AUTO_COMPACT_WINDOW); None = the provider's built-in default.
+    autocompact_threshold: int | None = None
+    # Max tokens per response (CLAUDE_CODE_MAX_OUTPUT_TOKENS); None = the provider's default.
+    max_output_tokens: int | None = None
 
     @property
     def isolates_credentials(self) -> bool:
@@ -72,6 +124,60 @@ class ProviderProfile:
 def provider_key(name: str) -> str:
     """``custom:llama-local`` / ``llama-local`` → ``CUSTOM_LLAMA_LOCAL`` / ``LLAMA_LOCAL``."""
     return re.sub(r"[^A-Z0-9]+", "_", name.strip().upper()).strip("_")
+
+
+# The precompute buffer the binary subtracts from the effective window before
+# applying the threshold (hardcoded in the Claude Code bundle).
+_AUTO_COMPACT_PRECOMPUTE_BUFFER = 13_000
+
+
+def _autocompact_threshold(block: dict[str, str]) -> int | None:
+    """The provider's autocompact trigger in tokens.
+
+    ``CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`` is a percentage of the 65536-token window
+    (e.g. 56.98 → 37342).  ``CLAUDE_CODE_AUTO_COMPACT_WINDOW`` is the resolved
+    window; the actual trigger is
+    ``window - min(max_output, 20000) - 13000``.
+    None when neither is set.
+    """
+    pct = block.get("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "").strip()
+    if pct:
+        return int(float(pct) * AUTO_COMPACT_WINDOW / 100)
+    window = block.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW", "").strip()
+    if window:
+        w = int(window)
+        max_output = _max_output_tokens(block) or DEFAULT_MAX_OUTPUT_TOKENS
+        return w - min(max_output, AUTO_COMPACT_TOOL_RESERVE) - _AUTO_COMPACT_PRECOMPUTE_BUFFER
+    return None
+
+
+def _max_output_tokens(block: dict[str, str]) -> int | None:
+    raw = block.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "").strip()
+    return int(raw) if raw else None
+
+
+def _validate_compaction_limits(name: str, block: dict[str, str]) -> None:
+    """The autocompact trigger must stay inside the provider's window and leave
+    headroom for one large tool output.  The headroom is ``AUTO_COMPACT_WINDOW -
+    threshold``; it must cover ``AUTO_COMPACT_TOOL_RESERVE`` (one ~20K tool
+    output).  For the window path the trigger is
+    ``window - min(max_output, 20000) - 13000``, so the headroom is exactly
+    ``min(max_output, 20000) + 13000``."""
+    threshold = _autocompact_threshold(block)
+    if threshold is None:
+        return
+    if threshold > AUTO_COMPACT_WINDOW:
+        raise ValueError(
+            f"provider {name}: autocompact threshold {threshold} exceeds "
+            f"the {AUTO_COMPACT_WINDOW}-token window"
+        )
+    headroom = AUTO_COMPACT_WINDOW - threshold
+    if headroom < AUTO_COMPACT_TOOL_RESERVE:
+        raise ValueError(
+            f"provider {name}: autocompact threshold {threshold} leaves only "
+            f"{headroom} tokens of headroom, less than the "
+            f"{AUTO_COMPACT_TOOL_RESERVE}-token tool reserve"
+        )
 
 
 def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
@@ -86,11 +192,14 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
     providers = {}
     for name, block in blocks.items():
         compact = block.get("COMPACT_MIN_TOKENS", "").strip()
+        _validate_compaction_limits(name, block)
         providers[name] = ProviderProfile(
             name=name,
             env={k: v for k, v in block.items() if k not in PROVIDER_RUNNER_KEYS},
             tools=block.get("TOOLS", "").strip(),
             compact_min_tokens=int(compact) if compact else None,
+            autocompact_threshold=_autocompact_threshold(block),
+            max_output_tokens=_max_output_tokens(block),
         )
     return providers
 
@@ -160,6 +269,10 @@ class Settings:
     extra_args: tuple[str, ...] = ()
     compact_mode: str = "auto"
     compact_min_tokens: int = 120_000
+    compact_instructions: str = DEFAULT_COMPACT_INSTRUCTIONS
+    # Compact instructions are delivered only to the local (credential-isolating) provider,
+    # so the cloud subscription's prompt stays the stock summarizer.
+    local_compact_instructions: bool = True
     compact_timeout_seconds: int = 600
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
@@ -195,6 +308,12 @@ class Settings:
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
                 tools=env.get(prefix + "TOOLS", "").strip(),
             )
+        # Empty env var = "use Claude Code's built-in summarizer" (no custom instructions);
+        # unset = use the built-in default instruction text.
+        if "CLAUDE_RUNNER_COMPACT_INSTRUCTIONS" in env:
+            compact_instructions = env["CLAUDE_RUNNER_COMPACT_INSTRUCTIONS"].strip()
+        else:
+            compact_instructions = DEFAULT_COMPACT_INSTRUCTIONS
         return cls(
             data_dir=Path(env.get("CLAUDE_RUNNER_DATA_DIR", "/data")),
             claude_bin=env.get("CLAUDE_RUNNER_CLAUDE_BIN", "claude").strip() or "claude",
@@ -211,6 +330,8 @@ class Settings:
             extra_args=tuple(shlex.split(env.get("CLAUDE_RUNNER_EXTRA_ARGS", ""))),
             compact_mode=compact_mode,
             compact_min_tokens=_int(env, "CLAUDE_RUNNER_COMPACT_MIN_TOKENS", 120_000),
+            compact_instructions=compact_instructions,
+            local_compact_instructions=_bool(env, "CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS", True),
             compact_timeout_seconds=_int(env, "CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS", 600, 1),
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),

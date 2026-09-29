@@ -6,7 +6,11 @@ import pytest
 
 from claude_runner.__main__ import main
 from claude_runner.claude_cli import StreamState, build_command, child_env, classify
-from claude_runner.config import Settings
+from claude_runner.config import (
+    AUTO_COMPACT_WINDOW,
+    ProviderProfile,
+    Settings,
+)
 
 
 def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:
@@ -48,6 +52,183 @@ def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:
         Settings.from_env({"CLAUDE_RUNNER_COMPACT_MODE": "sometimes"})
     with pytest.raises(ValueError):
         Settings.from_env({"CLAUDE_RUNNER_MAX_CONCURRENT": "0"})
+
+
+def test_compact_instructions_delivered_via_precompact_hook(
+    tmp_path: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    # A provider block with its own endpoint: the local provider the instructions target.
+    local = ProviderProfile(
+        name="LOCAL",
+        env={"ANTHROPIC_BASE_URL": "http://litellm:4000", "ANTHROPIC_AUTH_TOKEN": "sk-litellm"},
+    )
+    s = Settings.from_env({})
+    s.providers["LOCAL"] = local
+    assert "## Task and acceptance criteria" in s.compact_instructions
+    assert "1500-2000" in s.compact_instructions
+    assert "Do not copy tool outputs" in s.compact_instructions
+    assert "## Findings (file:line)" in s.compact_instructions
+    assert "## Changed files" in s.compact_instructions
+    assert "## Checks done / not done" in s.compact_instructions
+    assert "## Next step" in s.compact_instructions
+
+    # Only the local (credential-isolating) provider gets the settings file; the
+    # PreCompact hook only fires on compaction, so normal runs are unaffected.
+    assert local.isolates_credentials
+    cmd = build_command(
+        s, s.profile("worker"), model="m", claude_session_id="id", resume=True, provider=local
+    )
+    assert "--settings" in cmd
+    assert cmd[cmd.index("--settings") + 1] == str(tmp_path) + "/compact-settings.json"
+    payload = json.loads((tmp_path / "compact-settings.json").read_text("utf-8"))
+    hook = payload["hooks"]["PreCompact"][0]["hooks"][0]
+    assert hook["type"] == "command"
+    assert "## Task and acceptance criteria" in hook["command"]
+
+    # A compact run gets it too, with the usual compact flags still absent.
+    compact = build_command(
+        s,
+        s.profile("worker"),
+        model="",
+        claude_session_id="id",
+        resume=True,
+        compact=True,
+        provider=local,
+    )
+    assert "--permission-mode" not in compact and "--settings" in compact
+
+    # Overriding the instruction text via env works.
+    custom = Settings.from_env({"CLAUDE_RUNNER_COMPACT_INSTRUCTIONS": "кратко"})
+    assert custom.compact_instructions == "кратко"
+    build_command(
+        custom,
+        s.profile("worker"),
+        model="m",
+        claude_session_id="id",
+        resume=True,
+        provider=local,
+    )
+    custom_hook = json.loads((tmp_path / "compact-settings.json").read_text("utf-8"))["hooks"][
+        "PreCompact"
+    ][0]["hooks"][0]
+    assert "кратко" in custom_hook["command"]
+
+    # Empty instructions add no settings file at all.
+    bare = Settings.from_env({"CLAUDE_RUNNER_COMPACT_INSTRUCTIONS": ""})
+    empty = build_command(
+        bare,
+        s.profile("worker"),
+        model="m",
+        claude_session_id="id",
+        resume=True,
+        provider=local,
+    )
+    assert "--settings" not in empty
+
+    # The flag is off: no settings file even for the local provider, including a compact run.
+    off = Settings.from_env({"CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS": "0"})
+    assert off.local_compact_instructions is False
+    gated = build_command(
+        off,
+        s.profile("worker"),
+        model="m",
+        claude_session_id="id",
+        resume=True,
+        provider=local,
+    )
+    assert "--settings" not in gated
+    gated_compact = build_command(
+        off,
+        s.profile("worker"),
+        model="",
+        claude_session_id="id",
+        resume=True,
+        compact=True,
+        provider=local,
+    )
+    assert "--settings" not in gated_compact
+
+    # No local provider (default container env): no settings file.
+    none = build_command(
+        s, s.profile("worker"), model="m", claude_session_id="id", resume=True, provider=None
+    )
+    assert "--settings" not in none
+
+
+def test_autocompact_threshold_from_pct_and_absolute_window() -> None:
+    # 56.98% of the 65536-token window: 0.5698 * 65536 = 37342.4 → 37342.
+    s = Settings.from_env(
+        {"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "56.98"}
+    )
+    assert s.provider("local").autocompact_threshold == 37342
+    # An absolute window: the trigger is window - min(max_output, 20000) - 13000.
+    # 65536 - 8192 - 13000 = 44344 (the default effective trigger, ~44K).
+    s = Settings.from_env(
+        {"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536"}
+    )
+    assert s.provider("local").autocompact_threshold == 44344
+
+
+def test_autocompact_reserve_keeps_runs_inside_the_65536_window() -> None:
+    # The full window: trigger = 65536 - 8192 - 13000 = 44344, headroom = 21192.
+    s = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+        }
+    )
+    local = s.provider("local")
+    assert local is not None
+    assert local.autocompact_threshold == 44344
+    assert local.max_output_tokens == 8192
+    # Headroom after the trigger: 65536 - 44344 = 21192 >= 20000 tool reserve.
+    assert local.autocompact_threshold + 8192 + 13000 == AUTO_COMPACT_WINDOW
+    # A window larger than the 65536-token window produces a threshold above the
+    # window and is rejected.
+    with pytest.raises(ValueError):
+        Settings.from_env(
+            {"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "200000"}
+        )
+    # A PCT that pushes the trigger close to the full window leaves less than the
+    # 20000-token tool reserve: 0.99 * 65536 = 64880, headroom = 656 < 20000.
+    with pytest.raises(ValueError):
+        Settings.from_env({"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "99"})
+    # The 65536 window still gives the default 44344 threshold, headroom 21192.
+    s = Settings.from_env(
+        {"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536"}
+    )
+    local = s.provider("local")
+    assert local is not None
+    assert local.autocompact_threshold == 44344
+    assert AUTO_COMPACT_WINDOW - local.autocompact_threshold == 21192
+    # With no threshold set there is nothing to validate.
+    s = Settings.from_env({"CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192"})
+    assert s.provider("local").autocompact_threshold is None
+
+
+def test_child_env_carries_the_local_provider_output_limits() -> None:
+    # The output-limit variables (and the autocompact window) reach the Claude Code
+    # process env through the provider block: they are what actually reduce how often
+    # a run hits the compaction threshold.
+    s = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_BASE_URL": "http://litellm:4000",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_AUTH_TOKEN": "sk-litellm",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__BASH_MAX_OUTPUT_LENGTH": "12000",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS": "10000",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536",
+        }
+    )
+    local = s.provider("local")
+    env = child_env(local)
+    assert env["BASH_MAX_OUTPUT_LENGTH"] == "12000"
+    assert env["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] == "10000"
+    assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "8192"
+    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "65536"
+    # The runner's own settings still do not leak into the child process.
+    assert not any(key.startswith("CLAUDE_RUNNER_") for key in env)
 
 
 def test_child_env_hides_runner_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -134,3 +315,49 @@ def test_context_size_from_stream_events_of_a_run_that_timed_out() -> None:
     state.feed(stream({"type": "message_start", "message": {"usage": {"input_tokens": 9}}}, "t1"))
     state.feed(stream({"type": "message_delta", "usage": {"output_tokens": 5}}))
     assert state.final_context_tokens() == 63824  # no result event: the run was cut off
+
+
+def _reply(message_id: str, text: str, stop: str | None = None, tool: bool = False) -> str:
+    content: list[dict[str, object]] = [{"type": "text", "text": text}] if text else []
+    if tool:
+        content.append({"type": "tool_use", "id": "t", "name": "Read", "input": {}})
+    message = {"id": message_id, "content": content, "stop_reason": stop}
+    return json.dumps({"type": "assistant", "parent_tool_use_id": None, "message": message})
+
+
+def test_report_cut_at_output_limit_keeps_both_parts() -> None:
+    state = StreamState()
+    state.feed(_reply("m0", "Reading the code.", "max_tokens"))  # an early cut: work, not report
+    for i in range(1, 5):
+        state.feed(_reply(f"m{i}", "", "tool_use", tool=True))
+    state.feed(_reply("m5", "## FIX APPLIED\npart one", "max_tokens"))
+    state.feed(_reply("m6", "Let me see where it stopped.", "tool_use", tool=True))
+    state.feed(_reply("m7", "part two (continuing)", "end_turn"))
+    state.feed(
+        json.dumps({"type": "result", "subtype": "success", "result": "part two (continuing)"})
+    )
+    out = classify(state, 0, "")
+    assert out.status == "completed"
+    assert out.output == "## FIX APPLIED\npart one\n\npart two (continuing)"
+
+
+def test_report_cut_found_from_stream_event_and_not_doubled() -> None:
+    state = StreamState()
+    state.feed(_reply("m1", "whole report, cut", None))
+    delta = {"type": "message_delta", "delta": {"stop_reason": "max_tokens"}, "usage": {}}
+    state.feed(json.dumps({"type": "stream_event", "parent_tool_use_id": None, "event": delta}))
+    assert state.cut == ["m1"]
+    # no continuation: the cut reply is the result itself and is not repeated
+    state.feed(json.dumps({"type": "result", "subtype": "success", "result": "whole report, cut"}))
+    assert classify(state, 0, "").output == "whole report, cut"
+    plain = StreamState()
+    plain.feed(_reply("a", "done", "end_turn"))
+    plain.feed(json.dumps({"type": "result", "subtype": "success", "result": "done"}))
+    assert classify(plain, 0, "").output == "done"
+
+
+def test_secret_deny_keeps_env_example_readable() -> None:
+    worker = Settings.from_env({}).profiles["worker"].disallowed_tools
+    assert "Read(./.env)" in worker and "Read(**/.env.production)" in worker
+    assert "Read(./.env.*.local)" in worker
+    assert not any(".env.example" in rule or rule.endswith(".env.*)") for rule in worker)

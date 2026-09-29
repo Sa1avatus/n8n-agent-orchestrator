@@ -133,6 +133,21 @@ class Store:
         run["details"] = json.loads(run.get("details") or "{}")
         return run
 
+    def session_cost_before(self, claude_session_id: str, run_id: str) -> float | None:
+        """Cumulative cost Claude Code reported for this Claude session by the last run that
+        finished before ``run_id`` (Claude Code restores the session's cost on --resume)."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT details FROM runs WHERE claude_session_id = ? AND run_id != ? "
+                "AND finished_at IS NOT NULL ORDER BY finished_at DESC, rowid DESC LIMIT 20",
+                (claude_session_id, run_id),
+            ).fetchall()
+        for row in rows:
+            total = json.loads(row["details"] or "{}").get("total_cost_usd")
+            if isinstance(total, int | float):
+                return float(total)
+        return None
+
     def active_run(self, session_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._db.execute(

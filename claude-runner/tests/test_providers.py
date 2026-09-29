@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from claude_runner.api import create_app
-from claude_runner.config import Settings, provider_key
+from claude_runner.claude_cli import SECONDARY_MODEL_VARS, child_env
+from claude_runner.config import CREDENTIAL_VARS, ProviderProfile, Settings, provider_key
 
 from .conftest import calls, wait_for
 
@@ -17,13 +19,20 @@ LOCAL = {
     "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_DISABLE_THINKING": "1",
     "CLAUDE_RUNNER_PROVIDER_LOCAL__TOOLS": "Bash,Read,Edit",
     "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_MIN_TOKENS": "1500",
+    # Lower compaction frequency for the local model: small tool outputs and the
+    # full 65536-token window, giving a 44344-token trigger (the default ~44K)
+    # with 21192 tokens of headroom.
+    "CLAUDE_RUNNER_PROVIDER_LOCAL__BASH_MAX_OUTPUT_LENGTH": "12000",
+    "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS": "10000",
+    "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+    "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536",
 }
 
 
 @pytest.fixture
 def mixed(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> Settings:
     """Architect/Reviewer on the Anthropic subscription, Worker on llama.cpp via LiteLLM."""
-    for key in ("ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"):
+    for key in CREDENTIAL_VARS + SECONDARY_MODEL_VARS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-subscription")
     env = {k: str(v) for k, v in LOCAL.items()}
@@ -50,9 +59,24 @@ def test_provider_blocks_and_names() -> None:
     assert local is not None and local.tools == "Bash,Read,Edit"
     assert local.compact_min_tokens == 1500 and "TOOLS" not in local.env
     assert local.isolates_credentials
+    # The local provider's compaction settings are parsed and stay inside the window.
+    assert local.autocompact_threshold == 44344
+    assert local.max_output_tokens == 8192
+    # Headroom after the trigger: 65536 - 44344 = 21192 >= 20000 tool reserve.
+    assert local.autocompact_threshold + 8192 + 13000 == 65536
     assert s.provider("custom:llama") is not None  # Hermes-style provider names work
     assert s.provider("anthropic") is None and s.provider("") is None
     assert provider_key(" llama-local ") == "LLAMA_LOCAL"
+
+
+def test_local_provider_output_limits_reach_the_claude_process(mixed: Settings) -> None:
+    local = mixed.providers["LOCAL"]
+    env = child_env(local)
+    assert env["BASH_MAX_OUTPUT_LENGTH"] == "12000"
+    assert env["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] == "10000"
+    assert env["CLAUDE_CODE_MAX_OUTPUT_TOKENS"] == "8192"
+    assert env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "65536"
+    assert local.autocompact_threshold == 44344
 
 
 def test_roles_use_their_own_backend_and_credentials(mixed: Settings, tmp_path: Path) -> None:
@@ -101,10 +125,52 @@ def test_compaction_uses_the_session_provider(mixed: Settings, tmp_path: Path) -
         done = client.post(f"/v1/sessions/{sid}/compact", json={}).json()
         assert done["status"] == "completed"
     compact = calls(tmp_path)[-1]
-    assert compact["prompt"].strip() == "/compact"
+    assert compact["prompt"] == "/compact " + mixed.compact_instructions
     assert compact["env"]["ANTHROPIC_BASE_URL"] == "http://litellm:4000"
     assert "CLAUDE_CODE_OAUTH_TOKEN" not in compact["env"]
     assert compact["args"][compact["args"].index("--model") + 1] == "local-coder"
+
+
+def test_compact_instructions_are_stable_between_steps(mixed: Settings, tmp_path: Path) -> None:
+    from claude_runner.claude_cli import config_dir, settings_flag
+
+    # A backend that does not isolate credentials: it is not the local provider.
+    custom = ProviderProfile(
+        name="CUSTOM_LLAMA",
+        env={"CLAUDE_CODE_DISABLE_THINKING": "1"},
+        compact_min_tokens=1,
+    )
+    assert not custom.isolates_credentials
+    mixed.providers["CUSTOM_LLAMA"] = custom
+    with TestClient(create_app(mixed)) as client:
+        first = run(client, role="worker", provider="custom:llama", model="m")
+        sid = first["session_id"]
+        run(client, role="worker", provider="custom:llama", model="m", session_id=sid)
+        done = client.post(f"/v1/sessions/{sid}/compact", json={}).json()
+        assert done["status"] == "completed"
+    first_call, resume_call, compact_call = calls(tmp_path)
+    # Not the local provider: no settings file and no instruction text on /compact.
+    for claude in (first_call, resume_call, compact_call):
+        assert settings_flag(claude["args"]) is None
+    assert compact_call["prompt"].strip() == "/compact"
+
+    # The local provider: the settings file is written once and reused verbatim, so the
+    # system prompt and tools do not change between session steps.
+    with TestClient(create_app(mixed)) as client:
+        first = run(client, role="worker", provider="local", model="local-coder")
+        sid = first["session_id"]
+        run(client, role="worker", provider="local", model="local-coder", session_id=sid)
+        done = client.post(f"/v1/sessions/{sid}/compact", json={}).json()
+        assert done["status"] == "completed"
+    first_call, resume_call, compact_call = calls(tmp_path)[-3:]
+    expected = str(config_dir()) + "/compact-settings.json"
+    for claude in (first_call, resume_call, compact_call):
+        assert settings_flag(claude["args"]) == expected
+    # The runner-compact request and the auto-compact hook carry the same instruction text.
+    assert compact_call["prompt"] == "/compact " + mixed.compact_instructions
+    payload = json.loads(Path(expected).read_text("utf-8"))
+    hook_command = payload["hooks"]["PreCompact"][0]["hooks"][0]["command"]
+    assert mixed.compact_instructions in hook_command
 
 
 def test_unknown_provider_falls_back_to_container_env(mixed: Settings, tmp_path: Path) -> None:

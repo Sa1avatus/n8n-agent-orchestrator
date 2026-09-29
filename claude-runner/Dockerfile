@@ -17,8 +17,11 @@ RUN apt-get update \
 WORKDIR /opt/claude-runner
 COPY pyproject.toml ./
 COPY src ./src
+# Claude Code price list for models it does not know (the local Worker model); see README.
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+# [dev] = pytest, ruff, mypy: Workers run the checks without building their own venv.
 RUN python3 -m venv /opt/claude-runner/venv \
-    && /opt/claude-runner/venv/bin/pip install --no-cache-dir . \
+    && /opt/claude-runner/venv/bin/pip install --no-cache-dir ".[dev]" \
     && mkdir -p /data /home/node/.claude /workspace \
     && chown -R node:node /data /home/node/.claude
 

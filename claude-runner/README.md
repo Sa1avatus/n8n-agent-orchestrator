@@ -30,6 +30,19 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 | Claude Code routines `/fire` API, cloud sessions | Run in Anthropic's cloud against a GitHub repository, not against the local workspace, and there is no result/poll API for AHAWR. |
 | Managed Agents (Claude API) | Hosted agent loop in a cloud sandbox. It does not see the local workspace and is a different product surface. |
 
+### Cost shown for runs
+
+`cost_usd` is Claude Code's own estimate (`total_cost_usd`, list prices × tokens, cache reads and
+writes priced separately). Claude Code reports it for the whole session and restores it on
+`--resume`, so the runner stores each run's share: the session total minus the total of the
+previous finished run of the same Claude session (the cumulative value stays in `details`).
+A model Claude Code does not know is priced at a fallback; the image ships
+`/etc/claude-code/managed-settings.json` (`modelPricing.overrides`, USD per million tokens)
+that prices the local Worker model like Claude Sonnet 5 ($2 in, $10 out, $0.20 cache read,
+$2.50 cache write), the model it is usually compared with. It is an estimate for comparison,
+not a bill: the local model costs nothing per token. Edit the file to change the model id
+or the rates, then rebuild the image.
+
 ## API (Hermes-compatible)
 
 | Endpoint | Behaviour |
@@ -37,7 +50,7 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 | `POST /v1/runs` `{input, model, provider, session_id?, working_directory?, role?}` | Starts a Claude Code turn asynchronously → `{run_id, session_id, status: "queued"\|"running"}`. With a `session_id` the saved session is resumed. If that session already has a run in flight, the same run is returned (`attached: true`), so there are never two concurrent turns in one session. |
 | `GET /v1/runs/{run_id}` | `{status: queued\|running\|completed\|failed\|cancelled, output, error: {code, message}, http_code, session_id, cost_usd, num_turns, context_tokens, permission_denials}` |
 | `POST /v1/runs/{run_id}/cancel` | Interrupts the turn (SIGINT), then stops the CLI's whole process group, so the tool processes it started stop too. The session stays resumable. |
-| `POST /v1/sessions/{session_id}/compact` `{mode?: auto\|always\|off}` | Runs Claude Code's `/compact` on the saved session when its context exceeds `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` → `completed` / `skipped` (with `reason`) / `failed`. This replaces the Hermes TUI WebSocket compression. |
+| `POST /v1/sessions/{session_id}/compact` `{mode?: auto\|always\|off}` | Runs Claude Code's `/compact` on the saved session when its context exceeds `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` → `completed` / `skipped` (with `reason`) / `failed`. The compact instructions are delivered via a PreCompact hook and appended to the **end** of the compaction request, so the request's prefix (history + system prompt) is unchanged and its prefill stays the same. This replaces the Hermes TUI WebSocket compression. |
 | `GET /v1/sessions/{session_id}/digest?max_chars=12000` | What the session already did, from its runs' activity logs: the model's text, each tool call with a shortened result, compactions and results; the newest entries are kept when it is cut. The Run Manager gives it to a fresh session when the old one cannot be compacted. |
 | `GET /v1/sessions/{session_id}`, `GET /health` | Session binding and context size; CLI version, auth mode, run counts. |
 | `GET /v1/runs?role=&status=&session_id=&limit=`, `GET /v1/runs/{run_id}/events?after=N` | Read-only run list and each run's activity (the dashboard's data, see below). |
@@ -59,11 +72,41 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 
 | Role | Default permission mode | Denied tools |
 |---|---|---|
-| `worker` | `bypassPermissions` (edits, commands) | `Read(./.env)`, `Read(./.env.*)`, `Read(**/.env)`, `Read(**/.env.*)`, `Bash(git commit *)`, `Bash(git push *)` |
+| `worker` | `bypassPermissions` (edits, commands) | `Read` of `.env`, `.env.local`, `.env.*.local`, `.env.development`/`.dev`, `.env.production`/`.prod`, `.env.staging`, `.env.test` (in `./` and `**/`; `.env.example` stays readable), `Bash(git commit *)`, `Bash(git push *)` |
 | `reviewer` | `dontAsk` (reads, read-only commands) | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
 | `architect` | `dontAsk` | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
 
 Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_ALLOWED_TOOLS`, `_DISALLOWED_TOOLS`, `_APPEND_SYSTEM_PROMPT` and `_MAX_TURNS`. Deny rules are enforced even in `bypassPermissions`: a real run confirmed that the Worker could not read `.env`. Claude Code refuses `bypassPermissions` as root, which is why the container runs as the `node` user. The Worker can still reach environment variables through Bash, so give the container only the model credential. `CLAUDE_RUNNER_*` values, including the runner's own API key, are removed from the CLI's environment.
+
+### Compaction
+
+Every compaction (auto, manual `/compact`, or the runner's `/compact` before continuing a session) is given custom compact instructions. They are delivered two ways that Claude Code accepts as *custom compact instructions*:
+
+1. **PreCompact hook** — a settings file (`--settings <path>`) that carries a `PreCompact` hook printing the instruction text to stdout. Claude Code appends the hook's stdout to the compaction request.
+2. **`/compact <instructions>`** — the runner puts the instruction text on the `/compact` command itself.
+
+Both texts are appended to the **end** of the compaction request, so the request's prefix (history + system prompt) is untouched and the prefill is unchanged. The default instruction text fixes the five required headings in order — `## Task and acceptance criteria`, `## Findings (file:line)`, `## Changed files`, `## Checks done / not done`, `## Next step` — targets 1500–2000 tokens (hard cap 2000), and forbids verbatim copying of tool outputs, logs, diffs and code (use `file:line` references instead).
+
+The runner also decides *when* to compact a session before resuming it:
+
+| Setting | Meaning |
+|---|---|
+| `CLAUDE_RUNNER_COMPACT_MODE` | `auto` (default) compacts only above the threshold, `always` compacts whenever a session is continued, `off` never compacts. |
+| `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` | Context size (in tokens) above which `auto` compacts. Default 120000. A provider block can override it with `…__COMPACT_MIN_TOKENS`. |
+| `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` | Wall-clock budget for the compaction run itself. Default 600. |
+| `CLAUDE_RUNNER_COMPACT_INSTRUCTIONS` | The instruction text. Empty = Claude Code's built-in summarizer (no custom instructions). Unset = the built-in default shown above. |
+| `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS` | Delivers the instructions to the local (credential-isolating) provider only. Off (`0`) keeps every provider on the stock summarizer (default: on). |
+
+**How the runner decides to compact before resuming.** The runner reads the session's current context size (from the last request's usage, or the run totals for a gateway that streams no per-request usage) and compares it with the threshold. The threshold is `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` (default 120000), or — for a provider block — the provider's own `…__COMPACT_MIN_TOKENS` when set (`runs.py`: the provider value is used when the request does not pass `min_tokens`). With `auto`, the runner skips compaction while the context is below this threshold.
+
+**Claude Code's own autocompact trigger.** Separately, Claude Code compacts on its own as the context grows, and a provider block can configure that trigger with either:
+
+* `…__CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` — a percentage of the 65536-token window (e.g. `56.98` → 37342). Overrides the window path when set.
+* `…__CLAUDE_CODE_AUTO_COMPACT_WINDOW` — the resolved window; the actual trigger is `window − min(max_output, 20000) − 13000`, where `max_output` is `…__CLAUDE_CODE_MAX_OUTPUT_TOKENS` (default 8192) and 13000 is Claude Code's hardcoded precompute buffer.
+
+The runner does not use this trigger to decide when to compact; it only validates it at startup (`config.py`): the trigger must stay inside the 65536-token window and leave headroom of at least 20000 tokens (one large tool output, which Claude Code saves to a file via `BASH_MAX_OUTPUT_LENGTH` and similar limits). A value that violates either constraint makes the runner refuse to start.
+
+**Output cap for a compaction request.** The LiteLLM pre-call hook (`ahawr_hooks.py`) recognises a compaction request by the fixed marker `CRITICAL: Respond with TEXT ONLY` at the start of the last user message and caps its `max_tokens` at 3000 (`COMPACTION_MAX_TOKENS`), so the summary is generated within a known limit and is not cut off mid-way. `max_tokens` is a request parameter, not part of the prompt prefix, so capping it does not break the llama.cpp prefix cache.
 
 ## Setup
 
@@ -194,6 +237,8 @@ What the local-provider settings do:
 | Run model → `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (set by the runner) | Background tasks and subagents of a local run use the same model as the run, so no model name is configured outside `hermes_config`. |
 | `…__CLAUDE_CODE_MAX_CONTEXT_TOKENS` = llama-server `-c` | Claude Code assumes 200k for unknown models and would compact too late. |
 | `…__CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192` | The default for unknown models is 32000. |
+| `…__CLAUDE_CODE_AUTO_COMPACT_WINDOW=65536` | The full 65536-token window; the runner computes the autocompact trigger as `window − min(max_output, 20000) − 13000`. Must leave ≥ 20000 tokens of headroom (one large tool output). |
+| `…__CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | A percentage of the 65536-token window (e.g. `56.98` → 37342). Overrides the window path when set. |
 | `…__CLAUDE_CODE_DISABLE_THINKING=1`, `…__DISABLE_PROMPT_CACHING=1` | No `reasoning_effort` or cache fields for the local model; the Claude roles keep thinking. |
 | `…__TOOLS=Bash,Read,Edit,Write,Glob,Grep` | Cuts the system prompt from about 15k to about 4k tokens. |
 | `…__COMPACT_MIN_TOKENS` ≈ half the window | Session compaction before resuming. Through LiteLLM the runner estimates the context size from run totals, because per-request usage is not streamed. |
@@ -230,7 +275,7 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
   - экспорт прогона или всей сессии в Markdown и JSON (ссылки в шапке).
 
   Для Claude Code тайминги точные, по потоку токенов. Для Hermes они приблизительные (`≈`): считаются по времени записи сообщений, а токены берутся как итог по сессии. Размышления видны для любого провайдера: Anthropic, локальный llama.cpp, сторонняя модель через LiteLLM. Дашборд только для чтения, опубликован только на `127.0.0.1`. Ключ Hermes есть только в `ahawr-dashboard`, в claude-runner с Worker'ом его нет.
-- **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` (для провайдера — `…__COMPACT_MIN_TOKENS`). Размер контекста берётся из последнего запроса к модели, в том числе у run'а, оборванного таймаутом.
+- **Компакция.** Вместо WebSocket-компрессии Hermes используется `POST /v1/sessions/{id}/compact`. Он вызывает `/compact` Claude Code, только когда контекст больше `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` (для провайдера — `…__COMPACT_MIN_TOKENS`). Размер контекста берётся из последнего запроса к модели, в том числе у run'а, оборванного таймаутом. Инструкции сжатия доставляются как PreCompact-hook (stdout добавляется в конец запроса на сжатие) и как текст после `/compact`; обе вставки — в конце, поэтому префикс запроса (история + системный промпт) не меняется и префилл не растёт. Текст задаётся в `CLAUDE_RUNNER_COMPACT_INSTRUCTIONS` (пусто = встроенный суммаризатор Claude Code); доставляется только локальному провайдеру, управляется `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS` (выкл. = `0`).
 - **Продолжение после сбоя.** Упавшая задача продолжается с места остановки, а не начинается заново:
   - таймаут, 5xx или переполнение контекста: Run Manager сжимает сессию (после переполнения — принудительно) и продолжает её коротким сообщением о том, почему прервалась прошлая попытка, а не повторной отправкой всей задачи;
   - если сжать не удалось, новая сессия получает исходную задачу и дайджест прошлой (`GET /v1/sessions/{id}/digest`): что уже прочитано, запущено и найдено;

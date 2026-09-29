@@ -267,3 +267,43 @@ def test_empty_authorization_header_without_api_key(client: TestClient) -> None:
         "/v1/runs", json={"input": "x", "model": "m"}, headers={"Authorization": ""}
     )
     assert response.status_code == 200
+
+
+def test_run_cost_is_this_runs_share(tmp_path: Path) -> None:
+    from claude_runner.runs import run_cost
+    from claude_runner.store import Store
+
+    assert run_cost(None, 1.0) is None
+    assert run_cost(2.5, None) == 2.5  # first run of a session
+    assert run_cost(4.3359, 3.5) == 0.8359  # resumed: the session total minus the previous one
+    assert run_cost(0.4, 3.5) == 0.4  # total not restored: take it as is
+    store = Store(tmp_path / "runs.sqlite")
+    for rid, total, finished in (
+        ("a", 1.0, "2026-09-29T01:00:00+00:00"),
+        ("b", 3.5, "2026-09-29T02:00:00+00:00"),
+    ):
+        store.create_run(
+            run_id=rid,
+            kind="run",
+            session_id="s",
+            claude_session_id="c",
+            role="worker",
+            model="m",
+            provider="local",
+            cwd="/w",
+            input="x",
+        )
+        store.update_run(rid, details={"total_cost_usd": total}, finished_at=finished)
+    store.create_run(
+        run_id="z",
+        kind="run",
+        session_id="s",
+        claude_session_id="c",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="x",
+    )
+    assert store.session_cost_before("c", "z") == 3.5
+    assert store.session_cost_before("other", "z") is None

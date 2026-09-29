@@ -27,6 +27,16 @@ from .store import Store, now
 STDERR_TAIL = 8000
 
 
+def run_cost(total: Any, previous: float | None) -> float | None:
+    """This run's cost. Claude Code reports the session's cumulative cost and restores it on
+    --resume, so a resumed run's share is the difference to the previous run's total."""
+    if not isinstance(total, int | float):
+        return None
+    if previous is None or previous > total:  # new session, or Claude Code did not restore it
+        return float(total)
+    return round(float(total) - previous, 6)
+
+
 class RunnerError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 400) -> None:
         super().__init__(message)
@@ -327,6 +337,10 @@ class RunManager:
                 "Run was interrupted by a claude-runner shutdown; resume the session to continue."
             )
         details = outcome.details
+        record = self.store.get_run(run_id) or {}
+        previous = self.store.session_cost_before(
+            str(record.get("claude_session_id") or ""), run_id
+        )
         self.store.update_run(
             run_id,
             status=outcome.status,
@@ -334,7 +348,7 @@ class RunManager:
             error_code=outcome.error_code,
             error_message=outcome.error_message,
             http_code=outcome.http_code,
-            cost_usd=details.get("total_cost_usd"),
+            cost_usd=run_cost(details.get("total_cost_usd"), previous),
             num_turns=details.get("num_turns"),
             context_tokens=state.final_context_tokens() if state else None,
             details=details,
@@ -439,6 +453,17 @@ class RunManager:
             tokens = int(session["context_tokens"] or 0)
             if mode == "auto" and tokens < threshold:
                 return skipped("below_threshold", context_tokens=tokens, min_tokens=threshold)
+            # Same summary format as auto/manual compaction: the instruction text rides on the
+            # /compact command, which Claude Code treats as custom summarization instructions.
+            # Only the local provider gets it: other backends keep the stock summarizer.
+            if (
+                self.settings.local_compact_instructions
+                and provider is not None
+                and provider.isolates_credentials
+            ):
+                compact_prompt = "/compact " + self.settings.compact_instructions
+            else:
+                compact_prompt = "/compact"
             run_id = "cmp_" + uuid.uuid4().hex
             self.store.create_run(
                 run_id=run_id,
@@ -449,11 +474,11 @@ class RunManager:
                 model=model,
                 provider=provider_name,
                 cwd=session["cwd"],
-                input="/compact",
+                input=compact_prompt,
             )
             task = self._launch(
                 run_id,
-                "/compact",
+                compact_prompt,
                 model,
                 session["role"],
                 session["claude_session_id"],

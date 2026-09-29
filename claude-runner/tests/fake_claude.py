@@ -97,7 +97,7 @@ def main() -> int:
         }
     )
 
-    if prompt.strip() == "/compact":
+    if prompt.strip().startswith("/compact"):
         emit({"type": "system", "subtype": "status", "status": "compacting", "session_id": sid})
         emit(
             {

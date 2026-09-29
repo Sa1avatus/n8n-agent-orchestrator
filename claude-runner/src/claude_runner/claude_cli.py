@@ -36,6 +36,32 @@ def transcript_exists(claude_session_id: str) -> bool:
     return projects.is_dir() and any(projects.glob(f"*/{claude_session_id}.jsonl"))
 
 
+def _compact_settings_path(instructions: str) -> str:
+    """A settings file carrying a PreCompact hook that prints ``instructions`` to stdout.
+
+    Claude Code appends the hook's stdout to the compaction request as custom compact
+    instructions; the hook's matcher covers both ``auto`` and ``manual`` compaction.
+    """
+    path = config_dir() / "compact-settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "hooks": {
+            "PreCompact": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": f"cat <<'AHAWR_EOF'\n{instructions}\nAHAWR_EOF",
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return str(path)
+
+
 def build_command(
     settings: Settings,
     profile: RoleProfile,
@@ -73,8 +99,28 @@ def build_command(
             cmd += ["--max-turns", str(max_turns)]
         if settings.max_budget_usd > 0:
             cmd += ["--max-budget-usd", f"{settings.max_budget_usd:g}"]
+    # The compact-instructions settings file is added only for the local provider, where
+    # the small context makes the structured summary matter. Other providers keep the
+    # stock summarizer and their prompt cache: the hook only fires on compaction, its text
+    # is appended to the *end* of the compaction request, and the same file is used for
+    # every run, so system prompt and tools stay unchanged step to step. Empty instructions
+    # (the built-in summarizer) add no file at all.
+    if (
+        settings.local_compact_instructions
+        and provider is not None
+        and provider.isolates_credentials
+        and settings.compact_instructions
+    ):
+        cmd += ["--settings", _compact_settings_path(settings.compact_instructions)]
     cmd += list(settings.extra_args)
     return cmd
+
+
+def settings_flag(cmd: list[str]) -> str | None:
+    """The path of the ``--settings`` file on a command, if any."""
+    if "--settings" in cmd:
+        return cmd[cmd.index("--settings") + 1]
+    return None
 
 
 # Model names Claude Code uses besides --model: aliases, background tasks, subagents.
@@ -106,6 +152,11 @@ def child_env(provider: ProviderProfile | None = None, model: str = "") -> dict[
     return env
 
 
+# a reply cut at the output limit counts as part of the final report when it is one of the
+# last main-thread replies (the model may read its file back once before resuming)
+CUT_REPLY_WINDOW = 4
+
+
 @dataclass
 class StreamState:
     """Everything the runner keeps from one CLI stream."""
@@ -121,6 +172,9 @@ class StreamState:
     events: int = 0
     bad_lines: int = 0
     permission_denials: list[Any] = field(default_factory=list)
+    # main-thread replies in order (message id -> text) and the ids cut at the output limit
+    replies: dict[str, str] = field(default_factory=dict)
+    cut: list[str] = field(default_factory=list)
 
     def feed(self, line: str) -> dict[str, Any] | None:
         """Record one stream line; returns the parsed event (None for noise)."""
@@ -150,6 +204,11 @@ class StreamState:
                 ]
                 if any(texts):
                     self.last_text = "".join(texts)
+                message_id = str(message.get("id") or "")
+                if message_id:
+                    self.replies[message_id] = self.replies.get(message_id, "") + "".join(texts)
+                    if message.get("stop_reason") == "max_tokens":
+                        self._mark_cut(message_id)
                 size = _prompt_tokens(message.get("usage") or {})
                 if size:  # gateways that stream usage only at the end report 0 here
                     self.context_tokens = size
@@ -158,6 +217,9 @@ class StreamState:
             # LiteLLM reports a request's size only in its stream events; this is also the
             # only size a run that timed out (no result) leaves behind
             inner = event.get("event") or {}
+            if (inner.get("delta") or {}).get("stop_reason") == "max_tokens" and self.replies:
+                # with partial messages the stop reason arrives after the reply's blocks
+                self._mark_cut(next(reversed(self.replies)))
             if inner.get("type") in ("message_start", "message_delta"):
                 usage = inner.get("usage") or (inner.get("message") or {}).get("usage") or {}
                 size = _prompt_tokens(usage)
@@ -173,6 +235,24 @@ class StreamState:
         elif kind == "system" and subtype == "status" and event.get("compact_result"):
             self.compact_result = str(event.get("compact_result"))
         return event
+
+    def _mark_cut(self, message_id: str) -> None:
+        if message_id not in self.cut:
+            self.cut.append(message_id)
+
+    def full_result(self, text: str) -> str:
+        """The run's result with the parts of a reply that hit the output-token limit.
+
+        Claude Code then asks the model to resume, and `result` holds only the
+        continuation. Cut replies among the last few are put back in front of it; an
+        earlier cut belongs to the work, not to the final report."""
+        recent = list(self.replies)[-CUT_REPLY_WINDOW:]
+        parts = [
+            self.replies[i].strip()
+            for i in recent
+            if i in self.cut and self.replies[i].strip() and self.replies[i].strip() != text.strip()
+        ]
+        return "\n\n".join(parts + [text]) if parts else text
 
     def final_context_tokens(self) -> int | None:
         """Context size after the run: the last main-thread request, or — when a gateway
@@ -234,7 +314,9 @@ def classify(
         message = f"Claude Code run timed out after {timeout_seconds} s."
         return Outcome("failed", partial, "timeout", message, 408, details)
     if result and not result.get("is_error") and result.get("subtype") == "success":
-        return Outcome("completed", str(result.get("result") or ""), details=details)
+        return Outcome(
+            "completed", state.full_result(str(result.get("result") or "")), details=details
+        )
 
     text = str(result.get("result") or "").strip()
     subtype = str(result.get("subtype") or "")
