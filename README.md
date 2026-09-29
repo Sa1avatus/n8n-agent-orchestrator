@@ -1,4 +1,4 @@
-# n8n + Hermes Autonomous Agent Orchestrator
+# n8n Agent Orchestrator (AHAWR)
 
 **English** | [Русская версия](#русская-версия)
 
@@ -384,8 +384,8 @@ docker compose version
 #### 3. Clone the repository
 
 ```powershell
-git clone https://github.com/Sa1avatus/n8n-hermes-agents.git
-cd n8n-hermes-agents
+git clone https://github.com/Sa1avatus/n8n-agent-orchestrator.git
+cd n8n-agent-orchestrator
 ```
 
 #### 4. Start n8n
@@ -1133,8 +1133,8 @@ docker compose version
 #### 3. Клонировать репозиторий
 
 ```powershell
-git clone https://github.com/Sa1avatus/n8n-hermes-agents.git
-cd n8n-hermes-agents
+git clone https://github.com/Sa1avatus/n8n-agent-orchestrator.git
+cd n8n-agent-orchestrator
 ```
 
 #### 4. Запустить n8n
