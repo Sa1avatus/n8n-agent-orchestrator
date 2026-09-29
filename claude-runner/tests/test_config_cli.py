@@ -361,3 +361,20 @@ def test_secret_deny_keeps_env_example_readable() -> None:
     assert "Read(./.env)" in worker and "Read(**/.env.production)" in worker
     assert "Read(./.env.*.local)" in worker
     assert not any(".env.example" in rule or rule.endswith(".env.*)") for rule in worker)
+
+
+def test_role_add_dirs_become_add_dir_flags() -> None:
+    s = Settings.from_env({"CLAUDE_RUNNER_REVIEWER_ADD_DIRS": "/tmp/work, /d/rag-tmp"})
+    reviewer = build_command(
+        s, s.profile("reviewer"), model="opus", claude_session_id="id", resume=False
+    )
+    i = reviewer.index("--add-dir")
+    assert reviewer[i : i + 4] == ["--add-dir", "/tmp/work", "--add-dir", "/d/rag-tmp"]
+    worker = build_command(
+        s, s.profile("worker"), model="opus", claude_session_id="id", resume=False
+    )
+    assert "--add-dir" not in worker
+    compact = build_command(
+        s, s.profile("reviewer"), model="opus", claude_session_id="id", resume=True, compact=True
+    )
+    assert "--add-dir" not in compact

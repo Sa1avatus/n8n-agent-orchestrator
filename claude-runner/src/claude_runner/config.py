@@ -78,6 +78,9 @@ class RoleProfile:
     max_turns: int = 0
     # Built-in tool set offered to the model (`--tools`) for this role only; empty = inherit.
     tools: str = ""
+    # Extra folders the role may use besides the run's working directory (`--add-dir`), e.g.
+    # a Worker's scratch folder the read-only Reviewer must inspect.
+    add_dirs: list[str] = field(default_factory=list)
 
 
 # Model-access variables. A provider that sets its own endpoint gets only its own credentials,
@@ -307,6 +310,7 @@ class Settings:
                 append_system_prompt=env.get(prefix + "APPEND_SYSTEM_PROMPT", "").strip(),
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
                 tools=env.get(prefix + "TOOLS", "").strip(),
+                add_dirs=_list(env.get(prefix + "ADD_DIRS")) or [],
             )
         # Empty env var = "use Claude Code's built-in summarizer" (no custom instructions);
         # unset = use the built-in default instruction text.

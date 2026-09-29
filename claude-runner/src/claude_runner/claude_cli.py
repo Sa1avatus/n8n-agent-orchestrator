@@ -83,6 +83,8 @@ def build_command(
         cmd.append("--bare")
     if not compact:
         cmd += ["--permission-mode", profile.permission_mode]
+        for folder in profile.add_dirs:
+            cmd += ["--add-dir", folder]
         if profile.allowed_tools:
             cmd += ["--allowedTools", ",".join(profile.allowed_tools)]
         if profile.disallowed_tools:

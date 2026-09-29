@@ -76,7 +76,7 @@ or the rates, then rebuild the image.
 | `reviewer` | `dontAsk` (reads, read-only commands) | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
 | `architect` | `dontAsk` | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
 
-Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_ALLOWED_TOOLS`, `_DISALLOWED_TOOLS`, `_APPEND_SYSTEM_PROMPT` and `_MAX_TURNS`. Deny rules are enforced even in `bypassPermissions`: a real run confirmed that the Worker could not read `.env`. Claude Code refuses `bypassPermissions` as root, which is why the container runs as the `node` user. The Worker can still reach environment variables through Bash, so give the container only the model credential. `CLAUDE_RUNNER_*` values, including the runner's own API key, are removed from the CLI's environment.
+Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_ALLOWED_TOOLS`, `_DISALLOWED_TOOLS`, `_APPEND_SYSTEM_PROMPT`, `_MAX_TURNS` and `_ADD_DIRS` (comma-separated folders passed as `--add-dir`: in `dontAsk` mode a role can read only its working directory and these, e.g. `CLAUDE_RUNNER_REVIEWER_ADD_DIRS=/tmp/dcfr-work` for a mission whose Worker keeps its results in `/tmp`). Deny rules are enforced even in `bypassPermissions`: a real run confirmed that the Worker could not read `.env`. Claude Code refuses `bypassPermissions` as root, which is why the container runs as the `node` user. The Worker can still reach environment variables through Bash, so give the container only the model credential. `CLAUDE_RUNNER_*` values, including the runner's own API key, are removed from the CLI's environment.
 
 ### Compaction
 
