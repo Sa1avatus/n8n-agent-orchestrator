@@ -2,7 +2,7 @@
 
 **English** | [Русская версия](#русская-версия)
 
-An n8n-based orchestration system for running autonomous multi-agent development workflows through a Hermes Gateway.
+An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md).
 
 The system separates **workflow logic**, **runtime configuration**, **agent prompts**, **missions**, and **secrets** so that the workflow can be maintained and reused without editing the main orchestration graph every time a model or mission changes.
 
@@ -300,21 +300,30 @@ local logs
 
 ### Repository files
 
-The repository is expected to contain files similar to:
+The repository contains:
 
 ```text
 .
-├── AHAWR_v11.json
-├── Hermes_Run_Manager_v4.json
-├── hermes_config.csv
-├── agent_prompts.csv
-├── missions.csv
-├── docker-compose.yml
-├── .gitignore
+├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
+├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
+├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
+├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
+├── hermes_config.csv                # Data Table: models, providers, limits
+├── agent_prompts.csv                # Data Table: Architect / Worker / Reviewer prompts
+├── missions.csv, mission_*.csv      # Data Table: missions (one CSV per mission to import)
+├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
+├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
+├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
+├── docs/                            # retrieval docs, compaction analysis
+├── scripts/                         # helper scripts
+├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
+├── .env.example                     # every setting, with comments (copy to .env)
+├── ARCHITECTURE_CONTRACT.md
+├── CHANGELOG.md
 └── README.md
 ```
 
-The exact list may change as the project evolves.
+What changed and when: [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Requirements
 
@@ -432,11 +441,11 @@ Hermes Gateway
 
 Models and providers are configured through the `hermes_config` Data Table.
 
-#### 7. Import the current `Hermes_Run_Manager_v4.json`
+#### 7. Import the Run Manager
 
 In n8n:
 
-1. Import the current `Hermes_Run_Manager_v4.json`.
+1. Import `Hermes_Run_Manager_v5.json` (Hermes variant) or `Claude_Code_Run_Manager_v1.json` (Claude Code variant, see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner)).
 2. Configure the required Hermes credentials.
 3. Run a simple test request.
 4. Confirm that Hermes can start a run and return a result.
@@ -478,12 +487,13 @@ state_namespace: test
 
 The namespace isolates persistent state between missions.
 
-#### 10. Import `AHAWR_v11.json`
+#### 10. Import `AHAWR_v13.json` or `AHAWR_v13_ClaudeCode.json`
 
-Import:
+Import the workflow for your variant:
 
 ```text
-AHAWR_v11.json
+AHAWR_v13.json               # Hermes
+AHAWR_v13_ClaudeCode.json    # Claude Code (claude-runner)
 ```
 
 After importing, open the imported Run Manager and copy its workflow id from the URL (`/workflow/<id>`). If it is not `nhjwX1G7FiVTO2Ah`, put it into the `run_manager_workflow_id` column of `hermes_config`. `Architect/Worker/Reviewer Start` take the id from there. Their inputs are built by the `Build … Run Input` Code nodes, so re-selecting or re-importing the Run Manager never resets them.
@@ -629,7 +639,21 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
 - Dashboard at `http://localhost:8701` (container `ahawr-dashboard`; read-only, 127.0.0.1 only). It shows the runs of every role in both variants: Claude Code runs and Hermes sessions (`HERMES_API_URL`, `HERMES_API_KEY`). The layout follows DeepSeek Harness' Trajectory view: a timeline, a colored ledger with thinking, tool calls and their results, steps with TTFT, generation time, tokens and tok/s, and an inspector for each record.
 
-The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md).
+**Local Worker model (llama.cpp through LiteLLM).** Recommended settings for a 64K-token slot (the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`):
+
+- `CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536` (match `llama-server -c`), `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192`. Claude Code then auto-compacts at 65536 − 8192 − 13000 = 44344 tokens. The runner refuses to start if the trigger leaves less than 20000 tokens of headroom.
+- `COMPACT_MIN_TOKENS=40000`: the runner's `/compact` before resuming a session, below Claude Code's own trigger.
+- `BASH_MAX_OUTPUT_LENGTH=12000`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000`: one tool output cannot fill the window.
+- `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS=1` (default): a PreCompact hook asks for a short summary (1500–2000 tokens in fixed sections) instead of Claude Code's ~8K-token one. `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` bounds a compaction.
+- `TOOLS=Bash,Read,Edit,Write,Glob,Grep` cuts the system prompt from ~15K to ~4K tokens.
+
+**Retries.** A `needs_changes` retry continues the Worker's session and hands it its previous report and the review. A context overflow forces a compaction before the retry. A failed task resumes where it stopped, and when compaction fails a fresh session gets the old session's digest. The attempt counter takes the highest attempt logged for the task, so `max_attempts_per_task` holds even if `task_attempt` is reset by hand.
+
+**Cost.** The dashboard shows Claude Code's own estimate per run (the run's share, not the session total). The image prices the local model like Claude Sonnet 5 through `claude-runner/managed-settings.json`, as a comparison with an all-Anthropic setup.
+
+**Worker tools.** The image has git, pytest, ruff and mypy; build tools can be added with `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (e.g. `patch build-essential cmake`). The Worker cannot read `.env` files (every variant except `.env.example`), `git commit` or `git push`, and its prompt forbids printing environment variables.
+
+The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Hermes session compression
 
@@ -766,7 +790,7 @@ Changing the mission should not require rewriting the orchestrator.
 
 ### Что делает проект
 
-Это система оркестрации автономных AI-агентов на базе **n8n + Hermes Gateway**.
+Это система оркестрации автономных AI-агентов на базе **n8n**. Роли работают через **Hermes Gateway** или через **Claude Code** (`claude-runner`, с моделями Anthropic или локальной моделью llama.cpp), см. [AHAWR на Claude Code](#ahawr-на-claude-code-claude-runner). Последние изменения: [`CHANGELOG.md`](CHANGELOG.md).
 
 Главный workflow — **Autonomous Hermes Architect Worker Reviewer (AHAWR)**.
 
@@ -1026,9 +1050,9 @@ Prompts отделены от workflow и могут изменяться нез
 ```text
 hermes_config.csv
 agent_prompts.csv
-missions.csv
-AHAWR_v11.json
-Hermes_Run_Manager_v4.json
+missions.csv, mission_*.csv
+AHAWR_v13*.json
+*_Run_Manager_*.json
 ```
 
 Используйте:
@@ -1052,19 +1076,30 @@ logs
 
 ### Файлы репозитория
 
-Типичная структура:
+Состав репозитория:
 
 ```text
 .
-├── AHAWR_v11.json
-├── Hermes_Run_Manager_v4.json
-├── hermes_config.csv
-├── agent_prompts.csv
-├── missions.csv
-├── docker-compose.yml
-├── .gitignore
+├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
+├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
+├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
+├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
+├── hermes_config.csv                # Data Table: models, providers, limits
+├── agent_prompts.csv                # Data Table: Architect / Worker / Reviewer prompts
+├── missions.csv, mission_*.csv      # Data Table: missions (one CSV per mission to import)
+├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
+├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
+├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
+├── docs/                            # retrieval docs, compaction analysis
+├── scripts/                         # helper scripts
+├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
+├── .env.example                     # every setting, with comments (copy to .env)
+├── ARCHITECTURE_CONTRACT.md
+├── CHANGELOG.md
 └── README.md
 ```
+
+Что и когда менялось: [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Установка
 
@@ -1155,11 +1190,11 @@ Hermes Gateway
 
 Модели и provider задаются через таблицу `hermes_config`.
 
-#### 7. Импортировать `Hermes_Run_Manager_v4.json`
+#### 7. Импортировать Run Manager
 
 В n8n:
 
-1. Импортируйте `Hermes_Run_Manager_v4.json`.
+1. Импортируйте `Hermes_Run_Manager_v5.json` (вариант с Hermes) или `Claude_Code_Run_Manager_v1.json` (вариант с Claude Code, см. [AHAWR на Claude Code](#ahawr-на-claude-code-claude-runner)).
 2. Настройте необходимые Hermes credentials.
 3. Выполните простой тестовый запрос.
 4. Убедитесь, что Hermes запускает run и возвращает результат.
@@ -1201,12 +1236,13 @@ state_namespace: test
 
 `state_namespace` разделяет сохранённое состояние разных missions.
 
-#### 10. Импортировать `AHAWR_v11.json`
+#### 10. Импортировать `AHAWR_v13.json` или `AHAWR_v13_ClaudeCode.json`
 
-Импортируйте:
+Импортируйте workflow своего варианта:
 
 ```text
-AHAWR_v11.json
+AHAWR_v13.json               # Hermes
+AHAWR_v13_ClaudeCode.json    # Claude Code (claude-runner)
 ```
 
 После импорта откройте импортированный Run Manager и скопируйте его ID из адреса (`/workflow/<id>`). Если ID не `nhjwX1G7FiVTO2Ah`, впишите его в колонку `run_manager_workflow_id` таблицы `hermes_config`. `Architect/Worker/Reviewer Start` берут ID оттуда. Входы для них собирают Code-узлы `Build … Run Input`, поэтому повторный выбор или переимпорт Run Manager их не сбрасывает.
@@ -1321,7 +1357,21 @@ Architect контекст из RAG не получает, только Worker �
 - Настройки: строка `claude-code` и колонка `runner_url` в `hermes_config`.
 - Дашборд `http://localhost:8701` (контейнер `ahawr-dashboard`, только чтение, только 127.0.0.1). Показывает прогоны всех ролей обоих вариантов: Claude Code и сессии Hermes (`HERMES_API_URL`, `HERMES_API_KEY`). Устроен как вкладка Trajectory в DeepSeek Harness: таймлайн, цветной журнал с размышлениями, тулами и их результатами, шаги с TTFT, временем генерации, токенами и ток/с, инспектор записи.
 
-Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md).
+**Локальная модель Worker'а (llama.cpp через LiteLLM).** Рекомендуемые настройки для слота на 64K токенов (блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`):
+
+- `CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536` (как `llama-server -c`), `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192`. Автосжатие Claude Code срабатывает на 65536 − 8192 − 13000 = 44344 токенах. Runner не запустится, если до конца окна остаётся меньше 20000 токенов запаса.
+- `COMPACT_MIN_TOKENS=40000`: `/compact` runner'а перед продолжением сессии, ниже порога самого Claude Code.
+- `BASH_MAX_OUTPUT_LENGTH=12000`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000`: один вывод инструмента не заполнит окно.
+- `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS=1` (по умолчанию): хук PreCompact просит короткую сводку (1500–2000 токенов по фиксированным разделам) вместо ~8K токенов у Claude Code. `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` ограничивает время сжатия.
+- `TOOLS=Bash,Read,Edit,Write,Glob,Grep` сокращает системный промпт с ~15K до ~4K токенов.
+
+**Ретраи.** Ретрай после `needs_changes` продолжает сессию Worker'а и передаёт ему его прошлый отчёт и ревью. Переполнение контекста принудительно запускает сжатие перед ретраем. Упавшая задача продолжается с места остановки. Если сжатие не удалось, новая сессия получает дайджест старой. Счётчик попыток берёт наибольшую попытку из журнала задачи, поэтому `max_attempts_per_task` соблюдается, даже если `task_attempt` сброшен вручную.
+
+**Стоимость.** Дашборд показывает оценку самого Claude Code для каждого прогона: долю этого прогона, а не итог сессии. Образ оценивает локальную модель по ценам Claude Sonnet 5 через `claude-runner/managed-settings.json`, чтобы сравнивать с вариантом целиком на Anthropic.
+
+**Инструменты Worker'а.** В образе есть git, pytest, ruff и mypy. Инструменты сборки добавляются через `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (например, `patch build-essential cmake`). Worker не может читать файлы `.env` (любые варианты, кроме `.env.example`), делать `git commit` и `git push`, а промпт запрещает ему выводить переменные окружения.
+
+Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) и [`CHANGELOG.md`](CHANGELOG.md).
 ### Компрессия Hermes-сессий
 
 Для длинных Worker/Reviewer-сессий Run Manager использует отдельный TUI WebSocket путь Hermes:

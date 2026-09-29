@@ -208,8 +208,8 @@ Claude Code speaks only the Anthropic Messages API, while llama.cpp's `llama-ser
 
 **Setup for "Architect/Reviewer on Claude, Worker local":**
 
-1. Run llama.cpp on the host with tool calling and at least 32k context:
-   `llama-server -m model.gguf --jinja -c 32768 --host 0.0.0.0 --port 8080`
+1. Run llama.cpp on the host with tool calling and a 64k context (the `.env.example` compaction settings assume 65536; 32k is the bare minimum):
+   `llama-server -m model.gguf --jinja -c 65536 --host 0.0.0.0 --port 8080`
 2. In `.env`:
    * `CLAUDE_CODE_OAUTH_TOKEN` (or `ANTHROPIC_API_KEY`) for the Claude roles;
    * `LITELLM_MASTER_KEY` and the `LLAMACPP_*` values;
@@ -301,5 +301,5 @@ pytest                         # a fake CLI (tests/fake_claude.py); no network, 
   - Пример: Architect и Reviewer — `opus`/`anthropic`, Worker — `qwen3.8-27b-gsq-rco-iq2-s-mtp`/`local`.
   - Модель задаётся только в `hermes_config`: LiteLLM передаёт имя в llama-server без изменений, а runner использует его и для фоновых задач Claude Code.
   - Не задавай `ANTHROPIC_BASE_URL` и `ANTHROPIC_AUTH_TOKEN` глобально: тогда в LiteLLM уйдут все роли.
-  - llama-server нужно запускать с `--jinja` и `-c 32768` или больше.
+  - llama-server нужно запускать с `--jinja` и `-c 65536` (настройки сжатия в `.env.example` рассчитаны на 65536; минимум — 32768).
 - **Совместимость.** Воркфлоу для Hermes не изменены. Обе версии можно держать в n8n одновременно.
