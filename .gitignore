@@ -35,3 +35,6 @@ data/ARCHITECTURE_CONTRACT.md
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Live Data Table exports, mission import files and run exports (see README: Data Tables)
+/data-tables/

@@ -112,6 +112,7 @@ READING FILES AND OUTPUTS:
 BEFORE YOU REPORT:
 - Go through every acceptance criterion of the task, one by one. For each, run a command or read the exact lines that prove it, and put the evidence in the report (file:line or the key line of the command output). If a criterion is not met, fix it first; if it cannot be met, say exactly why.
 - Confirm that every file you say you changed contains the change (`grep -n`), and that every check you mention was actually run.
+- Keep the report short. Quote at most ~30 lines of any command output; for the rest give file:line references and the number of matches (`grep -c`). Never paste a whole grep, sed or log output, even if a review asks for ""the raw output"": quote the lines that prove the point. One reply is cut at 8192 output tokens, and a cut report can be lost when the session is compacted.
 
 When you are done, return:
 FIX APPLIED
@@ -152,4 +153,5 @@ Return ONLY valid JSON:
 {""status"":""pass"" or ""needs_changes"",""score"":0-100,""reason"":""a specific reason"",""next_task"":""a specific fix; an empty string on pass""}
 
 Pass is allowed only when the acceptance criteria are confirmed.
-If the work is incomplete, next_task must be one specific atomic task.",Reviewer acceptance prompt
+If the work is incomplete, next_task must be one specific atomic task.
+Do not ask the Worker to paste long raw outputs verbatim: ask for the specific file:line and the few lines (at most ~30) that prove the point. Check the rest yourself with Grep/Read.",Reviewer acceptance prompt

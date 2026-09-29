@@ -276,9 +276,7 @@ This makes it possible to have multiple independent missions without changing th
 
 Secrets should **not** be stored in:
 
-- `hermes_config.csv`;
-- `agent_prompts.csv`;
-- `missions.csv`;
+- `*.example.csv` and anything else under version control;
 - workflow source files.
 
 Use n8n Credentials, environment variables, or another secret-management mechanism.
@@ -308,9 +306,10 @@ The repository contains:
 ├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
 ├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
 ├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
-├── hermes_config.csv                # Data Table: models, providers, limits
-├── agent_prompts.csv                # Data Table: Architect / Worker / Reviewer prompts
-├── missions.csv, mission_*.csv      # Data Table: missions (one CSV per mission to import)
+├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
+├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
+├── missions.example.csv             # Data Table example: one mission
+├── data-tables/                     # your live CSVs (gitignored): exports, mission files
 ├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
@@ -462,7 +461,24 @@ agent_prompts
 missions
 ```
 
-Import the corresponding CSV files.
+Import the example CSV files from the repository root: `hermes_config.example.csv`,
+`agent_prompts.example.csv`, `missions.example.csv` (`hermes_config` and `missions` use `;` as
+the separator).
+
+`hermes_config.example.csv` has one row per setup:
+
+| `profile_id` | Workflow | Roles |
+|---|---|---|
+| `default` | `AHAWR_v13.json` (Hermes) | OpenRouter Architect/Reviewer, local llama.cpp Worker |
+| `claude-code` (enabled) | `AHAWR_v13_ClaudeCode.json` | all roles on Anthropic |
+| `claude-code` (disabled) | same | Worker on the local model through LiteLLM (`worker_provider=local`) |
+| `claude-code` (disabled) | same | all roles on OpenAI (`provider=openai`); needs the Codex executor of mission `ahawr-codex-executor`, not in claude-runner yet |
+
+The Claude Code workflow uses the first enabled `claude-code` row: enable exactly one of the three.
+The Hermes workflow uses the first enabled row among `default`, `test`, `openrouter`.
+
+Keep your own copies (exports of the live tables, mission CSVs, run exports) in `data-tables/`:
+it is gitignored.
 
 Verify that:
 
@@ -1048,9 +1064,7 @@ Prompts отделены от workflow и могут изменяться нез
 Секреты **не должны** находиться в:
 
 ```text
-hermes_config.csv
-agent_prompts.csv
-missions.csv, mission_*.csv
+*.example.csv
 AHAWR_v13*.json
 *_Run_Manager_*.json
 ```
@@ -1084,9 +1098,10 @@ logs
 ├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
 ├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
 ├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
-├── hermes_config.csv                # Data Table: models, providers, limits
-├── agent_prompts.csv                # Data Table: Architect / Worker / Reviewer prompts
-├── missions.csv, mission_*.csv      # Data Table: missions (one CSV per mission to import)
+├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
+├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
+├── missions.example.csv             # Data Table example: one mission
+├── data-tables/                     # your live CSVs (gitignored): exports, mission files
 ├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
@@ -1211,7 +1226,23 @@ agent_prompts
 missions
 ```
 
-Импортируйте соответствующие CSV.
+Импортируйте примеры из корня репозитория: `hermes_config.example.csv`,
+`agent_prompts.example.csv`, `missions.example.csv` (в `hermes_config` и `missions` разделитель `;`).
+
+В `hermes_config.example.csv` по строке на вариант:
+
+| `profile_id` | Workflow | Роли |
+|---|---|---|
+| `default` | `AHAWR_v13.json` (Hermes) | Architect/Reviewer через OpenRouter, Worker — локальный llama.cpp |
+| `claude-code` (включена) | `AHAWR_v13_ClaudeCode.json` | все роли на Anthropic |
+| `claude-code` (выключена) | тот же | Worker на локальной модели через LiteLLM (`worker_provider=local`) |
+| `claude-code` (выключена) | тот же | все роли на OpenAI (`provider=openai`); нужен исполнитель Codex из миссии `ahawr-codex-executor`, в claude-runner его пока нет |
+
+Workflow на Claude Code берёт первую включённую строку `claude-code`: включите ровно одну из трёх.
+Workflow на Hermes берёт первую включённую из `default`, `test`, `openrouter`.
+
+Свои копии (выгрузки живых таблиц, CSV миссий, экспорты прогонов) держите в `data-tables/`:
+папка в .gitignore.
 
 Проверьте, что:
 

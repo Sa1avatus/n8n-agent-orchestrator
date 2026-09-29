@@ -45,6 +45,12 @@ Results of the `ahawr-fast-compaction` mission, plus fixes found while it ran [1
   - checks every acceptance criterion with evidence before reporting.
 
 ### Other
+- Data Table CSVs: the repository keeps `hermes_config.example.csv` (profiles for Hermes, Claude
+  Code on Anthropic, Claude Code with a local Worker, OpenAI), `agent_prompts.example.csv` and
+  `missions.example.csv`; live exports and mission files live in the gitignored `data-tables/`.
+- Repository renamed to `n8n-agent-orchestrator`.
+- An AHAWR task now stops at `max_attempts_per_task`; before, the failure route was lost and the
+  task was retried without end.
 - LiteLLM hook test (`litellm/test_ahawr_hooks.py`).
 - `docs/compaction-analysis.md`: how Claude Code 2.1.283 compacts, and what can be tuned.
 - New missions: `llamacpp-speed-tuning`, `ahawr-rag-effectiveness` (v2, on-demand
