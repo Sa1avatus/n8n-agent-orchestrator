@@ -37,6 +37,14 @@ def claude_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     config = tmp_path / "claude-config"
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(config))
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "calls.jsonl"))
+    # the tests may run inside a runner-started Claude Code whose env already carries a probed
+    # window; the child env inherits it and the window assertions would see it
+    for name in (
+        "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+        "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+    ):
+        monkeypatch.delenv(name, raising=False)
     return config
 
 
