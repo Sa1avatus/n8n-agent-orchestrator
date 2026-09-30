@@ -6,6 +6,10 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 ## 2026-09-30
 
 ### claude-runner
+- The runner's `/compact` before resuming a session follows the probed window too:
+  `COMPACT_MIN_TOKENS` is taken as a share of 65536 (40000 → 60000 at 96K), or `COMPACT_MIN_PCT`
+  sets the percentage, never above the autocompact trigger. With the fixed 40000 a 96K Worker was
+  compacted at 46-52K before each retry, which took longer (4.6-7.1 min) than the retry itself.
 - The local model's context window follows llama-server. Before each run of a provider with
   `CONTEXT_PROBE_URL` (set in `docker-compose.yml` to `http://host.docker.internal:8033`, key from
   `LLAMACPP_API_KEY`) the runner reads the model's `--ctx-size` from `GET /v1/models` and sets

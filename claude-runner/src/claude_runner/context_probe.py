@@ -105,6 +105,17 @@ def autocompact_trigger(window: int, provider: ProviderProfile) -> int:
     return min(int(window * compact_pct(provider) / 100), max_trigger(window, provider))
 
 
+def resume_compact_threshold(window: int, provider: ProviderProfile, base: int) -> int:
+    """The runner's pre-resume /compact threshold for a ``window``-token context.
+
+    ``COMPACT_MIN_PCT`` of the window, else ``base`` (COMPACT_MIN_TOKENS) scaled from the static
+    65536 window, so a larger window does not compact a session that still has room. Never
+    above the autocompact trigger: a resumed session must start below it."""
+    pct = provider.compact_min_pct
+    scaled = int(window * pct / 100) if pct is not None else base * window // AUTO_COMPACT_WINDOW
+    return min(scaled, autocompact_trigger(window, provider))
+
+
 def window_env(window: int, provider: ProviderProfile) -> dict[str, str] | None:
     """Claude Code settings for a ``window``-token context, or None if it is too small."""
     trigger = autocompact_trigger(window, provider)

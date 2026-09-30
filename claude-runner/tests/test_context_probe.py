@@ -16,6 +16,7 @@ from claude_runner.context_probe import (
     autocompact_trigger,
     ctx_from_models,
     max_trigger,
+    resume_compact_threshold,
     window_env,
 )
 
@@ -83,6 +84,21 @@ def test_compact_pct_setting() -> None:
     assert autocompact_trigger(98304, high.providers["LOCAL"]) == 77112  # capped
     with pytest.raises(ValueError, match="COMPACT_PCT"):
         Settings.from_env({**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_PCT": "120"})
+
+
+def test_resume_compaction_threshold_follows_the_window() -> None:
+    local = Settings.from_env(dict(LOCAL)).providers["LOCAL"]
+    # COMPACT_MIN_TOKENS is a share of the static 65536 window: 40000 -> 60000 at 96K
+    assert resume_compact_threshold(65536, local, 40000) == 40000
+    assert resume_compact_threshold(98304, local, 40000) == 60000
+    # never above the autocompact trigger (a resumed session must start below it)
+    assert resume_compact_threshold(98304, local, 60000) == autocompact_trigger(98304, local)
+    pct = Settings.from_env({**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_MIN_PCT": "50"})
+    local50 = pct.providers["LOCAL"]
+    assert local50.compact_min_pct == 50 and "COMPACT_MIN_PCT" not in local50.env
+    assert resume_compact_threshold(98304, local50, 40000) == 49152
+    with pytest.raises(ValueError, match="COMPACT_MIN_PCT"):
+        Settings.from_env({**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_MIN_PCT": "0"})
 
 
 class _Llama(BaseHTTPRequestHandler):
@@ -162,3 +178,21 @@ def test_unreachable_server_keeps_static_settings(settings: Settings, tmp_path: 
     }
     (ev,) = [e for e in run_events(settings, rid) if e.get("kind") == "context_window"]
     assert ev["source"] == "static" and ev["probed"] is None
+
+
+@pytest.mark.parametrize(("ctx", "status"), [("98304", "skipped"), ("65536", "completed")])
+def test_resume_compaction_uses_the_probed_window(
+    settings: Settings, llama: str, ctx: str, status: str
+) -> None:
+    probing(settings, llama)
+    _Llama.payload = models((QWEN, ["--ctx-size", ctx]))
+    body = {"input": "t", "model": QWEN, "provider": "local", "role": "worker"}
+    with TestClient(create_app(settings)) as client:
+        sid = wait_for(client, client.post("/v1/runs", json=body).json()["run_id"])["session_id"]
+        wait_for(client, client.post("/v1/runs", json={**body, "session_id": sid}).json()["run_id"])
+        # 2015 context tokens; COMPACT_MIN_TOKENS 1500 of 65536 = 2250 at 96K, 1500 at 64K
+        done = client.post(f"/v1/sessions/{sid}/compact", json={}).json()
+    assert done["status"] == status
+    if status == "skipped":
+        assert done["reason"] == "below_threshold"
+        assert done["min_tokens"] == 2250 and done["window"] == 98304

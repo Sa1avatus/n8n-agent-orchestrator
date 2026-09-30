@@ -21,7 +21,7 @@ from .claude_cli import (
     transcript_exists,
 )
 from .config import ROLES, Settings
-from .context_probe import probe_context, window_env
+from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
 from .store import Store, now
 
@@ -472,9 +472,19 @@ class RunManager:
             provider = self.settings.provider(provider_name)
             if min_tokens is None and provider and provider.compact_min_tokens is not None:
                 threshold = provider.compact_min_tokens
+            window = None
+            if min_tokens is None and provider is not None and provider.context_probe_url:
+                # the threshold follows the window llama-server runs the model with now
+                window = await asyncio.to_thread(
+                    probe_context, provider.context_probe_url, provider.context_probe_key, model
+                )
+                if window:
+                    threshold = resume_compact_threshold(window, provider, threshold)
             tokens = int(session["context_tokens"] or 0)
             if mode == "auto" and tokens < threshold:
-                return skipped("below_threshold", context_tokens=tokens, min_tokens=threshold)
+                return skipped(
+                    "below_threshold", context_tokens=tokens, min_tokens=threshold, window=window
+                )
             # Same summary format as auto/manual compaction: the instruction text rides on the
             # /compact command, which Claude Code treats as custom summarization instructions.
             # Only the local provider gets it: other backends keep the stock summarizer.

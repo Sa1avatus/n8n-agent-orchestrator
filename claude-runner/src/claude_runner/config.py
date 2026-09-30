@@ -95,10 +95,13 @@ PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # Keys of a provider block that configure the runner instead of the Claude Code process.
 # CONTEXT_PROBE_URL / CONTEXT_PROBE_KEY: read the model's real window from llama-server before
 # each run (context_probe.py); the key never reaches the Claude Code process. COMPACT_PCT: the
-# autocompact trigger as a percentage of that window.
+# autocompact trigger as a percentage of that window. COMPACT_MIN_PCT: the runner's /compact
+# before resuming a session, as a percentage of that window (default: COMPACT_MIN_TOKENS' share
+# of 65536).
 PROVIDER_RUNNER_KEYS = {
     "TOOLS",
     "COMPACT_MIN_TOKENS",
+    "COMPACT_MIN_PCT",
     "CONTEXT_PROBE_URL",
     "CONTEXT_PROBE_KEY",
     "COMPACT_PCT",
@@ -132,6 +135,8 @@ class ProviderProfile:
     context_probe_key: str = field(default="", repr=False)
     # autocompact trigger as a percentage of the probed window; None = derived (context_probe)
     compact_pct: float | None = None
+    # pre-resume /compact threshold as a percentage of the probed window; None = derived
+    compact_min_pct: float | None = None
 
     @property
     def isolates_credentials(self) -> bool:
@@ -168,13 +173,13 @@ def _autocompact_threshold(block: dict[str, str]) -> int | None:
     return None
 
 
-def _pct(name: str, raw: str) -> float | None:
+def _pct(name: str, raw: str, key: str = "COMPACT_PCT") -> float | None:
     raw = raw.strip()
     if not raw:
         return None
     value = float(raw)
     if not 0 < value <= 100:
-        raise ValueError(f"provider {name}: COMPACT_PCT must be in (0, 100], got {raw}")
+        raise ValueError(f"provider {name}: {key} must be in (0, 100], got {raw}")
     return value
 
 
@@ -230,6 +235,7 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
             context_probe_url=block.get("CONTEXT_PROBE_URL", "").strip(),
             context_probe_key=block.get("CONTEXT_PROBE_KEY", "").strip(),
             compact_pct=_pct(name, block.get("COMPACT_PCT", "")),
+            compact_min_pct=_pct(name, block.get("COMPACT_MIN_PCT", ""), "COMPACT_MIN_PCT"),
         )
     return providers
 
