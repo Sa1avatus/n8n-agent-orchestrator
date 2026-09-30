@@ -63,7 +63,19 @@ def main() -> int:
                 )
                 if k in os.environ
             }
+            window = {
+                k: os.environ[k]
+                for k in (
+                    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+                    "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
+                    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+                    "CONTEXT_PROBE_KEY",
+                    "CONTEXT_PROBE_URL",
+                )
+                if k in os.environ
+            }
             record = {
+                "window": window,
                 "args": args,
                 "prompt": prompt,
                 "cwd": os.getcwd(),

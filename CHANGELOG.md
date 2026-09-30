@@ -5,6 +5,16 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 
 ## 2026-09-30
 
+### claude-runner
+- The local model's context window follows llama-server. Before each run of a provider with
+  `CONTEXT_PROBE_URL` (set in `docker-compose.yml` to `http://host.docker.internal:8033`, key from
+  `LLAMACPP_API_KEY`) the runner reads the model's `--ctx-size` from `GET /v1/models` and sets
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to it, dropping
+  `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` (a percentage of 65536). A llama-server started with 96K
+  (the transactional-replay + `--cpu-mtp` build fits it on 12 GB) compacts at 77112 tokens
+  instead of 44344; a 32K IQ3_XXS server at 11576. The run's event log gets a `context_window`
+  record; without an answer the static settings apply.
+
 ### Prompts and workflow
 - Working language is English. The Architect writes the plan and every task in English whatever
   the mission's language, keeping verbatim texts (paths, identifiers, required strings and

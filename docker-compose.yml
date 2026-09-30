@@ -92,6 +92,11 @@ services:
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
+      # Before each run of the local provider the runner reads the model's --ctx-size from
+      # llama-server (GET /v1/models) and sets Claude Code's window and autocompact trigger to it;
+      # the key is the one LiteLLM uses for llama-server. Empty URL = static settings only.
+      - CLAUDE_RUNNER_PROVIDER_LOCAL__CONTEXT_PROBE_URL=${LLAMACPP_CONTEXT_PROBE_URL-http://host.docker.internal:8033}
+      - CLAUDE_RUNNER_PROVIDER_LOCAL__CONTEXT_PROBE_KEY=${LLAMACPP_API_KEY:-}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).

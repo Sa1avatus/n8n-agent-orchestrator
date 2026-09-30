@@ -93,7 +93,9 @@ CREDENTIAL_VARS = (
 )
 PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # Keys of a provider block that configure the runner instead of the Claude Code process.
-PROVIDER_RUNNER_KEYS = {"TOOLS", "COMPACT_MIN_TOKENS"}
+# CONTEXT_PROBE_URL / CONTEXT_PROBE_KEY: read the model's real window from llama-server before
+# each run (context_probe.py); the key never reaches the Claude Code process.
+PROVIDER_RUNNER_KEYS = {"TOOLS", "COMPACT_MIN_TOKENS", "CONTEXT_PROBE_URL", "CONTEXT_PROBE_KEY"}
 
 # Context-window limits the local provider's compaction settings must stay inside. The local
 # model's window is 65536 tokens; the autocompact threshold must leave room for one large
@@ -118,6 +120,9 @@ class ProviderProfile:
     autocompact_threshold: int | None = None
     # Max tokens per response (CLAUDE_CODE_MAX_OUTPUT_TOKENS); None = the provider's default.
     max_output_tokens: int | None = None
+    # llama-server to ask for the model's --ctx-size before each run; "" = static settings only
+    context_probe_url: str = ""
+    context_probe_key: str = field(default="", repr=False)
 
     @property
     def isolates_credentials(self) -> bool:
@@ -131,7 +136,7 @@ def provider_key(name: str) -> str:
 
 # The precompute buffer the binary subtracts from the effective window before
 # applying the threshold (hardcoded in the Claude Code bundle).
-_AUTO_COMPACT_PRECOMPUTE_BUFFER = 13_000
+AUTO_COMPACT_PRECOMPUTE_BUFFER = 13_000
 
 
 def _autocompact_threshold(block: dict[str, str]) -> int | None:
@@ -150,7 +155,7 @@ def _autocompact_threshold(block: dict[str, str]) -> int | None:
     if window:
         w = int(window)
         max_output = _max_output_tokens(block) or DEFAULT_MAX_OUTPUT_TOKENS
-        return w - min(max_output, AUTO_COMPACT_TOOL_RESERVE) - _AUTO_COMPACT_PRECOMPUTE_BUFFER
+        return w - min(max_output, AUTO_COMPACT_TOOL_RESERVE) - AUTO_COMPACT_PRECOMPUTE_BUFFER
     return None
 
 
@@ -203,6 +208,8 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
             compact_min_tokens=int(compact) if compact else None,
             autocompact_threshold=_autocompact_threshold(block),
             max_output_tokens=_max_output_tokens(block),
+            context_probe_url=block.get("CONTEXT_PROBE_URL", "").strip(),
+            context_probe_key=block.get("CONTEXT_PROBE_KEY", "").strip(),
         )
     return providers
 

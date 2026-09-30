@@ -666,6 +666,7 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 **Local Worker model (llama.cpp through LiteLLM).** Recommended settings for a 64K-token slot (the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`):
 
 - `CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536` (match `llama-server -c`), `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192`. Claude Code then auto-compacts at 65536 − 8192 − 13000 = 44344 tokens. The runner refuses to start if the trigger leaves less than 20000 tokens of headroom.
+- The window follows llama-server. Before each local run the runner reads the model's `--ctx-size` from llama-server (`GET /v1/models`; `CONTEXT_PROBE_URL`, set in `docker-compose.yml` to `http://host.docker.internal:8033` with the key `LLAMACPP_API_KEY`) and sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW` to it: a server started with 96K compacts at 77112 tokens, one with 32K at 11576. The run's event log has a `context_window` record. When llama-server does not answer, the static values above apply.
 - `COMPACT_MIN_TOKENS=40000`: the runner's `/compact` before resuming a session, below Claude Code's own trigger.
 - `BASH_MAX_OUTPUT_LENGTH=12000`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000`: one tool output cannot fill the window.
 - `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS=1` (default): a PreCompact hook asks for a short summary (1500–2000 tokens in fixed sections) instead of Claude Code's ~8K-token one. `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` bounds a compaction.
@@ -1407,6 +1408,7 @@ Architect контекст из RAG не получает, только Worker �
 **Локальная модель Worker'а (llama.cpp через LiteLLM).** Рекомендуемые настройки для слота на 64K токенов (блок `CLAUDE_RUNNER_PROVIDER_LOCAL__*` в `.env.example`):
 
 - `CLAUDE_CODE_MAX_CONTEXT_TOKENS=65536` (как `llama-server -c`), `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192`. Автосжатие Claude Code срабатывает на 65536 − 8192 − 13000 = 44344 токенах. Runner не запустится, если до конца окна остаётся меньше 20000 токенов запаса.
+- Окно следует за llama-server. Перед каждым локальным прогоном runner читает у llama-server `--ctx-size` модели (`GET /v1/models`; `CONTEXT_PROBE_URL`, в `docker-compose.yml` это `http://host.docker.internal:8033` с ключом `LLAMACPP_API_KEY`) и выставляет по нему `CLAUDE_CODE_MAX_CONTEXT_TOKENS` и `CLAUDE_CODE_AUTO_COMPACT_WINDOW`: сервер на 96K сжимает контекст на 77112 токенах, на 32K — на 11576. В журнале прогона появляется запись `context_window`. Если llama-server не отвечает, действуют статичные значения выше.
 - `COMPACT_MIN_TOKENS=40000`: `/compact` runner'а перед продолжением сессии, ниже порога самого Claude Code.
 - `BASH_MAX_OUTPUT_LENGTH=12000`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=10000`: один вывод инструмента не заполнит окно.
 - `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS=1` (по умолчанию): хук PreCompact просит короткую сводку (1500–2000 токенов по фиксированным разделам) вместо ~8K токенов у Claude Code. `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` ограничивает время сжатия.

@@ -21,6 +21,7 @@ from .claude_cli import (
     transcript_exists,
 )
 from .config import ROLES, Settings
+from .context_probe import probe_context, window_env
 from .events import EventLog
 from .store import Store, now
 
@@ -251,6 +252,27 @@ class RunManager:
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
             )
+            env = child_env(provider, model)
+            if provider is not None and provider.context_probe_url:
+                # the window of the model as llama-server runs it now, not a fixed 65536
+                window = await asyncio.to_thread(
+                    probe_context, provider.context_probe_url, provider.context_probe_key, model
+                )
+                overrides = window_env(window, provider) if window else None
+                if overrides:
+                    env.update(overrides)
+                    env.pop("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", None)  # a percentage of 65536
+                self.events.add(
+                    run_id,
+                    {
+                        "kind": "context_window",
+                        "source": "probe" if overrides else "static",
+                        "probed": window,
+                        "window": int(env.get("CLAUDE_CODE_MAX_CONTEXT_TOKENS") or 0) or None,
+                        "compact_window": int(env.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW") or 0)
+                        or None,
+                    },
+                )
             state = StreamState()
             stderr_chunks: list[bytes] = []
             timed_out = False
@@ -258,7 +280,7 @@ class RunManager:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     cwd=cwd,
-                    env=child_env(provider, model),
+                    env=env,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
