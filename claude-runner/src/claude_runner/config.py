@@ -94,8 +94,15 @@ CREDENTIAL_VARS = (
 PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # Keys of a provider block that configure the runner instead of the Claude Code process.
 # CONTEXT_PROBE_URL / CONTEXT_PROBE_KEY: read the model's real window from llama-server before
-# each run (context_probe.py); the key never reaches the Claude Code process.
-PROVIDER_RUNNER_KEYS = {"TOOLS", "COMPACT_MIN_TOKENS", "CONTEXT_PROBE_URL", "CONTEXT_PROBE_KEY"}
+# each run (context_probe.py); the key never reaches the Claude Code process. COMPACT_PCT: the
+# autocompact trigger as a percentage of that window.
+PROVIDER_RUNNER_KEYS = {
+    "TOOLS",
+    "COMPACT_MIN_TOKENS",
+    "CONTEXT_PROBE_URL",
+    "CONTEXT_PROBE_KEY",
+    "COMPACT_PCT",
+}
 
 # Context-window limits the local provider's compaction settings must stay inside. The local
 # model's window is 65536 tokens; the autocompact threshold must leave room for one large
@@ -123,6 +130,8 @@ class ProviderProfile:
     # llama-server to ask for the model's --ctx-size before each run; "" = static settings only
     context_probe_url: str = ""
     context_probe_key: str = field(default="", repr=False)
+    # autocompact trigger as a percentage of the probed window; None = derived (context_probe)
+    compact_pct: float | None = None
 
     @property
     def isolates_credentials(self) -> bool:
@@ -157,6 +166,16 @@ def _autocompact_threshold(block: dict[str, str]) -> int | None:
         max_output = _max_output_tokens(block) or DEFAULT_MAX_OUTPUT_TOKENS
         return w - min(max_output, AUTO_COMPACT_TOOL_RESERVE) - AUTO_COMPACT_PRECOMPUTE_BUFFER
     return None
+
+
+def _pct(name: str, raw: str) -> float | None:
+    raw = raw.strip()
+    if not raw:
+        return None
+    value = float(raw)
+    if not 0 < value <= 100:
+        raise ValueError(f"provider {name}: COMPACT_PCT must be in (0, 100], got {raw}")
+    return value
 
 
 def _max_output_tokens(block: dict[str, str]) -> int | None:
@@ -210,6 +229,7 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
             max_output_tokens=_max_output_tokens(block),
             context_probe_url=block.get("CONTEXT_PROBE_URL", "").strip(),
             context_probe_key=block.get("CONTEXT_PROBE_KEY", "").strip(),
+            compact_pct=_pct(name, block.get("COMPACT_PCT", "")),
         )
     return providers
 

@@ -12,7 +12,12 @@ from fastapi.testclient import TestClient
 
 from claude_runner.api import create_app
 from claude_runner.config import Settings
-from claude_runner.context_probe import autocompact_trigger, ctx_from_models, window_env
+from claude_runner.context_probe import (
+    autocompact_trigger,
+    ctx_from_models,
+    max_trigger,
+    window_env,
+)
 
 from .conftest import calls, wait_for
 from .test_providers import LOCAL
@@ -49,17 +54,35 @@ def test_ctx_from_router_models() -> None:
     assert ctx_from_models(models(("m", ["--ctx-size", "0"])), "m") is None
 
 
-def test_window_env_matches_claude_codes_trigger() -> None:
+def test_trigger_is_a_percentage_of_the_window() -> None:
     local = Settings.from_env(dict(LOCAL)).providers["LOCAL"]
-    # the static 65536 window gives the documented 44344 trigger
+    # without COMPACT_PCT the static trigger's share of 65536 (44344 = 67.66%) is kept, so a
+    # 64K server compacts exactly where it did before
     assert autocompact_trigger(65536, local) == local.autocompact_threshold == 44344
+    assert autocompact_trigger(98304, local) == 66516  # 1.5 x 44344
+    assert autocompact_trigger(81234, local) == 81234 * 44344 // 65536
     assert window_env(98304, local) == {
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "98304",
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98304",
+        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "67.66",
     }
-    assert autocompact_trigger(98304, local) == 77112
-    assert window_env(32768, local) is not None  # IQ3_XXS at 32K: trigger 11576
+    # the percentage never eats the room for one reply and one large tool output:
+    # 32K (IQ3_XXS) is capped at 32768 - 8192 - 13000 = 11576
+    assert max_trigger(32768, local) == 11576
+    assert autocompact_trigger(32768, local) == 11576
     assert window_env(16384, local) is None  # trigger < 8000: keep the static settings
+
+
+def test_compact_pct_setting() -> None:
+    env = {**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_PCT": "75"}
+    local = Settings.from_env(env).providers["LOCAL"]
+    assert local.compact_pct == 75 and "COMPACT_PCT" not in local.env
+    assert autocompact_trigger(98304, local) == 73728
+    assert window_env(98304, local)["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"] == "75.00"  # type: ignore[index]
+    high = Settings.from_env({**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_PCT": "95"})
+    assert autocompact_trigger(98304, high.providers["LOCAL"]) == 77112  # capped
+    with pytest.raises(ValueError, match="COMPACT_PCT"):
+        Settings.from_env({**LOCAL, "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_PCT": "120"})
 
 
 class _Llama(BaseHTTPRequestHandler):
@@ -113,13 +136,16 @@ def test_run_gets_the_servers_window(settings: Settings, llama: str, tmp_path: P
         assert wait_for(client, rid)["status"] == "completed"
     (worker,) = calls(tmp_path)
     # the probed window replaces the static 65536 and the percentage of it
+    # the block's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=67 now means 67% of the probed window
     assert worker["window"] == {
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "98304",
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98304",
+        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "67.00",
     }
     assert _Llama.auth == ["Bearer llama-key"]  # the key goes to llama-server only
     (ev,) = [e for e in run_events(settings, rid) if e.get("kind") == "context_window"]
     assert ev["source"] == "probe" and ev["probed"] == 98304 and ev["window"] == 98304
+    assert ev["compact_pct"] == "67.00"
 
 
 def test_unreachable_server_keeps_static_settings(settings: Settings, tmp_path: Path) -> None:

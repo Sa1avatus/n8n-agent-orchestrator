@@ -18,6 +18,7 @@ from typing import Any
 from .config import (
     AUTO_COMPACT_PRECOMPUTE_BUFFER,
     AUTO_COMPACT_TOOL_RESERVE,
+    AUTO_COMPACT_WINDOW,
     DEFAULT_MAX_OUTPUT_TOKENS,
     ProviderProfile,
 )
@@ -79,18 +80,41 @@ def probe_context(
     return ctx
 
 
-def autocompact_trigger(window: int, provider: ProviderProfile) -> int:
-    """Claude Code's trigger for ``CLAUDE_CODE_AUTO_COMPACT_WINDOW=window``."""
+def max_trigger(window: int, provider: ProviderProfile) -> int:
+    """The latest safe trigger: room for one reply and one large tool output stays free
+    (Claude Code's own trigger for ``CLAUDE_CODE_AUTO_COMPACT_WINDOW=window``)."""
     max_output = provider.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS
     return window - min(max_output, AUTO_COMPACT_TOOL_RESERVE) - AUTO_COMPACT_PRECOMPUTE_BUFFER
 
 
+def compact_pct(provider: ProviderProfile) -> float:
+    """The trigger as a percentage of the window: ``COMPACT_PCT``, else the block's
+    ``CLAUDE_AUTOCOMPACT_PCT_OVERRIDE``, else the static trigger's share of the static
+    65536 window (44344 → 67.66%), so a 64K server keeps today's behaviour."""
+    if provider.compact_pct is not None:
+        return provider.compact_pct
+    raw = provider.env.get("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "").strip()
+    if raw:
+        return float(raw)
+    static = provider.autocompact_threshold or max_trigger(AUTO_COMPACT_WINDOW, provider)
+    return static * 100 / AUTO_COMPACT_WINDOW
+
+
+def autocompact_trigger(window: int, provider: ProviderProfile) -> int:
+    """The trigger for a ``window``-token context: the percentage, capped by ``max_trigger``."""
+    return min(int(window * compact_pct(provider) / 100), max_trigger(window, provider))
+
+
 def window_env(window: int, provider: ProviderProfile) -> dict[str, str] | None:
     """Claude Code settings for a ``window``-token context, or None if it is too small."""
-    if autocompact_trigger(window, provider) < MIN_TRIGGER_TOKENS:
+    trigger = autocompact_trigger(window, provider)
+    if trigger < MIN_TRIGGER_TOKENS:
         log.warning("context window %d too small for Claude Code; keeping static settings", window)
         return None
     return {
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": str(window),
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": str(window),
+        # Claude Code takes the trigger as a percentage of the window; two decimals keep it
+        # within a token or so of ``trigger``
+        "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": f"{trigger * 100 / window:.2f}",
     }

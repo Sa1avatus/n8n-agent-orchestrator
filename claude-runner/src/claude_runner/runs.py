@@ -261,7 +261,6 @@ class RunManager:
                 overrides = window_env(window, provider) if window else None
                 if overrides:
                     env.update(overrides)
-                    env.pop("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", None)  # a percentage of 65536
                 self.events.add(
                     run_id,
                     {
@@ -271,6 +270,7 @@ class RunManager:
                         "window": int(env.get("CLAUDE_CODE_MAX_CONTEXT_TOKENS") or 0) or None,
                         "compact_window": int(env.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW") or 0)
                         or None,
+                        "compact_pct": env.get("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE") or None,
                     },
                 )
             state = StreamState()
