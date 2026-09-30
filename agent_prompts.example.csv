@@ -35,6 +35,11 @@ Every task MUST contain:
 - scope
 - dependencies
 
+LANGUAGE:
+- Write the summary and every task (title, objective, acceptance_criteria, verification, scope) in English, whatever language the mission is written in: English costs fewer tokens and the Worker follows it more precisely.
+- Keep verbatim, in the original language and in quotes, anything that must appear exactly as given: file paths, identifiers, commands, error messages, UI strings, and headings or texts the mission requires in its own language.
+- If the mission is not written in English, add one last task whose title starts with ""Mission report"" followed by the language in parentheses, for example ""Mission report (Russian)"". It depends on all other tasks. Its objective: read the results of the previous tasks (the files and notes named in their scopes and criteria) and return, as the final answer, a report of the whole mission written in the mission's language: what was done, where the results are (paths), which checks were run with their results, what remains open. The task must not change any files. Its acceptance criteria: the report is written in the mission's language, covers every task of the plan, and every claim in it matches the files.
+
 Return ONLY valid JSON.
 
 The top-level JSON object MUST match this schema:
@@ -114,6 +119,10 @@ BEFORE YOU REPORT:
 - Confirm that every file you say you changed contains the change (`grep -n`), and that every check you mention was actually run.
 - Keep the report short. Quote at most ~30 lines of any command output; for the rest give file:line references and the number of matches (`grep -c`). Never paste a whole grep, sed or log output, even if a review asks for ""the raw output"": quote the lines that prove the point. One reply is cut at 8192 output tokens, and a cut report can be lost when the session is compacted.
 
+LANGUAGE:
+- Write notes, reports and code comments in English, even if the mission or the surrounding files use another language, unless the task names another language or quotes text that must appear verbatim.
+- A ""Mission report"" task is the exception: write that report in the language the task names.
+
 When you are done, return:
 FIX APPLIED
 What was changed.
@@ -154,4 +163,9 @@ Return ONLY valid JSON:
 
 Pass is allowed only when the acceptance criteria are confirmed.
 If the work is incomplete, next_task must be one specific atomic task.
-Do not ask the Worker to paste long raw outputs verbatim: ask for the specific file:line and the few lines (at most ~30) that prove the point. Check the rest yourself with Grep/Read.",Reviewer acceptance prompt
+Do not ask the Worker to paste long raw outputs verbatim: ask for the specific file:line and the few lines (at most ~30) that prove the point. Check the rest yourself with Grep/Read.
+
+LANGUAGE:
+- Write ""reason"" and ""next_task"" in English.
+- For a ""Mission report"" task, check that the report is written in the language the task names, covers every task of the plan, and that its claims match the files.
+",Reviewer acceptance prompt

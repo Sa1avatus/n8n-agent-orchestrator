@@ -3,6 +3,21 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
+## 2026-09-30
+
+### Prompts and workflow
+- Working language is English. The Architect writes the plan and every task in English whatever
+  the mission's language, keeping verbatim texts (paths, identifiers, required strings and
+  headings) in the original language; the Worker writes notes, reports and code comments in
+  English; the Reviewer writes `reason` and `next_task` in English. Measured on the GDN mission:
+  English takes 5-15% fewer tokens (Qwen 490 → 416 on a task, Claude 753 → 675), and the Worker
+  no longer mixes English rules with a Russian task and its own Russian notes.
+- Mission report in the mission's language. For a non-English mission the Architect adds a last
+  task `Mission report (<language>)` that returns a report of the whole mission in that language
+  without changing files; the Reviewer checks the language, coverage and facts. `Approved Result`
+  takes that task's Worker output as `final_report`, and the `✅ WORKFLOW APPROVED` Telegram
+  notice shows it instead of the last review's reason.
+
 ## 2026-09-29
 
 Results of the `ahawr-fast-compaction` mission, plus fixes found while it ran [11a278e].

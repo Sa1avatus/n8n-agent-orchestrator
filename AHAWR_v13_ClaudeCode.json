@@ -454,7 +454,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { status: 'approved', plan_summary: String($json.plan_summary ?? ''), total_tasks: Number($json.total_tasks ?? 0), completed_tasks: Number($json.task_index ?? 0), last_task: String($json.current_task_id ?? ''), last_review_score: Number($json.last_review_score ?? 0), reason: String($json.last_review_reason ?? 'All planned tasks passed independent review.') } }];"
+        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst last = tasks.length ? tasks[tasks.length - 1] : null;\nlet finalReport = '';\nif (last && /^Mission report\\b/i.test(String(last.title ?? ''))) {\n  try { finalReport = String($('Evaluate Worker').last().json.worker_output ?? ''); } catch (_) {}\n  if (!finalReport) finalReport = `(${last.id}: the report is in the Worker run of this task, see the dashboard)`;\n}\nreturn [{ json: { status: 'approved', plan_summary: String($json.plan_summary ?? ''), total_tasks: Number($json.total_tasks ?? 0), completed_tasks: Number($json.task_index ?? 0), last_task: String($json.current_task_id ?? ''), last_review_score: Number($json.last_review_score ?? 0), reason: String($json.last_review_reason ?? 'All planned tasks passed independent review.'), final_report: finalReport } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3667,7 +3667,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('✅ WORKFLOW APPROVED\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + String($json.reason ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ (() => { let t = String('✅ WORKFLOW APPROVED\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + ($json.final_report ? '\\n' + String($json.final_report) : String($json.reason ?? ''))); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false

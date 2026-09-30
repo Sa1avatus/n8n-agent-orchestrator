@@ -255,6 +255,14 @@ The important roles are:
 
 Prompts are kept outside the main workflow so they can evolve independently from orchestration logic.
 
+**Working language.** The plan, the tasks, the Worker's notes and reports and the reviews are in
+English whatever the mission's language: the same text in English takes 5-15% fewer tokens for
+Qwen and Claude, and the Worker sees one language instead of English rules plus a translated task.
+Texts that must appear verbatim (paths, identifiers, strings and headings the mission requires)
+stay in the original language. For a non-English mission the Architect adds a last task
+`Mission report (<language>)`: the Worker returns a report of the whole mission in the mission's
+language, the Reviewer checks it, and the `✅ WORKFLOW APPROVED` Telegram notice carries it.
+
 #### `missions`
 
 Mission definitions.
@@ -1046,6 +1054,14 @@ Reviewer
 ```
 
 Prompts отделены от workflow и могут изменяться независимо.
+
+**Рабочий язык.** План, задачи, заметки и отчёты Worker'а и ревью пишутся на английском, на каком бы
+языке ни была миссия: тот же текст на английском занимает на 5-15% меньше токенов у Qwen и Claude, а
+Worker видит один язык вместо английских правил и переведённой задачи. Тексты, которые должны
+появиться дословно (пути, идентификаторы, строки и заголовки, которых требует миссия), остаются на
+исходном языке. Для миссии не на английском архитектор добавляет последнюю задачу
+`Mission report (<язык>)`: Worker возвращает отчёт по всей миссии на языке миссии, ревьюер его
+проверяет, и он приходит в Telegram-уведомлении `✅ WORKFLOW APPROVED`.
 
 #### `missions`
 
