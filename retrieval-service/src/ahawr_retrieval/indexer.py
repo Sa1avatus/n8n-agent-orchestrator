@@ -36,6 +36,7 @@ from .models import (
     IndexDocument,
     IndexRequest,
     IndexResponse,
+    IndexStale,
     InvalidateRequest,
     InvalidateResponse,
 )
@@ -112,6 +113,19 @@ EXCLUDED_FILES = (
     "*.map",
 )
 ALLOWED_DOTFILES = frozenset({".env.example"})
+# Backup/edit artefacts are never indexed by default. ``Settings.exclude_globs`` (from
+# RETRIEVAL_EXCLUDE_GLOBS, comma-separated) replaces this list; pass per-request or per-corpora
+# ``exclude_globs`` to extend/override it further.
+DEFAULT_EXCLUDE_GLOBS = (
+    "*.bak",
+    "*.bak-*",
+    "*.orig",
+    "*.rej",
+    "*~",
+    "*_backup*",
+    "*backup[0-9]*",
+    "*.old",
+)
 
 
 class IndexingError(ValueError):
@@ -282,17 +296,41 @@ class Indexer:
 
     def index(self, request: IndexRequest) -> IndexResponse:
         started = time.perf_counter()
-        root = self.resolve_root(request.root) if request.root else None
-        if root is None and not request.documents:
-            existing = self.store.get_corpus(request.corpus_id)
-            if existing is None or not existing.root:
+        existing = self.store.get_corpus(request.corpus_id)
+        if request.root:
+            try:
+                root = self.resolve_root(request.root)
+            except IndexingError:
+                raise
+        elif existing is not None and existing.root:
+            try:
+                root = self.resolve_root(existing.root)
+            except IndexingError as exc:
+                if "not a directory" in str(exc):
+                    self._mark_corpus_stale(request.corpus_id)
+                    message = (
+                        f"corpus {request.corpus_id!r} is stale: root {existing.root!r} is gone"
+                    )
+                    raise IndexStale(message) from exc
+                raise
+        else:
+            root = None
+            if not request.documents:
                 raise IndexingError("root is required for the first index of a workspace corpus")
-            root = self.resolve_root(existing.root)
         config: dict[str, Any] = {}
         if request.include_globs:
             config["include_globs"] = request.include_globs
+        # ``exclude_globs`` (request, then stored corpus config, then RETRIEVAL_EXCLUDE_GLOBS,
+        # then DEFAULT_EXCLUDE_GLOBS): a non-empty value replaces the level below it, so a
+        # request/corpus glob overrides both the environment variable and the default list.
         if request.exclude_globs:
             config["exclude_globs"] = request.exclude_globs
+        elif existing is not None and existing.config.get("exclude_globs"):
+            config["exclude_globs"] = list(existing.config["exclude_globs"])
+        elif self.settings.exclude_globs:
+            config["exclude_globs"] = list(self.settings.exclude_globs)
+        else:
+            config["exclude_globs"] = list(DEFAULT_EXCLUDE_GLOBS)
         stats = _Stats()
         with self._lock_for(request.corpus_id):
             corpus = self.store.ensure_corpus(
@@ -317,7 +355,8 @@ class Indexer:
                     corpus, request.documents, request.documents_mode, stats, force
                 )
             self._finish(corpus, root, stats)
-        return self._response(request.corpus_id, stats, started)
+        stale = corpus.stale
+        return self._response(request.corpus_id, stats, started, stale=stale)
 
     def sync(self, corpus_id: str, paths: list[str] | None = None) -> IndexResponse | None:
         """Incremental workspace sync used by ``freshness_mode=sync`` before retrieval."""
@@ -968,7 +1007,18 @@ class Indexer:
         if stats.embeddings["computed"] and (backlog or not stats.changed_types):
             self.vector_index.invalidate(corpus_id)
 
-    def _response(self, corpus_id: str, stats: _Stats, started: float) -> IndexResponse:
+    def _mark_corpus_stale(self, corpus_id: str) -> None:
+        """Drop a corpus's file records and mark it stale after its root has disappeared."""
+        self.store.delete_all_files(corpus_id)
+        self.store.mark_stale(corpus_id, True)
+
+    def _response(
+        self,
+        corpus_id: str,
+        stats: _Stats,
+        started: float,
+        stale: bool = False,
+    ) -> IndexResponse:
         corpus = self.store.get_corpus(corpus_id)
         assert corpus is not None
         return IndexResponse(
@@ -978,6 +1028,7 @@ class Indexer:
             code_snapshot=corpus.code_snapshot,
             docs_snapshot=corpus.docs_snapshot,
             git_head=corpus.git_head,
+            stale=stale,
             files=stats.files,
             chunks=stats.chunks,
             embeddings=stats.embeddings,

@@ -64,6 +64,16 @@ class RankingConfig(_Strict):
         default_factory=lambda: {"code": 0.02, "doc": 0.0, "history": 0.0}
     )
     history_multiplier: float = Field(0.5, ge=0, le=1)
+    # Demotion for fragments of .patch/.diff files longer than the threshold
+    # (chunking.LARGE_PATCH_LINES, env RETRIEVAL_LARGE_PATCH_LINES) when the query does
+    # not name the file; 0.8 halves such fragments' final score relative to equal evidence.
+    large_patch_penalty: float = Field(0.8, ge=0, le=1)
+    # Bonus for fragments whose file the Worker changed (request ``changed_paths``);
+    # applied on top of the other features when the field is provided. Absent field:
+    # the feature is 0 for every candidate, so behaviour is identical to today.
+    # Must be large enough to lift a changed fragment across the min_final_score gate
+    # and outrank other high-scoring fragments that would otherwise consume the budget.
+    changed_path_bonus: float = Field(0.0, ge=0, le=2)
 
 
 class BudgetConfig(_Strict):
@@ -152,6 +162,12 @@ def default_profiles() -> dict[str, Profile]:
             scope_match=0.05,
             test_file=0.06,
             source_prior={"code": 0.02, "doc": 0.02, "history": 0.0},
+            # The Worker's own changed files are the Reviewer's primary focus; the bonus
+            # must be large enough to lift a changed fragment across the min_final_score
+            # gate even when its fused relevance is low (e.g. a file not named by the review),
+            # and to outrank other high-scoring fragments that would otherwise consume the
+            # budget and displace it.
+            changed_path_bonus=1.5,
         ),
         budget=BudgetConfig(max_chunks=10, max_tokens=5000, per_path_limit=8),
     )

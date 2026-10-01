@@ -88,6 +88,10 @@ class Settings:
     rag_cooldown_seconds: float = 30.0
     rag_mirror: bool = True
     rag_fresh_window_seconds: float = 120.0
+    # glob list applied when walking/syncing files (e.g. RETRIEVAL_EXCLUDE_GLOBS=
+    # "*.bak,*.orig"). A non-empty value replaces the built-in DEFAULT_EXCLUDE_GLOBS
+    # (backup/edit artefacts); per-request and per-corpus exclude_globs still win over it.
+    exclude_globs: list[str] = field(default_factory=list)
     # corpus_id -> workspace root, indexed automatically on first use
     bootstrap_corpora: dict[str, str] = field(default_factory=dict)
     # host path prefix -> container path, e.g. {"D:\\": "/host/d"}
@@ -139,6 +143,7 @@ class Settings:
             reranker_local_max_chars=int(e.get("RETRIEVAL_RERANKER_LOCAL_MAX_CHARS", "2000")),
             profiles_file=e.get("RETRIEVAL_PROFILES_FILE") or None,
             max_file_bytes=int(e.get("RETRIEVAL_MAX_FILE_BYTES", str(512 * 1024))),
+            exclude_globs=_list(e.get("RETRIEVAL_EXCLUDE_GLOBS")),
             cache_ttl_seconds=float(e.get("RETRIEVAL_CACHE_TTL_SECONDS", str(24 * 3600))),
             cache_max_entries=int(e.get("RETRIEVAL_CACHE_MAX_ENTRIES", "5000")),
             log_query_text=_bool(e.get("RETRIEVAL_LOG_QUERY_TEXT"), True),

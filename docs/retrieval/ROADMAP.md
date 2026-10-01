@@ -43,6 +43,9 @@ and silver datasets and AHAWR-level metrics; `AHAWR_v13.json` fail-open integrat
 Rollout: run AHAWR missions with `retrieval_label` values (`off`, `hybrid-v1`,
 `hybrid-v1-rerank`) and compare with `ahawr-retrieval-eval ahawr-metrics`. Tighten
 `cache.jaccard_threshold` or disable `cache.semantic_reuse` per profile if false reuse appears.
+For a live-task A/B (RAG on vs. RAG off on one mission) use the procedure in
+[`EVALUATION.md`](EVALUATION.md) §"Live-task A/B procedure" and cross-check with the usage
+metric CLI (`ahawr-retrieval usage --runner-url … --since …`).
 
 ### Phase 3 — dependency / structural retrieval
 

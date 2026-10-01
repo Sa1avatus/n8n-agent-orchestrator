@@ -8,6 +8,7 @@ later roadmap phase (see docs/retrieval/ROADMAP.md, phase 3).
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -20,6 +21,11 @@ DOC_LANGUAGES = {
     ".txt": "text",
     ".adoc": "asciidoc",
 }
+# Fragments of .patch/.diff files longer than this many lines are demoted in deterministic
+# ranking (ranking.py), unless the query names the file. Overridable via
+# RETRIEVAL_LARGE_PATCH_LINES; the value is read once at import time.
+LARGE_PATCH_LINES = int(os.environ.get("RETRIEVAL_LARGE_PATCH_LINES", "1000") or 1000)
+
 CODE_LANGUAGES = {
     ".py": "python",
     ".pyi": "python",

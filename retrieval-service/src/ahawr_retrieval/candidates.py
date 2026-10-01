@@ -20,6 +20,7 @@ class Candidate:
     fused_rank: int = 0
     record: ChunkRecord | None = None
     file: FileRecord | None = None
+    file_line_count: int | None = None  # whole-file line count (max end_line of active chunks)
     freshness: str = "indexed"
     filtered_reason: str | None = None
     reranker: float | None = None
@@ -57,6 +58,7 @@ class Candidate:
             "reranker_rank": self.reranker_rank,
             "exact_symbol": self.features.get("exact_symbol"),
             "path_mentioned": self.features.get("path_mentioned"),
+            "changed_path": self.features.get("changed_path"),
             "scope_match": self.features.get("scope_match"),
             "test_file": self.features.get("test_file"),
             "source_prior": self.features.get("source_prior"),

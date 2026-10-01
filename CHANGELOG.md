@@ -5,7 +5,30 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 
 ## 2026-10-01
 
+### ahawr-retrieval (mission ahawr-rag-effectiveness)
+- Measured first: in the GDN mission the Worker's file-level precision was 46% and recall 25%; one
+  3408-line `.patch` took 34.4% of the selected fragments and 44.8% of the tokens; the Worker never
+  searched (RAG was one context block at task start).
+- `changed_paths` request field (optional) and an automatic Reviewer focus: files the Worker changed
+  after its request for the same task are boosted for the reviewer profile; part of the cache key.
+- `corpus_roots`: a corpus for the agent's actual working folder is indexed on first use and
+  incrementally after that; a corpus whose root is gone is reported stale and serves nothing.
+- Related tests (`tests/test_x.py`, `conftest.py`, imported fakes) are added to the context after the
+  original fragments, at most 3 files. Same-corpus A/B on the gold sets: nDCG@5 and MRR unchanged,
+  ContextRecall +0.008. Open: gold-v1 latency +50% mean / +120% p95 in a single run per version.
+- Backups and edit artefacts are no longer indexed (`RETRIEVAL_EXCLUDE_GLOBS` replaces the list);
+  `.patch`/`.diff` files over 1000 lines are demoted unless the query names them.
+- An intentionally disabled reranker is a note, not `degraded`.
+- `ahawr-retrieval usage`: per-profile precision/recall, used token share, `ahawr-search` calls and
+  missed files from the retrieval log joined with claude-runner events.
+
 ### claude-runner
+- `ahawr-search "query" [--k N] [--budget T]` in the image: on-demand retrieval for agents from the
+  folder they run in, 1500-token default budget, fail-open (exit 0 when the service is down).
+- Runs may last up to `CLAUDE_RUNNER_MAX_RUN_SECONDS` (raised to 10800 in this stack's `.env`):
+  eval-heavy Worker runs hit the 2-hour limit.
+- git in the image uses `core.autocrlf=true`, so a Windows checkout mounted into the container no
+  longer shows every CRLF file as modified (85 false changes confused a scope check).
 - The dashboard's summary strip showed the Claude session's cumulative cost and API time: a
   resumed Worker run of 19.6 min showed $4.07 and 90 min of API time, the sum of three attempts.
   It now shows the run's own share, which the runner already stored as `cost_usd`; the runner also

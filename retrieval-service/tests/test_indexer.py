@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from ahawr_retrieval.config import Settings
 from ahawr_retrieval.indexer import IndexingError, git_files
 from ahawr_retrieval.models import IndexDocument, IndexRequest, InvalidateRequest
+from ahawr_retrieval.reranker import NoopReranker
 from ahawr_retrieval.service import RetrievalService
 from ahawr_retrieval.store import ACTIVE, DELETED, INVALIDATED
 
@@ -72,6 +74,16 @@ def test_every_text_file_is_indexed_except_what_gitignore_excludes(
         "server.pem",
         "node_modules/lib/index.js",  # vendor directories are never indexed
     }
+
+
+def test_file_line_count_is_max_end_line_over_active_chunks(
+    service: RetrievalService, workspace: Path
+) -> None:
+    _write(workspace, {"app/long.py": "\n".join(f"line {i}" for i in range(1200))})
+    service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
+    assert service.store.file_line_count("ws", "app/long.py") == 1200
+    # An unindexed path has no active chunks and reports None.
+    assert service.store.file_line_count("ws", "app/missing.py") is None
 
 
 @pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
@@ -255,3 +267,119 @@ def test_invalidation_survives_routine_sync_until_content_changes(
     by_symbol = {c.symbol: c.status for c in chunks.values()}
     assert by_symbol["compute_total"] == ACTIVE  # changed content is fresh evidence
     assert by_symbol["parse_invoice"] == INVALIDATED  # unchanged content keeps its verdict
+
+
+def test_backup_and_artifact_files_are_excluded_by_default(
+    settings: Settings, workspace: Path
+) -> None:
+    service = RetrievalService(settings, reranker=NoopReranker())
+    try:
+        _write(
+            workspace,
+            {
+                "docker-entrypoint_backup2.sh": "#!/bin/sh\nexit 0\n",
+                "Dockerfile_backup": "FROM scratch\n",
+                "x.bak-20260101": "backup\n",
+                "a.orig": "original\n",
+                "b.rej": "rejection\n",
+                "c~": "emacs backup\n",
+                "d.old": "old\n",
+            },
+        )
+        service.index(IndexRequest(corpus_id="ws", root=str(workspace)))
+        indexed = paths(service)
+        for rel in (
+            "docker-entrypoint_backup2.sh",
+            "Dockerfile_backup",
+            "x.bak-20260101",
+            "a.orig",
+            "b.rej",
+            "c~",
+            "d.old",
+        ):
+            assert rel not in indexed  # backup/edit artefacts are never indexed
+        assert "app/parser.py" in indexed  # normal files are still indexed
+    finally:
+        service.close()
+
+
+def test_retrieval_exclude_globs_replaces_the_default(settings: Settings, workspace: Path) -> None:
+    # The env parsing: RETRIEVAL_EXCLUDE_GLOBS=*.bak,*.orig -> Settings.exclude_globs.
+    assert Settings.from_env({"RETRIEVAL_EXCLUDE_GLOBS": "*.bak,*.orig"}).exclude_globs == [
+        "*.bak",
+        "*.orig",
+    ]
+    service = RetrievalService(settings, reranker=NoopReranker())
+    try:
+        _write(workspace, {"a.orig": "original\n", "b.txt": "backup\n"})
+        # A custom list ["*backup*", "*.txt"] replaces the default list, so a.orig
+        # (matched by the default *.orig) is kept, while b.txt (matched by *.txt)
+        # is dropped.
+        service.index(
+            IndexRequest(
+                corpus_id="ws",
+                root=str(workspace),
+                exclude_globs=["*backup*", "*.txt"],
+            )
+        )
+        indexed = paths(service)
+        # custom list replaces the default, so *.orig is no longer excluded
+        assert "a.orig" in indexed
+        assert "b.txt" not in indexed  # *.txt is in the custom list
+        assert "app/parser.py" in indexed  # normal files are still indexed
+    finally:
+        service.close()
+
+
+def test_excluded_files_indexed_before_are_removed_on_the_next_sync(
+    settings: Settings, workspace: Path
+) -> None:
+    service = RetrievalService(settings, reranker=NoopReranker())
+    try:
+        _write(workspace, {"a.orig": "original\n"})
+        # a.orig is indexed because ["*backup*"] does not match it (replaces default *.orig).
+        service.index(
+            IndexRequest(
+                corpus_id="ws",
+                root=str(workspace),
+                exclude_globs=["*backup*"],
+            )
+        )
+        assert "a.orig" in paths(service)
+
+        # Next sync with a glob that now matches a.orig: it disappears from the index.
+        result = service.index(
+            IndexRequest(
+                corpus_id="ws",
+                exclude_globs=["*.orig"],
+            )
+        )
+        assert "a.orig" not in paths(service)
+        assert result.files["deleted"] >= 1
+        file = service.store.files("ws")["a.orig"]
+        assert file.status == DELETED
+    finally:
+        service.close()
+
+
+def test_stored_corpus_exclude_globs_are_kept_when_the_request_has_none(
+    settings: Settings, workspace: Path
+) -> None:
+    service = RetrievalService(settings, reranker=NoopReranker())
+    try:
+        service.index(
+            IndexRequest(
+                corpus_id="ws",
+                root=str(workspace),
+                exclude_globs=["*.txt"],
+            )
+        )
+        _write(workspace, {"b.txt": "backup\n"})
+        # A sync without exclude_globs in the request keeps the stored ["*.txt"].
+        result = service.indexer.sync("ws")
+        assert result is not None
+        assert "b.txt" not in paths(service)
+        corpus = service.store.get_corpus("ws")
+        assert corpus is not None and corpus.config.get("exclude_globs") == ["*.txt"]
+    finally:
+        service.close()

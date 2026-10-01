@@ -104,6 +104,10 @@ class RetrieveRequest(BaseModel):
     task: TaskContext = Field(default_factory=TaskContext)
     review: ReviewContext | None = None
     query: str | None = Field(None, max_length=20_000)
+    # Optional: paths the Worker changed. When provided, fragments from these paths are
+    # boosted above others within the same budget (strongest for the reviewer profile).
+    # Absent field: identical behaviour to today.
+    changed_paths: list[str] | None = None
     workspace_state: WorkspaceState | None = None
     freshness_mode: Literal["trust", "verify", "sync"] | None = None
     budget: BudgetOverride | None = None
@@ -193,6 +197,8 @@ class RetrieveResponse(BaseModel):
     snapshots: dict[str, dict[str, Any]]
     degraded: bool
     degraded_reasons: list[str]
+    # Informational notes: not degradations (RETRIEVAL_RERANKER=none is expected, not a fault).
+    notes: list[str] = Field(default_factory=list)
     chunks: list[RetrievedChunk]
     context: str
     context_tokens: int
@@ -228,6 +234,11 @@ class IndexRequest(BaseModel):
     force: bool = False
 
 
+class IndexStale(Exception):
+    """Raised when a corpus's root no longer exists: its content is dropped, the corpus
+    is marked stale, and retrieval serves it as an empty, informational result."""
+
+
 class IndexResponse(BaseModel):
     corpus_id: str
     code_generation: int
@@ -235,6 +246,7 @@ class IndexResponse(BaseModel):
     code_snapshot: str | None
     docs_snapshot: str | None
     git_head: str | None
+    stale: bool = False
     files: dict[str, int]
     chunks: dict[str, int]
     embeddings: dict[str, int]

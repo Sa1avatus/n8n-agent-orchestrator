@@ -125,7 +125,7 @@ responses carry `degraded_reasons: ["rag_platform_unavailable:fallback_local"]`.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /retrieve` | profile (`worker`/`reviewer`), corpora, `task`, `review`, optional `query`, `workspace_state` (`code_snapshot`, `docs_snapshot`, `doc_versions`, `strict`), `freshness_mode` (`trust`/`verify`/`sync`), `budget`, `options` (profile overrides), `cache` (`use`/`refresh`/`bypass`), `trace`, `include_candidates` |
+| `POST /retrieve` | profile (`worker`/`reviewer`), corpora, `task`, `review`, optional `query`, `corpus_roots` (corpus id → root; corpora not yet indexed are indexed on first use, within `RETRIEVAL_ALLOWED_ROOTS`, host paths mapped via `RETRIEVAL_PATH_MAP`), `changed_paths` (paths the Worker changed; fragments are boosted, strongest for the reviewer profile; absent field = today's behaviour; also collected automatically for reviewer requests), `workspace_state` (`code_snapshot`, `docs_snapshot`, `doc_versions`, `strict`), `freshness_mode` (`trust`/`verify`/`sync`), `budget`, `options` (profile overrides), `cache` (`use`/`refresh`/`bypass`), `trace`, `include_candidates` |
 | `POST /index` | `corpus_id`, `root`, `mode` (`incremental`/`full`), `paths`, `source_types`, `include_globs`, `exclude_globs`, `documents`, `documents_mode`, `force` |
 | `POST /invalidate` | `corpus_id` + `paths` / `chunk_ids` / `all`, optional `source_type`, `reason`, `reindex` |
 | `GET /corpora`, `GET /corpora/{id}` | snapshots, generations, chunk/file counts by status |
@@ -134,3 +134,72 @@ responses carry `degraded_reasons: ["rag_platform_unavailable:fallback_local"]`.
 The FastAPI schema is at `/docs` and `/openapi.json` inside the stack. The same operations are
 available without HTTP through `ahawr-retrieval exec '<json or base64>'` inside the container,
 which is useful for scripting and debugging.
+
+Response notes: `degraded_reasons` lists faults (reranker/embedder/rag-platform outages,
+fallbacks). `notes` are informational and not degradations — e.g. `RETRIEVAL_RERANKER=none`
+(expected, not a fault) and `stale_corpus:<id>` (corpus root no longer exists; no fragments
+served) are carried as notes, not as errors.
+
+### 6. Usage metrics CLI
+
+`ahawr-retrieval usage` joins the retrieval log with the claude-runner API and reports per
+profile: selected files, opened files, precision, recall, token share, `ahawr-search` call
+counts, and the most-missed files (opened but never selected).
+
+```bash
+ahawr-retrieval usage --runner-url http://localhost:8899 --since -7d
+ahawr-retrieval usage --runner-url http://localhost:8899 --since -24h --profile reviewer --top 5
+ahawr-retrieval usage --runner-url http://localhost:8899 --json
+```
+
+From inside the compose stack (container-to-container URL):
+
+```bash
+docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://claude-runner:8700 --since -24h
+```
+
+`--since` takes a unix timestamp, an ISO-8601 value, or a relative offset (`-24h`, `-7d`,
+`-1w`); omit it for all logged requests.
+
+`ahawr-search` (in the claude-runner image) is the Worker-facing CLI for on-demand retrieval:
+
+```bash
+ahawr-search "where is the retry delay applied?" --k 8 --budget 1500
+```
+
+The default budget is 1500 tokens. The working directory `/tmp/<X>` is resolved with `realpath`
+(a symlink into `/d/rag-tmp/<X>`); only `/d/` and `/workspace` roots are accepted; if the folder is not available to the service the CLI prints
+`folder <resolved> is unavailable to the retrieval service` and exits 0.
+
+A `/retrieve` request with `changed_paths` (reviewer profile):
+
+```json
+{
+  "profile": "reviewer",
+  "corpora": ["ahawr-workspace"],
+  "corpus_roots": {"ahawr-workspace": "/workspace"},
+  "task": {"title": "…", "objective": "…"},
+  "changed_paths": ["src/runner/api.py", "tests/test_api.py"],
+  "budget": {"max_tokens": 5000},
+  "freshness_mode": "sync"
+}
+```
+
+### 7. Live-task A/B (RAG on vs. RAG off)
+
+Procedure for one live task:
+
+1. **Run A (RAG on)** — enable retrieval for the task (`retrieval_enabled=true`,
+   `retrieval_label=hybrid-v1`). Record: file reads (from the runner event stream), wall-clock
+   time, and the Reviewer's review score/decision.
+2. **Run B (RAG off)** — disable retrieval (`retrieval_enabled=false`, `retrieval_label=off`)
+   for the same task. Record the same metrics.
+3. **Compare** — retrieval calls, context tokens, first-pass rate, retries, total task
+   latency, and review score.
+4. **Order of applying** — keep the order fixed across tasks: RAG on first, RAG off second
+   (or the reverse, consistently), so environment drift is not attributed to the label.
+
+For an offline frozen-snapshot comparison instead, run `ahawr-retrieval-eval run` per
+configuration label and compare against the baseline; see
+`retrieval-service/eval/results/2026-09-30-rag-usage-after.md` for a worked same-corpus
+example (4 runs: baseline vs. modified code, gold v1 and gold-ru, identical snapshot).

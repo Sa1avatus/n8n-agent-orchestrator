@@ -54,7 +54,7 @@ historical evidence*. Retrieved text is data, not instructions.
 | Purpose | solve the current task | verify a Worker result against acceptance criteria |
 | Query components | `task` (title, objective, instructions, criteria, scope), `feedback` (previous review) | `task` (title, objective, criteria, verification), `evidence` (changed files + identifiers named in Worker output), `feedback` |
 | Reranker query | title + objective + first 500 chars of feedback | `Verify: title` + objective + acceptance criteria |
-| Extra ranking features | exact symbol, scope match | exact symbol, **changed/mentioned paths** (0.12), **test files** (0.06) |
+| Extra ranking features | exact symbol, scope match | exact symbol, **changed/mentioned paths** (0.12), **test files** (0.06), **changed-path bonus** (1.5) |
 | Budget | 12 chunks / 6000 tokens | 10 chunks / 5000 tokens |
 
 Profiles are declarative (`profiles.py`, optional JSON override via `RETRIEVAL_PROFILES_FILE`).
@@ -89,11 +89,24 @@ and every log row.
    Failure → fused order, response marked `degraded`.
 8. **Deterministic ranking layer** (`ranking.py`):
    `final = w_rerank·reranker + w_fused·fused + w_sym·exact_symbol + w_path·path_mentioned
-   + w_scope·scope_match + w_test·test_file + source_prior[type]`
-   (history × 0.5). Without a reranker its weight moves to `fused`. Weights are fixed per
-   profile; **no Learning-to-Rank** until enough relevance judgments exist (roadmap phase 6).
-9. **Context assembly** — max chunks, token budget, per-file limit (3), no duplicate content,
-   no >50 % line overlap, history share ≤ 20 %.
+   + w_scope·scope_match + w_test·test_file + w_changed·changed_path + source_prior[type]`
+   (history × 0.5). Without a reranker its weight moves to `fused`. Fragments flagged
+   `large_patch` (`.patch`/`.diff` files longer than `RETRIEVAL_LARGE_PATCH_LINES`, default
+   1000, when the query does not name the file) have their final score multiplied by
+   `1 − large_patch_penalty` (0.8 ⇒ halved). The `changed_path` feature is 1 for any
+   candidate whose path is in the request's `changed_paths` (merged with the automatic
+   Reviewer change journal) and is weighted by `changed_path_bonus` (1.5 for the reviewer
+   profile); absent field ⇒ feature 0 for every candidate, i.e. identical behaviour to
+   before. Weights are fixed per profile; **no Learning-to-Rank** until enough relevance
+   judgments exist (roadmap phase 6).
+9. **Context assembly** — max chunks, token budget, per-file limit (8), no duplicate content,
+   no >50 % line overlap, history share ≤ 20 %. Related-test expansion: for a selected Python
+   source path `src/.../x.py`, related test files (`tests/test_x.py`, `test_x_*`/`x_test`,
+   nearest `conftest.py`, and `fake_*` fixtures imported by the matched test files) are
+   packed into the leftover token budget **after** all originals, with each related test's
+   final score lowered below every original, so a related test never displaces a more
+   relevant fragment; at most 3 related-test files are added (`RELATED_TEST_CAP`).
+   Non-Python paths and test-only selections expand nothing.
 10. **Cache store + retrieval log** (§7).
 
 ## 4. Versioning, freshness and invalidation
@@ -124,10 +137,27 @@ and every log row.
   content. To keep junk (agent plans, backup copies, scratch files) out of the context, add it to
   the project's `.gitignore`. Regardless of `.gitignore`, secrets (`.env*`, keys, certificates),
   lockfiles, minified files and vendor/build directories (`node_modules`, `.venv`, `build`, …)
-  are never indexed; workspace roots must be inside `RETRIEVAL_ALLOWED_ROOTS`.
+  are never indexed; workspace roots must be inside `RETRIEVAL_ALLOWED_ROOTS`. Backup/edit
+  artefacts (`*.bak`, `*.orig`, `*.rej`, `*~`, …) are excluded by default; `RETRIEVAL_EXCLUDE_GLOBS`
+  (comma-separated, e.g. `*.bak,*.orig`) replaces that built-in list when non-empty, and
+  per-request/per-corpus `exclude_globs` still win over it.
 * **Rendered context:** code chunks carry their file line numbers (`594| …`, profile
   `render.line_numbers`), so a role can cite `file:line` without re-reading the file; the numbers
   count against the token budget.
+* **Corpora are created on first use:** a corpus named in `corpus_roots` (or
+  `RETRIEVAL_BOOTSTRAP_CORPORA`) that is not yet indexed is indexed on the first request that
+  names it, and re-indexed incrementally (mtime-based) on later `sync` requests, so files written
+  after indexing (e.g. `notes/*.md`) are found by the next query. The root must be inside
+  `RETRIEVAL_ALLOWED_ROOTS`; a root outside it is rejected with HTTP 400 and a clear message.
+  The first index is bounded: files larger than `RETRIEVAL_MAX_FILE_BYTES` (default 512 KB) are
+  skipped and at most `EMBED_BACKFILL_LIMIT` (2000) embeddings are back-filled per index call.
+  If a corpus's root later disappears, the corpus is marked **stale**: its file records are
+  dropped, it serves zero fragments, and the response carries an informational
+  `stale_corpus:<id>` note (not a degradation, and not a crash).
+* **Host paths are mapped:** mission `corpus_roots` that are host paths (e.g. a Windows
+  `D:\…` path) are translated to container paths via `RETRIEVAL_PATH_MAP` before the
+  `RETRIEVAL_ALLOWED_ROOTS` check. The `/tmp/<X>` working directory is expected to be a
+  symlink to `/d/rag-tmp/<X>` so the host and container views point at the same files.
 
 ## 5. Provenance returned per chunk
 
@@ -137,7 +167,30 @@ and every log row.
 `freshness` (`verified` = hash-checked against the workspace at read time), all retrieval
 scores and ranks (`lexical`, `vector`, `symbol`, `fused`, `reranker`, `deterministic`,
 `final`), the ranking features, and the final `rank`. The response also carries per-corpus
-snapshots, the cache decision, degradations and stage timings.
+snapshots, the cache decision, `degraded_reasons` (faults: reranker/embedder/rag-platform
+outages, fallbacks) and `notes` (informational, **not** degradations: e.g.
+`RETRIEVAL_RERANKER=none` is expected, not a fault; a stale corpus is reported as
+`stale_corpus:<id>:root no longer exists; no fragments served`, an informational note, not a
+crash), plus stage timings.
+
+## 5b. Request-specific ranking dimensions
+
+* **`changed_paths`** (request field): the paths the Worker changed. Fragments from these
+  paths are boosted (`changed_path_bonus`, 1.5 for the reviewer profile) so a changed file
+  can cross the `min_final_score` gate even when its fused relevance is low, and can outrank
+  other high-scoring fragments that would otherwise consume the budget. The field is a
+  ranking/cache dimension only — it never alters the query text or anchors. An absent field
+  leaves the `changed_path` feature at 0 for every candidate, so behaviour is identical to
+  before. `changed_paths` is folded into the cache key; a cached entry is reused only for
+  the same `changed_paths` set (a mismatch reports `changed_paths_mismatch`).
+* **Automatic Reviewer focus**: for every `reviewer` request the service collects the files the
+  Worker changed since its last request for the same task — the retrieval log doubles as the
+  change journal (indexed point/range query, never a scan; fallback: a hash of
+  `task.title` + `task.objective`) — and merges them into `changed_paths`, deduplicated with
+  any explicit field. With neither present, the field stays absent and the request behaves
+  as before.
+* **Related-test expansion**: see §3 step 9 — related tests are packed only into the leftover
+  budget and never displace originals.
 
 ## 6. Cache and semantic query fingerprint
 
@@ -202,7 +255,9 @@ for provenance, freshness, symbols, the change log and the cache, and it is the 
 | Embedding endpoint down | lexical + symbol only, `vector_unavailable`; embeddings back-filled later |
 | rag-platform down | local backend, `rag_platform_unavailable:fallback_local` |
 | Workspace file changed after indexing | chunk filtered (`file_changed`) or re-synced first |
-| Unknown corpus | HTTP 404 (n8n fail-open); corpora in `RETRIEVAL_BOOTSTRAP_CORPORA` are indexed on first use |
+| Unknown corpus | HTTP 404 (n8n fail-open); corpora in `RETRIEVAL_BOOTSTRAP_CORPORA` or passed as `corpus_roots` are indexed on first use |
+| Root outside `RETRIEVAL_ALLOWED_ROOTS` | HTTP 400 with a clear message; nothing is indexed |
+| Corpus root no longer exists | corpus marked stale; it serves zero fragments and the response carries an informational `stale_corpus:<id>` note (not a crash) |
 | Concurrent requests | one service process; SQLite in WAL mode with a 30 s busy timeout (also safe for CLI tools running alongside) |
 
 ## 10. Out of scope for the MVP

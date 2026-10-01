@@ -51,10 +51,22 @@ def scope_key(
     )
 
 
-def cache_key(scope: str, state: dict[str, Any], fingerprint: QueryFingerprint) -> str:
-    return (
-        "rc_" + sha256_hex(json.dumps([scope, state, fingerprint.exact_hash], sort_keys=True))[:32]
-    )
+def _canonical_changed_paths(changed_paths: list[str] | None) -> frozenset[str]:
+    return frozenset(changed_paths) if changed_paths is not None else frozenset()
+
+
+def cache_key(
+    scope: str,
+    state: dict[str, Any],
+    fingerprint: QueryFingerprint,
+    changed_paths: list[str] | None = None,
+) -> str:
+    # Absent changed_paths (None) keeps the pre-existing key byte-for-byte; a provided
+    # list is folded in as an additional key dimension.
+    payload = [scope, state, fingerprint.exact_hash]
+    if changed_paths is not None:
+        payload.append(tuple(sorted(set(changed_paths))))
+    return "rc_" + sha256_hex(json.dumps(payload, sort_keys=True))[:32]
 
 
 class RetrievalCache:
@@ -71,8 +83,9 @@ class RetrievalCache:
         query: BuiltQuery,
         profile: Profile,
         delta_scorer: DeltaScorer,
+        changed_paths: list[str] | None = None,
     ) -> CacheLookup:
-        key = cache_key(scope, state, query.fingerprint)
+        key = cache_key(scope, state, query.fingerprint, changed_paths)
         now = time.time()
         row = self.store.cache_get(key)
         if row is not None and now - row["created_at"] <= self.ttl_seconds:
@@ -88,6 +101,16 @@ class RetrievalCache:
                 continue
             if equivalence.level == "semantic" and not profile.cache.semantic_reuse:
                 miss_reason = "semantic_reuse_disabled"
+                continue
+            # The changed_paths dimension is request-specific (it boosts fragments), so a
+            # reused entry must have been computed for the same changed_paths set.
+            cached_changed = (
+                frozenset(json.loads(entry["changed_paths_json"]))
+                if entry["changed_paths_json"] is not None
+                else frozenset()
+            )
+            if cached_changed != _canonical_changed_paths(changed_paths):
+                miss_reason = "changed_paths_mismatch"
                 continue
             result = json.loads(entry["result_json"])
             cached_state = json.loads(entry["state_json"])
@@ -171,9 +194,10 @@ class RetrievalCache:
         state: dict[str, Any],
         query: BuiltQuery,
         result: dict[str, Any],
+        changed_paths: list[str] | None = None,
     ) -> str:
-        key = cache_key(scope, state, query.fingerprint)
-        self.store.cache_put(key, scope, state, query.fingerprint.to_dict(), result)
+        key = cache_key(scope, state, query.fingerprint, changed_paths)
+        self.store.cache_put(key, scope, state, query.fingerprint.to_dict(), result, changed_paths)
         self._writes += 1
         if self._writes % 100 == 0:
             self.store.cache_prune(self.ttl_seconds, self.max_entries)

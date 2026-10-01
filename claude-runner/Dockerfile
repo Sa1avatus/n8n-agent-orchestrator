@@ -11,6 +11,7 @@ RUN apt-get update \
        python3 python3-venv git ca-certificates curl ripgrep procps ${EXTRA_APT_PACKAGES} \
     && rm -rf /var/lib/apt/lists/* \
     && git config --system --add safe.directory '*' \
+    && git config --system core.autocrlf true \
     && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force
 

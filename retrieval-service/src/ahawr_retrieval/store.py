@@ -19,7 +19,7 @@ from typing import Any
 
 import numpy as np
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 4
 
 FTS_TOKENIZER = "porter unicode61 remove_diacritics 2 tokenchars '_'"
 
@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS corpora (
     config_json TEXT NOT NULL DEFAULT '{{}}',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL,
-    last_sync_at REAL
+    last_sync_at REAL,
+    stale INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS files (
     corpus_id TEXT NOT NULL,
@@ -57,6 +58,9 @@ CREATE TABLE IF NOT EXISTS files (
     indexed_at REAL NOT NULL,
     PRIMARY KEY (corpus_id, path)
 );
+-- Change journal: files re-indexed since a timestamp, per corpus (automatic Reviewer boost).
+CREATE INDEX IF NOT EXISTS files_corpus_indexed
+    ON files(corpus_id, indexed_at, path);
 CREATE TABLE IF NOT EXISTS chunks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     chunk_id TEXT NOT NULL UNIQUE,
@@ -128,7 +132,8 @@ CREATE TABLE IF NOT EXISTS retrieval_cache (
     result_json TEXT NOT NULL,
     created_at REAL NOT NULL,
     last_hit_at REAL,
-    hits INTEGER NOT NULL DEFAULT 0
+    hits INTEGER NOT NULL DEFAULT 0,
+    changed_paths_json TEXT
 );
 CREATE INDEX IF NOT EXISTS retrieval_cache_scope ON retrieval_cache(scope_key, created_at);
 CREATE TABLE IF NOT EXISTS rag_mirror (
@@ -167,6 +172,7 @@ class CorpusRecord:
     created_at: float = 0.0
     updated_at: float = 0.0
     last_sync_at: float | None = None
+    stale: bool = False
 
     def generation(self, source_type: str) -> int:
         return self.code_generation if source_type == "code" else self.docs_generation
@@ -264,6 +270,16 @@ class Store:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
             self._conn.executescript(_SCHEMA)
+            # Migration: v1 caches predate the changed_paths dimension; add the column.
+            columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(retrieval_cache)")}
+            if "changed_paths_json" not in columns:
+                self._conn.execute("ALTER TABLE retrieval_cache ADD COLUMN changed_paths_json TEXT")
+            # v3 -> v4: stale flag marks a corpus whose root no longer exists.
+            corpus_columns = {r["name"] for r in self._conn.execute("PRAGMA table_info(corpora)")}
+            if "stale" not in corpus_columns:
+                self._conn.execute(
+                    "ALTER TABLE corpora ADD COLUMN stale INTEGER NOT NULL DEFAULT 0"
+                )
             self._conn.execute(
                 "INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)",
                 (str(SCHEMA_VERSION),),
@@ -315,8 +331,9 @@ class Store:
             ).fetchone()
             if existing is None:
                 conn.execute(
-                    "INSERT INTO corpora(corpus_id, root, config_json, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO corpora"
+                    "(corpus_id, root, config_json, created_at, updated_at, stale) "
+                    "VALUES (?, ?, ?, ?, ?, 0)",
                     (corpus_id, root, json.dumps(config or {}, sort_keys=True), now, now),
                 )
             else:
@@ -342,6 +359,7 @@ class Store:
             "docs_snapshot",
             "git_head",
             "last_sync_at",
+            "stale",
         }
         unknown = set(fields) - allowed
         if unknown:
@@ -369,7 +387,21 @@ class Store:
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             last_sync_at=row["last_sync_at"],
+            stale=bool(row["stale"]),
         )
+
+    def mark_stale(self, corpus_id: str, stale: bool) -> None:
+        """Persist the corpus's stale flag (root no longer exists) without touching state."""
+        with self.transaction() as conn:
+            conn.execute(
+                "UPDATE corpora SET stale = ?, updated_at = ? WHERE corpus_id = ?",
+                (1 if stale else 0, time.time(), corpus_id),
+            )
+
+    def delete_all_files(self, corpus_id: str) -> int:
+        """Remove every file record of a corpus (e.g. when its root no longer exists)."""
+        with self.transaction() as conn:
+            return int(conn.execute("DELETE FROM files WHERE corpus_id = ?", (corpus_id,)).rowcount)
 
     # ------------------------------------------------------------------ files
 
@@ -440,6 +472,17 @@ class Store:
             )
             result.extend(self._chunk(r) for r in rows)
         return result
+
+    def file_line_count(self, corpus_id: str, path: str) -> int | None:
+        """Whole-file line count: the maximum ``end_line`` across the file's
+        active chunks. ``None`` when the file has no active chunks."""
+        row = self._query(
+            "SELECT MAX(end_line) AS max_line "
+            "FROM chunks WHERE corpus_id = ? AND path = ? AND status = 'active'",
+            (corpus_id, path),
+        )
+        value = row[0]["max_line"] if row else None
+        return int(value) if value is not None else None
 
     @staticmethod
     def insert_chunk(
@@ -547,6 +590,25 @@ class Store:
     def max_change_seq(self) -> int:
         rows = self._query("SELECT COALESCE(MAX(seq), 0) AS seq FROM changes")
         return int(rows[0]["seq"])
+
+    def files_indexed_since(self, since_ts: float, corpora: Sequence[str]) -> list[tuple[str, str]]:
+        """Corpus files re-indexed after ``since_ts`` (the sync/index change journal).
+
+        ``files.indexed_at`` is refreshed on every re-index, so the set of files changed
+        since the given timestamp is exactly ``indexed_at > since_ts``. The query is
+        indexed on ``(corpus_id, indexed_at, path)`` (files_corpus_indexed) and therefore
+        reads only the rows after the cutoff — cheap even for large corpora. Returns
+        ``(corpus_id, path)`` pairs, ordered by corpus then path.
+        """
+        if not corpora:
+            return []
+        rows = self._query(
+            f"SELECT corpus_id, path FROM files WHERE corpus_id IN "
+            f"({_placeholders(len(corpora))}) AND indexed_at > ? "
+            "ORDER BY corpus_id, path",
+            (*corpora, since_ts),
+        )
+        return [(r["corpus_id"], r["path"]) for r in rows]
 
     # ------------------------------------------------------------- embeddings
 
@@ -683,11 +745,13 @@ class Store:
         state: dict[str, Any],
         fingerprint: dict[str, Any],
         result: dict[str, Any],
+        changed_paths: list[str] | None = None,
     ) -> None:
         with self.transaction() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO retrieval_cache(cache_key, scope_key, state_json, "
-                "fingerprint_json, result_json, created_at, hits) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                "fingerprint_json, result_json, created_at, hits, changed_paths_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
                 (
                     cache_key,
                     scope_key,
@@ -695,6 +759,7 @@ class Store:
                     json.dumps(fingerprint, sort_keys=True),
                     json.dumps(result, sort_keys=True),
                     time.time(),
+                    json.dumps(sorted(set(changed_paths))) if changed_paths is not None else None,
                 ),
             )
 

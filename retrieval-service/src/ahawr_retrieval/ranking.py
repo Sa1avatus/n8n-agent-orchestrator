@@ -14,8 +14,10 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath
 
 from .candidates import Candidate
+from .chunking import LARGE_PATCH_LINES
 from .profiles import Profile
 from .query_builder import BuiltQuery
+from .store import ChunkRecord
 from .text import extract_paths
 
 TEST_PATH_RE = re.compile(
@@ -52,6 +54,18 @@ def _path_matches(path: str, reference: str) -> bool:
     return path.startswith(ref + "/") or fnmatch.fnmatch(path, ref)
 
 
+def _is_large_patch(record: ChunkRecord, query: BuiltQuery, file_line_count: int | None) -> bool:
+    """True when the fragment comes from a .patch/.diff file whose *whole file* is
+    longer than the threshold and the query/task text does not name the file
+    (path or basename). The check uses the whole-file line count, not the
+    fragment span, so a single fragment of a long patch still counts as large."""
+    if record.language != "diff":
+        return False
+    if file_line_count is None or file_line_count <= LARGE_PATCH_LINES:
+        return False
+    return not any(_path_matches(record.path, p) for p in query.paths)
+
+
 def compute_features(candidate: Candidate, query: BuiltQuery, profile: Profile) -> None:
     record = candidate.record
     assert record is not None
@@ -67,27 +81,38 @@ def compute_features(candidate: Candidate, query: BuiltQuery, profile: Profile) 
         "path_mentioned": float(
             any(_path_matches(record.path, p) for p in query.paths if "/" in p or "." in p)
         ),
+        "changed_path": float(any(_path_matches(record.path, p) for p in query.changed_paths)),
         "scope_match": float(
             any(_path_matches(record.path, p) for p in _scope_patterns(query.scope))
         ),
         "test_file": float(bool(TEST_PATH_RE.search(record.path))),
         "source_prior": profile.ranking.source_prior.get(record.source_type, 0.0),
         "fused": round(candidate.fused_norm, 6),
+        "large_patch": float(_is_large_patch(record, query, candidate.file_line_count)),
     }
     if candidate.reranker is not None:
         candidate.features["reranker"] = round(candidate.reranker, 6)
 
 
 def rank_candidates(
-    candidates: list[Candidate], query: BuiltQuery, profile: Profile, reranked: bool
+    candidates: list[Candidate],
+    query: BuiltQuery,
+    profile: Profile,
+    reranked: bool,
+    file_line_counts: dict[tuple[str, str], int] | None = None,
 ) -> list[Candidate]:
     weights = profile.ranking
     for candidate in candidates:
+        if file_line_counts and candidate.record is not None:
+            candidate.file_line_count = file_line_counts.get(
+                (candidate.record.corpus_id, candidate.record.path)
+            )
         compute_features(candidate, query, profile)
         f = candidate.features
         candidate.deterministic = (
             weights.exact_symbol * f["exact_symbol"]
             + weights.path_mentioned * f["path_mentioned"]
+            + weights.changed_path_bonus * f["changed_path"]
             + weights.scope_match * f["scope_match"]
             + weights.test_file * f["test_file"]
             + f["source_prior"]
@@ -101,6 +126,8 @@ def rank_candidates(
             # Outside the reranked window: no cross-encoder evidence, so no reranker credit.
             relevance = weights.fused * candidate.fused_norm
         candidate.final = relevance + candidate.deterministic
+        if f["large_patch"]:
+            candidate.final *= 1.0 - weights.large_patch_penalty
         if candidate.record is not None and candidate.record.source_type == "history":
             candidate.final *= weights.history_multiplier
     ordered = sorted(candidates, key=lambda c: (-c.final, c.fused_rank, c.chunk_id))

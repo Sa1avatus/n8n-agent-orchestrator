@@ -7,10 +7,12 @@ rerank → deterministic ranking layer → budgeted context assembly → cache s
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 import uuid
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Any
 
 import numpy as np
@@ -19,7 +21,13 @@ from . import __version__
 from .cache import CacheLookup, RetrievalCache, scope_key
 from .candidates import Candidate, fuse
 from .config import Settings, map_host_path
-from .context import chunk_cost, render_context, select_context
+from .context import (
+    RELATED_TEST_CAP,
+    chunk_cost,
+    related_test_paths,
+    render_context,
+    select_context,
+)
 from .embeddings import (
     DEFAULT_LOCAL_EMBEDDING_MODEL,
     Embedder,
@@ -36,6 +44,7 @@ from .models import (
     ChunkScores,
     IndexRequest,
     IndexResponse,
+    IndexStale,
     InvalidateRequest,
     InvalidateResponse,
     RetrievedChunk,
@@ -48,7 +57,13 @@ from .rag_platform import RagMirror, RagPlatformClient, RagPlatformUnavailable
 from .ranking import AUTHORITY, rank_candidates
 from .reranker import HttpReranker, LocalReranker, NoopReranker, Reranker
 from .store import CorpusRecord, FileRecord, Store
-from .text import content_terms, extract_identifiers, sha256_hex
+from .text import (
+    content_terms,
+    extract_identifiers,
+    normalize_whitespace,
+    sha256_hex,
+    short_hash,
+)
 from .vector_index import VectorIndex
 
 MAX_FTS_TERMS = 64
@@ -249,6 +264,7 @@ class RetrievalService:
         profile = self.resolve_profile(request)
         freshness_mode = request.freshness_mode or profile.freshness_mode
         degraded: list[str] = []
+        notes: list[str] = []
 
         mark = time.perf_counter()
         corpora = self._corpora(request.corpora, request.corpus_roots)
@@ -263,6 +279,9 @@ class RetrievalService:
                         degraded.extend(self._push_mirror(corpus_id))
                 except IndexingError as exc:
                     degraded.append(f"sync_failed:{corpus_id}:{exc}")
+                except IndexStale:
+                    # Root vanished during sync; corpus is now stale and serves no fragments.
+                    pass
             corpora = self._corpora(request.corpora, request.corpus_roots)
         timings["sync"] = _ms(mark)
 
@@ -276,6 +295,9 @@ class RetrievalService:
             for cid, c in corpora.items()
         }
         trace = request.trace.model_dump(exclude_none=True) if request.trace else {}
+        stale_corpora = [cid for cid, c in corpora.items() if c.stale]
+        for cid in stale_corpora:
+            notes.append(f"stale_corpus:{cid}:root no longer exists; no fragments served")
         scope = scope_key(
             profile,
             list(corpora),
@@ -303,6 +325,7 @@ class RetrievalService:
                 lambda ids: self._delta_scores(
                     ids, match_query, vector_for_query, profile, list(corpora)
                 ),
+                changed_paths=query.changed_paths or None,
             )
             timings["cache_lookup"] = _ms(mark)
             if lookup.result is not None:
@@ -326,6 +349,26 @@ class RetrievalService:
                 )
             else:
                 cache_info = CacheInfo(status="miss", key=lookup.cache_key, reason=lookup.reason)
+
+        # Automatic Reviewer boost: collect the files the Worker changed since its
+        # last request for this same task and boost them as if they had been passed
+        # in as changed_paths. Merged with an explicit changed_paths when both are
+        # present; when neither is present the field stays absent. Runs for every
+        # reviewer request; the correlation keys come from the task and/or trace.
+        if profile.name == "reviewer":
+            mark = time.perf_counter()
+            journal_paths = self._reviewer_changed_paths(
+                request,
+                query,
+                request.corpora,
+                time.time(),
+            )
+            if journal_paths:
+                query = replace(
+                    query,
+                    changed_paths=list(dict.fromkeys([*query.changed_paths, *journal_paths])),
+                )
+            timings["changed_paths"] = _ms(mark)
 
         retrievers = profile.retrievers
         corpus_ids = list(corpora)
@@ -386,7 +429,10 @@ class RetrievalService:
             )
             timings["rerank"] = round(outcome.latency_ms, 2)
             if outcome.degraded_reason:
-                degraded.append(outcome.degraded_reason)
+                if outcome.degraded_reason == "reranker_not_configured":
+                    notes.append("reranker_disabled")
+                else:
+                    degraded.append(outcome.degraded_reason)
             elif outcome.scores:
                 reranked = True
                 for candidate in window:
@@ -403,14 +449,23 @@ class RetrievalService:
                     candidate.reranker_rank = rank
 
         mark = time.perf_counter()
-        ranked = rank_candidates(valid, query, profile, reranked)
+        line_counts = {
+            (c.record.corpus_id, c.record.path): c.file_line_count
+            for c in valid
+            if c.record is not None and c.file_line_count is not None
+        }
+        ranked = rank_candidates(valid, query, profile, reranked, file_line_counts=line_counts)
         line_numbers = profile.render.line_numbers
+        related_tests = self._related_tests(
+            ranked, list(corpora), {cid: c.root for cid, c in corpora.items()}
+        )
         selected = select_context(
             ranked,
             profile.budget,
             profile.budget.max_chunks,
             profile.budget.max_tokens,
             line_numbers=line_numbers,
+            related_tests=related_tests,
         )
         timings["ranking"] = _ms(mark)
 
@@ -436,7 +491,9 @@ class RetrievalService:
                     "request_id": request_id,
                     "selected": [self._cache_item(c) for c in selected],
                     "degraded_reasons": sorted(set(degraded)),
+                    "notes": sorted(set(notes)),
                 },
+                changed_paths=query.changed_paths or None,
             )
         timings["total"] = _ms(started)
         stats = {
@@ -457,6 +514,7 @@ class RetrievalService:
             snapshots={cid: self._snapshot(c) for cid, c in corpora.items()},
             degraded=bool(degraded),
             degraded_reasons=sorted(set(degraded)),
+            notes=sorted(set(notes)),
             chunks=chunks,
             context=context,
             context_tokens=context_tokens,
@@ -471,6 +529,61 @@ class RetrievalService:
 
     # -------------------------------------------------------------- helpers
 
+    def _reviewer_changed_paths(
+        self,
+        request: RetrieveRequest,
+        query: BuiltQuery,
+        corpora: list[str],
+        before_ts: float,
+    ) -> list[str]:
+        """Files changed since the last Worker request for the same task (automatic boost).
+
+        Mechanism: the retrieval log doubles as the change journal. ``last_request``
+        (correlation keys) or, failing that, ``last_worker_request`` (fallback key)
+        finds the most recent ``worker`` request logged for this task — an indexed
+        point/range query, never a scan — and its ``ts`` is the cutoff. Every corpus
+        file the sync re-indexed since then (``files.indexed_at > ts``; the journal query
+        is indexed on (corpus_id, indexed_at, path)) is returned as ``changed_paths``
+        for the reviewer request and merged with an explicit ``changed_paths`` when both
+        are present.
+
+        Correlation keys, in priority order:
+        1. ``mission_id`` + ``task_id`` — taken from ``request.task``, falling back to
+           ``request.trace`` (the same sources as the request's cache scope key). Matched
+           with ``last_request`` on ``(trace_mission_id, trace_task_id)``.
+        2. fallback (used when no ids are available, or the id lookup finds no matching
+           worker request): a hash of ``task.title`` and ``task.objective`` — both fields
+           are identical across worker and reviewer requests for the same task, so the same
+           hash matches the worker request even when no explicit key exists. The hash is
+           ``short_hash(normalize_whitespace(title), normalize_whitespace(objective))``,
+           and each request's ``_log`` stores it as ``component_value`` with
+           ``query_component == "task"``; ``last_worker_request`` matches on that column.
+        3. no keys (and no title/objective): no boost — the field stays absent and the
+           request behaves as before.
+
+        The merge happens in :meth:`retrieve`, not here: an explicit ``changed_paths`` is
+        kept alongside the journal paths (deduplicated), so a reviewer request that already
+        carries the Worker's own changed files still gets any additional journal files.
+        """
+        trace = request.trace
+        mission_id = request.task.mission_id or (trace.mission_id if trace else None)
+        task_id = request.task.task_id or (trace.task_id if trace else None)
+        row = None
+        if mission_id or task_id:
+            row = self.log.last_request("worker", mission_id or "", task_id or "", before_ts)
+        if row is None:
+            task = request.task
+            task_key_hash = (
+                short_hash(normalize_whitespace(task.title), normalize_whitespace(task.objective))
+                if task.title or task.objective
+                else ""
+            )
+            if task_key_hash:
+                row = self.log.last_worker_request("task", task_key_hash, before_ts)
+        if row is None:
+            return []
+        return [path for _, path in self.store.files_indexed_since(row["ts"], corpora)]
+
     def _corpora(
         self, corpus_ids: list[str], roots: dict[str, str] | None = None
     ) -> dict[str, CorpusRecord]:
@@ -481,7 +594,9 @@ class RetrievalService:
             root = self.settings.bootstrap_corpora.get(corpus_id) or (roots or {}).get(corpus_id)
             if corpus is None and root:
                 # First use of a corpus declared by the deployment: index it now.
-                self.index(IndexRequest(corpus_id=corpus_id, root=root))
+                # A stale root (directory gone) marks the corpus stale instead of failing.
+                with contextlib.suppress(IndexStale):
+                    self.index(IndexRequest(corpus_id=corpus_id, root=root))
                 corpus = self.store.get_corpus(corpus_id)
             if corpus is None:
                 missing.append(corpus_id)
@@ -652,19 +767,66 @@ class RetrievalService:
                     out.setdefault(cid, {})["vector"] = float(vector @ q)
         return out
 
+    def _related_tests(
+        self,
+        ranked: list[Candidate],
+        corpora: list[str],
+        roots: dict[str, str | None],
+    ) -> dict[str, list[Candidate]]:
+        """Related-test fragments for the source files this request selected, top fragment each.
+
+        ``ranked`` is the ranked candidate list (before selection); the source files considered
+        are the highest-scoring code files that are not themselves test files. Their related
+        tests (see :func:`related_test_paths`) are packed only into the leftover budget and
+        score below every original selection (context.select_context).
+        """
+        sources = [
+            c
+            for c in ranked
+            if c.record is not None
+            and c.record.source_type == "code"
+            and not c.filtered_reason
+            and not self._is_test_path(c.record.path)
+        ][:RELATED_TEST_CAP]
+        related: dict[str, list[Candidate]] = {}
+        for source in sources:
+            assert source.record is not None
+            for path in related_test_paths(self.store, corpora, source.record.path, roots):
+                for record in self.store.active_chunks_for_paths(
+                    source.record.corpus_id, [path], 1
+                ):
+                    file = self.store.get_files(source.record.corpus_id, [path]).get(path)
+                    related.setdefault(source.record.path, []).append(
+                        Candidate(chunk_id=record.chunk_id, record=record, file=file, final=0.0)
+                    )
+                    break
+        return related
+
+    @staticmethod
+    def _is_test_path(path: str) -> bool:
+        base = path.replace("\\", "/").rsplit("/", 1)[-1]
+        return base.startswith(("test_", "conftest", "fake_"))
+
     def _hydrate(self, candidates: list[Candidate]) -> None:
         records = self.store.get_chunks(c.chunk_id for c in candidates)
         by_corpus: dict[str, set[str]] = {}
         for record in records.values():
             by_corpus.setdefault(record.corpus_id, set()).add(record.path)
         files: dict[tuple[str, str], FileRecord] = {}
+        line_counts: dict[tuple[str, str], int] = {}
         for corpus_id, paths in by_corpus.items():
-            for path, file in self.store.get_files(corpus_id, paths).items():
-                files[(corpus_id, path)] = file
+            for path in paths:
+                file = self.store.get_files(corpus_id, [path]).get(path)
+                if file is not None:
+                    files[(corpus_id, path)] = file
+                line_counts[(corpus_id, path)] = self.store.file_line_count(corpus_id, path) or 0
         for candidate in candidates:
             candidate.record = records.get(candidate.chunk_id)
             if candidate.record is not None:
                 candidate.file = files.get((candidate.record.corpus_id, candidate.record.path))
+                candidate.file_line_count = line_counts.get(
+                    (candidate.record.corpus_id, candidate.record.path)
+                )
 
     def _rerank_text(self, candidate: Candidate, profile: Profile) -> str:
         record = candidate.record
@@ -798,6 +960,11 @@ class RetrievalService:
         timings["total"] = _ms(started)
         cached_degraded = list(lookup.result.get("degraded_reasons", []))
         reasons = sorted(set(degraded + cached_degraded))
+        notes = list(lookup.result.get("notes", [])) + [
+            f"stale_corpus:{cid}:root no longer exists; no fragments served"
+            for cid, c in corpora.items()
+            if c.stale
+        ]
         response = RetrieveResponse(
             request_id=request_id,
             profile=profile.name,
@@ -812,6 +979,7 @@ class RetrievalService:
             snapshots={cid: self._snapshot(c) for cid, c in corpora.items()},
             degraded=bool(reasons),
             degraded_reasons=reasons,
+            notes=sorted(set(notes)),
             chunks=chunks,
             context=render_context(
                 candidates,
@@ -851,6 +1019,7 @@ class RetrievalService:
             "docs_generation": corpus.docs_generation,
             "git_head": corpus.git_head,
             "last_sync_at": corpus.last_sync_at,
+            "stale": corpus.stale,
         }
 
     @staticmethod
@@ -881,6 +1050,12 @@ class RetrievalService:
         query_text = json.dumps(
             {"components": query.components, "rerank": query.rerank_text}, ensure_ascii=False
         )
+        task = request.task
+        task_key_hash = (
+            short_hash(normalize_whitespace(task.title), normalize_whitespace(task.objective))
+            if task.title or task.objective
+            else ""
+        )
         self.log.write(
             {
                 "request_id": response.request_id,
@@ -888,6 +1063,8 @@ class RetrievalService:
                 "profile": profile.name,
                 "config_id": response.config_id,
                 "corpora": request.corpora,
+                "query_component": "task" if task_key_hash else "",
+                "component_value": task_key_hash,
                 "trace": trace,
                 "query_text": query_text if self.settings.log_query_text else None,
                 "query_hash": sha256_hex(query_text)[:24],

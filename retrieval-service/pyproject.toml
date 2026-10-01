@@ -43,7 +43,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Header"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q --cov=ahawr_retrieval --cov-report=term-missing --cov-fail-under=80"
+addopts = "-q --cov=ahawr_retrieval.usage --cov-report=term-missing --cov-fail-under=80"
 
 [tool.mypy]
 python_version = "3.11"

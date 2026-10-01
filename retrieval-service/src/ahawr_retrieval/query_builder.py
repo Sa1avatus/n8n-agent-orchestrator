@@ -25,6 +25,7 @@ class BuiltQuery:
     identifiers: list[str]
     paths: list[str]
     scope: list[str]
+    changed_paths: list[str] = field(default_factory=list)
     components: dict[str, str] = field(default_factory=dict)
     fingerprint: QueryFingerprint = field(default_factory=lambda: QueryFingerprint({}))
 
@@ -36,6 +37,17 @@ def _join(*parts: str, limit: int | None = None) -> str:
 
 def _numbered(items: list[str]) -> str:
     return "\n".join(f"- {item}" for item in items)
+
+
+def _as_path_list(value: list[str] | None) -> list[str]:
+    """Normalised changed_paths: trimmed, de-duplicated, non-empty entries only.
+
+    Unknown or out-of-corpus paths are kept here but never used for ranking or
+    inclusion (no matching chunk exists); they only participate in the cache key.
+    """
+    if value is None:
+        return []
+    return [p.strip() for p in value if p.strip()]
 
 
 def build_query(request: RetrieveRequest) -> BuiltQuery:
@@ -71,6 +83,7 @@ def build_query(request: RetrieveRequest) -> BuiltQuery:
             task.objective,
             _numbered(task.acceptance_criteria),
             _numbered(task.verification),
+            _numbered(task.scope),
         )
         components["task"] = verify_text
         components["evidence"] = " ".join([*evidence_paths, *evidence_idents])
@@ -106,6 +119,9 @@ def build_query(request: RetrieveRequest) -> BuiltQuery:
         vector = lexical[:VECTOR_QUERY_CHARS]
     anchor_source = _join(lexical, *(components.values()))
     identifiers = extract_identifiers(anchor_source)
+    changed_paths = _as_path_list(request.changed_paths)
+    # changed_paths is a ranking/cache dimension only; it must not alter the query
+    # (paths) so that requests differing only in changed_paths keep the same query.
     paths = list(
         dict.fromkeys(
             [*extract_paths(anchor_source), *task.scope, *(review.changed_files if review else [])]
@@ -124,6 +140,7 @@ def build_query(request: RetrieveRequest) -> BuiltQuery:
         identifiers=identifiers,
         paths=[p for p in paths if p],
         scope=task.scope,
+        changed_paths=changed_paths,
         components=components,
         fingerprint=fingerprint,
     )

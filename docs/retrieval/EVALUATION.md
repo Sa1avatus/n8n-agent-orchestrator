@@ -66,6 +66,9 @@ ahawr-retrieval-eval ahawr-metrics --attempts attempts.json \
 
 # features for later LTR
 ahawr-retrieval export-logs --out features.jsonl
+
+# retrieval-usage metrics per profile (log + claude-runner API)
+ahawr-retrieval usage --runner-url http://localhost:8899 --since -7d
 ```
 
 `hybrid-rerank` needs `RETRIEVAL_RERANKER_URL` pointing at a running `reranker-service`;
@@ -81,3 +84,32 @@ MRR and Recall@5 do not decrease, at least one of them improves, ContextRecall d
 decrease, silver `file_Recall@10` does not regress, cache decision accuracy stays 1.0, and
 p95 latency stays well inside `retrieval_timeout_ms`. AHAWR-level A/B (first-pass rate,
 retries, success) is the final confirmation before enabling a phase by default.
+
+## Live-task A/B procedure (RAG on vs. RAG off)
+
+For a live mission, compare one task run with retrieval against the same task without it:
+
+1. **Run A (RAG on)** — set `retrieval_enabled=true` and `retrieval_label=hybrid-v1`; record
+   the files the Worker reads (from runner events), wall-clock time, and the Reviewer's
+   review score/decision.
+2. **Run B (RAG off)** — set `retrieval_enabled=false` and `retrieval_label=off` for the same
+   task; record the same metrics.
+3. **Compare** — retrieval calls, context tokens, first-pass rate, retries, total task
+   latency, and review score between the two runs.
+4. **Order of applying** — keep the order fixed across tasks (RAG on first, RAG off second, or
+   the reverse, consistently) so environment drift is not attributed to the label.
+
+Offline, the same comparison is done on a frozen snapshot with `ahawr-retrieval-eval run` per
+configuration label (see `eval/results/2026-09-30-rag-usage-after.md`). The usage metric CLI
+(`ahawr-retrieval usage --runner-url … --since …`) supplies the live per-profile numbers
+(selected/opened files, precision, recall, token share, `ahawr-search` calls, missed files).
+
+### Proposed Worker prompt rule (text only — not applied in this change)
+
+> Use `ahawr-search "query"` for exploratory, multi-file or semantic questions — "where is X
+> implemented?", "what tests cover this module?", "how does this config flow to the runner?".
+> Use `grep -n "pattern" <file>` when you already know the exact identifier, file, or literal
+> string and only need its line numbers in a single file. Prefer `ahawr-search` first when the
+> answer may span several files; fall back to `grep -n` for pinpoint lookups. `ahawr-search`
+> is fail-open: on any retrieval outage it prints a one-line notice and exits 0, so it never
+> blocks the Worker.

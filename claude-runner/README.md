@@ -145,6 +145,24 @@ The `working_directory` column of the `missions` Data Table (e.g. `D:\OpenAIProj
 
 Give missions of different projects different `state_namespace` values. The Worker can reach the whole mounted drive. To narrow that, replace the drive mount in `docker-compose.yml` by bind mounts of the project folders at the matching `/d/...` paths.
 
+## On-demand retrieval: `ahawr-search`
+
+The Worker (or a human) can query the mission's corpus directly, outside the run's own context assembly:
+
+```bash
+ahawr-search "where is the retry delay applied?"
+ahawr-search "query" --k 3 --budget 2000 --root . --url http://ahawr-retrieval:8500
+```
+
+* `--k N` (default 5) — how many fragments to print.
+* `--budget T` (default 1500) — the token budget sent to the service.
+* `--root PATH` (default the current directory) — the working directory; it is resolved with `realpath` and must fall under `/d/` or `/workspace` (a `/tmp/X` symlink that resolves to `/d/rag-tmp/X` is used). If the resolved path is outside the allowed roots, the command prints that the folder is unavailable to the service and exits 0.
+* `--url` — the retrieval service URL; defaults to `http://ahawr-retrieval:8500`, overridable with `AHAWR_RETRIEVAL_URL`.
+
+Each fragment is printed as `path:start-end` followed by its text, in the service's ranking order. The request is a `POST /retrieve` with `profile: worker`, `budget: {max_tokens: T}`, a corpus named after the resolved root (e.g. `/d/OpenAIProjects/job-searching-assistant` → `d-openaiprojects-job-searching-assistant`) and `corpus_roots: {slug: resolved_root}`.
+
+**Fail-open.** On any connection error, timeout (default 10 s) or 5xx response the command prints one short line (`retrieval unavailable`) and exits 0 — a retrieval outage never blocks the Worker or the run.
+
 ## Dashboard: watch the agents work
 
 Open **http://localhost:8701** (host port `AHAWR_DASHBOARD_PORT`). The `ahawr-dashboard` container shows every Architect, Worker and Reviewer run of both AHAWR variants, most recent activity first:

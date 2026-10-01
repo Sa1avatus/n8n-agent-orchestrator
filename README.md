@@ -633,6 +633,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 - Incremental indexing with chunk-level invalidation, and a retrieval cache with semantic query fingerprints for retries.
 - Its own local index by default; `rag-platform` can be attached as an external backend, with automatic fallback to the local index.
 - An Eval Harness (gold/silver datasets, retrieval, system and AHAWR-level metrics) decides on every later extension.
+- Agents can also search during a task: `ahawr-search "query"` in the claude-runner image queries the folder it runs in (fail-open, 1500-token budget). The Reviewer's context is focused on the files the Worker changed (`changed_paths`), and `ahawr-retrieval usage` reports per-profile precision, recall and search calls from the retrieval log and the runner events.
 
 `AHAWR_v13.json` calls `POST http://ahawr-retrieval:8500/retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only into the retrieval container at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
@@ -1374,6 +1375,7 @@ worker_provider
 - Инкрементальная индексация, инвалидация на уровне чанков, кэш с семантическим fingerprint для повторных попыток.
 - По умолчанию используется собственный локальный индекс. `rag-platform` можно подключить как внешний бэкенд; если он недоступен, сервис автоматически переходит на локальный индекс.
 - Все дальнейшие расширения принимаются по данным Eval Harness (gold/silver наборы; метрики retrieval, системы и AHAWR).
+- Агенты могут искать и по ходу задачи: команда `ahawr-search "запрос"` в образе claude-runner ищет по папке, из которой вызвана (fail-open, бюджет 1500 токенов). Контекст Reviewer'а фокусируется на файлах, изменённых Worker'ом (`changed_paths`), а `ahawr-retrieval usage` показывает по профилям точность, полноту и число поисков по журналу retrieval и событиям runner'а.
 
 `AHAWR_v13.json` вызывает `POST http://ahawr-retrieval:8500/retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется в контейнер retrieval только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 

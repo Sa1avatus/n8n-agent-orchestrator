@@ -161,3 +161,93 @@ def test_map_host_path() -> None:
     assert map_host_path("D:\\", table) == "/host/d"
     assert map_host_path("/already/linux", table) == "/already/linux"
     assert Settings.from_env({"RETRIEVAL_PATH_MAP": "D:\\=/host/d"}).path_map == {"D:\\": "/host/d"}
+
+
+def test_corpus_roots_first_use_indexes_a_new_root_and_finds_new_files_on_next_query(
+    settings: Settings, tmp_path: Path
+) -> None:
+    root = tmp_path / "mission"
+    root.mkdir()
+    (root / "app").mkdir()
+    (root / "app" / "parser.py").write_text(
+        "def compute_total(lines):\n    return sum(float(l.split()[-1]) for l in lines)\n",
+        encoding="utf-8",
+    )
+    with client_for(settings) as client:
+        first = client.post(
+            "/retrieve",
+            json={
+                "corpora": ["m-work"],
+                "corpus_roots": {"m-work": str(root)},
+                "query": "compute_total",
+            },
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["chunks"][0]["symbol"] == "compute_total"
+        # a newly written file appears in the index by the next (synced) request
+        (root / "notes").mkdir()
+        (root / "notes" / "meeting.md").write_text(
+            "# Meeting notes\n\nWe fixed the invoice totals.\n",
+            encoding="utf-8",
+        )
+        again = client.post(
+            "/retrieve",
+            json={
+                "corpora": ["m-work"],
+                "query": "invoice totals meeting",
+                "cache": "bypass",
+            },
+        )
+        assert again.status_code == 200, again.text
+        paths = {c["path"] for c in again.json()["chunks"]}
+        assert "notes/meeting.md" in paths
+        # and the corpus is no longer stale
+        assert not again.json()["snapshots"]["m-work"]["stale"]
+
+
+def test_corpus_root_deletion_marks_corpus_stale_and_serves_no_fragments(
+    settings: Settings, tmp_path: Path
+) -> None:
+    root = tmp_path / "gone"
+    root.mkdir()
+    (root / "app").mkdir()
+    (root / "app" / "parser.py").write_text(
+        "def compute_total(lines):\n    return sum(float(l.split()[-1]) for l in lines)\n",
+        encoding="utf-8",
+    )
+    with client_for(settings) as client:
+        first = client.post(
+            "/retrieve",
+            json={
+                "corpora": ["gone-work"],
+                "corpus_roots": {"gone-work": str(root)},
+                "query": "compute_total",
+            },
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["chunks"][0]["symbol"] == "compute_total"
+        # the root disappears; the next request marks the corpus stale and serves nothing
+        (root / "app" / "parser.py").unlink()
+        (root / "app").rmdir()
+        root.rmdir()
+        again = client.post(
+            "/retrieve",
+            json={
+                "corpora": ["gone-work"],
+                "query": "compute_total",
+                "freshness_mode": "sync",
+                "cache": "bypass",
+            },
+        )
+        assert again.status_code == 200, again.text
+        body = again.json()
+        assert body["chunks"] == []
+        assert body["snapshots"]["gone-work"]["stale"] is True
+        assert "stale_corpus:gone-work:root no longer exists; no fragments served" in body["notes"]
+        # an out-of-allowed-root is rejected with a clear message, not a crash
+        bad = client.post(
+            "/retrieve",
+            json={"corpora": ["etc"], "corpus_roots": {"etc": "/etc"}, "query": "x"},
+        )
+        assert bad.status_code == 400
+        assert "RETRIEVAL_ALLOWED_ROOTS" in bad.json()["detail"]
