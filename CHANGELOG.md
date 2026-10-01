@@ -21,6 +21,10 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 - An intentionally disabled reranker is a note, not `degraded`.
 - `ahawr-retrieval usage`: per-profile precision/recall, used token share, `ahawr-search` calls and
   missed files from the retrieval log joined with claude-runner events.
+  Open: on live data it reports 0 opened files, because claude-runner run summaries carry no
+  mission/task id to match runs to requests (the fixtures assumed one).
+- Fixed on deploy: an existing retrieval log failed to open (`no such column: trace_mission_id`)
+  because the new indexes were created before the column migration.
 
 ### claude-runner
 - `ahawr-search "query" [--k N] [--budget T]` in the image: on-demand retrieval for agents from the

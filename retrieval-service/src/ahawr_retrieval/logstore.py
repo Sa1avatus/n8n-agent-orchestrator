@@ -51,14 +51,6 @@ CREATE TABLE IF NOT EXISTS retrieval_requests (
     reranker TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS retrieval_requests_ts ON retrieval_requests(ts);
--- Correlation keys of the request's task, in canonical order, for the automatic
--- Reviewer boost's last-request lookup (see last_request below).
-CREATE INDEX IF NOT EXISTS retrieval_requests_task
-    ON retrieval_requests(trace_mission_id, trace_task_id, profile, ts);
--- Fingerprint-component lookup for the Reviewer boost's fallback key (see
--- last_worker_request below); the component key is the name, the value its exact hash.
-CREATE INDEX IF NOT EXISTS retrieval_requests_component
-    ON retrieval_requests(profile, query_component, component_value, ts);
 CREATE TABLE IF NOT EXISTS retrieval_candidates (
     request_id TEXT NOT NULL,
     chunk_id TEXT NOT NULL,
@@ -133,6 +125,20 @@ CANDIDATE_FIELDS = (
 )
 
 
+# Indexes on columns that older logs only get by the migration in RetrievalLog.__init__,
+# so they are created after it.
+_INDEXES = """
+-- Correlation keys of the request's task, in canonical order, for the automatic
+-- Reviewer boost's last-request lookup (see last_request below).
+CREATE INDEX IF NOT EXISTS retrieval_requests_task
+    ON retrieval_requests(trace_mission_id, trace_task_id, profile, ts);
+-- Fingerprint-component lookup for the Reviewer boost's fallback key (see
+-- last_worker_request below); the component key is the name, the value its exact hash.
+CREATE INDEX IF NOT EXISTS retrieval_requests_component
+    ON retrieval_requests(profile, query_component, component_value, ts);
+"""
+
+
 class RetrievalLog:
     def __init__(self, path: str | Path) -> None:
         self.path = str(path)
@@ -167,6 +173,7 @@ class RetrievalLog:
                     "ALTER TABLE retrieval_requests "
                     "ADD COLUMN component_value TEXT NOT NULL DEFAULT ''"
                 )
+            self._conn.executescript(_INDEXES)
 
     def close(self) -> None:
         with self._lock:
