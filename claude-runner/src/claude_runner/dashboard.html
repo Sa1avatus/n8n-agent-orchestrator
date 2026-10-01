@@ -370,9 +370,11 @@ function totals(m) {
   if (u) { t.input = u.input_tokens || 0; t.cacheRead = u.cache_read_input_tokens || 0; t.cacheWrite = u.cache_creation_input_tokens || 0; t.output = u.output_tokens || t.output; }
   const rt = S.run && S.run.tokens;
   if (rt && S.run.source === "hermes") { t.input = rt.input || t.input; t.output = rt.output || t.output; t.cacheRead = rt.cache_read || 0; t.cacheWrite = rt.cache_write || 0; t.reasoning = rt.reasoning; }
-  t.cost = result && result.cost_usd != null ? result.cost_usd : S.run && S.run.cost_usd;
+  // Claude Code reports the session's cumulative cost and API time (restored on --resume);
+  // the runner stores this run's share, so prefer it
+  t.cost = S.run && S.run.cost_usd != null ? S.run.cost_usd : result && result.cost_usd;
   t.durationMs = result && result.duration_ms;
-  t.apiMs = result && result.duration_api_ms;
+  t.apiMs = S.run && S.run.api_ms != null ? S.run.api_ms : result && result.duration_api_ms;
   return t;
 }
 

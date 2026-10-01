@@ -36,6 +36,8 @@ Yes, with one difference: Hermes is a server, and Claude Code is a process. The 
 writes priced separately). Claude Code reports it for the whole session and restores it on
 `--resume`, so the runner stores each run's share: the session total minus the total of the
 previous finished run of the same Claude session (the cumulative value stays in `details`).
+API time (`duration_api_ms`) is cumulative the same way; the run's share is `api_ms` in
+`GET /v1/runs/{run_id}`, and the dashboard's summary strip shows these per-run values.
 A model Claude Code does not know is priced at a fallback; the image ships
 `/etc/claude-code/managed-settings.json` (`modelPricing.overrides`, USD per million tokens)
 that prices the local Worker model like Claude Sonnet 5 ($2 in, $10 out, $0.20 cache read,
@@ -48,7 +50,7 @@ or the rates, then rebuild the image.
 | Endpoint | Behaviour |
 |---|---|
 | `POST /v1/runs` `{input, model, provider, session_id?, working_directory?, role?}` | Starts a Claude Code turn asynchronously → `{run_id, session_id, status: "queued"\|"running"}`. With a `session_id` the saved session is resumed. If that session already has a run in flight, the same run is returned (`attached: true`), so there are never two concurrent turns in one session. |
-| `GET /v1/runs/{run_id}` | `{status: queued\|running\|completed\|failed\|cancelled, output, error: {code, message}, http_code, session_id, cost_usd, num_turns, context_tokens, permission_denials}` |
+| `GET /v1/runs/{run_id}` | `{status: queued\|running\|completed\|failed\|cancelled, output, error: {code, message}, http_code, session_id, cost_usd, api_ms, num_turns, context_tokens, permission_denials}` |
 | `POST /v1/runs/{run_id}/cancel` | Interrupts the turn (SIGINT), then stops the CLI's whole process group, so the tool processes it started stop too. The session stays resumable. |
 | `POST /v1/sessions/{session_id}/compact` `{mode?: auto\|always\|off}` | Runs Claude Code's `/compact` on the saved session when its context exceeds `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` → `completed` / `skipped` (with `reason`) / `failed`. The compact instructions are delivered via a PreCompact hook and appended to the **end** of the compaction request, so the request's prefix (history + system prompt) is unchanged and its prefill stays the same. This replaces the Hermes TUI WebSocket compression. |
 | `GET /v1/sessions/{session_id}/digest?max_chars=12000` | What the session already did, from its runs' activity logs: the model's text, each tool call with a shortened result, compactions and results; the newest entries are kept when it is cut. The Run Manager gives it to a fresh session when the old one cannot be compacted. |

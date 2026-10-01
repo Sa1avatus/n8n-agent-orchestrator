@@ -3,6 +3,15 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
+## 2026-10-01
+
+### claude-runner
+- The dashboard's summary strip showed the Claude session's cumulative cost and API time: a
+  resumed Worker run of 19.6 min showed $4.07 and 90 min of API time, the sum of three attempts.
+  It now shows the run's own share, which the runner already stored as `cost_usd`; the runner also
+  stores the run's API time (`api_ms` in `GET /v1/runs/{run_id}`, `run_duration_api_ms` in
+  `details`) as the difference to the previous run of the same session.
+
 ## 2026-09-30
 
 ### claude-runner

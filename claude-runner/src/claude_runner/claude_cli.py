@@ -303,6 +303,7 @@ def classify(
         "terminal_reason": result.get("terminal_reason"),
         "num_turns": result.get("num_turns"),
         "total_cost_usd": result.get("total_cost_usd"),
+        "duration_api_ms": result.get("duration_api_ms"),
         "usage": result.get("usage"),
         "permission_denials": state.permission_denials,
         "model": state.model,

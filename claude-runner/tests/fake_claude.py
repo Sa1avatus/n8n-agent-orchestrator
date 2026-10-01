@@ -328,6 +328,7 @@ def main() -> int:
             "result": answer,
             "session_id": sid,
             "total_cost_usd": 0.001 * turns,
+            "duration_api_ms": 1000 * turns,
             "permission_denials": [],
             "usage": {"output_tokens": 5},
         }

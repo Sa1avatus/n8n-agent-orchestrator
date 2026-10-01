@@ -36,6 +36,9 @@ def test_start_poll_complete_and_resume(client: TestClient, tmp_path: Path) -> N
     assert second["session_id"] == sid and second["session_created"] is False
     done2 = wait_for(client, second["run_id"])
     assert done2["output"].startswith("echo[2]: continue")
+    # Claude Code reports session totals; each run carries only its own share
+    assert done["cost_usd"] == 0.001 and done["api_ms"] == 1000
+    assert done2["cost_usd"] == 0.001 and done2["api_ms"] == 1000
 
     first_call, second_call = calls(tmp_path)
     assert "--session-id" in first_call["args"] and "--resume" in second_call["args"]
@@ -307,3 +310,4 @@ def test_run_cost_is_this_runs_share(tmp_path: Path) -> None:
     )
     assert store.session_cost_before("c", "z") == 3.5
     assert store.session_cost_before("other", "z") is None
+    assert store.session_total_before("c", "z", "duration_api_ms") is None

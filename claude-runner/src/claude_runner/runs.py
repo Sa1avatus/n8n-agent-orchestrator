@@ -29,8 +29,9 @@ STDERR_TAIL = 8000
 
 
 def run_cost(total: Any, previous: float | None) -> float | None:
-    """This run's cost. Claude Code reports the session's cumulative cost and restores it on
-    --resume, so a resumed run's share is the difference to the previous run's total."""
+    """This run's share of a cumulative session counter (cost, API time). Claude Code reports
+    the session's totals and restores them on --resume, so a resumed run's share is the
+    difference to the previous run's total."""
     if not isinstance(total, int | float):
         return None
     if previous is None or previous > total:  # new session, or Claude Code did not restore it
@@ -130,6 +131,7 @@ class RunManager:
             "error": error,
             "http_code": run["http_code"],
             "cost_usd": run["cost_usd"],
+            "api_ms": details.get("run_duration_api_ms"),
             "num_turns": run["num_turns"],
             "context_tokens": run["context_tokens"],
             "permission_denials": details.get("permission_denials", []),
@@ -360,9 +362,14 @@ class RunManager:
             )
         details = outcome.details
         record = self.store.get_run(run_id) or {}
-        previous = self.store.session_cost_before(
-            str(record.get("claude_session_id") or ""), run_id
+        claude_session = str(record.get("claude_session_id") or "")
+        previous = self.store.session_cost_before(claude_session, run_id)
+        api_ms = run_cost(
+            details.get("duration_api_ms"),
+            self.store.session_total_before(claude_session, run_id, "duration_api_ms"),
         )
+        if api_ms is not None:
+            details["run_duration_api_ms"] = int(api_ms)
         self.store.update_run(
             run_id,
             status=outcome.status,
