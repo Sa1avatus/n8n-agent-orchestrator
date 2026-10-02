@@ -39,7 +39,7 @@ This project turns n8n into an orchestration layer for three logical AI roles:
                             pass / retry / next
 ```
 
-The main workflow is the **Autonomous Hermes Architect Worker Reviewer (AHAWR)** workflow.
+The main workflow is the **Agentic Hub for Automation Workflow Routing (AHAWR)** workflow.
 
 It is designed for long-running tasks where a single LLM call is not enough. Instead of asking one model to solve everything, the workflow:
 
