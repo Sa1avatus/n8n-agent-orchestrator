@@ -334,7 +334,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = String($json.output ?? $json.reviewer_output ?? $json.response ?? $json.content ?? $json.hermes_output ?? '').trim();\nif (!raw) throw new Error('Reviewer returned empty output');\nlet text = raw.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/\\s*```$/i, '').trim();\nfunction extractReviewObject(input) {\n  const candidates = [];\n  let start = -1, depth = 0, inString = false, escaped = false;\n  for (let i = 0; i < input.length; i++) {\n    const ch = input[i];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === '\\\\') escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '{') { if (depth === 0) start = i; depth++; continue; }\n    if (ch === '}') {\n      if (depth === 0) continue;\n      depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = input.slice(start, i + 1);\n        try { const parsed = JSON.parse(candidate); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) candidates.push(parsed); } catch (_) {}\n        start = -1;\n      }\n    }\n  }\n  const review = candidates.find(candidate => {\n    const status = String(candidate.status ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    return ['pass','needs_changes'].includes(status) && Number.isFinite(score) && score >= 0 && score <= 100 && Object.prototype.hasOwnProperty.call(candidate,'reason') && Object.prototype.hasOwnProperty.call(candidate,'next_task');\n  });\n  if (!review) throw new Error('Reviewer output does not contain a valid review JSON object.');\n  return review;\n}\nconst review = extractReviewObject(text);\nreturn [{ json: { ...$json, review, review_valid: true, review_raw: raw, review_status: String(review.status ?? '').toLowerCase(), review_score: Number(review.score ?? 0), review_reason: String(review.reason ?? ''), review_next_task: String(review.next_task ?? '') } }];"
+        "jsCode": "const raw = String($json.output ?? $json.reviewer_output ?? $json.response ?? $json.content ?? $json.hermes_output ?? '').trim();\nif (!raw) return [{ json: { ...$json, review_valid: false, review_parse_error: 'Reviewer returned empty output', review_raw: '' } }];\nlet text = raw.replace(/^```json\\s*/i, '').replace(/^```\\s*/i, '').replace(/\\s*```$/i, '').trim();\nfunction extractReviewObject(input) {\n  const candidates = [];\n  let start = -1, depth = 0, inString = false, escaped = false;\n  for (let i = 0; i < input.length; i++) {\n    const ch = input[i];\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === '\\\\') escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n    if (ch === '\"') { inString = true; continue; }\n    if (ch === '{') { if (depth === 0) start = i; depth++; continue; }\n    if (ch === '}') {\n      if (depth === 0) continue;\n      depth--;\n      if (depth === 0 && start !== -1) {\n        const candidate = input.slice(start, i + 1);\n        try { const parsed = JSON.parse(candidate); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) candidates.push(parsed); } catch (_) {}\n        start = -1;\n      }\n    }\n  }\n  const review = candidates.find(candidate => {\n    const status = String(candidate.status ?? '').toLowerCase();\n    const score = Number(candidate.score);\n    return ['pass','needs_changes'].includes(status) && Number.isFinite(score) && score >= 0 && score <= 100 && Object.prototype.hasOwnProperty.call(candidate,'reason') && Object.prototype.hasOwnProperty.call(candidate,'next_task');\n  });\n  if (!review) {\n    const loose = lenientReviewObject(input);\n    if (loose) return loose;\n    throw new Error('Reviewer output does not contain a valid review JSON object.');\n  }\n  return review;\n}\n// Last resort for the final {\"status\", \"score\", \"reason\", \"next_task\"} object when a model leaves\n// double quotes unescaped inside \"reason\"/\"next_task\" (JSON.parse then rejects it although the\n// verdict is clear). Strict parsing always wins; this only runs when it found nothing.\nfunction lenientReviewObject(input) {\n  const starts = [...input.matchAll(/\\{\\s*\"status\"\\s*:/g)];\n  if (!starts.length) return null;\n  const tail = input.slice(starts[starts.length - 1].index).trim().replace(/\\s*```$/, '');\n  const m = /^\\{\\s*\"status\"\\s*:\\s*\"(pass|needs_changes)\"\\s*,\\s*\"score\"\\s*:\\s*(\\d+(?:\\.\\d+)?)\\s*,\\s*\"reason\"\\s*:\\s*\"([\\s\\S]*)\"\\s*,\\s*\"next_task\"\\s*:\\s*\"([\\s\\S]*)\"\\s*\\}$/i.exec(tail);\n  if (!m) return null;\n  const score = Number(m[2]);\n  if (!Number.isFinite(score) || score < 0 || score > 100) return null;\n  return { status: m[1].toLowerCase(), score, reason: m[3], next_task: m[4] };\n}\nlet review;\ntry { review = extractReviewObject(text); }\ncatch (e) { return [{ json: { ...$json, review_valid: false, review_parse_error: String(e.message ?? e), review_raw: raw } }]; }\nreturn [{ json: { ...$json, review, review_valid: true, review_raw: raw, review_status: String(review.status ?? '').toLowerCase(), review_score: Number(review.score ?? 0), review_reason: String(review.reason ?? ''), review_next_task: String(review.next_task ?? '') } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3033,7 +3033,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst taskId = String(prep.current_task_id ?? '');\nconst reviewMessage = ['🧪 REVIEW RESULT', `Task: ${taskId}`, `Status: ${String(review.review_status ?? '')}`, `Score: ${String(review.review_score ?? 0)}`, String(review.review_reason ?? ''), review.review_next_task ? `Next: ${String(review.review_next_task)}` : ''].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
+        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst taskId = String(prep.current_task_id ?? '');\nconst cutText = (s, n) => {\n  s = String(s ?? '').replace(/\\s+/g, ' ').trim();\n  if (s.length <= n) return s;\n  let c = s.slice(0, n);\n  const dot = Math.max(c.lastIndexOf('. '), c.lastIndexOf('; '));\n  if (dot > n * 0.5) c = c.slice(0, dot + 1);\n  return c + ' …';\n};\nconst verdict = String(review.review_status ?? '');\nconst attemptNo = Number(prep.task_attempt ?? 0);\nconst reviewMessage = [\n  `🧪 REVIEW ${taskId}${attemptNo > 1 ? ` · attempt ${attemptNo}` : ''}: ${verdict} · ${String(review.review_score ?? 0)}`,\n  cutText(review.review_reason, 450),\n  verdict !== 'pass' && review.review_next_task ? `Fix: ${cutText(review.review_next_task, 450)}` : ''\n].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3518,7 +3518,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('▶️ TASK STARTED\\n' +\n  String($json.current_task_id ?? '') +\n  ': ' +\n  String($json.current_task?.title ?? '') +\n  '\\n\\n' +\n  String($json.worker_prompt ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ (() => {\n  const j = $json, t = j.current_task || {};\n  const cut = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };\n  const list = (v) => Array.isArray(v) ? v.map(x => '- ' + String(x)).join('\\n') : String(v ?? '');\n  const attempt = Number(j.task_attempt ?? 1);\n  let m = '▶️ TASK STARTED\\n' + String(j.current_task_id ?? '') + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : '');\n  if (t.objective) m += '\\n\\nObjective:\\n' + cut(t.objective, 1200);\n  if (t.acceptance_criteria && t.acceptance_criteria.length) m += '\\n\\nAcceptance:\\n' + cut(list(t.acceptance_criteria), 1200);\n  if (t.verification && t.verification.length) m += '\\n\\nVerification:\\n' + cut(list(t.verification), 600);\n  const fb = String(j.review_feedback ?? '').trim();\n  if (attempt > 1 && fb) {\n    const score = Number(j.last_review_score);\n    m += '\\n\\nPrevious review' + (score ? ' (score ' + score + ')' : '') + ':\\n' + cut(j.last_review_reason, 700) + '\\n\\nRequested fixes:\\n' + cut(fb, 1200);\n  }\n  if (m.length > 3800) m = m.slice(0, 3800) + '\\n…';\n  return m.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n})() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -3952,7 +3952,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Inputs of the Claude Code Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// The item is either the task state (resume path) or the previous report row read by\n// Load Previous Worker Report (the state then comes from Attach Worker Context).\nconst fromReport = !Array.isArray(($json ?? {}).tasks) && $('Attach Worker Context').isExecuted;\nconst s = fromReport ? ($('Attach Worker Context').last().json ?? {}) : ($json ?? {});\nconst previous = fromReport ? ($json ?? {}) : {};\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String(s.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String(s.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const task = tasks[Number(s.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const index = Number(s.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    s.retrieval_worker_context ? String(s.retrieval_worker_context) : '',\n    '',\n    s.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String(s.review_feedback) : '',\n    (() => {\n      // A retry after a review: the reviewer scores the final report on its own, so the\n      // Worker must hand back the whole report, not only the fixes.\n      const text = String(previous.worker_output ?? '').trim();\n      if (!s.review_feedback || !text || String(previous.task_id ?? '') !== String(task.id ?? '')) return '';\n      const report = text.length > 16000 ? text.slice(0, 16000) + '\\n…(truncated)' : text;\n      return [\n        '',\n        `YOUR PREVIOUS REPORT FOR THIS TASK (attempt ${previous.task_attempt ?? '?'}, the review above refers to it):`,\n        report,\n        '',\n        'Return the COMPLETE updated report: keep every part of the previous report that is correct, fix and add what the review asks, and re-check anything you change. Do not return only the changes: the reviewer scores your final report on its own.'\n      ].join('\\n');\n    })()\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String(s.worker_run_id ?? '')),\n  session_id: (String(s.worker_session_id ?? '')),\n  input: unfinished ? resumeText : fullInput,\n  resume_input: resumeText,\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
+        "jsCode": "// Inputs of the Claude Code Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// The item is either the task state (resume path) or the previous report row read by\n// Load Previous Worker Report (the state then comes from Attach Worker Context).\nconst fromReport = !Array.isArray(($json ?? {}).tasks) && $('Attach Worker Context').isExecuted;\nconst s = fromReport ? ($('Attach Worker Context').last().json ?? {}) : ($json ?? {});\nconst previous = fromReport ? ($json ?? {}) : {};\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String(s.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String(s.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const task = tasks[Number(s.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\n\n// Fresh-session retry switch (default off: keeps the compact-then-resume\n// behaviour, so the emitted request is byte-for-byte identical to the\n// unpatched workflow when the flag is not set).\n// On: a review retry of this session starts a fresh runner session instead\n// of resuming it. `input` carries the four-part retry text (task,\n// acceptance criteria, previous review feedback, previous report, previous\n// session digest; newest last) and `session_id` is left empty so the\n// runner creates a new session. The digest is cut to retry_input_chars here;\n// the runner applies its own cut on top.\nconst freshRetry = Boolean(s.retry_fresh_session ?? false)\n  && String(s.worker_session_id ?? '').trim() !== ''\n  && String(s.review_feedback ?? '').trim() !== '';\nconst digest = String(s.previous_session_digest ?? '').trim();\nconst retryDigest = digest.length > Number(s.retry_input_chars ?? 16000)\n  ? digest.slice(0, Number(s.retry_input_chars ?? 16000))\n    + '\\n[previous session digest trimmed to the retry budget]' : digest;\nconst retryTask = (Array.isArray(s.tasks) ? s.tasks : [])[Number(s.task_index ?? 0)] ?? {};\nconst retryInput = freshRetry ? [\n  'FRESH SESSION RETRY — continue in a new session from the digest below.',\n  'Do NOT restart the task from scratch.',\n  `TASK ${String(retryTask.id ?? '')}: ${String(retryTask.title ?? '')}`,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  ((retryTask.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')),\n  '',\n  'PREVIOUS REVIEW FEEDBACK:',\n  String(s.review_feedback ?? ''),\n  '',\n  'PREVIOUS REPORT:',\n  String(previous.worker_output ?? '').trim(),\n  '',\n  'PREVIOUS SESSION DIGEST (newest last):',\n  retryDigest || '(not available)'\n].join('\\n') : '';\n// Mission acceptance criteria switch (default off: flag unset -> fullInput is\n// byte-for-byte the unpatched input; on: append the mission-level criteria\n// block, a numbered list from Mission.acceptance_criteria plus a short\n// mission goal (Mission.objective), within a char budget. Switchable per\n// request: set worker_mission_criteria=true on the state to enable it.\nconst missionCriteria = (() => {\n  if (!Boolean(s.worker_mission_criteria ?? false)) return '';\n  const m = $('Mission').first().json ?? {};\n  const list = (Array.isArray(m.acceptance_criteria) ? m.acceptance_criteria : []).map(String);\n  if (!list.length) return '';\n  const goal = String(m.objective ?? '').trim();\n  const budget = Number(s.mission_criteria_chars ?? 1600);\n  let text = 'MISSION ACCEPTANCE CRITERIA:' + '\\n' + list.map((x, i) => `${i + 1}. ${x}`).join('\\n');\n  if (goal) text += '\\n\\nMISSION GOAL: ' + goal;\n  if (budget > 0 && text.length > budget) text = text.slice(0, budget) + '\\n…(mission criteria block truncated to the budget)';\n  return text;\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const index = Number(s.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    missionCriteria,\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    s.retrieval_worker_context ? String(s.retrieval_worker_context) : '',\n    '',\n    s.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String(s.review_feedback) : '',\n    (() => {\n      // A retry after a review: the reviewer scores the final report on its own, so the\n      // Worker must hand back the whole report, not only the fixes.\n      const text = String(previous.worker_output ?? '').trim();\n      if (!s.review_feedback || !text || String(previous.task_id ?? '') !== String(task.id ?? '')) return '';\n      const report = text.length > 16000 ? text.slice(0, 16000) + '\\n…(truncated)' : text;\n      return [\n        '',\n        `YOUR PREVIOUS REPORT FOR THIS TASK (attempt ${previous.task_attempt ?? '?'}, the review above refers to it):`,\n        report,\n        '',\n        'Return the COMPLETE updated report: keep every part of the previous report that is correct, fix and add what the review asks, and re-check anything you change. Do not return only the changes: the reviewer scores your final report on its own.'\n      ].join('\\n');\n    })()\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String(s.worker_run_id ?? '')),\n  // Fresh-session retry switch (default off: flag unset -> exactly the\n  // pre-patch expressions; on: fresh runner session, digest-seeded input).\n  input: freshRetry ? retryInput : (unfinished ? resumeText : fullInput),\n  session_id: freshRetry ? '' : String(s.worker_session_id ?? ''),\n  retry_fresh_session: Boolean(s.retry_fresh_session ?? false),\n  retry_input_chars: Number.isFinite(Number(s.retry_input_chars ?? NaN)) ? Number(s.retry_input_chars) : -1,\n  previous_session_digest: String(s.previous_session_digest ?? ''),\n  resume_input: resumeText,\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3966,7 +3966,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Inputs of the Claude Code Run Manager for the Reviewer (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"reviewer\",\n  run_id: (String($('Reviewer State').first().json.reviewer_run_id ?? '')),\n  session_id: (String($('Reviewer State').first().json.reviewer_session_id ?? '')),\n  input: ((() => {\n  // Reviewer State keeps only its own fields (no tasks/current_task): read the task\n  // from the state nodes it takes current_task_id and task_index from.\n  const state = $('Reviewer State').first().json ?? {};\n  const task = (() => {\n    for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n      try {\n        if (!$(n).isExecuted) continue;\n        const s = $(n).last().json ?? {};\n        const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n        const t = tasks[Number(state.task_index ?? s.task_index ?? 0)] ?? s.current_task;\n        if (t && (t.id ?? t.task_id ?? t.title)) return t;\n      } catch (_) {}\n    }\n    return {};\n  })();\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    ...($('Mission').first().json.working_directory_block ? [$('Mission').first().json.working_directory_block + '\\nInspect the Worker\\'s changes in this folder before scoring; a file you cannot find elsewhere is not evidence that it is missing.', ''] : []),\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    ...(() => {\n      // The previous review of this task (a retry): the Worker was asked to return the whole\n      // report, so check that parts accepted before are still there.\n      for (const n of ['Restore Retry State','Restore Task After State Save','Restore Saved Task State','Restore Plan After State Save','Prepare Current Task']) {\n        try {\n          if (!$(n).isExecuted) continue;\n          const s = $(n).last().json ?? {};\n          const feedback = String(s.review_feedback ?? '').trim();\n          if (!feedback || Number(s.task_index ?? -1) !== Number(state.task_index ?? -2)) continue;\n          return [\n            `PREVIOUS REVIEW OF THIS TASK (score ${Number(s.last_review_score ?? 0)}):`,\n            String(s.last_review_reason ?? '').trim(),\n            'Asked next: ' + feedback,\n            'Score the WORKER RESULT below as a complete report: check that these points were addressed and that parts which were correct before were not lost.',\n            ''\n          ];\n        } catch (_) {}\n      }\n      return [];\n    })(),\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})()),\n  resume_input: \"Continue the existing Reviewer task from the saved Claude Code session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.\",\n  model: ($('Constants').first().json.reviewer_model),\n  provider: ($('Constants').first().json.reviewer_provider),\n  poll_seconds: ($('Constants').first().json.reviewer_poll_seconds),\n  max_polls: ($('Constants').first().json.reviewer_max_polls),\n  max_retries: ($('Constants').first().json.reviewer_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: (String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),\n  service_model: ($('Constants').first().json.service_model),\n  service_provider: ($('Constants').first().json.service_provider),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
+        "jsCode": "// Inputs of the Claude Code Run Manager for the Reviewer (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\nreturn { json: {\n  role: \"reviewer\",\n  run_id: (String($('Reviewer State').first().json.reviewer_run_id ?? '')),\n  session_id: (String($('Reviewer State').first().json.reviewer_session_id ?? '')),\n  input: ((() => {\n  // Reviewer State keeps only its own fields (no tasks/current_task): read the task\n  // from the state nodes it takes current_task_id and task_index from.\n  const state = $('Reviewer State').first().json ?? {};\n  const task = (() => {\n    for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n      try {\n        if (!$(n).isExecuted) continue;\n        const s = $(n).last().json ?? {};\n        const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n        const t = tasks[Number(state.task_index ?? s.task_index ?? 0)] ?? s.current_task;\n        if (t && (t.id ?? t.task_id ?? t.title)) return t;\n      } catch (_) {}\n    }\n    return {};\n  })();\n  const workerOutput = String($('Load Worker Result').first().json.worker_output ?? '');\n  // Mission acceptance criteria switch (default off: flag unset -> input is\n  // byte-for-byte the unpatched reviewer input; on: add the mission-level\n  // criteria block, a numbered list from Mission.acceptance_criteria plus a\n  // short mission goal (Mission.objective), within a char budget.\n  const missionCriteria = (() => {\n    if (!Boolean($json.worker_mission_criteria ?? false)) return '';\n    const m = $('Mission').first().json ?? {};\n    const list = (Array.isArray(m.acceptance_criteria) ? m.acceptance_criteria : []).map(String);\n    if (!list.length) return '';\n    const goal = String(m.objective ?? '').trim();\n    const budget = Number($json.mission_criteria_chars ?? 1600);\n    let text = 'MISSION ACCEPTANCE CRITERIA:' + '\\n' + list.map((x, i) => `${i + 1}. ${x}`).join('\\n');\n    if (goal) text += '\\n\\nMISSION GOAL: ' + goal;\n    if (budget > 0 && text.length > budget) text = text.slice(0, budget) + '\\n\\u2026(mission criteria block truncated to the budget)';\n    return text;\n  })();\n  return [\n    $('Prompt Templates').first().json.reviewer_prompt ?? '',\n    '',\n    ...($('Mission').first().json.working_directory_block ? [$('Mission').first().json.working_directory_block + '\\nInspect the Worker\\'s changes in this folder before scoring; a file you cannot find elsewhere is not evidence that it is missing.', ''] : []),\n    'ORIGINAL GOAL:',\n    String($('Mission').first().json.original_goal ?? ''),\n    '',\n    'CURRENT TASK:',\n    String(task.title ?? ''),\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria : []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    ...(missionCriteria ? [missionCriteria, ''] : []),\n    'VERIFICATION:',\n    (Array.isArray(task.verification) ? task.verification : []).join('\\n'),\n    '',\n    'SCOPE:',\n    (Array.isArray(task.scope) ? task.scope : []).join('\\n'),\n    '',\n    ...(() => {\n      // The previous review of this task (a retry): the Worker was asked to return the whole\n      // report, so check that parts accepted before are still there.\n      for (const n of ['Restore Retry State','Restore Task After State Save','Restore Saved Task State','Restore Plan After State Save','Prepare Current Task']) {\n        try {\n          if (!$(n).isExecuted) continue;\n          const s = $(n).last().json ?? {};\n          const feedback = String(s.review_feedback ?? '').trim();\n          if (!feedback || Number(s.task_index ?? -1) !== Number(state.task_index ?? -2)) continue;\n          return [\n            `PREVIOUS REVIEW OF THIS TASK (score ${Number(s.last_review_score ?? 0)}):`,\n            String(s.last_review_reason ?? '').trim(),\n            'Asked next: ' + feedback,\n            'Score the WORKER RESULT below as a complete report: check that these points were addressed and that parts which were correct before were not lost.',\n            ''\n          ];\n        } catch (_) {}\n      }\n      return [];\n    })(),\n    'WORKER RESULT:',\n    workerOutput,\n    ...($json.retrieval_reviewer_context ? ['', String($json.retrieval_reviewer_context)] : [])\n  ].join('\\n');\n})()),\n  resume_input: \"Continue the existing Reviewer task from the saved Claude Code session. Do not start the review over. Use the existing session context and return only the required JSON acceptance result.\",\n  model: ($('Constants').first().json.reviewer_model),\n  provider: ($('Constants').first().json.reviewer_provider),\n  poll_seconds: ($('Constants').first().json.reviewer_poll_seconds),\n  max_polls: ($('Constants').first().json.reviewer_max_polls),\n  max_retries: ($('Constants').first().json.reviewer_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: (String($('Reviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),\n  service_model: ($('Constants').first().json.service_model),\n  service_provider: ($('Constants').first().json.service_provider),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4019,6 +4019,92 @@
       "name": "Load Previous Worker Report",
       "alwaysOutputData": true,
       "executeOnce": false
+    },
+    {
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -10656,
+        1280
+      ],
+      "id": "9e24985c-02cc-41b7-bc02-bd3f4bd775c4",
+      "name": "Review Parsed?",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7c42c4ac-372b-4abf-8481-ec2620078325",
+              "leftValue": "={{ $json.review_valid === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10656,
+        1460
+      ],
+      "id": "1db3fbfb-dff2-4979-bd7f-40e7a3aa31d5",
+      "name": "Prepare Verdict Retry",
+      "parameters": {
+        "jsCode": "// Parse Review found no readable verdict: ask the Reviewer again, in the same session, for the JSON only.\n// The number of re-asks is hermes_config.reviewer_max_retries; when used up, fail with the parse error.\nconst cfg = $('Constants').first().json;\nconst maxRetries = Number(cfg.reviewer_max_provider_retries ?? 0);\nconst attempt = $runIndex; // 0 on the first re-ask\nconst err = String($json.review_parse_error ?? 'no valid review JSON object');\nif (attempt >= maxRetries) throw new Error(`${err} (the Reviewer was re-asked ${attempt} time(s))`);\nlet session = '';\nfor (const n of ['Verdict Retry Result', 'Save Reviewer Run Context']) {\n  try { if ($(n).isExecuted) { const s = String($(n).last().json.reviewer_session_id ?? ''); if (s) { session = s; break; } } } catch (_) {}\n}\nif (!session) throw new Error(`${err} (no Reviewer session to re-ask)`);\nconst prompt = [\n  `Your previous reply did not contain a readable verdict (${err}).`,\n  'Do NOT review again and do NOT use tools. Reply now with ONLY this JSON object, nothing before or after it:',\n  '{\"status\":\"pass\" or \"needs_changes\",\"score\":0-100,\"reason\":\"a specific reason\",\"next_task\":\"a specific fix; an empty string on pass\"}',\n  'Rules: valid JSON; no double quotes inside \"reason\" or \"next_task\" (write `code` or single quotes instead); keep the verdict you had reached.'\n].join('\\n');\nreturn [{ json: {\n  role: 'reviewer', run_id: '', session_id: session, input: prompt, resume_input: prompt,\n  model: cfg.reviewer_model, provider: cfg.reviewer_provider,\n  poll_seconds: cfg.reviewer_poll_seconds, max_polls: cfg.reviewer_max_polls,\n  max_retries: cfg.reviewer_max_provider_retries, retry_count: 0, retry_delays: cfg.retry_delays,\n  state_key: String(cfg.state_namespace ?? ''), service_model: cfg.service_model, service_provider: cfg.service_provider,\n  runner_url: cfg.runner_url, runner_api_key: cfg.runner_api_key,\n  working_directory: $('Mission').first().json.working_directory,\n  verdict_retry: attempt + 1\n} }];"
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Constants').first().json.run_manager_workflow_id }}"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -10416,
+        1460
+      ],
+      "id": "2a83fb10-e09c-4ffb-a328-aa68ddf16221",
+      "name": "Reviewer Verdict Retry Start"
+    },
+    {
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -10176,
+        1460
+      ],
+      "id": "dab8c927-cc38-4c5e-ab60-771737216e1c",
+      "name": "Verdict Retry Result",
+      "parameters": {
+        "jsCode": "// Result of the verdict re-ask: hand its text to Parse Review in place of the unreadable one.\nfunction unwrap(value) { const x = value?.json ?? value?.data ?? value ?? {}; return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; }\nconst r = unwrap($json);\nconst status = String(r.status ?? '').toLowerCase();\nif (status !== 'completed') throw new Error(`Reviewer verdict re-ask did not complete (status ${status || 'unknown'}${r.error ? ': ' + String(r.error).slice(0, 200) : ''})`);\nconst out = String(r.output ?? r.response ?? r.content ?? '');\nconst { review_valid, review_parse_error, review_raw, ...base } = $('Parse Review').last().json ?? {};\nreturn [{ json: { ...base, output: out, reviewer_output: out, reviewer_run_id: String(r.run_id ?? base.reviewer_run_id ?? ''), reviewer_session_id: String(r.session_id ?? '') } }];"
+      }
     }
   ],
   "pinData": {
@@ -4207,7 +4293,7 @@
       "main": [
         [
           {
-            "node": "Persist Parsed Review",
+            "node": "Review Parsed?",
             "type": "main",
             "index": 0
           }
@@ -5040,6 +5126,57 @@
         [
           {
             "node": "Build Worker Run Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Parsed?": {
+      "main": [
+        [
+          {
+            "node": "Persist Parsed Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Verdict Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Verdict Retry": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Verdict Retry Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviewer Verdict Retry Start": {
+      "main": [
+        [
+          {
+            "node": "Verdict Retry Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verdict Retry Result": {
+      "main": [
+        [
+          {
+            "node": "Parse Review",
             "type": "main",
             "index": 0
           }

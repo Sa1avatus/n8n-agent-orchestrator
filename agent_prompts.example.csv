@@ -103,6 +103,7 @@ If workspace rules exist in the current project, read them before you start.
 Work ONLY on the current task.
 Do not try to solve the whole project.
 Do not explore unrelated parts of the repository.
+
 Do not commit or push changes.
 Do not read .env or secrets.
 Do not print environment variables (env, printenv, set, os.environ): they contain tokens. If you need to know whether a non-secret variable is set, check only that one: `test -n ""$NAME"" && echo set`.

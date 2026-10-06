@@ -1,0 +1,501 @@
+{
+  "name": "AHAWR Status Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const data = $getWorkflowStaticData('global');\nconst offset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nreturn [{ json: { offset } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        5120,
+        1488
+      ],
+      "id": "b69d96c2-a240-442d-ab1b-dd574f42ad7d",
+      "name": "Prepare Poll"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 10
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        4880,
+        1488
+      ],
+      "id": "c0639be1-71ef-407f-8519-20d1d9e9d9af",
+      "name": "Poll Telegram"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "telegram_bot_token",
+              "value": "REDACTED-BOT-TOKEN"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        5360,
+        1488
+      ],
+      "id": "028e5feb-6d69-4900-addf-c28d2ba26fad",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://api.telegram.org/bot' + $('Config').first().json.telegram_bot_token + '/getUpdates' }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "={{ $json.offset }}"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "timeout",
+              "value": "0"
+            },
+            {
+              "name": "allowed_updates",
+              "value": "[\"message\"]"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5536,
+        1488
+      ],
+      "id": "54757ef0-2cf7-4e7f-87d7-99610ed91bef",
+      "name": "Get Updates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $json ?? {};\nif (result.ok !== true) {\n  throw new Error(`Telegram getUpdates failed: ${result.description ?? 'unknown error'}`);\n}\nconst updates = Array.isArray(result.result) ? result.result : [];\nconst data = $getWorkflowStaticData('global');\nconst currentOffset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nconst fresh = updates.filter(u => Number(u.update_id ?? -1) >= currentOffset);\nif (fresh.length) {\n  const maxId = fresh.reduce((m, u) => Math.max(m, Number(u.update_id ?? -1)), currentOffset - 1);\n  data.telegram_update_offset = maxId + 1;\n}\nreturn fresh.map(update => ({ json: update }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5712,
+        1488
+      ],
+      "id": "a9c27c6d-b372-458c-a4c8-55ba4480a278",
+      "name": "Expand Updates"
+    },
+    {
+      "parameters": {
+        "jsCode": "const message = $json.message ?? {};\nconst chatId = message.chat?.id;\nconst text = String(message.text ?? '').trim();\nconst command = text.split(/\\s+/)[0].toLowerCase().split('@')[0];\nreturn [{json:{chat_id:chatId, command, supported:command === '/status' || command === '/start', original_text:text}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5904,
+        1488
+      ],
+      "id": "9d5c4aef-37a0-4f1b-abbc-ed37bb26f606",
+      "name": "Parse Command"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "supported",
+              "leftValue": "={{ String($json.supported) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6096,
+        1488
+      ],
+      "id": "39155330-ea92-47b4-8ecc-8109983ad664",
+      "name": "Supported Command?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "mode",
+              "name": "execution_mode",
+              "value": "production",
+              "type": "string"
+            },
+            {
+              "id": "namespace",
+              "name": "state_namespace",
+              "value": "llama.cpp-dashboard-v1",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6384,
+        1472
+      ],
+      "id": "49624066-4a9e-40f5-95ab-7be5f1ba6d17",
+      "name": "Constants"
+    },
+    {
+      "parameters": {
+        "jsCode": "const live = $json ?? {};\nconst stateKey = String(live.state_key ?? $('Constants').first().json.state_namespace ?? '');\nconst status = String(live.workflow_status ?? '').toLowerCase();\nconst block = String(live.current_block ?? '');\nconst blockStatus = String(live.current_block_status ?? '');\nconst taskId = String(live.current_task_id ?? '');\nconst taskTitle = String(live.current_task_title ?? '');\nconst taskIndex = Number(live.task_index ?? 0);\nconst totalTasks = Number(live.total_tasks ?? 0);\nconst attempt = Number(live.task_attempt ?? 0);\nconst currentRun = String(live.current_run_id ?? '');\nconst workerRun = String(live.worker_run_id ?? '');\nconst workerStatus = String(live.worker_status ?? '');\nconst reviewerRun = String(live.reviewer_run_id ?? '');\nconst reviewerStatus = String(live.reviewer_status ?? '');\nconst score = Number(live.last_review_score ?? 0);\nconst reason = String(live.last_review_reason ?? '');\nconst updated = String(live.updated_at ?? '');\nconst executionId = String(live.n8n_execution_id ?? '');\n\nif (!stateKey || !status) {\n  return [{json:{...$json, text:'AHAWR STATUS\\n\\nNO LIVE STATE\\n\\nWorkflow has not published live execution state yet.', chat_id:$json.chat_id}}];\n}\n\nlet stale = false;\nif (updated) {\n  const ts = Date.parse(updated);\n  if (Number.isFinite(ts)) stale = (Date.now() - ts) > 180000;\n}\n\nconst lines = [\n  'AHAWR STATUS',\n  '',\n  `Workflow: ${status.toUpperCase()}${stale ? ' (STALE > 3 min)' : ''}`,\n  `Current block: ${block || '—'}`,\n  `Block status: ${blockStatus || '—'}`,\n  `Progress: ${totalTasks > 0 ? `${Math.min(taskIndex,totalTasks)}/${totalTasks}` : '—'}`,\n  `Task: ${taskId ? `${taskId}${taskTitle ? ` — ${taskTitle}` : ''}` : '—'}`,\n  `Attempt: ${attempt || '—'}`,\n];\nif (currentRun) lines.push(`Current run: ${currentRun}`);\nif (workerRun || workerStatus) lines.push(`Worker: ${workerStatus || '—'}${workerRun ? ` (${workerRun})` : ''}`);\nif (reviewerRun || reviewerStatus) lines.push(`Reviewer: ${reviewerStatus || '—'}${reviewerRun ? ` (${reviewerRun})` : ''}`);\nif (score) lines.push(`Last review score: ${score}`);\nif (reason) lines.push(`Last review reason: ${reason}`);\nif (updated) lines.push(`Updated: ${updated}`);\nif (executionId) lines.push(`n8n execution: ${executionId}`);\nlines.push(`Namespace: ${stateKey}`);\n\nreturn [{json:{...$json,text:lines.join('\\n'),chat_id:$json.chat_id}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7072,
+        1472
+      ],
+      "id": "4103c8e2-0f9b-420e-bc61-9f9cffd3e668",
+      "name": "Build Status"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Supported Command?').item.json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        7296,
+        1472
+      ],
+      "id": "f39df623-73a2-4900-9bfc-a0943430e368",
+      "name": "Send Status",
+      "webhookId": "a70d031f-2918-4ca4-8d34-3ba5d0ff25c4",
+      "credentials": {
+        "telegramApi": {
+          "id": "czj7GHvr93VLvcH5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "AHAWR Status Bot\\n\\n/status — текущий статус production workflow.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6384,
+        1680
+      ],
+      "id": "51cd9215-788b-4535-909e-3d181f2fc55d",
+      "name": "Send Help",
+      "webhookId": "61d4141c-bfbc-410f-89e8-40d842c2484f",
+      "credentials": {
+        "telegramApi": {
+          "id": "czj7GHvr93VLvcH5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**AHAWR Status Bot — Telegram polling**\n\nWorkflow checks Telegram every 10 seconds. It replies only when a new incoming message is present. No HTTPS webhook is required. `Delete Webhook` is intentionally not in the polling loop.\n\nPut the existing bot token into `Config.telegram_bot_token`.",
+        "height": 300,
+        "width": 520
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5360,
+        1792
+      ],
+      "id": "4ef3aa0d-5d49-4884-86f5-c22de108ab55",
+      "name": "Setup note"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6832,
+        1472
+      ],
+      "id": "46595fa6-a151-480e-8e00-e8aeed798154",
+      "name": "Load Live State",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "create",
+        "tableName": "Autonomous Agent Live State",
+        "columns": {
+          "column": [
+            {
+              "name": "state_key"
+            },
+            {
+              "name": "workflow_status"
+            },
+            {
+              "name": "current_block"
+            },
+            {
+              "name": "current_block_status"
+            },
+            {
+              "name": "current_run_id"
+            },
+            {
+              "name": "current_task_id"
+            },
+            {
+              "name": "current_task_title"
+            },
+            {
+              "name": "task_index",
+              "type": "number"
+            },
+            {
+              "name": "total_tasks",
+              "type": "number"
+            },
+            {
+              "name": "task_attempt",
+              "type": "number"
+            },
+            {
+              "name": "worker_run_id"
+            },
+            {
+              "name": "worker_status"
+            },
+            {
+              "name": "reviewer_run_id"
+            },
+            {
+              "name": "reviewer_status"
+            },
+            {
+              "name": "last_review_score",
+              "type": "number"
+            },
+            {
+              "name": "last_review_reason"
+            },
+            {
+              "name": "updated_at"
+            },
+            {
+              "name": "n8n_execution_id"
+            }
+          ]
+        },
+        "options": {
+          "createIfNotExists": true
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6608,
+        1472
+      ],
+      "id": "e647496a-51a0-4e17-b72a-de65f5b1adf5",
+      "name": "Ensure Live Task State Table"
+    }
+  ],
+  "connections": {
+    "Poll Telegram": {
+      "main": [
+        [
+          {
+            "node": "Prepare Poll",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Poll": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Updates": {
+      "main": [
+        [
+          {
+            "node": "Expand Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Updates": {
+      "main": [
+        [
+          {
+            "node": "Parse Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Command": {
+      "main": [
+        [
+          {
+            "node": "Supported Command?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supported Command?": {
+      "main": [
+        [
+          {
+            "node": "Constants",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Help",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Constants": {
+      "main": [
+        [
+          {
+            "node": "Ensure Live Task State Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Status": {
+      "main": [
+        [
+          {
+            "node": "Send Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Live State": {
+      "main": [
+        [
+          {
+            "node": "Build Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Live Task State Table": {
+      "main": [
+        [
+          {
+            "node": "Load Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "active": false
+}
