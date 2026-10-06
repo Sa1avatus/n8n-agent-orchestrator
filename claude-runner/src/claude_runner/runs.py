@@ -27,6 +27,30 @@ from .store import Store, now
 
 STDERR_TAIL = 8000
 
+# A fresh-session retry input carries the task, the review findings, the previous report
+# and the previous session's digest (newest last). Cut only the digest if it alone would
+# break the budget; keep the three fixed parts whole otherwise, newest last.
+_RETRY_MARK = "[previous session's digest trimmed to the retry budget]"
+_RETRY_KEEP_PARTS_CHARS = 4000
+
+
+def cut_retry_input(prompt: str, budget: int) -> str:
+    """Cut the retry input to ``budget`` characters, newest last."""
+    budget = max(1, budget)
+    if len(prompt) <= budget:
+        return prompt
+    parts = prompt.split("\n\n")
+    digest = parts[-1] if parts else ""
+    fixed = "\n\n".join(parts[:-1]) if len(parts) > 1 else ""
+    if len(fixed) + 4 + len(_RETRY_MARK) > budget:
+        # the fixed parts alone exceed the budget: cut the whole input
+        return prompt[:budget]
+    digest_chars = max(0, budget - 4 - len(fixed) - len(_RETRY_MARK))
+    if digest_chars >= len(digest):
+        # fits exactly: no marker
+        return prompt
+    return f"{fixed}\n\n{digest[:digest_chars]}\n\n{_RETRY_MARK}"
+
 
 def run_cost(total: Any, previous: float | None) -> float | None:
     """This run's share of a cumulative session counter (cost, API time). Claude Code reports
@@ -158,8 +182,12 @@ class RunManager:
                     # One turn per session at a time: a repeated start (n8n retry, recovery)
                     # attaches to the run that is already working on this session.
                     return self.public(active, attached=True)
-            claude_id, resume, created = self._bind(session_id, cwd, role)
+            provider = self.settings.provider(request.provider.strip())
+            fresh_retry = bool(session_id and self.settings.retry_fresh_session_for(provider))
+            claude_id, resume, created = self._bind(session_id, cwd, role, fresh=fresh_retry)
             session_id = session_id or claude_id
+            if fresh_retry:
+                prompt = cut_retry_input(prompt, self.settings.retry_input_chars)
             run_id = "run_" + uuid.uuid4().hex
             self.store.create_run(
                 run_id=run_id,
@@ -178,10 +206,20 @@ class RunManager:
         assert run is not None
         return self.public(run, attached=False)
 
-    def _bind(self, session_id: str, cwd: str, role: str) -> tuple[str, bool, bool]:
-        """Return (claude_session_id, resume?, created?) for a runner session id."""
+    def _bind(
+        self, session_id: str, cwd: str, role: str, fresh: bool = False
+    ) -> tuple[str, bool, bool]:
+        """Return (claude_session_id, resume?, created?) for a runner session id.
+
+        With ``fresh`` a retry starts a new Claude Code session instead of resuming: the
+        old transcript stays untouched and its digest is carried in the retry input, so no
+        compaction of the old session is needed before continuing."""
         if session_id:
             known = self.store.get_session(session_id)
+            if fresh:
+                claude_id = str(uuid.uuid4())
+                self.store.bind_session(session_id, claude_id, cwd, role)
+                return claude_id, False, True
             if known and transcript_exists(known["claude_session_id"]):
                 return known["claude_session_id"], True, False
             if not known and transcript_exists(session_id):
@@ -250,6 +288,7 @@ class RunManager:
                 resume=resume,
                 compact=compact,
                 provider=provider,
+                search_first=self.settings.search_first_for(role, provider),
             )
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
@@ -477,6 +516,10 @@ class RunManager:
             provider_name = str((last or {}).get("provider") or "")
             model = model or str((last or {}).get("model") or "")
             provider = self.settings.provider(provider_name)
+            if self.settings.retry_fresh_session_for(provider):
+                # Fresh-session retry is on: a retry will start a new session, so
+                # compacting the old one would be wasted work.
+                return skipped("fresh_session_retry")
             if min_tokens is None and provider and provider.compact_min_tokens is not None:
                 threshold = provider.compact_min_tokens
             window = None

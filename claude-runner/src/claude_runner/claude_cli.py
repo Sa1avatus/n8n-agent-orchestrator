@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,10 @@ def transcript_exists(claude_session_id: str) -> bool:
     return projects.is_dir() and any(projects.glob(f"*/{claude_session_id}.jsonl"))
 
 
+def _compact_hook_command(instructions: str) -> str:
+    return f"cat <<'AHAWR_EOF'\n{instructions}\nAHAWR_EOF"
+
+
 def _compact_settings_path(instructions: str) -> str:
     """A settings file carrying a PreCompact hook that prints ``instructions`` to stdout.
 
@@ -51,7 +57,7 @@ def _compact_settings_path(instructions: str) -> str:
                     "hooks": [
                         {
                             "type": "command",
-                            "command": f"cat <<'AHAWR_EOF'\n{instructions}\nAHAWR_EOF",
+                            "command": _compact_hook_command(instructions),
                         }
                     ]
                 }
@@ -59,6 +65,41 @@ def _compact_settings_path(instructions: str) -> str:
         }
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
+    return str(path)
+
+
+def _search_first_settings_path(every: int, compact_instructions: str) -> str:
+    """A settings file with the search-first PreToolUse hook (search_hook.py) for Bash, Grep and
+    Glob, plus the PreCompact hook when ``compact_instructions`` is given."""
+    path = config_dir() / "search-first-settings.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    search = shlex.quote(sys.executable) + " -m claude_runner.search_hook"
+    hooks: dict[str, Any] = {
+        "PreToolUse": [
+            {
+                "matcher": "Bash|Grep|Glob",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"AHAWR_SEARCH_FIRST_EVERY={every} {search}",
+                        "timeout": 10,
+                    }
+                ],
+            }
+        ]
+    }
+    if compact_instructions:
+        hooks["PreCompact"] = [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": _compact_hook_command(compact_instructions),
+                    }
+                ]
+            }
+        ]
+    path.write_text(json.dumps({"hooks": hooks}), encoding="utf-8")
     return str(path)
 
 
@@ -71,6 +112,7 @@ def build_command(
     resume: bool,
     compact: bool = False,
     provider: ProviderProfile | None = None,
+    search_first: bool = False,
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
     if settings.live_tokens and not compact:
@@ -107,12 +149,19 @@ def build_command(
     # is appended to the *end* of the compaction request, and the same file is used for
     # every run, so system prompt and tools stay unchanged step to step. Empty instructions
     # (the built-in summarizer) add no file at all.
-    if (
+    compact_hook = bool(
         settings.local_compact_instructions
         and provider is not None
         and provider.isolates_credentials
         and settings.compact_instructions
-    ):
+    )
+    if search_first and not compact:
+        instructions = settings.compact_instructions if compact_hook else ""
+        cmd += [
+            "--settings",
+            _search_first_settings_path(settings.search_first_every, instructions),
+        ]
+    elif compact_hook:
         cmd += ["--settings", _compact_settings_path(settings.compact_instructions)]
     cmd += list(settings.extra_args)
     return cmd

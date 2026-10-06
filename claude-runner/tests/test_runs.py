@@ -48,6 +48,134 @@ def test_start_poll_complete_and_resume(client: TestClient, tmp_path: Path) -> N
     assert args[args.index("--model") + 1] == "sonnet"
 
 
+def test_retry_fresh_session_starts_a_new_session(settings: Settings, tmp_path: Path) -> None:
+    from claude_runner.runs import _RETRY_MARK
+
+    object.__setattr__(settings, "retry_fresh_session", True)
+    object.__setattr__(settings, "retry_input_chars", 2000)
+    with TestClient(create_app(settings)) as client:
+        first = start(client, role="worker", input="task")
+        sid = first["session_id"]
+        wait_for(client, first["run_id"])
+
+        digest = "d" * 5000
+        retry_input = "TASK: redo\n\nFINDINGS: x\n\nREPORT: y\n\n" + digest
+        retry = start(client, role="worker", session_id=sid, input=retry_input)
+        assert retry["session_id"] == sid
+        assert retry["session_created"] is True
+        assert retry["claude_session_id"] != first["claude_session_id"]
+        done = wait_for(client, retry["run_id"])
+        assert done["status"] == "completed"
+        # The fake CLI received the cut prompt, and the second call is a fresh session.
+        first_call, second_call = calls(tmp_path)
+        assert "--session-id" in second_call["args"] and "--resume" not in second_call["args"]
+        prompt = second_call["prompt"]
+        assert len(prompt) == 2000
+        assert prompt.endswith(_RETRY_MARK)
+        assert prompt.startswith("TASK: redo\n\nFINDINGS: x\n\nREPORT: y\n\n")
+        # the digest is cut to exactly budget - fixed parts - separators - marker
+        fixed = "TASK: redo\n\nFINDINGS: x\n\nREPORT: y"
+        parts = prompt.split("\n\n")
+        assert len(parts) == 5
+        assert parts[0] == "TASK: redo" and parts[1] == "FINDINGS: x" and parts[2] == "REPORT: y"
+        assert parts[3] == "d" * (2000 - len(fixed) - 4 - len(_RETRY_MARK))
+        assert parts[4] == _RETRY_MARK
+        # No /compact run was started for the old session before the retry.
+        assert all(c["prompt"] != "/compact" for c in calls(tmp_path))
+
+
+def test_retry_fresh_session_default_off_keeps_resuming(settings: Settings, tmp_path: Path) -> None:
+    object.__setattr__(settings, "retry_input_chars", 2000)
+    with TestClient(create_app(settings)) as client:
+        first = start(client, role="worker", input="task")
+        sid = first["session_id"]
+        wait_for(client, first["run_id"])
+        retry = start(client, role="worker", session_id=sid, input="x" * 5000)
+        assert retry["session_created"] is False
+        assert retry["claude_session_id"] == first["claude_session_id"]
+        done = wait_for(client, retry["run_id"])
+        assert done["output"].startswith("echo[2]: ")
+        second_call = calls(tmp_path)[-1]
+        assert "--resume" in second_call["args"]
+        assert second_call["prompt"] == "x" * 5000
+
+
+def test_retry_fresh_session_per_provider_override(settings: Settings) -> None:
+    from claude_runner.config import _providers
+
+    object.__setattr__(settings, "retry_fresh_session", False)
+    object.__setattr__(
+        settings,
+        "providers",
+        _providers(
+            {
+                "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_BASE_URL": "http://litellm:4000",
+                "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_AUTH_TOKEN": "sk-litellm",
+                "CLAUDE_RUNNER_PROVIDER_LOCAL__RETRY_FRESH_SESSION": "1",
+            }
+        ),
+    )
+    with TestClient(create_app(settings)) as client:
+        first = start(client, role="worker", provider="local", input="task")
+        sid = first["session_id"]
+        wait_for(client, first["run_id"])
+        on = start(client, role="worker", provider="local", session_id=sid, input="redo")
+        assert on["session_created"] is True
+        wait_for(client, on["run_id"])
+        off = start(client, role="worker", provider="anthropic", session_id=sid, input="again")
+        assert off["session_created"] is False
+        assert off["claude_session_id"] == on["claude_session_id"]
+        wait_for(client, off["run_id"])
+
+
+def test_compact_skipped_when_fresh_session_retry_is_on(settings: Settings, tmp_path: Path) -> None:
+    object.__setattr__(settings, "retry_fresh_session", True)
+    with TestClient(create_app(settings)) as client:
+        first = start(client, role="worker", input="task")
+        sid = first["session_id"]
+        wait_for(client, first["run_id"])
+        resp = client.post(f"/v1/sessions/{sid}/compact")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "skipped"
+        assert body["reason"] == "fresh_session_retry"
+        assert all(c["prompt"] != "/compact" for c in calls(tmp_path))
+
+
+def test_compact_runs_when_fresh_session_retry_is_off(settings: Settings, tmp_path: Path) -> None:
+    object.__setattr__(settings, "retry_fresh_session", False)
+    with TestClient(create_app(settings)) as client:
+        first = start(client, role="worker", input="task")
+        sid = first["session_id"]
+        wait_for(client, first["run_id"])
+        # Force the context above the threshold so compaction is not skipped for that reason.
+        object.__setattr__(settings, "compact_min_tokens", 0)
+        resp = client.post(f"/v1/sessions/{sid}/compact")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["status"] == "completed"
+        assert body["compression_completed"] is True
+        compact_calls = [c for c in calls(tmp_path) if c["prompt"].startswith("/compact")]
+        assert len(compact_calls) == 1
+
+
+def test_retry_input_cut_keeps_the_fixed_parts(settings: Settings) -> None:
+    from claude_runner.runs import _RETRY_MARK, cut_retry_input
+
+    fixed = "A" * 3000
+    digest = "d" * 5000
+    # The digest is trimmed so the fixed parts survive, newest last, with a marker.
+    cut = cut_retry_input(fixed + "\n\n" + digest, 4000)
+    assert len(cut) == 4000
+    assert cut.startswith(fixed)
+    assert cut.endswith(_RETRY_MARK)
+    assert cut.count("\n\n") == 2
+    # The input is unchanged when it fits the budget.
+    assert cut_retry_input(fixed + "\n\n" + digest, 10_000) == fixed + "\n\n" + digest
+    # If the fixed parts alone exceed the budget the whole input is cut.
+    assert cut_retry_input(fixed + "\n\n" + digest, 2000) == (fixed + "\n\n" + digest)[:2000]
+
+
 def test_role_profiles_keep_reviewer_read_only(client: TestClient, tmp_path: Path) -> None:
     run = start(client, role="reviewer")
     wait_for(client, run["run_id"])

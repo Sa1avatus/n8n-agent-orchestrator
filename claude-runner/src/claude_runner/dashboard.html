@@ -4,30 +4,49 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AHAWR Trajectory</title>
+<script>
+(function () {
+  try {
+    const t = localStorage.getItem("ahawr-dashboard-theme");
+    const el = document.documentElement;
+    if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
+    else el.removeAttribute("data-theme"); // Auto
+  } catch (e) { /* keep Auto */ }
+})();
+</script>
 <style>
 :root {
-  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2130; --muted: #6a7385; --faint: #9aa2b1;
+  color-scheme: light dark;
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2130; --muted: #6a7385; --faint: #687182;
   --line: #e6e8ee; --hover: #f2f4f8; --sel: #e9f0fd; --code: #f3f5f8; --accent: #2f6fde;
   --user: #2f6fde; --system: #6b7280; --init: #15803d; --think: #9b6bdc; --assistant: #6d3fc0;
   --tool: #c56a06; --ok: #16803c; --err: #d03b30; --retry: #b98900; --compact: #0f8f84;
   --model-wait: #cdbcf0; --model-gen: #8a5cd6; --tool-bar: #e0892a; --rag: #0e7490;
+  --shadow: rgba(0,0,0,.15);
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #5f6878;
+    color-scheme: dark;
+    --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #a8b1c1;
     --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
     --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
     --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
     --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
+    --shadow: rgba(0,0,0,.35);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #5f6878;
+  color-scheme: dark;
+  --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #a8b1c1;
   --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
   --user: #6f9ef6; --system: #9aa3b2; --init: #4cc27a; --think: #b99af2; --assistant: #a47ef0;
   --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
   --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
+  --shadow: rgba(0,0,0,.35);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -42,6 +61,10 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 #side header { padding: 12px 14px 8px; }
 #side h1 { font-size: 15px; margin: 0 0 8px; font-weight: 650; letter-spacing: -.01em; }
 #side h1 small { color: var(--muted); font-weight: 450; }
+#theme { margin-top: 8px; }
+#theme button { font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; }
+#theme button:hover { background: var(--hover); }
+#theme button:active { background: var(--sel); }
 .filters { display: flex; gap: 6px; flex-wrap: wrap; }
 .filters select { flex: 1 1 90px; min-width: 0; font-size: 12px; padding: 3px 4px; }
 #srcstate { font-size: 11.5px; color: var(--muted); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
@@ -160,7 +183,10 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 .del { color: var(--err); } .add { color: var(--ok); }
 .bar { height: 8px; border-radius: 4px; background: var(--code); display: flex; overflow: hidden; margin-top: 4px; }
 .bar i { display: block; height: 100%; }
-@media (max-width: 1100px) { #insp { position: fixed; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 24px rgba(0,0,0,.15); z-index: 10; max-width: 100vw; } }
+/* Inline-style colors moved onto classes so they track the palette per theme */
+.t-mut { color: var(--muted); } .t-acc { color: var(--accent); } .t-err { color: var(--err); }
+.c-acc { background: var(--accent); } .c-ok { background: var(--ok); } .c-retry { background: var(--retry); }
+@media (max-width: 1100px) { #insp { position: fixed; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 24px var(--shadow); z-index: 10; max-width: 100vw; } }
 @media (max-width: 760px) {
   body { flex-direction: column; overflow: auto; }
   #side { width: auto; max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--line); }
@@ -175,6 +201,7 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 <aside id="side">
   <header>
     <h1>AHAWR <small>trajectory</small></h1>
+    <div id="theme"><button id="themebtn" type="button" data-theme="auto" aria-label="Theme: Auto" title="Theme: Auto">Theme: Auto</button></div>
     <div class="filters">
       <select id="f-source" aria-label="Source"><option value="">sources</option><option value="claude-runner">Claude Code</option><option value="hermes">Hermes</option></select>
       <select id="f-role" aria-label="Role"><option value="">roles</option><option>architect</option><option>worker</option><option>reviewer</option><option>hermes</option><option>generic</option></select>
@@ -186,6 +213,39 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   <nav id="list"></nav>
 </aside>
 <main id="main"><div id="empty">Select a run.</div></main>
+<script>
+(function () {
+  const KEY = "ahawr-dashboard-theme";
+  const names = ["auto", "light", "dark"];
+  const b = document.getElementById("themebtn");
+  if (!b) return;
+  const el = document.documentElement;
+  function read() {
+    try { return localStorage.getItem(KEY); } catch (e) { return null; }
+  }
+  function persist(v) {
+    try { v === "auto" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch (e) { /* ignore */ }
+  }
+  let cur = read() === "light" || read() === "dark" ? read() : "auto";
+  const apply = (v) => { if (v === "auto") el.removeAttribute("data-theme"); else el.setAttribute("data-theme", v); };
+  b.textContent = "Theme: " + cur[0].toUpperCase() + cur.slice(1);
+  b.setAttribute("data-theme", cur);
+  b.setAttribute("aria-label", "Theme: " + cur[0].toUpperCase() + cur.slice(1));
+  b.setAttribute("title", "Theme: " + cur[0].toUpperCase() + cur.slice(1));
+  b.onclick = () => {
+    cur = names[(names.indexOf(cur) + 1) % 3];
+    apply(cur); persist(cur);
+    b.textContent = "Theme: " + cur[0].toUpperCase() + cur.slice(1);
+    b.setAttribute("data-theme", cur);
+    b.setAttribute("aria-label", "Theme: " + cur[0].toUpperCase() + cur.slice(1));
+    b.setAttribute("title", "Theme: " + cur[0].toUpperCase() + cur.slice(1));
+  };
+  // the timeline lanes are CSS-painted, so no redraw is needed on theme change;
+  // if canvas-drawn charts are added later, read the palette via
+  // getComputedStyle(document.documentElement).getPropertyValue("--...") and
+  // repaint on this toggle and on matchMedia("(prefers-color-scheme: dark)").change
+})();
+</script>
 <script>
 "use strict";
 const $ = (s, r = document) => r.querySelector(s);
@@ -244,7 +304,7 @@ function renderList() {
       <div class="m"><span class="dot ${esc(r.status)}"></span><span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
         <span class="role ${esc(r.role)}">${esc(r.role)}</span><span>${esc(r.model || "")}${r.provider && r.provider !== "hermes" ? " · " + esc(r.provider) : ""}</span>
         <span>${esc(ago(r.updated_at || r.created_at))}</span></div>
-    </div>`).join("") : '<div class="item" style="cursor:default;color:var(--muted)">No runs yet.</div>';
+    </div>`).join("") : '<div class="item" style="cursor:default" class="t-mut">No runs yet.</div>';
 }
 $("#list").addEventListener("click", (e) => { const it = e.target.closest(".item[data-id]"); if (it) select(it.dataset.id); });
 for (const id of ["#f-source", "#f-role", "#f-status"]) $(id).addEventListener("change", () => { S.known = null; loadRuns(); });
@@ -488,11 +548,11 @@ function summaryHTML(e, tools) {
     case "tool_use": {
       const r = (tools[e.id] || {}).result;
       return `<span class="mono">${esc(e.name)}</span> <span class="arg">${esc(oneLine(toolArgs(e.name, e.input), 160))}</span>` +
-        (r ? `<span class="arrow">→</span><span class="res">${esc(oneLine(r.preview || r.text, 240))}</span>` : `<span class="arrow">→</span><span class="res" style="color:var(--accent)">running…</span>`);
+        (r ? `<span class="arrow">→</span><span class="res">${esc(oneLine(r.preview || r.text, 240))}</span>` : `<span class="arrow">→</span><span class="res t-acc">running…</span>`);
     }
     case "tool_result": return `<span class="res">${esc(oneLine(e.text))}</span>`;
     case "retry": return `attempt ${esc(e.attempt)}/${esc(e.max_retries)} · ${esc(e.status ?? "")} ${esc(e.error ?? "")}${e.delay_ms ? " · wait " + ms(e.delay_ms) : ""}`;
-    case "compact": return `context compacted (${esc(e.trigger)}): ${tok(e.pre_tokens)} → ${tok(e.post_tokens)} tokens`;
+    case "compact": return `context compacted (${esc(e.trigger)}): ${tok(e.pre_tokens)} → ${tok(e.post_tokens)} tokens${e.duration_ms ? " in " + ms(e.duration_ms) : ""}`;
     case "result": return [e.subtype, e.num_turns != null ? e.num_turns + " turns" : "", e.duration_ms ? ms(e.duration_ms) : "", e.cost_usd != null ? "$" + Number(e.cost_usd).toFixed(4) : ""].filter(Boolean).map(esc).join(" · ") + (e.is_error && e.text ? " — " + esc(oneLine(e.text)) : "");
     case "end": return `run ${esc(e.status)}${e.error ? " — " + esc(e.error_code) + ": " + esc(oneLine(e.error)) : ""}`;
     default: return esc(oneLine(e.text || JSON.stringify(e)));
@@ -517,7 +577,7 @@ function renderLedger(m) {
         s.output_tokens ? `<span>out <b>${tok(s.output_tokens)}</b></span>` : "",
         s.tokens_per_s ? `<span><b>${s.tokens_per_s}</b> tok/s</span>` : "",
         s.finish_reason ? `<span>${esc(s.finish_reason)}</span>` : "",
-        s.step == null ? `<span style="color:var(--accent)">generating…</span>` : "",
+        s.step == null ? `<span class="t-acc">generating…</span>` : "",
       ].filter(Boolean).join("");
       html.push(`<div class="steprow ${S.pick === row.key ? "sel" : ""}" data-key="${row.key}"><span class="gut">step ${row.step}</span><span class="off">${off(s.started)}</span><span class="dur ${durClass(s.duration_ms)}">${s.approximate && s.duration_ms != null ? "≈" : ""}${ms(s.duration_ms)}</span><span class="info">${bits}</span></div>`);
       continue;
@@ -542,7 +602,7 @@ function renderLedger(m) {
     const lb = S.live, label = lb.kind === "thinking" ? "thinking" : lb.kind === "tool_use" ? "calling " + lb.name : "writing";
     html.push(`<div class="liverow ${lb.kind === "thinking" ? "thinking" : ""}"><div class="lbl"><span class="pulse"></span>${esc(label)} · ${ms((now - lb.started) * 1000)}</div><div class="txt">${esc(lb.text)}</div></div>`);
   }
-  if (!html.length) html.push(`<div style="padding:30px;color:var(--muted)">${isActive(S.run) ? "Waiting for the first event…" : "No activity recorded."}</div>`);
+  if (!html.length) html.push(`<div class="t-mut" style="padding:30px">${isActive(S.run) ? "Waiting for the first event…" : "No activity recorded."}</div>`);
   setHTML(box, html.join(""));
   if (near) box.scrollTop = box.scrollHeight;
 }
@@ -571,7 +631,7 @@ function renderInspector(m) {
     head = `<span class="badge k-rag">RAG</span><span class="where">request ${esc(b.request)} · profile ${esc(b.profile)}</span>`;
     tabs = ["summary", "context"];
     if (S.tab === "summary") body = kv([["Chunks", b.chunks.length], ["Context size", tok(b.chars) + " chars"], ["Request id", `<span class="mono">${esc(b.request)}</span>`]]) +
-      `<div class="sect"><table class="chunks"><tr><th>#</th><th>Source</th><th>Location</th><th>Score</th></tr>${b.chunks.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.authority)}${c.freshness ? `<br><span style="color:var(--muted)">${esc(c.freshness)}</span>` : ""}</td><td class="mono">${esc(c.path)}:${esc(c.lines)}${c.symbol ? `<br>${esc(c.symbol)}` : ""}${c.section ? `<br>${esc(c.section)}` : ""}</td><td>${esc(c.score || "")}</td></tr>`).join("")}</table></div>`;
+      `<div class="sect"><table class="chunks"><tr><th>#</th><th>Source</th><th>Location</th><th>Score</th></tr>${b.chunks.map((c, i) => `<tr><td>${i + 1}</td><td>${esc(c.authority)}${c.freshness ? `<br><span class="t-mut">${esc(c.freshness)}</span>` : ""}</td><td class="mono">${esc(c.path)}:${esc(c.lines)}${c.symbol ? `<br>${esc(c.symbol)}` : ""}${c.section ? `<br>${esc(c.section)}` : ""}</td><td>${esc(c.score || "")}</td></tr>`).join("")}</table></div>`;
     else body = `<div class="sect"><pre>${esc(b.body)}</pre></div>`;
   } else if (S.pick.startsWith("s")) {
     const n = Number(S.pick.slice(1)), s = m.steps[n] || { step: n };
@@ -579,7 +639,7 @@ function renderInspector(m) {
     head = `<span class="badge k-text">STEP</span><span class="where">Turn ${blocks[0] ? blocks[0]._turn : "?"} · Request #${n}</span>`;
     tabs = ["summary", "content", "raw"];
     const totalIn = (s.input_tokens || 0) + (s.cache_read_tokens || 0) + (s.cache_write_tokens || 0);
-    const bar = totalIn ? `<div class="bar" title="cache read / cache write / uncached"><i style="width:${(s.cache_read_tokens || 0) / totalIn * 100}%;background:var(--ok)"></i><i style="width:${(s.cache_write_tokens || 0) / totalIn * 100}%;background:var(--retry)"></i><i style="flex:1;background:var(--accent)"></i></div>` : "";
+    const bar = totalIn ? `<div class="bar" title="cache read / cache write / uncached"><i style="width:${(s.cache_read_tokens || 0) / totalIn * 100}%" class="c-ok"></i><i style="width:${(s.cache_write_tokens || 0) / totalIn * 100}%" class="c-retry"></i><i style="flex:1" class="c-acc"></i></div>` : "";
     if (S.tab === "summary") body = kv([
       ["Model", esc(s.model || S.run.model || "")],
       ["Status", s.duration_ms != null || s.approximate ? "completed" : "generating"],
@@ -594,7 +654,7 @@ function renderInspector(m) {
       ["TTFT", s.ttft_ms != null ? ms(s.ttft_ms) : ""],
       ["Generation", s.generation_ms != null ? ms(s.generation_ms) : ""],
       ["Throughput", s.tokens_per_s ? s.tokens_per_s + " tok/s" : ""],
-    ]) + (s.approximate ? `<div class="sect" style="color:var(--muted);font-size:12px">Hermes stores when each message was written, so a step is timed from the previous message to the answer.</div>` : "");
+    ]) + (s.approximate ? `<div class="sect t-mut" style="font-size:12px">Hermes stores when each message was written, so a step is timed from the previous message to the answer.</div>` : "");
     else if (S.tab === "content") body = blocks.map((b) => b.kind === "thinking" ? `<div class="sect"><h4>Thinking</h4><div class="prose think">${esc(b.text)}</div></div>` : b.kind === "text" ? `<div class="sect"><h4>Answer</h4><div class="prose">${esc(b.text)}</div></div>` : `<div class="sect"><h4>Tool call · ${esc(b.name)}</h4><pre>${esc(JSON.stringify(b.input, null, 2))}</pre></div>`).join("") || `<div class="sect">No content.</div>`;
     else body = `<div class="sect"><pre>${esc(JSON.stringify({ step: s, blocks }, null, 2))}</pre></div>`;
   } else {
@@ -608,7 +668,7 @@ function renderInspector(m) {
       const end = r ? r.t : null;
       if (S.tab === "summary") body = kv([
         ["Tool", `<span class="mono">${esc(e.name)}</span>`],
-        ["Status", r ? (r.is_error ? `<span style="color:var(--err)">error</span>` : "completed") : "running"],
+        ["Status", r ? (r.is_error ? `<span class="t-err">error</span>` : "completed") : "running"],
         ["Started", clock(e.t)], ["Duration", end ? ms((end - e.t) * 1000) : ms((Date.now() / 1000 - e.t) * 1000) + " (running)"],
         ["Call id", `<span class="mono">${esc(e.id)}</span>`],
       ]) + `<div class="sect"><h4>Payload</h4>${toolPayload(e)}</div>` + (r ? `<div class="sect"><h4>Result · ${String(r.preview || r.text || "").split("\n").length} lines</h4><pre>${esc(pretty(r))}</pre></div>` : "");

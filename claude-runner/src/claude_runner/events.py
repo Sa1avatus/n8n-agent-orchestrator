@@ -127,6 +127,8 @@ def entries_from(event: dict[str, Any]) -> list[dict[str, Any]]:
                 "trigger": meta.get("trigger"),
                 "pre_tokens": meta.get("pre_tokens"),
                 "post_tokens": meta.get("post_tokens"),
+                # Claude Code reports how long the compaction took (summary request included)
+                "duration_ms": meta.get("duration_ms"),
             }
         )
     elif kind == "result":

@@ -204,7 +204,8 @@ def run_markdown(run: dict[str, Any], entries: list[dict[str, Any]], level: int 
         elif kind == "compact":
             out += [
                 f"🗜 Context compacted ({entry.get('trigger')}): "
-                f"{_tokens(entry.get('pre_tokens'))} → {_tokens(entry.get('post_tokens'))} tokens",
+                f"{_tokens(entry.get('pre_tokens'))} → {_tokens(entry.get('post_tokens'))} tokens"
+                + (f" in {entry['duration_ms'] / 1000:.0f} s" if entry.get("duration_ms") else ""),
                 "",
             ]
         elif kind == "result":

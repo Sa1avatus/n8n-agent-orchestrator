@@ -81,7 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.2.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

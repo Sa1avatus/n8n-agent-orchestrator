@@ -117,6 +117,12 @@ def test_entries_cover_stream_events() -> None:
          "compact_metadata": {"trigger": "manual", "pre_tokens": 9, "post_tokens": 1}}
     )  # fmt: skip
     assert compact[0]["kind"] == "compact" and compact[0]["post_tokens"] == 1
+    assert compact[0]["duration_ms"] is None  # older Claude Code builds do not report it
+    timed = entries_from(
+        {"type": "system", "subtype": "compact_boundary",
+         "compact_metadata": {"trigger": "auto", "pre_tokens": 59931, "post_tokens": 9749, "duration_ms": 136158}}
+    )  # fmt: skip
+    assert timed[0]["duration_ms"] == 136158
     sub = entries_from(
         {"type": "assistant", "parent_tool_use_id": "toolu_9",
          "message": {"content": [{"type": "redacted_thinking"}, {"type": "text", "text": "hi"}]}}
@@ -295,6 +301,31 @@ def dashboard(runner_app: TestClient, **overrides: Any) -> TestClient:
         create_dashboard_app(DashboardSettings(**values), transport=httpx.MockTransport(handler)),
         base_url="http://localhost:8701",
     )
+
+
+def test_dashboard_theme_switcher(client: TestClient) -> None:
+    import re
+
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+        # theme toggle button and the localStorage key it persists to
+        assert 'id="themebtn"' in text
+        assert "ahawr-dashboard-theme" in text
+        # the switcher cycles through three states: auto, light, dark
+        assert '["auto", "light", "dark"]' in text
+        # the early <head> script that reads localStorage before any stylesheet
+        early = text.split("<style>")[0]
+        assert 'localStorage.getItem("ahawr-dashboard-theme")' in early
+
+        # the dark palette (:root[data-theme="dark"]) defines every visual
+        # variable the light palette (:root) does; --mono is theme-invariant
+        def vars_of(selector: str) -> set[str]:
+            m = re.search(selector + r"\s*\{([^}]*)\}", text)
+            return {v for v in re.findall(r"--([\w-]+)", m.group(1)) if v != "mono"}
+
+        assert vars_of(r":root\[data-theme=\"dark\"\]") >= vars_of(r":root ")
 
 
 def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:

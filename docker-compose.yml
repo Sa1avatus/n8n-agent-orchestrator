@@ -97,6 +97,8 @@ services:
       # the key is the one LiteLLM uses for llama-server. Empty URL = static settings only.
       - CLAUDE_RUNNER_PROVIDER_LOCAL__CONTEXT_PROBE_URL=${LLAMACPP_CONTEXT_PROBE_URL-http://host.docker.internal:8033}
       - CLAUDE_RUNNER_PROVIDER_LOCAL__CONTEXT_PROBE_KEY=${LLAMACPP_API_KEY:-}
+      # refuse exploratory grep/rg/find from local Workers until they have used ahawr-search
+      - CLAUDE_RUNNER_PROVIDER_LOCAL__SEARCH_FIRST=${AHAWR_SEARCH_FIRST:-1}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).

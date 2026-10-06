@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -67,6 +68,54 @@ _SECRET_ENV_FILES = [
 ]
 _SECRET_DENY = [f"Read({where}{name})" for where in ("./", "**/") for name in _SECRET_ENV_FILES]
 _GIT_DENY = ["Bash(git commit *)", "Bash(git push *)"]
+# The Reviewer runs in `dontAsk`, where a Bash command works only if a rule allows it (a real
+# run: 105 denied Bash calls, among them plain grep, wc, git status and ahawr-search). It gets
+# read-only inspection commands and the retrieval CLI, so it can check a Worker's claims itself.
+# Commands that write, build or change git state stay denied. Redirections to a file are
+# denied too (an allow rule for `head *` would otherwise also match `head x > y`); this is
+# defence in depth for an Opus Reviewer, not a sandbox.
+_REVIEWER_READ_CMDS = [
+    "ahawr-search",
+    "grep",
+    "ls",
+    "wc",
+    "head",
+    "tail",
+    "cat",
+    "md5sum",
+    "sha256sum",
+    "stat",
+    "file",
+    "diff",
+    "cmp",
+    "sort",
+    "uniq",
+    "cut",
+    "pwd",
+    "cd",
+    "bash -n",
+]
+_REVIEWER_GIT_READ = [
+    "diff",
+    "status",
+    "log",
+    "show",
+    "rev-parse",
+    "ls-files",
+    "ls-tree",
+    "cat-file",
+    "blame",
+    "grep",
+    "describe",
+]
+_REVIEWER_BASH_ALLOW = (
+    [f"Bash({c} *)" for c in _REVIEWER_READ_CMDS]
+    + ["Bash(pwd)"]
+    + [f"Bash(git {g} *)" for g in _REVIEWER_GIT_READ]
+    + [f"Bash(git -C * {g} *)" for g in _REVIEWER_GIT_READ]
+    + [f"Bash(git {g})" for g in _REVIEWER_GIT_READ]
+)
+_REVIEWER_BASH_DENY = ["Bash(* >*)", "Bash(git * --output*)", "Bash(*.env*)"]
 
 
 @dataclass(frozen=True)
@@ -97,7 +146,10 @@ PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # each run (context_probe.py); the key never reaches the Claude Code process. COMPACT_PCT: the
 # autocompact trigger as a percentage of that window. COMPACT_MIN_PCT: the runner's /compact
 # before resuming a session, as a percentage of that window (default: COMPACT_MIN_TOKENS' share
-# of 65536).
+# of 65536). SEARCH_FIRST: steer runs of this provider to ``ahawr-search`` (search_hook.py); empty
+# = the CLAUDE_RUNNER_SEARCH_FIRST default. RETRY_FRESH_SESSION: a retry with a previous session
+# starts a fresh session (no pre-retry /compact) seeded with the four-part retry input; the
+# input is cut to RETRY_INPUT_CHARS characters.
 PROVIDER_RUNNER_KEYS = {
     "TOOLS",
     "COMPACT_MIN_TOKENS",
@@ -105,7 +157,14 @@ PROVIDER_RUNNER_KEYS = {
     "CONTEXT_PROBE_URL",
     "CONTEXT_PROBE_KEY",
     "COMPACT_PCT",
+    "SEARCH_FIRST",
+    "RETRY_FRESH_SESSION",
 }
+
+# Character budget for the fresh-session retry input (task, review findings, previous report,
+# previous session's digest, newest last). The digest fills most of it; it is built at roughly
+# budget - 4000, leaving room for the three other parts.
+DEFAULT_RETRY_INPUT_CHARS = 32_000
 
 # Context-window limits the local provider's compaction settings must stay inside. The local
 # model's window is 65536 tokens; the autocompact threshold must leave room for one large
@@ -137,6 +196,12 @@ class ProviderProfile:
     compact_pct: float | None = None
     # pre-resume /compact threshold as a percentage of the probed window; None = derived
     compact_min_pct: float | None = None
+    # steer runs to ahawr-search (search_hook.py); None = the global CLAUDE_RUNNER_SEARCH_FIRST
+    search_first: bool | None = None
+    # retries with a previous session start a fresh one (no pre-retry /compact), seeded with
+    # the four-part retry input (task, review findings, previous report, digest); None = the
+    # global CLAUDE_RUNNER_RETRY_FRESH_SESSION
+    retry_fresh_session: bool | None = None
 
     @property
     def isolates_credentials(self) -> bool:
@@ -181,6 +246,17 @@ def _pct(name: str, raw: str, key: str = "COMPACT_PCT") -> float | None:
     if not 0 < value <= 100:
         raise ValueError(f"provider {name}: {key} must be in (0, 100], got {raw}")
     return value
+
+
+def _opt_bool(name: str, raw: str, key: str) -> bool | None:
+    raw = raw.strip().lower()
+    if not raw:
+        return None
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"provider {name}: {key} must be true or false, got {raw!r}")
 
 
 def _max_output_tokens(block: dict[str, str]) -> int | None:
@@ -236,6 +312,10 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
             context_probe_key=block.get("CONTEXT_PROBE_KEY", "").strip(),
             compact_pct=_pct(name, block.get("COMPACT_PCT", "")),
             compact_min_pct=_pct(name, block.get("COMPACT_MIN_PCT", ""), "COMPACT_MIN_PCT"),
+            search_first=_opt_bool(name, block.get("SEARCH_FIRST", ""), "SEARCH_FIRST"),
+            retry_fresh_session=_opt_bool(
+                name, block.get("RETRY_FRESH_SESSION", ""), "RETRY_FRESH_SESSION"
+            ),
         )
     return providers
 
@@ -243,7 +323,11 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
 DEFAULT_PROFILES: dict[str, RoleProfile] = {
     "architect": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
     "worker": RoleProfile("bypassPermissions", disallowed_tools=_SECRET_DENY + _GIT_DENY),
-    "reviewer": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
+    "reviewer": RoleProfile(
+        "dontAsk",
+        allowed_tools=_REVIEWER_BASH_ALLOW,
+        disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY + _REVIEWER_BASH_DENY,
+    ),
     "generic": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
 }
 
@@ -317,6 +401,14 @@ class Settings:
     # Activity log for the dashboard: token deltas, retention.
     live_tokens: bool = True
     event_retention_days: int = 14
+    # Steer runs to ``ahawr-search`` with a PreToolUse hook (search_hook.py): exploratory greps are
+    # refused until the session has used it, then once per ``search_first_every`` (0 = never again).
+    search_first: bool = False
+    search_first_roles: tuple[str, ...] = ("worker",)
+    search_first_every: int = 6
+    # Fresh-session retry: off by default (a retry compacts and resumes the old session).
+    retry_fresh_session: bool = False
+    retry_input_chars: int = DEFAULT_RETRY_INPUT_CHARS
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -375,6 +467,15 @@ class Settings:
             providers=_providers(env),
             live_tokens=_bool(env, "CLAUDE_RUNNER_LIVE_TOKENS", True),
             event_retention_days=_int(env, "CLAUDE_RUNNER_EVENT_RETENTION_DAYS", 14),
+            search_first=_bool(env, "CLAUDE_RUNNER_SEARCH_FIRST", False),
+            search_first_roles=tuple(
+                _list(env.get("CLAUDE_RUNNER_SEARCH_FIRST_ROLES")) or ["worker"]
+            ),
+            search_first_every=_int(env, "CLAUDE_RUNNER_SEARCH_FIRST_EVERY", 6),
+            retry_fresh_session=_bool(env, "CLAUDE_RUNNER_RETRY_FRESH_SESSION", False),
+            retry_input_chars=_int(
+                env, "CLAUDE_RUNNER_RETRY_INPUT_CHARS", DEFAULT_RETRY_INPUT_CHARS, minimum=1
+            ),
         )
 
     def profile(self, role: str) -> RoleProfile:
@@ -383,6 +484,29 @@ class Settings:
     def provider(self, name: str) -> ProviderProfile | None:
         """The configured provider for a request's ``provider`` value; None = container env."""
         return self.providers.get(provider_key(name)) if name.strip() else None
+
+    def retry_fresh_session_for(self, provider: ProviderProfile | None) -> bool:
+        """Whether a retry with a previous session starts a fresh one instead of
+        compacting and resuming: enabled for the provider (else globally)."""
+        return (
+            provider.retry_fresh_session
+            if provider is not None and provider.retry_fresh_session is not None
+            else self.retry_fresh_session
+        )
+
+    def search_first_for(self, role: str, provider: ProviderProfile | None) -> bool:
+        """Whether this run gets the search hook: enabled for the provider (else globally), the
+        role is listed, and ``ahawr-search`` is installed (the hook's message points to it)."""
+        on = (
+            provider.search_first
+            if provider is not None and provider.search_first is not None
+            else self.search_first
+        )
+        return (
+            bool(on)
+            and role in self.search_first_roles
+            and shutil.which("ahawr-search") is not None
+        )
 
     def tools_for(self, profile: RoleProfile, provider: ProviderProfile | None) -> str:
         return profile.tools or (provider.tools if provider else "") or self.tools

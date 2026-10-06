@@ -11,8 +11,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from claude_runner.api import create_app
-from claude_runner.config import Settings
+# Ensure the source tree is importable even when the venv has a stale copy of
+# claude_runner (pip-installed non-editable).
+_SRC = str(Path(__file__).resolve().parent.parent / "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
+from claude_runner.api import create_app  # noqa: E402
+from claude_runner.config import Settings  # noqa: E402
 
 FAKE = Path(__file__).with_name("fake_claude.py")
 

@@ -75,10 +75,29 @@ or the rates, then rebuild the image.
 | Role | Default permission mode | Denied tools |
 |---|---|---|
 | `worker` | `bypassPermissions` (edits, commands) | `Read` of `.env`, `.env.local`, `.env.*.local`, `.env.development`/`.dev`, `.env.production`/`.prod`, `.env.staging`, `.env.test` (in `./` and `**/`; `.env.example` stays readable), `Bash(git commit *)`, `Bash(git push *)` |
-| `reviewer` | `dontAsk` (reads, read-only commands) | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
+| `reviewer` | `dontAsk`; allowed Bash: `ahawr-search`, `grep`, `ls`, `wc`, `head`, `tail`, `cat`, `diff`, `bash -n`, read-only `git` (`diff`, `status`, `log`, `show`, `ls-files`, `blame`, also as `git -C <dir> …`) | `Edit`, `Write`, `NotebookEdit`, the `.env` reads, Bash redirections to a file (`> f`), `git … --output` |
 | `architect` | `dontAsk` | `Edit`, `Write`, `NotebookEdit`, and the `.env` reads |
 
+In `dontAsk` a Bash command runs only if a rule allows it. Before this list the Reviewer had no Bash at all: a real mission logged 105 denied calls (plain `grep`, `wc`, `git status`, `ahawr-search`), so it judged a Worker's report without being able to check it. The list is inspection only; building and anything that writes stay denied (a Reviewer that must run a build needs its own narrow rule, e.g. `Bash(bash /path/verify.sh)`, in `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS`, which replaces the default list; an empty value gives the old no-Bash Reviewer). The rules are defence in depth, not a sandbox.
+
 Override any of these per role with `CLAUDE_RUNNER_<ROLE>_PERMISSION_MODE`, `_ALLOWED_TOOLS`, `_DISALLOWED_TOOLS`, `_APPEND_SYSTEM_PROMPT`, `_MAX_TURNS` and `_ADD_DIRS` (comma-separated folders passed as `--add-dir`: in `dontAsk` mode a role can read only its working directory and these, e.g. `CLAUDE_RUNNER_REVIEWER_ADD_DIRS=/tmp/dcfr-work` for a mission whose Worker keeps its results in `/tmp`). Deny rules are enforced even in `bypassPermissions`: a real run confirmed that the Worker could not read `.env`. Claude Code refuses `bypassPermissions` as root, which is why the container runs as the `node` user. The Worker can still reach environment variables through Bash, so give the container only the model credential. `CLAUDE_RUNNER_*` values, including the runner's own API key, are removed from the CLI's environment.
+
+### Reviewer result access
+
+By default the Reviewer reads only the mission's working directory. When an Architect or Worker places results the Reviewer must verify (notes, artifacts, logs) in `/tmp` or outside the mission folder, the Reviewer cannot open them and the attempt is lost to "cannot check the file".
+
+Two ways to let the Reviewer reach those files:
+
+* **`CLAUDE_RUNNER_REVIEWER_ADD_DIRS`** — static, requires a runner restart. Comma-separated folders passed as `--add-dir`; the Reviewer can then read them in addition to the mission working directory.
+* **`CLAUDE_RUNNER_<ROLE>_APPEND_SYSTEM_PROMPT`** (default: none) — extra prompt text appended to the role's system prompt. This is how the opt-in **RESULT PLACEMENT RULE** is delivered: the Architect and Worker are told to place every file the Reviewer must verify inside the mission working directory (or a subfolder), and to cite its exact path in the report. No new permission, no directory access, no restart — the Reviewer's read surface is unchanged.
+
+| Setting | Meaning |
+|---|---|
+| `CLAUDE_RUNNER_REVIEWER_ADD_DIRS` | Extra folders the Reviewer may read (default: none). Requires a runner restart. |
+| `CLAUDE_RUNNER_ARCHITECT_APPEND_SYSTEM_PROMPT` | Extra prompt text for the Architect (default: none). Used to enable the RESULT PLACEMENT RULE. |
+| `CLAUDE_RUNNER_WORKER_APPEND_SYSTEM_PROMPT` | Extra prompt text for the Worker (default: none). Used to enable the RESULT PLACEMENT RULE. |
+
+The rule is **off by default**: the shipped `agent_prompts.example.csv` rows do not carry it, so the Reviewer still reads only the mission working directory. To enable it, an operator appends the exact paragraph to the `system_prompt` column of the `architect` and `worker` rows in the mission's `agent_prompts` data table, or sets the corresponding `CLAUDE_RUNNER_<ROLE>_APPEND_SYSTEM_PROMPT` env var. No workflow node, per-run flag, or runner restart is needed — the rule lives entirely in the prompt text. See `docs/ahawr-cheaper-retries.md` §5.3 for the exact opt-in paragraphs and the enable step.
 
 ### Compaction
 
@@ -98,6 +117,23 @@ The runner also decides *when* to compact a session before resuming it:
 | `CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS` | Wall-clock budget for the compaction run itself. Default 600. |
 | `CLAUDE_RUNNER_COMPACT_INSTRUCTIONS` | The instruction text. Empty = Claude Code's built-in summarizer (no custom instructions). Unset = the built-in default shown above. |
 | `CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS` | Delivers the instructions to the local (credential-isolating) provider only. Off (`0`) keeps every provider on the stock summarizer (default: on). |
+
+### Fresh-session retry
+
+Instead of compacting the old session and resuming it, a retry can start a **fresh** session. This is useful when the old context is too large to compact economically (e.g. a small local model that compacts slowly), or when a clean slate is preferred.
+
+| Setting | Meaning |
+|---|---|
+| `CLAUDE_RUNNER_RETRY_FRESH_SESSION` | `1` = a retry with a previous session starts a new session; `0` (default) = the existing compact-and-resume path is used. |
+| `CLAUDE_RUNNER_RETRY_INPUT_CHARS` | Character budget for the fresh-session retry input (default 32000). The four-part input — task, review findings, previous report, previous session digest — is cut to fit this budget, with only the digest trimmed. A marker notes the cut. |
+
+The fresh-session retry input is assembled in the same order the Run Manager already builds resume inputs: task, findings, previous report, and the previous session's digest (newest last). When the digest alone would break the budget, it is cut and a one-line marker (`[previous session's digest trimmed to the retry budget]`) is appended so the model knows it is incomplete. The three fixed parts are kept whole as long as they fit.
+
+Only `CLAUDE_RUNNER_RETRY_FRESH_SESSION` can be overridden per provider with `CLAUDE_RUNNER_PROVIDER_<NAME>__RETRY_FRESH_SESSION` in a provider block (config.py `PROVIDER_RUNNER_KEYS`); `CLAUDE_RUNNER_RETRY_INPUT_CHARS` is global only.
+
+**How the runner decides.** In `start()` (`runs.py`), when the request carries a `session_id`, the runner looks up the provider's `retry_fresh_session_for` value. If it is true, `_bind` is called with `fresh=True`: a new Claude Code session is created, `session_created` is `true`, and `cut_retry_input` trims the prompt to the budget. If it is false (the default), the existing path is used: the old session is resumed after compaction if needed, and `session_created` is `false`.
+
+**Effect on compaction.** When fresh-session retry is on, `RunManager.compact()` returns `skipped("fresh_session_retry")` before any `/compact` run: compacting the old session would be wasted work because the retry will start a new session anyway. When the switch is off, compact runs as usual.
 
 **How the runner decides to compact before resuming.** The runner reads the session's current context size (from the last request's usage, or the run totals for a gateway that streams no per-request usage) and compares it with the threshold. The threshold is `CLAUDE_RUNNER_COMPACT_MIN_TOKENS` (default 120000), or — for a provider block — the provider's own `…__COMPACT_MIN_TOKENS` when set (`runs.py`: the provider value is used when the request does not pass `min_tokens`). With `auto`, the runner skips compaction while the context is below this threshold.
 
@@ -154,14 +190,29 @@ ahawr-search "where is the retry delay applied?"
 ahawr-search "query" --k 3 --budget 2000 --root . --url http://ahawr-retrieval:8500
 ```
 
-* `--k N` (default 5) — how many fragments to print.
-* `--budget T` (default 1500) — the token budget sent to the service.
+* `--k N` (default 5; also `-n`, `--max`, `--limit`, `--top`, `--count`) — how many fragments to print. Option abbreviations are off, so `--max` is never read as `--max-tokens`.
+* `--budget T` (default 1500, allowed 100–100000, clamped with a note on stderr) — the token budget sent to the service.
+* To search another folder, for example a scratch checkout of upstream code, pass it as `--root /d/…/src` or as an extra path argument (`ahawr-search "state_write f_l" /d/rag-tmp/tree/src`). A folder searched for the first time is indexed by that call (about 8-9 s for 30 small files, measured; later calls take 0.2-0.5 s), which is why the default timeout is 30 s. On a large tree the first answer can still time out; the service keeps indexing, so repeat the command or add `--timeout 120`. Search a subfolder, not the whole checkout.
+* When the call fails, the printed line says why (`retrieval unavailable: the service rejected the request (HTTP 422): …`, `the service failed`, `cannot be reached`, `no answer within 30 s…`) and the exit code is still 0.
 * `--root PATH` (default the current directory) — the working directory; it is resolved with `realpath` and must fall under `/d/` or `/workspace` (a `/tmp/X` symlink that resolves to `/d/rag-tmp/X` is used). If the resolved path is outside the allowed roots, the command prints that the folder is unavailable to the service and exits 0.
 * `--url` — the retrieval service URL; defaults to `http://ahawr-retrieval:8500`, overridable with `AHAWR_RETRIEVAL_URL`.
 
 Each fragment is printed as `path:start-end` followed by its text, in the service's ranking order. The request is a `POST /retrieve` with `profile: worker`, `budget: {max_tokens: T}`, a corpus named after the resolved root (e.g. `/d/OpenAIProjects/job-searching-assistant` → `d-openaiprojects-job-searching-assistant`) and `corpus_roots: {slug: resolved_root}`.
 
+The query may be several words without quotes or `--query`/`-q`; `--limit`/`--top`/`-k` mean `--k` and `--max-tokens` means `--budget`. An unknown option is reported on stderr and ignored, so a model that guesses the interface still gets its answer.
+
 **Fail-open.** On any connection error, timeout (default 10 s) or 5xx response the command prints one short line (`retrieval unavailable`) and exits 0 — a retrieval outage never blocks the Worker or the run.
+
+### Making agents use it: the search-first hook
+
+A rule in the prompt ("search with `ahawr-search` first") is followed once at best by a small local model, which then falls back to `grep`. With `SEARCH_FIRST` the runner adds a Claude Code **PreToolUse hook** (`search_hook.py`, a settings file passed with `--settings`) for the Bash, Grep and Glob tools:
+
+* until the session has called `ahawr-search`, an **exploratory** search is refused (exit code 2, the message goes back to the model and shows the syntax): `rg`, `find`, `git grep`, a recursive `grep` or one whose paths include a directory or a glob, the `Grep` and `Glob` tools. At most two refusals; a model that insists is let through;
+* after that the hook reminds once every `CLAUDE_RUNNER_SEARCH_FIRST_EVERY` (default 6) exploratory searches without a new `ahawr-search`; `0` turns the reminders off;
+* checking a known file (`grep -n text path/to/file.py`) or filtering a pipe is never touched;
+* any error inside the hook means "allow": it can not break a run. Decisions are appended to `<CLAUDE_CONFIG_DIR>/search-first/decisions.jsonl` (`search`, `deny-first`, `deny-again`).
+
+Enable it with `CLAUDE_RUNNER_SEARCH_FIRST=1` for all providers, or per provider with `CLAUDE_RUNNER_PROVIDER_<NAME>__SEARCH_FIRST=1` (`docker-compose.yml` turns it on for `LOCAL`; `AHAWR_SEARCH_FIRST=0` in `.env` turns that off). It applies to the roles in `CLAUDE_RUNNER_SEARCH_FIRST_ROLES` (default `worker`) and only when `ahawr-search` is installed. In the first check on the local Qwen model a Worker told to `grep -rn` was refused once, called `ahawr-search`, and answered correctly.
 
 ## Dashboard: watch the agents work
 
@@ -169,6 +220,16 @@ Open **http://localhost:8701** (host port `AHAWR_DASHBOARD_PORT`). The `ahawr-da
 
 * **Claude Code runs**, read from claude-runner.
 * **Hermes sessions**, read from the Hermes API server (`HERMES_API_URL`, `HERMES_API_KEY`: the `API_SERVER_KEY` that the n8n "Bearer Auth account" credential holds). By default it shows only the sessions AHAWR starts through the API (`HERMES_SESSION_SOURCE=api_server`). This needs a Hermes version with `GET /api/sessions`; the source line in the sidebar says when it is missing, unreachable or the key is wrong.
+
+* **Theme:** the "Theme" button in the sidebar cycles Auto → Light → Dark. Auto follows the OS
+  `prefers-color-scheme`; Light and Dark are fixed palettes. The choice is persisted via
+  localStorage (`ahawr-dashboard-theme`), with Auto removing the key. A small inline script in
+  `<head>` — before any stylesheet — reads the key and applies `data-theme` to `<html>` before
+  first paint, so the theme is applied before the page paints and persists across reloads without
+  a flash of the wrong theme; it is wrapped in try/catch and falls back to Auto on error.
+  `color-scheme` is declared as `light dark` on `:root`, `light` for `[data-theme="light"]` and
+  `dark` for `[data-theme="dark"]`; each palette defines the full set of CSS variables (the
+  monospace stack `--mono` is theme-invariant).
 
 The layout follows DeepSeek Harness' *Trajectory* view:
 

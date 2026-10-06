@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -8,6 +9,7 @@ from claude_runner.__main__ import main
 from claude_runner.claude_cli import StreamState, build_command, child_env, classify
 from claude_runner.config import (
     AUTO_COMPACT_WINDOW,
+    DEFAULT_RETRY_INPUT_CHARS,
     ProviderProfile,
     Settings,
 )
@@ -52,6 +54,42 @@ def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:
         Settings.from_env({"CLAUDE_RUNNER_COMPACT_MODE": "sometimes"})
     with pytest.raises(ValueError):
         Settings.from_env({"CLAUDE_RUNNER_MAX_CONCURRENT": "0"})
+
+
+def test_retry_fresh_session_settings() -> None:
+    # Off by default, with a configurable character budget for the retry input.
+    s = Settings.from_env({})
+    assert s.retry_fresh_session is False
+    assert s.retry_input_chars == DEFAULT_RETRY_INPUT_CHARS
+    on = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_RETRY_FRESH_SESSION": "1",
+            "CLAUDE_RUNNER_RETRY_INPUT_CHARS": "18000",
+        }
+    )
+    assert on.retry_fresh_session is True and on.retry_input_chars == 18000
+    # Per-provider override: the provider wins over the global value, and an empty
+    # value falls back to the global one.
+    per = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_RETRY_FRESH_SESSION": "0",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__RETRY_FRESH_SESSION": "1",
+        }
+    )
+    assert per.providers["LOCAL"].retry_fresh_session is True
+    assert per.retry_fresh_session_for(per.providers["LOCAL"]) is True
+    assert per.retry_fresh_session_for(None) is False
+    empty = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_RETRY_FRESH_SESSION": "1",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__RETRY_FRESH_SESSION": "",
+        }
+    )
+    assert empty.providers["LOCAL"].retry_fresh_session is None
+    assert empty.retry_fresh_session_for(empty.providers["LOCAL"]) is True
+    assert empty.retry_fresh_session_for(None) is True
+    with pytest.raises(ValueError):
+        Settings.from_env({"CLAUDE_RUNNER_RETRY_INPUT_CHARS": "0"})
 
 
 def test_compact_instructions_delivered_via_precompact_hook(
@@ -378,3 +416,70 @@ def test_role_add_dirs_become_add_dir_flags() -> None:
         s, s.profile("reviewer"), model="opus", claude_session_id="id", resume=True, compact=True
     )
     assert "--add-dir" not in compact
+
+
+def test_reviewer_default_profile_allows_read_only_bash_and_ahawr_search():
+    prof = Settings.from_env({}).profile("reviewer")
+    assert prof.permission_mode == "dontAsk"
+    for rule in (
+        "Bash(ahawr-search *)",
+        "Bash(grep *)",
+        "Bash(git diff *)",
+        "Bash(git -C * log *)",
+        "Bash(bash -n *)",
+    ):
+        assert rule in prof.allowed_tools
+    # nothing that writes, builds or changes git state
+    joined = " ".join(prof.allowed_tools)
+    for word in (
+        "commit",
+        "push",
+        "checkout",
+        "reset",
+        "apply",
+        "cmake",
+        "make",
+        "rm ",
+        "sed",
+        "tee",
+    ):
+        assert word not in joined
+    assert "Bash(* >*)" in prof.disallowed_tools and "Edit" in prof.disallowed_tools
+    # the env override still replaces the list, and an empty value switches Bash off again
+    assert (
+        Settings.from_env({"CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS": ""})
+        .profile("reviewer")
+        .allowed_tools
+        == []
+    )
+    # the Worker and Architect are unchanged
+    assert Settings.from_env({}).profile("architect").allowed_tools == []
+    assert Settings.from_env({}).profile("worker").allowed_tools == []
+
+
+def test_result_placement_rule_in_prompts_keeps_reviewer_read_only(tmp_path: Path) -> None:
+    """T011: the shipped default rows of agent_prompts.example.csv do NOT carry the
+    result placement rule (opt-in, off by default), and the Reviewer profile stays
+    read-only regardless."""
+    import csv
+    from pathlib import Path
+
+    rows = list(
+        csv.reader(
+            (Path(__file__).resolve().parents[2] / "agent_prompts.example.csv").open(newline="")
+        )
+    )
+    assert [r[0] for r in rows[1:]] == ["architect", "worker", "reviewer"]
+    architect, worker, reviewer = (r[3] for r in rows[1:])
+    # the rule is NOT in the shipped defaults (it is opt-in text per §5.3)
+    assert "RESULT PLACEMENT RULE" not in architect
+    assert "RESULT PLACEMENT RULE" not in worker
+    assert "RESULT PLACEMENT RULE" not in reviewer
+    # the Reviewer stays read-only: no write tools, no shell commands that write/build
+    prof = Settings.from_env({}).profile("reviewer")
+    for word in ("Edit", "Write", "NotebookEdit"):
+        assert word in prof.disallowed_tools
+    assert "Bash(* >*)" in prof.disallowed_tools
+    joined = " ".join(prof.allowed_tools)
+    for word in ("commit", "push", "rm ", "sed", "tee", "make"):
+        assert word not in joined

@@ -189,6 +189,76 @@ def test_url_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert transport.request.url == "http://custom:9999/retrieve"
 
 
+# --- arguments a model guesses, and the reason when the service says no -----------
+
+
+def test_max_is_the_result_count_not_an_abbreviation_of_max_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    chunks = [
+        {"path": f"f{i}", "start_line": 1, "end_line": 2, "content": f"c{i}"} for i in range(10)
+    ]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    code, out = _run(["q", "--max", "2", "--root", "/workspace"], transport, monkeypatch)
+    assert code == 0
+    assert len(out.strip().split("\n")) == 4  # two fragments, not budget 2
+    assert json.loads(transport.request.content)["budget"] == {"max_tokens": 1500}
+
+
+def test_budget_outside_the_service_range_is_clamped(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    _run(["q", "--budget", "20", "--root", "/workspace"], transport, monkeypatch)
+    assert json.loads(transport.request.content)["budget"] == {"max_tokens": 100}
+    assert "--budget changed to 100" in capsys.readouterr().err
+
+
+def test_folder_given_as_an_extra_argument_is_the_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os.path, "isdir", lambda p: p == "/d/rag-tmp/tree")
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    code, _ = _run(["where is state_write", "/d/rag-tmp/tree"], transport, monkeypatch)
+    assert code == 0
+    body = json.loads(transport.request.content)
+    assert body["query"] == "where is state_write"
+    assert body["corpus_roots"] == {"d-rag-tmp-tree": "/d/rag-tmp/tree"}
+
+
+def test_explicit_root_wins_over_a_folder_argument(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os.path, "isdir", lambda p: True)
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    _run(["q", "/d/other", "--root", "/workspace"], transport, monkeypatch)
+    body = json.loads(transport.request.content)
+    assert body["corpus_roots"] == {"workspace": "/workspace"}
+    assert body["query"] == "q /d/other"
+
+
+def test_a_bare_word_that_is_a_folder_stays_in_the_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(os.path, "isdir", lambda p: True)
+    monkeypatch.chdir("/d/rag-tmp")
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    _run(["retry", "src"], transport, monkeypatch)
+    assert json.loads(transport.request.content)["query"] == "retry src"
+
+
+def test_failure_message_says_what_to_do(monkeypatch: pytest.MonkeyPatch) -> None:
+    rejected = _CapturingTransport(lambda r: httpx.Response(422, json={"detail": "bad budget"}))
+    _, out = _run(["q", "--root", "/workspace"], rejected, monkeypatch)
+    assert "retrieval unavailable: the service rejected the request (HTTP 422)" in out
+    assert "bad budget" in out
+
+    async def slow(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow")
+
+    _, out = _run(["q", "--root", "/workspace"], _CapturingTransport(slow), monkeypatch)
+    assert "retrieval unavailable: no answer within 30 s" in out
+    assert "--timeout 120" in out
+
+    down = _CapturingTransport(lambda r: httpx.Response(503, json={}))
+    _, out = _run(["q", "--root", "/workspace"], down, monkeypatch)
+    assert "retrieval unavailable: the service failed (HTTP 503)" in out
+
+
 # --- direct fetch checks ----------------------------------------------------
 
 
