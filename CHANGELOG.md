@@ -3,6 +3,106 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
+Version: **0.2.0** (claude-runner `0.1.0` → `0.2.0`, 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+
+## 2026-10-06
+
+### AHAWR workflow
+- Reviewer result access (item 5): the `RESULT PLACEMENT RULE` is opt-in prompt text,
+  not in the shipped defaults. The `architect` and `worker` rows of
+  `agent_prompts.example.csv` do not carry the rule; to enable it, an operator appends
+  the exact paragraph (given in `docs/ahawr-cheaper-retries.md` §5.3) to the
+  `system_prompt` column of the `architect` and `worker` rows in the mission's
+  `agent_prompts` data table. Files the Reviewer must verify (notes, artifacts, logs)
+  then go into the mission working directory or a subfolder of it, never /tmp, and the
+  Worker cites the exact path in its report. The Reviewer stays read-only:
+  `config.py:326` (`dontAsk`, allowed tools read-only Bash only, `Edit`/`Write`/
+  `NotebookEdit` and `Bash(* >*)` denied), covered by
+  `tests/test_config_cli.py::test_reviewer_default_profile_allows_read_only_bash_and_ahawr_search`
+  and `test_result_placement_rule_in_prompts_keeps_reviewer_read_only` (asserts the rule is
+  absent from the shipped default rows while the Reviewer profile stays read-only).
+  No workflow node, per-run flag, or restart changes; `CLAUDE_RUNNER_REVIEWER_ADD_DIRS`
+  remains the alternative (wider read access, restart). The example T001 of
+  `ahawr-dashboard-theme` (notes in `/tmp/ahawr-theme/T001-notes.md`) would now pass on
+  the first review with the rule enabled: notes land in the mission folder the Reviewer
+  can read. Documented in `docs/ahawr-cheaper-retries.md` §5.3, including the exact opt-in
+  paragraphs, the enable step, and the example task.
+
+### claude-runner
+- The `compact` event now carries `duration_ms`, taken from Claude Code's `compact_metadata` (summary request included); the dashboard shows it ("context compacted (auto): 59.9K → 9.75K tokens in 2.3min") and the Markdown export too. Older Claude Code builds that do not report it leave it empty. The same number was already stored in `details.compact` of finished runs, so past compactions can be read from there.
+- Fresh-session retry: `CLAUDE_RUNNER_RETRY_FRESH_SESSION=1` (default `0`) makes a retry with a
+  previous `session_id` start a new Claude Code session instead of compacting and resuming the
+  old one. The retry input carries the task, review findings, previous report, and the previous
+  session's digest (newest last); `CLAUDE_RUNNER_RETRY_INPUT_CHARS` (default 32000) is the
+  character budget — only the digest is cut, and a marker notes the cut. Both settings are
+  overridable per provider with `…__RETRY_FRESH_SESSION` and `…__RETRY_INPUT_CHARS`.
+  `tests/test_runs.py` gained `test_retry_fresh_session_per_provider_override` (on → new
+  session, off → resume existing, per-provider override), `test_retry_input_cut_keeps_the_fixed_parts`
+  (digest cut, fixed parts kept, unchanged when it fits), `test_compact_skipped_when_fresh_session_retry_is_on`
+  (compact endpoint returns `skipped` with reason `fresh_session_retry` when the switch is on), and
+  `test_compact_runs_when_fresh_session_retry_is_off` (compact still runs when the switch is off).
+  `.env.example` documents the two new variables; `claude-runner/README.md` has a "Fresh-session retry"
+  section. `RunManager.compact()` returns `skipped("fresh_session_retry")` when
+  `retry_fresh_session_for` is true, so no `/compact` runs when fresh-session retry is on.
+- `tests/conftest.py` now puts `src/` first on `sys.path`, so tests always run against the source
+  tree even when the venv has a stale (non-editable) copy of `claude_runner`.
+
+## 2026-10-02
+
+### claude-runner
+- The dashboard gained an Auto/Light/Dark theme switcher in the sidebar. An inline script in
+  `<head>` (before any stylesheet) reads the `ahawr-dashboard-theme` localStorage key and applies
+  `data-theme` to `<html>` before first paint, so there is no flash of the wrong theme; it is
+  wrapped in try/catch and falls back to Auto on error. `:root` sets `color-scheme: light dark`
+  with `light` for `[data-theme="light"]` and `dark` for `[data-theme="dark"]`, and each palette
+  defines the full set of CSS variables (the `--mono` monospace stack is theme-invariant). The
+  choice is persisted via localStorage and cycles Auto → Light → Dark with the "Theme" button.
+- `tests/test_dashboard.py` gained `test_dashboard_theme_switcher`: it checks the "Theme" button
+  and the `ahawr-dashboard-theme` key, the Auto → Light → Dark cycle, that the localStorage
+  read is in `<head>` before any stylesheet, and that the dark palette defines every visual
+  variable the light one does.
+- `claude-runner/README.md` documents the Theme button: Auto follows the OS
+  `prefers-color-scheme`, the localStorage persistence (with Auto removing the key), the early
+  `<head>` script and the `color-scheme` declarations.
+
+## 2026-10-05
+
+### AHAWR workflow
+- `Parse Review` no longer fails the run on an unreadable verdict. A final
+  `{"status","score","reason","next_task"}` object whose strings contain unescaped double quotes (a
+  local Reviewer wrote a shell command with `""` in `reason`) is read leniently; with no verdict at
+  all the new loop (`Review Parsed?` → `Prepare Verdict Retry` → `Reviewer Verdict Retry Start` →
+  `Verdict Retry Result`) asks the Reviewer again in the same session for the JSON only, up to
+  `hermes_config.reviewer_max_retries` times, and fails with the original error when they run out.
+
+### claude-runner
+- Search-first hook: with `SEARCH_FIRST` a PreToolUse hook refuses exploratory `grep`/`rg`/`find`/
+  `Grep`/`Glob` until the session has used `ahawr-search` and reminds every few searches after it.
+  Over 26 local Worker runs the prompt rule ("MANDATORY: search with ahawr-search first") gave 4
+  runs with a call, and only early in the run, against 413 `grep` commands. Enabled for the `LOCAL`
+  provider in `docker-compose.yml`.
+- `ahawr-search` accepts `--query`/`-q`, an unquoted multi-word query and the usual spellings of
+  `--k` and `--budget`; an unknown option is reported and ignored.
+- `ahawr-search` no longer hides why it failed. A Worker ran `ahawr-search "docs/PORT.md"
+  /d/…/project --max 20` and got `retrieval unavailable`: argparse had taken `--max` as an
+  abbreviation of `--max-tokens`, the service rejected a budget of 20 (HTTP 422, minimum 100),
+  and every failure printed the same line. Now `--max`, `-n` and `--count` set the number of
+  fragments, abbreviations are off, the budget is clamped to 100–100000, an existing folder
+  given as an extra path argument (`/…`, `./…`, `../…`) becomes the root unless `--root` is set,
+  and the failure line says what happened: request rejected (with the HTTP status and detail),
+  service failed, unreachable, or no answer in time (a folder searched for the first time is
+  indexed by that call, so repeat it or add `--timeout 120`). The default timeout is 30 s instead
+  of 10: the first search of a folder indexes it inside the request, which took 8-9 s for 30 small
+  files, so in a live mission every new folder timed out (four calls in a row, the same folder
+  three times) while the service went on indexing. `--help` shows how to search
+  another folder with `--root`. Applies after the runner is rebuilt.
+- The Reviewer profile allows read-only Bash by default (`ahawr-search`, `grep`, `ls`, `wc`, `head`,
+  `tail`, `cat`, `diff`, `bash -n`, read-only `git` incl. `git -C <dir>`) and denies Bash redirections
+  to a file and `git … --output`. In `dontAsk` a command runs only if a rule allows it, and a local
+  mission logged 105 denied Bash calls from its Reviewers, so they judged reports they could not
+  check. `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS` replaces the list (empty = no Bash as before).
+  Applies after the runner is rebuilt.
+
 ## 2026-10-01
 
 ### ahawr-retrieval (mission ahawr-rag-effectiveness)

@@ -2,7 +2,7 @@
 
 **English** | [Русская версия](#русская-версия)
 
-An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md).
+An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **0.2.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
 
 The system separates **workflow logic**, **runtime configuration**, **agent prompts**, **missions**, and **secrets** so that the workflow can be maintained and reused without editing the main orchestration graph every time a model or mission changes.
 
@@ -681,6 +681,62 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
 The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
+### Versioning
+
+The stack is versioned as a whole by the `claude-runner` package version (`claude-runner/pyproject.toml`, also reported by the runner API); the workflow files keep their own names (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial claude-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md).
+
+### Why it works this way: constraints and workarounds
+
+Several parts of this stack look odd until you know what they work around. The Worker is usually a small quantized local model (Qwen3.8-27B at 2-bit, MTP speculative decoding, one 12 GB GPU, a 64K–96K context window, roughly 25–30 tokens per second), while the Architect and the Reviewer run on Opus (about 130 tokens per second). Three facts drive most decisions: **the window is small**, **generation and uncached prefill are slow** (a full 78K-token prefill takes about 4 minutes, a compaction about 7), and **a cheap Worker is only useful if something checks its work**. Each item below says what the workaround is, why it exists, and what it costs.
+
+**1. The mission and the plan are translated into English first; the report comes back in the mission's language.**
+- *What.* The Architect writes the summary and every task in English whatever language the mission is written in. The Worker writes notes, reports and code comments in English and the Reviewer answers in English. Texts that must appear exactly as given (paths, identifiers, commands, UI strings, headings the mission requires) stay verbatim in the original language and in quotes. For a non-English mission the Architect adds a last task, `Mission report (<language>)`, that depends on all others; the Worker writes a report of the whole mission in the mission's language without changing files, the Reviewer checks language, coverage and facts, and the `✅ WORKFLOW APPROVED` Telegram notice carries that report.
+- *Why.* The same text takes 5–15% fewer tokens in English (measured on one task: Qwen 490 → 416, Claude 753 → 675), which matters when the window is 64K and every retry resends the task. The small local model also follows rules written in English more reliably when the task, its own notes and the files are in one language; with a Russian task and English system rules it mixed both. The final report in the mission's language is there because the operator reads the result in their own language; making it a separate last task keeps the working language English for everything the models read during the run.
+- *Cost.* One extra task per mission, and a translation step that can lose meaning. That is why anything that must match exactly is kept verbatim and quoted, and why the Reviewer checks the report against the facts. Prompts: `agent_prompts.example.csv` (the `LANGUAGE:` blocks).
+
+**2. Compaction is short, early and sized to the model's real window.**
+- *What.* A PreCompact hook asks the local model for a 1500–2000-token summary in fixed sections (Task, Findings, Changed files, Checks, Next step). Before each local run the runner reads `--ctx-size` from llama-server and sets the context window and the auto-compact trigger as a percentage of it; the runner's own `/compact` before a retry scales the same way. Tool output is capped (`BASH_MAX_OUTPUT_LENGTH`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS`) and the tool list is trimmed, which cuts the system prompt from about 15K to about 4K tokens. The runner refuses to start if the trigger leaves less than 20000 tokens of headroom.
+- *Why.* Claude Code's default summary is about 8K tokens, which took about 6 minutes at local generation speed; a fixed 40000-token pre-resume threshold compacted a 96K Worker at 46–52K, so the compaction took longer than the retry it preceded. A window that is changed on the server but not in the runner makes the model fail with an overflow instead of compacting.
+- *Cost / open problem.* Every compaction still costs minutes, because the llama-server prompt cache is not reused for the compaction request (a full re-prefill of the prefix). The cause is not found yet; see "Known open problems" below.
+
+**3. Retries, attempt limits and the operator.**
+- *What.* A `needs_changes` retry resumes the Worker's session (`--resume`) and hands it its previous full report and the review; the Reviewer checks that parts it accepted earlier are still there. The retry counter takes the highest attempt logged for the task, and a task stops at `max_attempts_per_task` instead of retrying forever. A context overflow forces a compaction before the retry; if compaction fails, a fresh session gets the old session's digest (`GET /v1/sessions/{id}/digest`). `CLAUDE_RUNNER_RETRY_FRESH_SESSION=1` (off by default) starts a fresh session on a review retry instead of compacting the old one; the retry input is the task, the review, the previous report and the digest, with a character budget.
+- *Why.* The local model sometimes cannot fix a review finding in three attempts, and a Reviewer can keep finding new issues in each attempt. An unbounded loop burns hours of GPU time, so the limit is hard.
+- *How a failed task is handled.* The operator reads the last review, fixes or accepts the result by hand, and closes the task: the history gets an `operator_accept` row (not a Reviewer verdict) and the mission moves on. The record keeps the operator's closure visible, so statistics do not count it as a Reviewer pass.
+- *The Reviewer's verdict is parsed leniently.* A local Reviewer wrote unescaped double quotes inside `reason` and failed the run; `Parse Review` now reads such a verdict leniently and, with no verdict at all, asks the same session again for the JSON only (up to `reviewer_max_retries`).
+
+**4. Agents are made to search first, by a hook, not by a prompt.**
+- *What.* `ahawr-search "<question>"` in the claude-runner image asks the retrieval layer for the most relevant fragments of the folder the agent works in. With `SEARCH_FIRST` a PreToolUse hook refuses exploratory `grep`/`rg`/`find`/`Grep`/`Glob` until the session has used `ahawr-search`, and reminds the agent every few searches afterwards. The command is fail-open (exit 0 when the service is down), says why it failed (rejected request, service error, unreachable, timeout), accepts the usual spellings of `--k`/`--budget`, and clamps the budget.
+- *Why.* A prompt rule ("MANDATORY: search with ahawr-search first") was followed in 4 of 26 local Worker runs, and only early in the run, against 413 `grep` commands. Retrieval context at the start of a task is also not enough: the Worker's file-level precision was 46% and recall 25%, and one 3408-line patch file took 44.8% of the context tokens. So retrieval is on demand, the Reviewer's context is focused on the files the Worker changed, and large `.patch` files are demoted.
+- *Cost.* A search costs a few seconds, and the first search of a new folder indexes it inside the request (8–9 s for 30 small files, hence the 30 s default timeout).
+
+**5. The Reviewer can read, but not write.**
+- *What.* The Reviewer profile runs in `dontAsk` mode with a read-only Bash allow-list (`ahawr-search`, `grep`, `ls`, `wc`, `head`, `tail`, `cat`, `diff`, `bash -n`, read-only `git`), and denies redirections to files and `git … --output`. `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS` replaces the list.
+- *Why.* In `dontAsk` a command runs only if a rule allows it; one local mission logged 105 denied Bash calls from its Reviewers, which then judged reports they could not check.
+- *Result placement.* The Reviewer cannot see `/tmp` of the Worker. The optional result placement rule asks agents to put files the Reviewer must verify into the mission working directory and to cite the exact path in the report (`docs/ahawr-cheaper-retries.md` §5.3).
+
+**6. What the Reviewer cannot verify is accepted by the operator.**
+The Reviewer judges the Worker's report and the files it can read. The Worker cannot run Docker, build a GPU image or run a live service, so a mission that needs those can pass review and still not work (a patch series once passed all reviews while it did not apply; a rebuilt image then crashed on the first request). For such missions the acceptance criteria say what the operator runs (for example `docker build` and a benchmark), and the mission is not considered done until that has passed. A change made by hand in a working tree must also end up in the artifact (the patch, the file under version control), not only in the tree; reviews cannot see the difference.
+
+**7. Cost numbers are estimates.**
+Claude Code reports a cost for every run. For the local model the image prices it like Claude Sonnet 5 (`claude-runner/managed-settings.json`) so that a local run can be compared with an all-Anthropic one; this is not a bill. Real spending is the Anthropic roles (usually the Opus Reviewer and Architect). The run's `cost_usd` is its own share: Claude Code restores the session's total on `--resume`, so the runner subtracts the previous run's total.
+
+**8. Telegram notices are short and safe.**
+Task and review notices carry the task id, the attempt, the score and the reason cut at a sentence, not the whole review. The text is cut first and HTML-escaped after, because escaping first and cutting second can split an entity and make Telegram reject the message.
+
+**9. Operational details that are easy to miss.**
+- The image sets `core.autocrlf=true`, so a Windows checkout mounted into the container does not show every CRLF file as modified (85 false changes once confused a scope check).
+- Runs may last up to `CLAUDE_RUNNER_MAX_RUN_SECONDS` (10800 in this stack's `.env`); evaluation-heavy Worker runs hit two hours.
+- Live Data Table exports and mission files are kept out of git (`data-tables/`); the repository ships `hermes_config.example.csv`, `agent_prompts.example.csv` and `missions.example.csv`.
+- Data Tables live in n8n's SQLite file; editing them directly (for example to close a task or to load a mission) is only safe while n8n is stopped, with a copy of the database made first. Prefer the n8n UI where it is enough.
+- Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
+
+**Known open problems.**
+- The llama-server prompt cache is not reused when Claude Code sends a compaction request, so each compaction re-prefills the whole prefix (about 7 minutes at 78K tokens; seven of them in one task). The cause (server build, Claude Code version or cache settings) is not established.
+- The retrieval usage metric reports 0 opened files on live data, because runner run summaries carry no mission or task id to join them with retrieval requests.
+- The built-in hashing embedder ranks rare identifiers poorly.
+- Quality, price and speed comparisons between the local model and Anthropic models are single runs; see `CHANGELOG.md` for measured numbers.
+
 ### Hermes session compression
 
 The Run Manager includes a dedicated Hermes TUI WebSocket compression path for long-running sessions. Compression is performed by `hermes_compress.py` through the Hermes WebSocket endpoint rather than through `/v1/runs`.
@@ -818,7 +874,7 @@ Changing the mission should not require rewriting the orchestrator.
 
 Это система оркестрации автономных AI-агентов на базе **n8n**. Роли работают через **Hermes Gateway** или через **Claude Code** (`claude-runner`, с моделями Anthropic или локальной моделью llama.cpp), см. [AHAWR на Claude Code](#ahawr-на-claude-code-claude-runner). Последние изменения: [`CHANGELOG.md`](CHANGELOG.md).
 
-Главный workflow — **Autonomous Hermes Architect Worker Reviewer (AHAWR)**.
+Главный workflow — **Agentic Hub for Automation Workflow Routing (AHAWR)**.
 
 Он разделяет работу на три логические роли:
 
@@ -1423,6 +1479,62 @@ Architect контекст из RAG не получает, только Worker �
 **Инструменты Worker'а.** В образе есть git, pytest, ruff и mypy. Инструменты сборки добавляются через `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (например, `patch build-essential cmake`). Worker не может читать файлы `.env` (любые варианты, кроме `.env.example`), делать `git commit` и `git push`, а промпт запрещает ему выводить переменные окружения.
 
 Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) и [`CHANGELOG.md`](CHANGELOG.md).
+### Версии
+
+Стек версионируется по версии пакета `claude-runner` (`claude-runner/pyproject.toml`, её же отдаёт API runner'а); файлы воркфлоу сохраняют свои имена (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый claude-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
+
+### Почему всё устроено именно так: ограничения и обходные решения
+
+Многое в этом стеке выглядит странно, пока не знаешь, что именно оно обходит. Worker — обычно небольшая квантованная локальная модель (Qwen3.8-27B в 2 битах, спекулятивное декодирование MTP, одна видеокарта на 12 ГБ, окно 64K–96K токенов, примерно 25–30 токенов в секунду), а Architect и Reviewer работают на Opus (около 130 токенов в секунду). Большинство решений следует из трёх фактов: **окно маленькое**, **генерация и prefill без кэша медленные** (полный prefill 78K токенов занимает около 4 минут, одно сжатие — около 7) и **дешёвый Worker полезен, только если кто-то проверяет его работу**. Для каждого пункта ниже указано, в чём обходное решение, зачем оно и чего стоит.
+
+**1. Миссия и план сначала переводятся на английский, а отчёт возвращается на языке миссии.**
+- *Что.* Architect пишет summary и каждую задачу на английском, на каком бы языке ни была миссия. Worker пишет заметки, отчёты и комментарии в коде на английском, Reviewer отвечает на английском. Тексты, которые должны появиться дословно (пути, идентификаторы, команды, строки интерфейса, заголовки, которых требует миссия), остаются на исходном языке и в кавычках. Для миссии не на английском Architect добавляет последнюю задачу `Mission report (<язык>)`, зависящую от всех остальных: Worker пишет отчёт по всей миссии на языке миссии, не меняя файлы, Reviewer проверяет язык, полноту и факты, а Telegram-уведомление `✅ WORKFLOW APPROVED` содержит этот отчёт.
+- *Зачем.* Тот же текст на английском занимает на 5–15% меньше токенов (замер на одной задаче: Qwen 490 → 416, Claude 753 → 675), а при окне 64K и повторной отправке задачи в каждом ретрае это заметно. Небольшая локальная модель надёжнее следует правилам, когда задача, её собственные заметки и файлы на одном языке: с русской задачей и английскими системными правилами она смешивала оба. Итоговый отчёт на языке миссии нужен потому, что оператор читает результат на своём языке; отдельная последняя задача оставляет рабочим языком английский для всего, что модели читают во время прогона.
+- *Цена.* Одна лишняя задача на миссию и шаг перевода, который может потерять смысл. Поэтому всё, что должно совпадать дословно, сохраняется и берётся в кавычки, а Reviewer сверяет отчёт с фактами. Промпты: `agent_prompts.example.csv` (блоки `LANGUAGE:`).
+
+**2. Сжатие короткое, ранее и под реальное окно модели.**
+- *Что.* Хук PreCompact просит у локальной модели сводку на 1500–2000 токенов по фиксированным разделам (Task, Findings, Changed files, Checks, Next step). Перед каждым локальным прогоном runner читает `--ctx-size` у llama-server и задаёт окно и порог автосжатия как процент от него; собственный `/compact` runner'а перед ретраем масштабируется так же. Вывод инструментов ограничен (`BASH_MAX_OUTPUT_LENGTH`, `CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS`), список инструментов сокращён, и системный промпт уменьшается с ~15K до ~4K токенов. Runner не запустится, если до конца окна остаётся меньше 20000 токенов запаса.
+- *Зачем.* Стандартная сводка Claude Code около 8K токенов, на скорости локальной модели это около 6 минут; фиксированный порог 40000 перед возобновлением сжимал Worker'а на 96K уже на 46–52K, и сжатие шло дольше самого ретрая. Если окно изменено на сервере, но не в runner'е, модель падает с переполнением вместо сжатия.
+- *Цена и нерешённое.* Каждое сжатие всё равно стоит минуты: кэш промпта llama-server не используется для запроса сжатия (полный повторный prefill префикса). Причина не найдена, см. «Известные открытые проблемы».
+
+**3. Ретраи, лимит попыток и оператор.**
+- *Что.* Ретрай после `needs_changes` продолжает сессию Worker'а (`--resume`) и передаёт ему его прошлый полный отчёт и ревью; Reviewer проверяет, что принятые ранее части не потеряны. Счётчик попыток берёт наибольшую попытку из журнала задачи, а задача останавливается на `max_attempts_per_task`, а не повторяется бесконечно. Переполнение контекста принудительно запускает сжатие перед ретраем; если сжатие не удалось, новая сессия получает дайджест старой (`GET /v1/sessions/{id}/digest`). `CLAUDE_RUNNER_RETRY_FRESH_SESSION=1` (по умолчанию выключено) начинает на ретрае после ревью новую сессию вместо сжатия старой; вход ретрая — задача, ревью, прошлый отчёт и дайджест в пределах бюджета символов.
+- *Зачем.* Локальная модель иногда не может исправить замечание за три попытки, а Reviewer может находить новые замечания в каждой попытке. Бесконечный цикл сжигает часы времени GPU, поэтому лимит жёсткий.
+- *Что делать с упавшей задачей.* Оператор читает последнее ревью, правит или принимает результат вручную и закрывает задачу: в журнале появляется строка `operator_accept` (не вердикт Reviewer'а), и миссия идёт дальше. Закрытие оператором остаётся видимым, поэтому в статистике оно не считается принятием ревью.
+- *Вердикт Reviewer'а разбирается мягко.* Локальный Reviewer написал в `reason` неэкранированные двойные кавычки, и прогон упал; теперь `Parse Review` читает такой вердикт мягко, а если вердикта нет совсем, снова просит ту же сессию вернуть только JSON (до `reviewer_max_retries` раз).
+
+**4. Агентов заставляет искать сначала хук, а не промпт.**
+- *Что.* `ahawr-search "<вопрос>"` в образе claude-runner просит слой retrieval найти самые подходящие фрагменты в папке, где работает агент. При `SEARCH_FIRST` хук PreToolUse отклоняет разведочные `grep`/`rg`/`find`/`Grep`/`Glob`, пока сессия не вызвала `ahawr-search`, и после этого напоминает каждые несколько поисков. Команда fail-open (выход 0, если сервис недоступен), говорит, почему не сработала (запрос отклонён, ошибка сервиса, недоступность, таймаут), принимает привычные написания `--k`/`--budget` и ограничивает бюджет.
+- *Зачем.* Правило в промпте («ОБЯЗАТЕЛЬНО: сначала ищи через ahawr-search») выполнялось в 4 из 26 прогонов локального Worker'а и только в начале, против 413 команд `grep`. Контекста retrieval в начале задачи тоже не хватает: точность по файлам у Worker'а была 46%, полнота 25%, а один патч на 3408 строк занимал 44,8% токенов контекста. Поэтому поиск по требованию, контекст Reviewer'а фокусируется на файлах, изменённых Worker'ом, а крупные `.patch` понижаются в выдаче.
+- *Цена.* Поиск занимает несколько секунд, а первый поиск по новой папке индексирует её прямо в запросе (8–9 с на 30 небольших файлов, отсюда таймаут по умолчанию 30 с).
+
+**5. Reviewer может читать, но не писать.**
+- *Что.* Профиль Reviewer'а работает в режиме `dontAsk` с белым списком Bash только для чтения (`ahawr-search`, `grep`, `ls`, `wc`, `head`, `tail`, `cat`, `diff`, `bash -n`, `git` только для чтения) и запрещает перенаправление в файлы и `git … --output`. Список заменяется через `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS`.
+- *Зачем.* В `dontAsk` команда выполняется, только если её разрешает правило; одна локальная миссия записала 105 отказанных вызовов Bash у Reviewer'ов, и они судили отчёты, которые не могли проверить.
+- *Размещение результатов.* Reviewer не видит `/tmp` Worker'а. Необязательное правило размещения результатов просит класть файлы, которые Reviewer должен проверить, в рабочую папку миссии и указывать в отчёте точный путь (`docs/ahawr-cheaper-retries.md` §5.3).
+
+**6. То, что Reviewer не может проверить, принимает оператор.**
+Reviewer судит отчёт Worker'а и файлы, которые может прочитать. Worker не может запустить Docker, собрать образ с GPU или поднять живой сервис, поэтому миссия, которой это нужно, может пройти ревью и не заработать (серия патчей однажды прошла все ревью, хотя не применялась, а пересобранный образ упал на первом запросе). Для таких миссий в критериях приёмки указано, что запускает оператор (например `docker build` и бенчмарк), и миссия не считается завершённой, пока это не пройдёт. Ручная правка рабочего дерева должна попадать и в артефакт (патч, файл под версионным контролем), а не только в дерево: ревью этой разницы не видит.
+
+**7. Цифры стоимости — оценки.**
+Claude Code сообщает стоимость каждого прогона. Для локальной модели образ оценивает её по ценам Claude Sonnet 5 (`claude-runner/managed-settings.json`), чтобы сравнивать локальный прогон с полностью Anthropic; это не счёт. Реальные траты — роли на Anthropic (обычно Reviewer и Architect на Opus). `cost_usd` прогона — его собственная доля: Claude Code восстанавливает итог сессии при `--resume`, поэтому runner вычитает итог предыдущего прогона.
+
+**8. Telegram-уведомления короткие и безопасные.**
+Уведомления о задаче и ревью содержат id задачи, попытку, балл и причину, обрезанную по предложению, а не всё ревью. Текст сначала обрезается, а потом экранируется для HTML: если экранировать до обрезки, можно разрезать сущность, и Telegram отклонит сообщение.
+
+**9. Эксплуатационные детали, которые легко упустить.**
+- Образ ставит `core.autocrlf=true`, поэтому Windows-репозиторий, смонтированный в контейнер, не показывает все CRLF-файлы изменёнными (85 ложных изменений однажды запутали проверку области правок).
+- Прогон может идти до `CLAUDE_RUNNER_MAX_RUN_SECONDS` (в `.env` этого стека 10800); прогоны Worker'а с тяжёлой оценкой упирались в два часа.
+- Живые выгрузки Data Tables и файлы миссий хранятся вне git (`data-tables/`); в репозитории лежат `hermes_config.example.csv`, `agent_prompts.example.csv` и `missions.example.csv`.
+- Data Tables лежат в SQLite-файле n8n; править их напрямую (например, чтобы закрыть задачу или загрузить миссию) безопасно только при остановленном n8n и после копии базы. Где хватает интерфейса n8n, лучше пользоваться им.
+- Worker и Reviewer не могут читать файлы `.env` (любые варианты, кроме `.env.example`) и делать `git commit` и `git push`; коммитит оператор.
+
+**Известные открытые проблемы.**
+- Кэш промпта llama-server не используется, когда Claude Code присылает запрос сжатия, поэтому каждое сжатие заново обрабатывает весь префикс (около 7 минут на 78K токенов; семь таких сжатий в одной задаче). Причина (сборка сервера, версия Claude Code или настройки кэша) не установлена.
+- Метрика использования retrieval показывает 0 открытых файлов на живых данных: в сводках прогонов runner'а нет id миссии и задачи, по которым их можно связать с запросами retrieval.
+- Встроенный хеширующий эмбеддер плохо ранжирует редкие идентификаторы.
+- Сравнения качества, цены и скорости между локальной моделью и моделями Anthropic — единичные прогоны; измеренные числа см. в `CHANGELOG.md`.
+
 ### Компрессия Hermes-сессий
 
 Для длинных Worker/Reviewer-сессий Run Manager использует отдельный TUI WebSocket путь Hermes:
