@@ -3033,7 +3033,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst taskId = String(prep.current_task_id ?? '');\nconst cutText = (s, n) => {\n  s = String(s ?? '').replace(/\\s+/g, ' ').trim();\n  if (s.length <= n) return s;\n  let c = s.slice(0, n);\n  const dot = Math.max(c.lastIndexOf('. '), c.lastIndexOf('; '));\n  if (dot > n * 0.5) c = c.slice(0, dot + 1);\n  return c + ' …';\n};\nconst verdict = String(review.review_status ?? '');\nconst attemptNo = Number(prep.task_attempt ?? 0);\nconst reviewMessage = [\n  `🧪 REVIEW ${taskId}${attemptNo > 1 ? ` · attempt ${attemptNo}` : ''}: ${verdict} · ${String(review.review_score ?? 0)}`,\n  cutText(review.review_reason, 450),\n  verdict !== 'pass' && review.review_next_task ? `Fix: ${cutText(review.review_next_task, 450)}` : ''\n].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
+        "jsCode": "const review = $('Parse Review').last().json ?? {};\nconst prep = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) return $(n).last().json ?? {}; } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst taskId = String(prep.current_task_id ?? '');\nconst cutText = (s, n) => {\n  s = String(s ?? '').replace(/\\s+/g, ' ').trim();\n  if (s.length <= n) return s;\n  let c = s.slice(0, n);\n  const dot = Math.max(c.lastIndexOf('. '), c.lastIndexOf('; '));\n  if (dot > n * 0.5) c = c.slice(0, dot + 1);\n  return c + ' …';\n};\nconst verdict = String(review.review_status ?? '');\nconst attemptNo = Number(prep.task_attempt ?? 0);\nconst reviewMessage = [\n  `🧪 REVIEW ${taskId}${attemptNo > 1 ? ` · attempt ${attemptNo}` : ''}: ${verdict} · ${String(review.review_score ?? 0)}`,\n  (() => { try { const c = $('Constants').first().json; const f = (m, p) => String(m || '?') + (p ? ' @' + p : ''); return `🤖 Worker: ${f(c.worker_model, c.worker_provider)} · Reviewer ${f(c.reviewer_model, c.reviewer_provider)}`; } catch (_) { return ''; } })(),\n  cutText(review.review_reason, 450),\n  verdict !== 'pass' && review.review_next_task ? `Fix: ${cutText(review.review_next_task, 450)}` : ''\n].filter(Boolean).join('\\n');\nreturn [{json:{...prep,...review,review_message:reviewMessage}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3457,7 +3457,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('📋 PLAN RECEIVED\\n' + String($json.plan_summary ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ (() => { let t = String('📋 PLAN RECEIVED\\n🤖 Planner: ' + (()=>{try{const c=$('Constants').first().json;const f=(m,p)=>String(m||'?')+(p?' @'+p:'');return f(c.planner_model,c.planner_provider);}catch(e){return '?'} })() + '\\n' + String($json.plan_summary ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -3518,7 +3518,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => {\n  const j = $json, t = j.current_task || {};\n  const cut = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };\n  const list = (v) => Array.isArray(v) ? v.map(x => '- ' + String(x)).join('\\n') : String(v ?? '');\n  const attempt = Number(j.task_attempt ?? 1);\n  let m = '▶️ TASK STARTED\\n' + String(j.current_task_id ?? '') + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : '');\n  if (t.objective) m += '\\n\\nObjective:\\n' + cut(t.objective, 1200);\n  if (t.acceptance_criteria && t.acceptance_criteria.length) m += '\\n\\nAcceptance:\\n' + cut(list(t.acceptance_criteria), 1200);\n  if (t.verification && t.verification.length) m += '\\n\\nVerification:\\n' + cut(list(t.verification), 600);\n  const fb = String(j.review_feedback ?? '').trim();\n  if (attempt > 1 && fb) {\n    const score = Number(j.last_review_score);\n    m += '\\n\\nPrevious review' + (score ? ' (score ' + score + ')' : '') + ':\\n' + cut(j.last_review_reason, 700) + '\\n\\nRequested fixes:\\n' + cut(fb, 1200);\n  }\n  if (m.length > 3800) m = m.slice(0, 3800) + '\\n…';\n  return m.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n})() }}",
+        "text": "={{ (() => {\n  const j = $json, t = j.current_task || {};\n  const cut = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };\n  const list = (v) => Array.isArray(v) ? v.map(x => '- ' + String(x)).join('\\n') : String(v ?? '');\n  const attempt = Number(j.task_attempt ?? 1);\n  let m = '▶️ TASK STARTED\\n🤖 Worker: ' + (()=>{try{const c=$('Constants').first().json;const f=(m,p)=>String(m||'?')+(p?' @'+p:'');return f(c.worker_model,c.worker_provider);}catch(e){return '?'} })() + '\\n' + String(j.current_task_id ?? '') + (()=>{const n=Number(j.total_tasks ?? (Array.isArray(j.tasks)?j.tasks.length:0));return n?' (from '+n+')':''})() + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : '');\n  if (t.objective) m += '\\n\\nObjective:\\n' + cut(t.objective, 1200);\n  if (t.acceptance_criteria && t.acceptance_criteria.length) m += '\\n\\nAcceptance:\\n' + cut(list(t.acceptance_criteria), 1200);\n  if (t.verification && t.verification.length) m += '\\n\\nVerification:\\n' + cut(list(t.verification), 600);\n  const fb = String(j.review_feedback ?? '').trim();\n  if (attempt > 1 && fb) {\n    const score = Number(j.last_review_score);\n    m += '\\n\\nPrevious review' + (score ? ' (score ' + score + ')' : '') + ':\\n' + cut(j.last_review_reason, 700) + '\\n\\nRequested fixes:\\n' + cut(fb, 1200);\n  }\n  if (m.length > 3800) m = m.slice(0, 3800) + '\\n…';\n  return m.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n})() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -3640,7 +3640,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('❌ WORKFLOW FAILED\\nStatus: ' + String($json.status ?? '') + '\\nRole: ' + String($json.role ?? '') + '\\nTask: ' + String($json.task_id ?? '') + '\\nAttempt: ' + String($json.task_attempt ?? '') + '\\n' + String($json.reason ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ (() => { let t = String('❌ WORKFLOW FAILED\\n🤖 Worker: ' + (()=>{try{const c=$('Constants').first().json;const f=(m,p)=>String(m||'?')+(p?' @'+p:'');return f(c.worker_model,c.worker_provider);}catch(e){return '?'} })() + '\\nStatus: ' + String($json.status ?? '') + '\\nRole: ' + String($json.role ?? '') + '\\nTask: ' + String($json.task_id ?? '') + '\\nAttempt: ' + String($json.task_attempt ?? '') + '\\n' + String($json.reason ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -3667,7 +3667,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('✅ WORKFLOW APPROVED\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + ($json.final_report ? '\\n' + String($json.final_report) : String($json.reason ?? ''))); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ (() => { let t = String('✅ WORKFLOW APPROVED\\n🤖 Worker: ' + (()=>{try{const c=$('Constants').first().json;const f=(m,p)=>String(m||'?')+(p?' @'+p:'');return f(c.worker_model,c.worker_provider);}catch(e){return '?'} })() + '\\n' + String($json.status ?? 'approved') + '\\nCompleted tasks: ' + String($json.completed_tasks ?? 0) + '/' + String($json.total_tasks ?? 0) + '\\nLast task: ' + String($json.last_task ?? '') + '\\nScore: ' + String($json.last_review_score ?? '') + '\\n' + ($json.final_report ? '\\n' + String($json.final_report) : String($json.reason ?? ''))); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -4105,6 +4105,49 @@
       "parameters": {
         "jsCode": "// Result of the verdict re-ask: hand its text to Parse Review in place of the unreadable one.\nfunction unwrap(value) { const x = value?.json ?? value?.data ?? value ?? {}; return x && typeof x === 'object' && !Array.isArray(x) ? x : {}; }\nconst r = unwrap($json);\nconst status = String(r.status ?? '').toLowerCase();\nif (status !== 'completed') throw new Error(`Reviewer verdict re-ask did not complete (status ${status || 'unknown'}${r.error ? ': ' + String(r.error).slice(0, 200) : ''})`);\nconst out = String(r.output ?? r.response ?? r.content ?? '');\nconst { review_valid, review_parse_error, review_raw, ...base } = $('Parse Review').last().json ?? {};\nreturn [{ json: { ...base, output: out, reviewer_output: out, reviewer_run_id: String(r.run_id ?? base.reviewer_run_id ?? ''), reviewer_session_id: String(r.session_id ?? '') } }];"
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Constants').first().json;\nreturn [{ json: { state_key: c.state_namespace, runner_url: c.runner_url, runner_api_key: c.runner_api_key } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13248,
+        704
+      ],
+      "id": "7f1b2c3d-0a11-4e55-9a10-results00001",
+      "name": "Prepare Results Update",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "AhawrMissionRes01"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -12988,
+        704
+      ],
+      "id": "7f1b2c3d-0a11-4e55-9a10-results00002",
+      "name": "Update Mission Results",
+      "onError": "continueRegularOutput"
     }
   ],
   "pinData": {
@@ -4384,6 +4427,11 @@
       "main": [
         [
           {
+            "node": "Prepare Results Update",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "If5",
             "type": "main",
             "index": 0
@@ -4563,6 +4611,11 @@
       "main": [
         [
           {
+            "node": "Prepare Results Update",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Load Worker Result",
             "type": "main",
             "index": 0
@@ -4585,6 +4638,11 @@
       "main": [
         [
           {
+            "node": "Prepare Results Update",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Load Reviewer Result",
             "type": "main",
             "index": 0
@@ -4606,6 +4664,11 @@
     "Persist Parsed Review": {
       "main": [
         [
+          {
+            "node": "Prepare Results Update",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Persist Reviewer State",
             "type": "main",
@@ -4694,6 +4757,11 @@
     "Persist Workflow Failure State": {
       "main": [
         [
+          {
+            "node": "Prepare Results Update",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Restore Workflow Failure Context",
             "type": "main",
@@ -5177,6 +5245,17 @@
         [
           {
             "node": "Parse Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Results Update": {
+      "main": [
+        [
+          {
+            "node": "Update Mission Results",
             "type": "main",
             "index": 0
           }

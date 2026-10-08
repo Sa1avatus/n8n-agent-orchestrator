@@ -7,7 +7,9 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field
 
+from .mission_stats import stats_for_runs
 from .runs import RunManager, RunnerError
 from .titles import title_of
 
@@ -49,6 +51,10 @@ def summary(run: dict[str, Any], manager: RunManager) -> dict[str, Any]:
     }
 
 
+class StatsBody(BaseModel):
+    run_ids: list[str] = Field(default_factory=list, max_length=2000)
+
+
 def build_router(get_manager: Callable[[], RunManager]) -> APIRouter:
     router = APIRouter()
 
@@ -76,5 +82,10 @@ def build_router(get_manager: Callable[[], RunManager]) -> APIRouter:
             "next": after + len(entries),
             "live": live,
         }
+
+    @router.post("/stats/runs")
+    async def run_stats(body: StatsBody) -> dict[str, Any]:
+        """Time, cost, speed and cache figures of the given runs and their sessions' compactions."""
+        return stats_for_runs(get_manager(), body.run_ids)
 
     return router

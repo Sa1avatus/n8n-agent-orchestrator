@@ -21,8 +21,14 @@ COPY src ./src
 # Claude Code price list for models it does not know (the local Worker model); see README.
 COPY managed-settings.json /etc/claude-code/managed-settings.json
 # [dev] = pytest, ruff, mypy: Workers run the checks without building their own venv.
-RUN python3 -m venv /opt/claude-runner/venv \
+# Python 3.12 (Debian bookworm ships 3.11): the Workers' projects (e.g. rag-platform) require >=3.12,
+# and a runner on 3.11 made their mypy/pytest baselines impossible. A standalone build from uv, in /opt/python.
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN python3 -m venv /tmp/uvvenv \
+    && /tmp/uvvenv/bin/pip install --no-cache-dir uv \
+    && /tmp/uvvenv/bin/uv venv --seed --python 3.12 /opt/claude-runner/venv \
     && /opt/claude-runner/venv/bin/pip install --no-cache-dir ".[dev]" \
+    && rm -rf /tmp/uvvenv \
     && mkdir -p /data /home/node/.claude /workspace \
     && chown -R node:node /data /home/node/.claude
 

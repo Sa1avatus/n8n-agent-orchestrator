@@ -28,7 +28,20 @@ Version: **0.2.0** (claude-runner `0.1.0` → `0.2.0`, 2026-10-06); the stack's 
   can read. Documented in `docs/ahawr-cheaper-retries.md` §5.3, including the exact opt-in
   paragraphs, the enable step, and the example task.
 
+### AHAWR workflow
+- Mission results table. `AHAWR_Mission_Results.json` (sub-workflow "AHAWR Mission Results", id `AhawrMissionRes01`)
+  keeps the n8n data table `mission_results` up to date: AHAWR calls it, without waiting, after every saved stage
+  (worker result, reviewer result, parsed review, workflow failure, approval) through two new nodes, `Prepare Results
+  Update` and `Update Mission Results`. It reads the task history and the state, asks claude-runner
+  (`POST /v1/stats/runs`) for the time, cost, speed and cache figures of the mission's runs and upserts one row per
+  mission (status, tasks closed, reviewer/operator split, average score, attempts per task, Worker hours, cost
+  estimate/real, tok/s, cache). Every new node continues on error, so a failure never stops a mission; if the runner
+  has no such endpoint, only the progress columns are written. `verified_works` is the operator's note and is never
+  written by the workflow. Import the sub-workflow first, then the patched AHAWR.
+
 ### claude-runner
+- `POST /v1/stats/runs` (read-only, same bearer as the other `/v1` views): time, cost, tok/s and cache figures for a list
+  of run ids and the compactions of their sessions (`mission_stats.py`, test `test_stats_for_a_set_of_runs`).
 - The `compact` event now carries `duration_ms`, taken from Claude Code's `compact_metadata` (summary request included); the dashboard shows it ("context compacted (auto): 59.9K → 9.75K tokens in 2.3min") and the Markdown export too. Older Claude Code builds that do not report it leave it empty. The same number was already stored in `details.compact` of finished runs, so past compactions can be read from there.
 - Fresh-session retry: `CLAUDE_RUNNER_RETRY_FRESH_SESSION=1` (default `0`) makes a retry with a
   previous `session_id` start a new Claude Code session instead of compacting and resuming the

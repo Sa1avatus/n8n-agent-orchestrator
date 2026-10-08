@@ -96,6 +96,21 @@ def test_run_list_filters(client: TestClient) -> None:
     assert client.get("/v1/runs/run_nope/events").status_code == 404
 
 
+def test_stats_for_a_set_of_runs(client: TestClient) -> None:
+    a = start(client, role="architect", input="BEGIN MISSION\nMISSION: Calc\nEND MISSION")
+    wait_for(client, a["run_id"])
+    w = start(client, role="worker", input="x")
+    wait_for(client, w["run_id"])
+    body = client.post("/v1/stats/runs", json={"run_ids": [a["run_id"], w["run_id"], "run_nope"]})
+    assert body.status_code == 200
+    stats = body.json()
+    assert stats["runs"] == 2  # an unknown id is skipped
+    assert stats["worker_hours"] >= 0 and stats["architect_minutes"] >= 0
+    assert stats["cost_estimate_usd"] >= stats["cost_real_usd"] >= 0
+    assert 0 <= stats["cache_ratio"] <= 1 and stats["compactions"] == 0
+    assert client.post("/v1/stats/runs", json={"run_ids": []}).json()["runs"] == 0
+
+
 def test_read_views_need_the_bearer(settings: Settings) -> None:
     secured = Settings(**{**settings.__dict__, "api_key": "k"})
     with TestClient(create_app(secured)) as api:

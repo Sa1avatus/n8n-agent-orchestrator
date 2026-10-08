@@ -6,6 +6,12 @@
         "output": 10,
         "cacheRead": 0.2,
         "cacheWrite": 2.5
+      },
+      "qwen3.8-27b-gsq-rco-iq3-xxs-mtp": {
+        "input": 2,
+        "output": 10,
+        "cacheRead": 0.2,
+        "cacheWrite": 2.5
       }
     }
   }
