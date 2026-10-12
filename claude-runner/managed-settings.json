@@ -2,17 +2,24 @@
   "modelPricing": {
     "overrides": {
       "qwen3.8-27b-gsq-rco-iq2-s-mtp": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.1,
+        "cacheWrite": 1.25
       },
       "qwen3.8-27b-gsq-rco-iq3-xxs-mtp": {
-        "input": 2,
-        "output": 10,
-        "cacheRead": 0.2,
-        "cacheWrite": 2.5
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.1,
+        "cacheWrite": 1.25
+      },
+      "qwen3.8-27b-gsq-rco-iq2-s-mtp-gpu96": {
+        "input": 1,
+        "output": 5,
+        "cacheRead": 0.1,
+        "cacheWrite": 1.25
       }
     }
-  }
+  },
+  "showThinkingSummaries": true
 }

@@ -114,10 +114,95 @@ def _chunk_text(item: Any) -> str:
         return ""
 
 
+# A text block is held back only until it is clear that nothing leaked: it is released at once when it grows past
+# this many characters without a think tag (a leak is the model's reasoning prose, which ends in </think>).
+FLUSH_LIMIT = 1500
+NL = chr(10)
+EOE = NL + NL  # end of an SSE event
+
+
+def _sse_event(event: str, obj: dict[str, Any]) -> str:
+    return "event: " + event + NL + "data: " + json.dumps(obj, ensure_ascii=False) + EOE
+
+
+def _text_delta(index: int, text: str) -> str:
+    return _sse_event("content_block_delta", {
+        "type": "content_block_delta", "index": index, "delta": {"type": "text_delta", "text": text}})
+
+
+class _SseRepair:
+    """Incremental repair of an Anthropic SSE stream. Thinking blocks, tool calls and every other event pass
+    through immediately (live view, honest timing); only text blocks are held until they end or are known clean."""
+
+    def __init__(self) -> None:
+        self.pending = ""
+        self.held: dict[int, dict[str, Any]] = {}
+        self.leaks = 0
+
+    def feed(self, chunk: str) -> list[str]:
+        self.pending += chunk
+        parts = self.pending.split(EOE)
+        self.pending = parts.pop()  # an incomplete tail waits for the next chunk
+        out: list[str] = []
+        for raw in parts:
+            out.extend(self._event(raw))
+        return out
+
+    def finish(self) -> list[str]:
+        out: list[str] = []
+        if self.pending.strip():
+            out.extend(self._event(self.pending))
+        self.pending = ""
+        for index in sorted(self.held):
+            out.extend(self._release(index))
+        return out
+
+    def _event(self, raw: str) -> list[str]:
+        data = ""
+        for line in raw.split(NL):
+            if line.startswith("data:"):
+                data += line[5:].strip()
+        try:
+            obj = json.loads(data) if data else {}
+        except ValueError:
+            return [raw + EOE]
+        kind, index = obj.get("type"), obj.get("index", 0)
+        if kind == "content_block_start" and (obj.get("content_block") or {}).get("type") == "text":
+            self.held[index] = {"start": raw + EOE, "text": "", "flushed": False}
+            return []
+        hold = self.held.get(index) if kind in ("content_block_delta", "content_block_stop") else None
+        if hold is None:
+            return [raw + EOE]
+        if kind == "content_block_delta":
+            delta = obj.get("delta") or {}
+            if delta.get("type") != "text_delta" or hold["flushed"]:
+                return [raw + EOE]
+            hold["text"] += str(delta.get("text", ""))
+            if len(hold["text"]) > FLUSH_LIMIT and not THINK_TAG.search(hold["text"]):
+                hold["flushed"] = True
+                return [hold["start"], _text_delta(index, hold["text"])]
+            return []
+        out = self._release(index)  # content_block_stop
+        out.append(raw + EOE)
+        return out
+
+    def _release(self, index: int) -> list[str]:
+        hold = self.held.pop(index, None)
+        if hold is None or hold["flushed"]:
+            return []
+        clean, leak = strip_think_leak(hold["text"])
+        if leak:
+            self.leaks += 1
+        out = [hold["start"]]
+        if clean:
+            out.append(_text_delta(index, clean))
+        return out
+
+
 class ThinkLeakGuard(CustomLogger):
-    """Buffers a reply until it ends, so a thinking that leaked into the visible text can be cut out
-    before Claude Code sees any of it. A step is a few hundred tokens, so streaming is not needed;
-    the compaction request (a long summary, minutes of generation) streams through untouched."""
+    """Force-closes a Qwen thinking that leaked into the visible text. Thinking blocks and tool calls stream through
+    live; a text block is held until it ends (or grows past FLUSH_LIMIT without a think tag), then the leak is cut out.
+    The compaction request (a long summary, minutes of generation) streams through untouched."""
 
     async def async_post_call_streaming_iterator_hook(  # type: ignore[override]
         self, user_api_key_dict: Any, response: Any, request_data: dict[str, Any]
@@ -132,25 +217,20 @@ class ThinkLeakGuard(CustomLogger):
             async for item in response:
                 yield item
             return
-        buffered: list[Any] = []
+        repair = _SseRepair()
+        passthrough = False
         async for item in response:
-            buffered.append(item)
-        try:
-            if buffered and all(isinstance(i, (str, bytes)) for i in buffered):
-                raw = "".join(i if isinstance(i, str) else i.decode("utf-8", "ignore") for i in buffered)
-                fixed, leak = repair_anthropic_sse(raw)
-                if leak:
-                    log.warning("THINK_LEAK model=%s format=sse", request_data.get("model"))
-                items = [fixed] if leak else buffered
-            else:
-                items, leak = repair_openai_chunks(buffered)
-                if leak:
-                    log.warning("THINK_LEAK model=%s format=chunks", request_data.get("model"))
-        except Exception:  # noqa: BLE001 - fail-open
-            log.exception("THINK_LEAK guard failed, passing the stream through unchanged")
-            items = buffered
-        for item in items:
-            yield item
+            if passthrough or not isinstance(item, (str, bytes)):
+                passthrough = True  # not an Anthropic SSE stream: leave it alone
+                yield item
+                continue
+            text = item if isinstance(item, str) else item.decode("utf-8", "ignore")
+            for piece in repair.feed(text):
+                yield piece
+        for piece in repair.finish():
+            yield piece
+        if repair.leaks:
+            log.warning("THINK_LEAK model=%s blocks=%d", request_data.get("model"), repair.leaks)
 
 
 think_leak_guard = ThinkLeakGuard()

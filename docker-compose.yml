@@ -1,4 +1,23 @@
 services:
+  # n8n database (2026-10-12): SQLite on the Windows bind-mount ended executions with SQLITE_BUSY. The data lives in a
+  # Docker volume (ext4 inside WSL); scripts reach it with `docker exec ahawr-postgres psql ...` (no published port).
+  ahawr-postgres:
+    image: postgres:16-alpine
+    container_name: ahawr-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=n8n
+      - POSTGRES_DB=n8n
+      - POSTGRES_PASSWORD=${N8N_PG_PASSWORD}
+    volumes:
+      - ahawr-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    command: ["postgres", "-c", "max_connections=200", "-c", "shared_buffers=256MB"]
+
   n8n:
     build:
       context: .
@@ -6,6 +25,12 @@ services:
 
     container_name: n8n-autonomous-agents
     restart: unless-stopped
+
+    # Public resolvers for external names (api.telegram.org): the host/WSL resolver answered EAI_AGAIN now and then.
+    # Container names (claude-runner, ...) are still answered by Docker's own DNS.
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
     ports:
       - "5678:5678"
@@ -19,12 +44,21 @@ services:
       - TZ=Asia/Ho_Chi_Minh
       - N8N_SECURE_COOKIE=false
       - NODES_EXCLUDE=[]
+      # database: Postgres (ahawr-postgres), not the SQLite file in the bind-mount; the encryption key stays in ~/.n8n/config
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=ahawr-postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=${N8N_PG_PASSWORD}
 
     volumes:
       - D:\n8n\data:/home/node/.n8n
       - D:\n8n\scripts:/home/node/scripts
 
     depends_on:
+      ahawr-postgres:
+        condition: service_healthy
       ahawr-retrieval:
         condition: service_started
         # AHAWR is fail-open: n8n still starts if the retrieval container is absent.
@@ -110,6 +144,12 @@ services:
       # Claude Code sessions (transcripts) survive container restarts and rebuilds.
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
+      # the Worker's scratch folder (missions use /tmp/dcfr-work) survives container recreation
+      - type: bind
+        source: ${AHAWR_SCRATCH_DIR:-D:\n8n\runner-scratch}
+        target: /tmp/dcfr-work
+        bind:
+          create_host_path: true
 
     extra_hosts:
       # model endpoints on the host (e.g. ANTHROPIC_BASE_URL=http://host.docker.internal:4000)
@@ -189,16 +229,22 @@ services:
       # used only by the optional Claude / OpenRouter entries in litellm/config.yaml
       - ANTHROPIC_API_KEY=${LITELLM_ANTHROPIC_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      # 1 = drop the thinking of earlier steps from the context of local models (ahawr_hooks.drop_history_thinking)
+      - AHAWR_DROP_HISTORY_THINKING=${AHAWR_DROP_HISTORY_THINKING:-0}
 
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
       - ./litellm/ahawr_hooks.py:/app/ahawr_hooks.py:ro
+      - ./litellm/think_leak_guard.py:/app/think_leak_guard.py:ro
+      # runtime switches read on every request (no restart): local_thinking = on | off (set_local_thinking.sh)
+      - ./litellm/runtime:/app/runtime:ro
 
     extra_hosts:
       # llama-server running on the Docker host
       - "host.docker.internal:host-gateway"
 
 volumes:
+  ahawr-postgres-data:
   ahawr-retrieval-data:
   claude-runner-home:
   claude-runner-data:

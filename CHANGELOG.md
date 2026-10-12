@@ -3,7 +3,33 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.2.0** (claude-runner `0.1.0` → `0.2.0`, 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+Version: **0.3.0** (claude-runner `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+
+## 2026-10-12 (0.3.0)
+
+- n8n database moved from SQLite to Postgres 16 (`ahawr-postgres` service): no more `SQLITE_BUSY` execution crashes.
+- Thinking switch for local models without a llama restart (`litellm/runtime/local_thinking`, read by the LiteLLM hook per request).
+- Task-started Telegram notice is split into several messages of up to 4096 characters.
+- Dashboard: live generation text auto-scrolls to the end.
+- Worker scratch folder `/tmp/dcfr-work` is a host bind mount and survives container recreation.
+- Reviewer can search any folder under `/d` with `ahawr-search --root`.
+
+
+## 2026-10-11
+
+### Documentation and configuration examples
+- Telegram control bot: the README gained the "The Telegram control bot" section (long-polling, chat allow-list via
+  `hermes_config.telegram_chat_id`, admin/viewer access levels, confirmation of mutating commands, audit log, the
+  command list by category, and the two-bot/two-token constraint); the full command registry stays in
+  `docs/telegram-bot.md`.
+- `.env.example` documents four optional `TELEGRAM_STATUS_BOT_*` settings (descriptions only, no values):
+  `TELEGRAM_STATUS_BOT_POLL_SECONDS` (default 30), `TELEGRAM_STATUS_BOT_TIMEOUT_SECONDS` (default 30, keep 25..30),
+  `TELEGRAM_STATUS_BOT_CONFIRM_TTL_SECONDS` (default 120) and `TELEGRAM_STATUS_BOT_AUDIT_TABLE`
+  (default `AHAWR Bot Audit Log`). The bot token itself stays in the n8n `telegramApi` credential, never in a
+  version-controlled file.
+- `hermes_config.example.csv` gained four optional columns — `telegram_status_bot_poll_seconds`,
+  `telegram_status_bot_timeout_seconds`, `telegram_status_bot_confirm_ttl_seconds`,
+  `telegram_status_bot_audit_table` — left empty in every row, so they fall back to the defaults above.
 
 ## 2026-10-06
 

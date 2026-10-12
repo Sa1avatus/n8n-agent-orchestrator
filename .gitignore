@@ -38,3 +38,6 @@ data/ARCHITECTURE_CONTRACT.md
 
 # Live Data Table exports, mission import files and run exports (see README: Data Tables)
 /data-tables/
+runner-scratch/
+*.bak-*
+check_workflows_output.txt

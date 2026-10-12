@@ -232,6 +232,69 @@ def test_mid_system_conversion_runs_before_compaction_cap() -> None:
     assert "# Environment" in _reminder_text(reminder_user[0].get("content"))
 
 
+def test_drop_history_thinking() -> None:
+    from ahawr_hooks import drop_history_thinking
+
+    msgs = [
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": [
+            {"type": "thinking", "thinking": "step one thoughts", "signature": "x"},
+            {"type": "text", "text": "plan"},
+            {"type": "tool_use", "id": "t1", "name": "Read", "input": {}},
+        ]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}]},
+        {"role": "assistant", "content": [{"type": "thinking", "thinking": "only thoughts"}]},
+        {"role": "assistant", "content": "plain", "reasoning_content": "kept thoughts"},
+    ]
+    out, removed = drop_history_thinking(copy.deepcopy(msgs))
+    assert removed == 3
+    assert [b["type"] for b in out[1]["content"]] == ["text", "tool_use"]
+    assert out[3]["content"] == [{"type": "text", "text": " "}]  # never an empty assistant turn
+    assert "reasoning_content" not in out[4] and out[4]["content"] == "plain"
+    assert out[0] == msgs[0] and out[2] == msgs[2]
+    assert drop_history_thinking([{"role": "user", "content": "x"}]) == ([{"role": "user", "content": "x"}], 0)
+
+
+
+def test_local_thinking_flag_file() -> None:
+    import os
+    import tempfile
+
+    import ahawr_hooks
+
+    with tempfile.TemporaryDirectory() as d:
+        ahawr_hooks.RUNTIME_DIR = d
+        hook = MidSystemMessageHook()
+
+        def call(model: str) -> dict:
+            ahawr_hooks._thinking_cache = (0.0, False)
+            return asyncio.run(hook.async_pre_call_hook(None, None, {"model": model, "messages": [{"role": "user", "content": "x"}]}, "completion"))
+
+        # no file: nothing added
+        assert "extra_body" not in call("qwen3.8-27b")
+        # "on": nothing added
+        open(os.path.join(d, "local_thinking"), "w").write("on")
+        assert "extra_body" not in call("qwen3.8-27b")
+        # "off": local models get enable_thinking=false, merged into an existing extra_body, claude models are untouched
+        open(os.path.join(d, "local_thinking"), "w").write(" OFF ")
+        out = call("qwen3.8-27b")
+        assert out["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+        ahawr_hooks._thinking_cache = (0.0, False)
+        data = {"model": "qwen", "messages": [], "extra_body": {"chat_template_kwargs": {"x": 1}, "y": 2}}
+        out = asyncio.run(hook.async_pre_call_hook(None, None, data, "completion"))
+        assert out["extra_body"] == {"chat_template_kwargs": {"x": 1, "enable_thinking": False}, "y": 2}
+        assert "extra_body" not in call("claude-opus-5-5")
+        # the flag is cached for 2 s, then re-read
+        ahawr_hooks._thinking_cache = (0.0, False)
+        open(os.path.join(d, "local_thinking"), "w").write("off")
+        assert ahawr_hooks.local_thinking_off(now=100.0) is True
+        open(os.path.join(d, "local_thinking"), "w").write("on")
+        assert ahawr_hooks.local_thinking_off(now=101.0) is True    # still cached
+        assert ahawr_hooks.local_thinking_off(now=103.0) is False   # re-read after 2 s
+    ahawr_hooks.RUNTIME_DIR = "/app/runtime"
+    ahawr_hooks._thinking_cache = (0.0, False)
+
+
 if __name__ == "__main__":
     test_leading_system_message_is_left_alone()
     test_mid_system_message_merges_into_preceding_user_message()
@@ -244,4 +307,6 @@ if __name__ == "__main__":
     test_ordinary_request_keeps_max_tokens()
     test_compaction_marker_only_in_last_user_message_counts()
     test_mid_system_conversion_runs_before_compaction_cap()
+    test_drop_history_thinking()
+    test_local_thinking_flag_file()
     print("hook unit tests passed")

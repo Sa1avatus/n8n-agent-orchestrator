@@ -109,11 +109,68 @@ def _run(guard, items, messages=None):
 
 def test_guard_end_to_end() -> None:
     guard = ThinkLeakGuard()
-    leaked = [sse(text_delta(0, "hmm</think>answer"))]
+    start = ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})
+    stop = ("content_block_stop", {"type": "content_block_stop", "index": 0})
+    leaked = [sse(start, text_delta(0, "hmm</think>answer"), stop)]
     out = _run(guard, leaked)
     assert "hmm" not in "".join(out) and "answer" in "".join(out)
-    ok = [sse(text_delta(0, "fine"))]
-    assert _run(guard, ok) == ok
+    ok = [sse(start, text_delta(0, "fine"), stop)]
+    assert "fine" in "".join(_run(guard, ok))
+
+
+def test_thinking_streams_live_and_text_is_held() -> None:
+    """Thinking and tool-call events leave the guard before the reply ends; only the text block waits."""
+    guard = ThinkLeakGuard()
+    seen_before_end: list[str] = []
+    state = {"upstream_done": False}
+
+    def ev(kind, obj):
+        return sse((kind, obj))
+
+    chunks = [
+        ev("message_start", {"type": "message_start"}),
+        ev("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}}),
+        ev("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "pondering"}}),
+        ev("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ev("content_block_start", {"type": "content_block_start", "index": 1, "content_block": {"type": "text", "text": ""}}),
+        ev("content_block_delta", {"type": "content_block_delta", "index": 1, "delta": {"type": "text_delta", "text": "stray thought</think>Final."}}),
+        ev("content_block_stop", {"type": "content_block_stop", "index": 1}),
+        ev("content_block_start", {"type": "content_block_start", "index": 2, "content_block": {"type": "tool_use", "id": "t", "name": "Read"}}),
+        ev("content_block_stop", {"type": "content_block_stop", "index": 2}),
+        ev("message_stop", {"type": "message_stop"}),
+    ]
+
+    async def gen():
+        for c in chunks:
+            yield c
+        state["upstream_done"] = True
+
+    async def collect():
+        out = []
+        async for piece in guard.async_post_call_streaming_iterator_hook(None, gen(), {"model": "m", "messages": None}):
+            out.append(piece)
+            if not state["upstream_done"]:
+                seen_before_end.append(piece)
+        return out
+
+    out = "".join(asyncio.run(collect()))
+    early = "".join(seen_before_end)
+    assert "pondering" in early                 # the thinking was visible while the reply was still being generated
+    assert "stray thought" not in out and "Final." in out
+    assert out.index("Final.") < out.index("tool_use")   # block order is kept
+    assert out.count("event: message_stop") == 1
+
+
+def test_long_clean_text_is_released_without_waiting() -> None:
+    from think_leak_guard import FLUSH_LIMIT, _SseRepair
+
+    r = _SseRepair()
+    out = r.feed(sse(("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}})))
+    assert out == []
+    out = r.feed(sse(text_delta(0, "x" * (FLUSH_LIMIT + 10))))
+    assert len(out) == 2 and "xxxx" in out[1]       # start + the held text, no leak tag in it
+    out = r.feed(sse(text_delta(0, "more")))
+    assert len(out) == 1 and "more" in out[0]        # later deltas pass straight through
 
 
 def test_guard_fails_open_on_garbage() -> None:

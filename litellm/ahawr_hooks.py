@@ -17,6 +17,7 @@ messages and does not break the llama.cpp prefix cache.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
@@ -64,6 +65,59 @@ def move_mid_system_messages(messages: list[Any]) -> list[Any]:
     return out
 
 
+def drop_history_thinking(messages: list[Any]) -> tuple[list[Any], int]:
+    """Remove thinking blocks of earlier assistant turns (Anthropic ``thinking`` / ``redacted_thinking`` blocks and
+    OpenAI-style ``reasoning_content`` / ``thinking_blocks`` keys). Returns (messages, number of blocks removed).
+
+    Claude Code sends every earlier thinking block back, and the Qwen chat template keeps the reasoning of all
+    assistant steps after the last user message, so a long tool loop drags every step's thinking along in the
+    context. Without the thinking the next request differs from the cached one only from the previous step's
+    thinking on, so the llama.cpp prefix cache still covers everything before it.
+    """
+    removed = 0
+    out: list[Any] = []
+    for message in messages:
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            out.append(message)
+            continue
+        message = dict(message)
+        for key in ("reasoning_content", "thinking_blocks"):
+            if message.pop(key, None) is not None:
+                removed += 1
+        content = message.get("content")
+        if isinstance(content, list):
+            kept = [b for b in content if not (isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"))]
+            removed += len(content) - len(kept)
+            message["content"] = kept or [{"type": "text", "text": " "}]
+        out.append(message)
+    return out, removed
+
+
+# Thinking of local models without a llama-server restart (operator 2026-10-11): the file AHAWR_RUNTIME_DIR/local_thinking holds
+# "on" (default) or "off". With "off" every request to a non-claude model carries chat_template_kwargs {"enable_thinking": false}
+# (extra_body), so the Qwen template closes the think block and the model answers at once. The file is read on every request
+# (cached for 2 s): change it with set_local_thinking.sh, no restart of llama-server or LiteLLM.
+RUNTIME_DIR = os.environ.get("AHAWR_RUNTIME_DIR", "/app/runtime")
+_thinking_cache: tuple[float, bool] = (0.0, False)
+
+
+def local_thinking_off(now: float | None = None) -> bool:
+    global _thinking_cache
+    import time
+
+    t = time.monotonic() if now is None else now
+    if t - _thinking_cache[0] < 2.0 and _thinking_cache[0] > 0.0:
+        return _thinking_cache[1]
+    off = False
+    try:
+        with open(os.path.join(RUNTIME_DIR, "local_thinking"), encoding="utf-8") as f:
+            off = f.read().strip().lower() == "off"
+    except OSError:
+        off = False
+    _thinking_cache = (t if t > 0.0 else 0.001, off)
+    return off
+
+
 def _is_compaction_request(messages: list[Any]) -> bool:
     """True if the last user message starts with the compaction marker after strip().
 
@@ -91,6 +145,22 @@ class MidSystemMessageHook(CustomLogger):
             data["messages"] = move_mid_system_messages(messages)
             if _is_compaction_request(data["messages"]):
                 data["max_tokens"] = COMPACTION_MAX_TOKENS
+        # Local Qwen: Claude Code turns its thinking setting into reasoning_effort=high, which the Qwen chat template
+        # rejects (it knows xhigh/medium/low only). Drop the setting; the template default and the llama-server
+        # reasoning budget (preset) decide how much it thinks.
+        if not str(data.get("model", "")).startswith("claude"):
+            for key in ("thinking", "reasoning_effort"):
+                data.pop(key, None)
+            if local_thinking_off():
+                extra = data.get("extra_body")
+                extra = dict(extra) if isinstance(extra, dict) else {}
+                kwargs = dict(extra.get("chat_template_kwargs") or {})
+                kwargs["enable_thinking"] = False
+                extra["chat_template_kwargs"] = kwargs
+                data["extra_body"] = extra
+            # Flag AHAWR_DROP_HISTORY_THINKING=1 (default 0): do not carry earlier steps' thinking in the context.
+            if os.environ.get("AHAWR_DROP_HISTORY_THINKING", "0") == "1" and isinstance(data.get("messages"), list):
+                data["messages"], _ = drop_history_thinking(data["messages"])
         return data
 
 

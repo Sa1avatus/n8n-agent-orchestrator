@@ -161,7 +161,7 @@ table.chunks td.mono { overflow-wrap: anywhere; }
 .sub .sum::before { content: "↳ subagent "; color: var(--faint); font-size: 11px; }
 .liverow { margin: 8px 18px; border: 1px dashed var(--accent); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
 .liverow .lbl { font: 650 10.5px var(--mono); color: var(--accent); letter-spacing: .04em; text-transform: uppercase; }
-.liverow .txt { white-space: pre-wrap; font-size: 12.5px; max-height: 180px; overflow-y: auto; margin-top: 3px; }
+.liverow .txt { white-space: pre-wrap; font-size: 12.5px; max-height: 40vh; overflow-y: auto; margin-top: 3px; }
 .liverow.thinking .txt { color: var(--muted); font-style: italic; }
 .pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 6px; animation: pulse 1.2s infinite; }
 
@@ -603,7 +603,12 @@ function renderLedger(m) {
     html.push(`<div class="liverow ${lb.kind === "thinking" ? "thinking" : ""}"><div class="lbl"><span class="pulse"></span>${esc(label)} · ${ms((now - lb.started) * 1000)}</div><div class="txt">${esc(lb.text)}</div></div>`);
   }
   if (!html.length) html.push(`<div class="t-mut" style="padding:30px">${isActive(S.run) ? "Waiting for the first event…" : "No activity recorded."}</div>`);
+  // the live text box is rebuilt on every poll: follow its end while the reader is at the end, keep the position when they scrolled up
+  const oldTxt = box.querySelector(".liverow .txt");
+  const txtState = oldTxt ? { top: oldTxt.scrollTop, follow: oldTxt.scrollHeight - oldTxt.scrollTop - oldTxt.clientHeight < 40 } : null;
   setHTML(box, html.join(""));
+  const newTxt = box.querySelector(".liverow .txt");
+  if (newTxt) newTxt.scrollTop = (!txtState || txtState.follow) ? newTxt.scrollHeight : txtState.top;
   if (near) box.scrollTop = box.scrollHeight;
 }
 function onLedgerClick(e) {

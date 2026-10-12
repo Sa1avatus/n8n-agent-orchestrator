@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import IO, Any
 
 MAX_TEXT = 20_000
+# a step faster than this was not streamed token by token (see StepTracker._close)
+MAX_PLAUSIBLE_TPS = 600
 MAX_INPUT = 8_000
 
 
@@ -219,7 +221,14 @@ class StepTracker:
             generation = now - first
             step["generation_ms"] = round(generation * 1000)
             if generation > 0 and step["output_tokens"]:
-                step["tokens_per_s"] = round(step["output_tokens"] / generation, 1)
+                tps = step["output_tokens"] / generation
+                if tps > MAX_PLAUSIBLE_TPS:
+                    # the proxy held the reply and sent it at once (think-leak guard): first token == last token,
+                    # so generation time and speed are not measured; do not report a made-up speed
+                    step["stream_buffered"] = True
+                    step.pop("generation_ms", None)
+                else:
+                    step["tokens_per_s"] = round(tps, 1)
         return [step]
 
     def feed(self, event: dict[str, Any], now: float) -> list[dict[str, Any]]:

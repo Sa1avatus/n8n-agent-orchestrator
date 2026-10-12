@@ -2,7 +2,7 @@
 
 **English** | [Русская версия](#русская-версия)
 
-An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **0.2.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
+An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **0.3.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
 
 The system separates **workflow logic**, **runtime configuration**, **agent prompts**, **missions**, and **secrets** so that the workflow can be maintained and reused without editing the main orchestration graph every time a model or mission changes.
 
@@ -723,6 +723,28 @@ Claude Code reports a cost for every run. For the local model the image prices i
 
 **8. Telegram notices are short and safe.**
 Task and review notices carry the task id, the attempt, the score and the reason cut at a sentence, not the whole review. The text is cut first and HTML-escaped after, because escaping first and cutting second can split an entity and make Telegram reject the message.
+
+**9. The Telegram control bot.**
+`AHAWR_Status_Bot.json` is the control bot: it long-polls Telegram (default every 30 s, getUpdates timeout 30 s, ~2880 executions/day) and answers only the chats named in `hermes_config.telegram_chat_id`; other chats are counted silently. It has two access levels — admin (control and edit commands) and viewer (view commands only) — and every mutating command (control and edit) is applied only after a confirmation (inline Approve/Deny buttons or a one-time code, 2-minute TTL). Every confirmed mutation is written to the `AHAWR Bot Audit Log` table. The bot token lives in the `telegramApi` n8n credential, never in the workflow file. If Hermes' gateway runs its own Telegram bot, that bot needs its own token: one token can have only one `getUpdates` consumer.
+
+The commands, by category:
+
+| Category | Commands |
+|---|---|
+| view (read-only) | `/status [mission]`, `/missions`, `/mission <id>`, `/progress [mission]`, `/agents` (alias `/tasks`), `/usage [reset]`, `/insights [days]`, `/errors [N]`, `/config`, `/profile`, `/version`, `/whoami`, `/audit [N]` |
+| control (confirmation required) | `/start <mission>`, `/resume [mission]`, `/stop`, `/restart`, `/pause [reason \| off]`, `/retry`, `/accept [reason]`, `/steer <text>`, `/queue [add \| list \| rm \| move \| clear]` |
+| edit (confirmation required) | `/set <key> <value>`, `/model <role> <model> [--provider name]`, `/mission <id> edit <field> …`, `/undo [N]` |
+| confirm | `/approve [session \| always]`, `/deny [all] [reason]` |
+| help | `/help [<filter>]`, `/commands [page]`, `/start_greet` |
+
+Only the fields in the allow-list in `docs/telegram-bot.md` (model/provider, poll and retry limits, mission name/objective/working folder/enabled) are editable; secrets are never shown or editable. The optional columns `telegram_status_bot_poll_seconds`, `telegram_status_bot_timeout_seconds`, `telegram_status_bot_confirm_ttl_seconds` and `telegram_status_bot_audit_table` in `hermes_config.example.csv` are empty (defaults 30, 30, 120, `AHAWR Bot Audit Log`).
+
+**10. Operational details that are easy to miss.**
+- The image sets `core.autocrlf=true`, so a Windows checkout mounted into the container does not show every CRLF file as modified (85 false changes once confused a scope check).
+- Runs may last up to `CLAUDE_RUNNER_MAX_RUN_SECONDS` (10800 in this stack's `.env`); evaluation-heavy Worker runs hit two hours.
+- Live Data Table exports and mission files are kept out of git (`data-tables/`); the repository ships `hermes_config.example.csv`, `agent_prompts.example.csv` and `missions.example.csv`.
+- Data Tables live in n8n's SQLite file; editing them directly (for example to close a task or to load a mission) is only safe while n8n is stopped, with a copy of the database made first. Prefer the n8n UI where it is enough.
+- Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
 
 **9. Operational details that are easy to miss.**
 - The image sets `core.autocrlf=true`, so a Windows checkout mounted into the container does not show every CRLF file as modified (85 false changes once confused a scope check).

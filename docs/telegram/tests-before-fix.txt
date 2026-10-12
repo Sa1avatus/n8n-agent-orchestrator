@@ -1,0 +1,155 @@
+
+[Parse Command]
+PASS  allowed chat 12345 -> allowed=true
+PASS  command parsed from first token
+PASS  text captured
+PASS  non-allowed chat 99999 -> allowed=false
+PASS  non-allowed chat counted
+PASS  callback_query from allowed chat -> allowed=true
+PASS  callback_query command set
+PASS  callback_data captured
+PASS  callback with null data -> resolved=callback_query
+PASS  second allowed chat 67890 -> allowed=true
+
+[Route Category]
+PASS  /status -> view
+PASS  /stop -> control
+PASS  /set -> edit
+PASS  /approve -> confirm
+PASS  /help -> help
+PASS  callback_query -> confirm
+PASS  alias /tasks -> /agents -> view
+PASS  alias /v -> /version -> view
+PASS  alias /q -> /queue -> control
+PASS  mutating=true for control
+PASS  mutating=true for edit
+PASS  mutating=false for view
+PASS  unknown command -> unknown
+
+[Handle View]
+PASS  /status shows workflow_status
+PASS  /status shows progress 3/10
+PASS  /status shows attempt and score
+PASS  /status shows worker/reviewer
+PASS  /status shows run id
+PASS  /whoami shows admin level
+PASS  /missions lists mission id and name
+PASS  /audit 2 shows two entries
+PASS  /config lists editable keys
+PASS  /config does not expose secrets
+PASS  /status escapes HTML in status
+PASS  /status long field -> output has exactly 6 lines
+PASS  /status long field -> value is not split mid-string
+PASS  /status long field -> no empty line (no double newline)
+
+[Handle Control]
+PASS  /stop pending stored
+PASS  /stop pending kind=control
+PASS  /stop TTL set to now+120s
+PASS  /stop code issued
+PASS  /stop buttons present
+PASS  /stop approve button
+PASS  /stop deny button
+PASS  /pause stores reason in args
+PASS  /pause off -> reason empty
+PASS  /steer stores prompt
+PASS  /queue add captures op and mission
+PASS  /start captures mission arg
+
+[Handle Edit]
+PASS  /set max_tasks 100 -> pending stored
+PASS  /set pending key=max_tasks
+PASS  /set pending kind=edit
+PASS  /set max_tasks 9999 -> rejected
+PASS  /set out of range -> no pending stored
+PASS  /set non-number -> rejected
+PASS  /set enabled true -> pending stored
+PASS  /set unknown key api_key -> Not editable
+PASS  /set unknown key -> no pending
+PASS  /set name too long -> rejected
+PASS  /model pending stored
+PASS  /model pending action starts with 'model '
+PASS  /model captures role and model in args
+PASS  /model captures provider
+PASS  /model missing model -> usage, no pending
+PASS  /undo 3 -> pending stored
+PASS  /undo captures n=3
+
+[Handle Confirm]
+PASS  /approve -> result approved
+PASS  /approve -> pending consumed
+PASS  /approve -> audit row emitted
+PASS  expired pending -> 'No pending change'
+PASS  expired pending -> pending cleared
+PASS  callback 'confirm' -> approved
+PASS  callback 'confirm' -> pending consumed
+PASS  callback 'deny' -> denied
+PASS  /deny -> denied
+PASS  no pending + /approve -> 'No pending change'
+PASS  no decision -> 'Pending:' message
+
+[Apply Mutation]
+PASS  /stop -> workflow_status=stopped
+PASS  /stop -> owner set
+PASS  /stop -> current_run_id preserved
+PASS  /pause -> paused=true
+PASS  /pause -> reason=maintenance
+PASS  /pause off -> paused=false
+PASS  /pause off -> reason empty
+PASS  /restart -> workflow_status=starting
+PASS  /steer -> steer_note appended
+PASS  /queue add -> queue includes mission-c
+PASS  /queue add -> queue length 3
+PASS  /queue rm 0 -> 'a' removed
+PASS  /queue move 0 2 -> swapped
+PASS  /queue clear -> empty queue
+PASS  /queue list -> returns queue
+PASS  /model -> config row updated
+PASS  /undo 2 -> rolled_back last 2 (reversed)
+PASS  /set plain edit -> value written
+PASS  /mission enable -> mission_id set
+PASS  /mission enable -> enabled=true
+PASS  /mission disable -> enabled=false
+PASS  no pending -> empty output
+
+[Build Audit Row]
+PASS  audit row has all columns
+PASS  no audit -> empty output
+
+[E2E Chain]
+PASS  e2e: /approve reply says approved
+FAIL  e2e: confirmed /set changed hermes_config.worker_model
+FAIL  e2e: audit insert added a new row
+FAIL  e2e: audit row holds before and after
+FAIL  e2e: /undo restored before value
+FAIL  e2e: /undo audit row holds before and after
+PASS  e2e: wrong code -> value unchanged
+PASS  e2e: wrong code -> reply not approved
+FAIL  e2e: wrong code -> failed/rejected audit row
+PASS  e2e: foreign chat -> value unchanged
+FAIL  e2e: foreign chat -> reply not approved
+FAIL  e2e: foreign chat -> failed/rejected audit row
+PASS  e2e: viewer role -> value unchanged
+PASS  e2e: viewer role -> reply not approved
+FAIL  e2e: viewer role -> failed/rejected audit row
+PASS  e2e: expired code -> value unchanged
+FAIL  e2e: expired code -> failed/rejected audit row
+PASS  e2e: code reuse -> value unchanged on second use
+PASS  e2e: code reuse -> second reply not approved
+FAIL  e2e: code reuse -> failed/rejected audit row on second use
+PASS  e2e: outside whitelist -> rejected with 'Not editable'
+PASS  e2e: outside whitelist -> no pending stored
+PASS  e2e: outside whitelist -> no write, no audit row
+PASS  e2e: wrong type -> rejected with 'Rejected'
+PASS  e2e: wrong type -> no pending stored
+PASS  e2e: wrong type -> no write, no audit row
+PASS  e2e: out of range -> rejected with 'Rejected'
+PASS  e2e: out of range -> no pending stored
+PASS  e2e: out of range -> no write, no audit row
+FAIL  e2e: callback carrying code -> accepted (approved)
+FAIL  e2e: callback carrying code -> value written
+FAIL  e2e: callback carrying code -> approved audit row
+
+=========================================
+TOTAL: 119 passed, 14 failed
+=========================================

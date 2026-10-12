@@ -3518,7 +3518,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => {\n  const j = $json, t = j.current_task || {};\n  const cut = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? s.slice(0, n) + '…' : s; };\n  const list = (v) => Array.isArray(v) ? v.map(x => '- ' + String(x)).join('\\n') : String(v ?? '');\n  const attempt = Number(j.task_attempt ?? 1);\n  let m = '▶️ TASK STARTED\\n🤖 Worker: ' + (()=>{try{const c=$('Constants').first().json;const f=(m,p)=>String(m||'?')+(p?' @'+p:'');return f(c.worker_model,c.worker_provider);}catch(e){return '?'} })() + '\\n' + String(j.current_task_id ?? '') + (()=>{const n=Number(j.total_tasks ?? (Array.isArray(j.tasks)?j.tasks.length:0));return n?' (from '+n+')':''})() + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : '');\n  if (t.objective) m += '\\n\\nObjective:\\n' + cut(t.objective, 1200);\n  if (t.acceptance_criteria && t.acceptance_criteria.length) m += '\\n\\nAcceptance:\\n' + cut(list(t.acceptance_criteria), 1200);\n  if (t.verification && t.verification.length) m += '\\n\\nVerification:\\n' + cut(list(t.verification), 600);\n  const fb = String(j.review_feedback ?? '').trim();\n  if (attempt > 1 && fb) {\n    const score = Number(j.last_review_score);\n    m += '\\n\\nPrevious review' + (score ? ' (score ' + score + ')' : '') + ':\\n' + cut(j.last_review_reason, 700) + '\\n\\nRequested fixes:\\n' + cut(fb, 1200);\n  }\n  if (m.length > 3800) m = m.slice(0, 3800) + '\\n…';\n  return m.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n})() }}",
+        "text": "={{ $json.notice_text }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -4148,6 +4148,19 @@
       "id": "7f1b2c3d-0a11-4e55-9a10-results00002",
       "name": "Update Mission Results",
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// AHAWR_NOTICE_SPLIT: TASK STARTED notice, split into messages of at most 4096 characters on section boundaries\nconst j = $input.first().json ?? {};\nconst t = j.current_task || {};\nconst attempt = Number(j.task_attempt ?? 1);\nconst LIMIT = 4096, RESERVE = 24;           // RESERVE: room for the '— i/n —' marker\nconst esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst f = (m, p) => String(m || '?') + (p ? ' @' + p : '');\nlet model = '?';\ntry { const c = $('Constants').first().json; model = f(c.worker_model, c.worker_provider); } catch (_) {}\nconst total = Number(j.total_tasks ?? (Array.isArray(j.tasks) ? j.tasks.length : 0));\nconst sections = [];\nsections.push('▶️ TASK STARTED\\n🤖 Worker: ' + model);\nsections.push(String(j.current_task_id ?? '') + (total ? ' (from ' + total + ')' : '') + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : ''));\nif (t.objective) sections.push('OBJECTIVE:\\n' + String(t.objective));\nif (Array.isArray(t.acceptance_criteria) && t.acceptance_criteria.length)\n  sections.push('ACCEPTANCE CRITERIA:\\n' + t.acceptance_criteria.map((x, i) => (i + 1) + '. ' + String(x)).join('\\n'));\nif (Array.isArray(t.verification) && t.verification.length)\n  sections.push('VERIFICATION:\\n' + t.verification.map(String).join('\\n'));\nif (Array.isArray(t.scope) && t.scope.length)\n  sections.push('SCOPE:\\n' + t.scope.map(String).join('\\n'));\nconst fb = String(j.review_feedback ?? '').trim();\nif (attempt > 1 && fb) {\n  const score = Number(j.last_review_score);\n  sections.push('PREVIOUS REVIEW' + (score ? ' (score ' + score + ')' : '') + ':\\n' + String(j.last_review_reason ?? '').trim() + '\\nAsked next: ' + fb);\n}\nconst MAX = LIMIT - RESERVE;\n// 1) a section longer than one message is cut on line boundaries (a single line longer than a message is cut by length)\nconst pieces = [];\nfor (const sec of sections) {\n  if (sec.length <= MAX) { pieces.push(sec); continue; }\n  let cur = '';\n  for (const line of sec.split('\\n')) {\n    let l = line;\n    while (l.length > MAX) {\n      if (cur) { pieces.push(cur); cur = ''; }\n      let k = l.lastIndexOf(' ', MAX);           // cut at a space when there is one\n      if (k < MAX / 2) k = MAX;\n      pieces.push(l.slice(0, k)); l = l.slice(k).replace(/^ /, '');\n    }\n    if (!cur) cur = l; else if ((cur + '\\n' + l).length > MAX) { pieces.push(cur); cur = l; } else cur += '\\n' + l;\n  }\n  if (cur) pieces.push(cur);\n}\n// 2) pieces are packed into messages, never splitting a piece\nconst parts = [];\nlet cur = '';\nfor (const p of pieces) {\n  if (!cur) cur = p; else if ((cur + '\\n\\n' + p).length > MAX) { parts.push(cur); cur = p; } else cur += '\\n\\n' + p;\n}\nif (cur) parts.push(cur);\nreturn parts.map((p, i) => ({ json: { notice_text: esc(parts.length > 1 ? p + '\\n\\n— ' + (i + 1) + '/' + parts.length + ' —' : p), part: i + 1, parts: parts.length } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14838,
+        2256
+      ],
+      "id": "5bd823eb-c103-4ede-b1a6-1674af4ffd65",
+      "name": "Split Task Notice"
     }
   ],
   "pinData": {
@@ -4967,7 +4980,7 @@
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Split Task Notice",
             "type": "main",
             "index": 0
           }
@@ -5256,6 +5269,17 @@
         [
           {
             "node": "Update Mission Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Task Notice": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
             "type": "main",
             "index": 0
           }

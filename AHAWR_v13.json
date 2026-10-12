@@ -3518,7 +3518,7 @@
     {
       "parameters": {
         "chatId": "={{ $('Constants').first().json.telegram_chat_id }}",
-        "text": "={{ (() => { let t = String('▶️ TASK STARTED\\n' +\n  String($json.current_task_id ?? '') +\n  ': ' +\n  String($json.current_task?.title ?? '') +\n  '\\n\\n' +\n  String($json.worker_prompt ?? '')); if (t.length > 3800) t = t.slice(0, 3800) + '\\n…'; return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); })() }}",
+        "text": "={{ $json.notice_text }}",
         "additionalFields": {
           "parse_mode": "HTML",
           "appendAttribution": false
@@ -4019,6 +4019,19 @@
       "name": "Load Previous Worker Report",
       "alwaysOutputData": true,
       "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// AHAWR_NOTICE_SPLIT: TASK STARTED notice, split into messages of at most 4096 characters on section boundaries\nconst j = $input.first().json ?? {};\nconst t = j.current_task || {};\nconst attempt = Number(j.task_attempt ?? 1);\nconst LIMIT = 4096, RESERVE = 24;           // RESERVE: room for the '— i/n —' marker\nconst esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst f = (m, p) => String(m || '?') + (p ? ' @' + p : '');\nlet model = '?';\ntry { const c = $('Constants').first().json; model = f(c.worker_model, c.worker_provider); } catch (_) {}\nconst total = Number(j.total_tasks ?? (Array.isArray(j.tasks) ? j.tasks.length : 0));\nconst sections = [];\nsections.push('▶️ TASK STARTED\\n🤖 Worker: ' + model);\nsections.push(String(j.current_task_id ?? '') + (total ? ' (from ' + total + ')' : '') + ': ' + String(t.title ?? '') + (attempt > 1 ? '  (attempt ' + attempt + ')' : ''));\nif (t.objective) sections.push('OBJECTIVE:\\n' + String(t.objective));\nif (Array.isArray(t.acceptance_criteria) && t.acceptance_criteria.length)\n  sections.push('ACCEPTANCE CRITERIA:\\n' + t.acceptance_criteria.map((x, i) => (i + 1) + '. ' + String(x)).join('\\n'));\nif (Array.isArray(t.verification) && t.verification.length)\n  sections.push('VERIFICATION:\\n' + t.verification.map(String).join('\\n'));\nif (Array.isArray(t.scope) && t.scope.length)\n  sections.push('SCOPE:\\n' + t.scope.map(String).join('\\n'));\nconst fb = String(j.review_feedback ?? '').trim();\nif (attempt > 1 && fb) {\n  const score = Number(j.last_review_score);\n  sections.push('PREVIOUS REVIEW' + (score ? ' (score ' + score + ')' : '') + ':\\n' + String(j.last_review_reason ?? '').trim() + '\\nAsked next: ' + fb);\n}\nconst MAX = LIMIT - RESERVE;\n// 1) a section longer than one message is cut on line boundaries (a single line longer than a message is cut by length)\nconst pieces = [];\nfor (const sec of sections) {\n  if (sec.length <= MAX) { pieces.push(sec); continue; }\n  let cur = '';\n  for (const line of sec.split('\\n')) {\n    let l = line;\n    while (l.length > MAX) {\n      if (cur) { pieces.push(cur); cur = ''; }\n      let k = l.lastIndexOf(' ', MAX);           // cut at a space when there is one\n      if (k < MAX / 2) k = MAX;\n      pieces.push(l.slice(0, k)); l = l.slice(k).replace(/^ /, '');\n    }\n    if (!cur) cur = l; else if ((cur + '\\n' + l).length > MAX) { pieces.push(cur); cur = l; } else cur += '\\n' + l;\n  }\n  if (cur) pieces.push(cur);\n}\n// 2) pieces are packed into messages, never splitting a piece\nconst parts = [];\nlet cur = '';\nfor (const p of pieces) {\n  if (!cur) cur = p; else if ((cur + '\\n\\n' + p).length > MAX) { parts.push(cur); cur = p; } else cur += '\\n\\n' + p;\n}\nif (cur) parts.push(cur);\nreturn parts.map((p, i) => ({ json: { notice_text: esc(parts.length > 1 ? p + '\\n\\n— ' + (i + 1) + '/' + parts.length + ' —' : p), part: i + 1, parts: parts.length } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -14838,
+        2256
+      ],
+      "id": "8902b199-cb94-487a-ae42-8440478a1976",
+      "name": "Split Task Notice"
     }
   ],
   "pinData": {
@@ -4813,7 +4826,7 @@
       "main": [
         [
           {
-            "node": "Send a text message",
+            "node": "Split Task Notice",
             "type": "main",
             "index": 0
           }
@@ -5040,6 +5053,17 @@
         [
           {
             "node": "Build Worker Run Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Task Notice": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
             "type": "main",
             "index": 0
           }

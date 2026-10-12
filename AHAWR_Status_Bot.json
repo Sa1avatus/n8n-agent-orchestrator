@@ -3,24 +3,11 @@
   "nodes": [
     {
       "parameters": {
-        "jsCode": "const data = $getWorkflowStaticData('global');\nconst offset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nreturn [{ json: { offset } }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
-      "position": [
-        5120,
-        1488
-      ],
-      "id": "b69d96c2-a240-442d-ab1b-dd574f42ad7d",
-      "name": "Prepare Poll"
-    },
-    {
-      "parameters": {
         "rule": {
           "interval": [
             {
               "field": "seconds",
-              "secondsInterval": 10
+              "secondsInterval": 30
             }
           ]
         }
@@ -36,11 +23,60 @@
     },
     {
       "parameters": {
+        "jsCode": "const data = $getWorkflowStaticData('global');\nconst offset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nreturn [{ json: { offset } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5120,
+        1488
+      ],
+      "id": "b69d96c2-a240-442d-ab1b-dd574f42ad7d",
+      "name": "Prepare Poll"
+    },
+    {
+      "parameters": {
         "values": {
           "string": [
             {
-              "name": "telegram_bot_token",
-              "value": "REDACTED-BOT-TOKEN"
+              "name": "state_namespace",
+              "value": "llama.cpp-dashboard-v1"
+            },
+            {
+              "name": "execution_mode",
+              "value": "production"
+            },
+            {
+              "name": "profile_id",
+              "value": "claude-code"
+            },
+            {
+              "name": "active_mission_id",
+              "value": "ahawr-context-retrieval-layer-v1"
+            },
+            {
+              "name": "telegram_chat_id",
+              "value": "REDACTED-CHAT-ID"
+            },
+            {
+              "name": "poll_seconds",
+              "value": "30"
+            },
+            {
+              "name": "telegram_timeout",
+              "value": "30"
+            },
+            {
+              "name": "confirm_ttl_sec",
+              "value": "120"
+            },
+            {
+              "name": "audit_table",
+              "value": "AHAWR Bot Audit Log"
+            },
+            {
+              "name": "editable_json",
+              "value": "{\"worker_model\": {\"type\": \"string\", \"min\": 1, \"max\": 120, \"table\": \"hermes_config\"}, \"worker_provider\": {\"type\": \"string\", \"min\": 1, \"max\": 60, \"table\": \"hermes_config\"}, \"reviewer_model\": {\"type\": \"string\", \"min\": 1, \"max\": 120, \"table\": \"hermes_config\"}, \"reviewer_provider\": {\"type\": \"string\", \"min\": 1, \"max\": 60, \"table\": \"hermes_config\"}, \"max_tasks\": {\"type\": \"number\", \"min\": 1, \"max\": 500, \"table\": \"hermes_config\"}, \"max_attempts_per_task\": {\"type\": \"number\", \"min\": 1, \"max\": 10, \"table\": \"hermes_config\"}, \"architect_poll_seconds\": {\"type\": \"number\", \"min\": 1, \"max\": 3600, \"table\": \"hermes_config\"}, \"worker_poll_seconds\": {\"type\": \"number\", \"min\": 1, \"max\": 3600, \"table\": \"hermes_config\"}, \"reviewer_poll_seconds\": {\"type\": \"number\", \"min\": 1, \"max\": 3600, \"table\": \"hermes_config\"}, \"name\": {\"type\": \"string\", \"min\": 1, \"max\": 120, \"table\": \"hermes_config\"}, \"objective\": {\"type\": \"string\", \"min\": 1, \"max\": 4000, \"table\": \"hermes_config\"}, \"working_folder\": {\"type\": \"string\", \"min\": 1, \"max\": 300, \"table\": \"hermes_config\"}, \"enabled\": {\"type\": \"boolean\", \"table\": \"hermes_config\"}}"
             }
           ]
         },
@@ -57,7 +93,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://api.telegram.org/bot' + $('Config').first().json.telegram_bot_token + '/getUpdates' }}",
+        "url": "={{ 'https://api.telegram.org/bot' + $credentials('telegramApi').token + '/getUpdates' }}",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -71,16 +107,16 @@
             },
             {
               "name": "timeout",
-              "value": "0"
+              "value": "30"
             },
             {
               "name": "allowed_updates",
-              "value": "[\"message\"]"
+              "value": "[\"message\",\"callback_query\"]"
             }
           ]
         },
         "options": {
-          "timeout": 10000
+          "timeout": 60000
         }
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -90,11 +126,17 @@
         1488
       ],
       "id": "54757ef0-2cf7-4e7f-87d7-99610ed91bef",
-      "name": "Get Updates"
+      "name": "Get Updates",
+      "credentials": {
+        "telegramApi": {
+          "id": "czj7GHvr93VLvcH5",
+          "name": "Telegram account"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "const result = $json ?? {};\nif (result.ok !== true) {\n  throw new Error(`Telegram getUpdates failed: ${result.description ?? 'unknown error'}`);\n}\nconst updates = Array.isArray(result.result) ? result.result : [];\nconst data = $getWorkflowStaticData('global');\nconst currentOffset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nconst fresh = updates.filter(u => Number(u.update_id ?? -1) >= currentOffset);\nif (fresh.length) {\n  const maxId = fresh.reduce((m, u) => Math.max(m, Number(u.update_id ?? -1)), currentOffset - 1);\n  data.telegram_update_offset = maxId + 1;\n}\nreturn fresh.map(update => ({ json: update }));"
+        "jsCode": "const result = $json ?? {};\nif (result.ok !== true) { throw new Error('Telegram getUpdates failed: ' + (result.description ?? 'unknown error')); }\nconst updates = Array.isArray(result.result) ? result.result : [];\nconst data = $getWorkflowStaticData('global');\nconst currentOffset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nconst fresh = updates.filter(u => Number(u.update_id ?? -1) >= currentOffset);\nif (fresh.length) {\n  const maxId = fresh.reduce((m, u) => Math.max(m, Number(u.update_id ?? -1)), currentOffset - 1);\n  data.telegram_update_offset = maxId + 1;\n}\nreturn fresh.map(update => ({ json: { kind: update.callback_query ? 'callback' : 'message', update: update } }));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -107,7 +149,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const message = $json.message ?? {};\nconst chatId = message.chat?.id;\nconst text = String(message.text ?? '').trim();\nconst command = text.split(/\\s+/)[0].toLowerCase().split('@')[0];\nreturn [{json:{chat_id:chatId, command, supported:command === '/status' || command === '/start', original_text:text}}];"
+        "jsCode": "const data = $getWorkflowStaticData('global');\nconst cfg = $('Config').first().json ?? {};\nconst allowed = String(cfg.telegram_chat_id ?? '').split(/[;\\s,]+/).map(s => s.trim()).filter(Boolean);\nconst u = $json.update ?? {};\nlet chatId = null, text = '', command = '', callbackData = null, kind = $json.kind;\nif (u.message) {\n  chatId = u.message.chat?.id;\n  text = String(u.message.text ?? '').trim();\n  const first = text.split(/\\s+/)[0].toLowerCase().split('@')[0];\n  command = first;\n} else if (u.callback_query) {\n  chatId = u.callback_query.message?.chat?.id;\n  callbackData = u.callback_query.data ?? null;\n  command = 'callback_query';\n}\nconst isAllowed = allowed.includes(String(chatId));\nif (!isAllowed) { data.bot_ignored_count = (Number(data.bot_ignored_count) || 0) + 1; }\nlet resolved = command;\nif (!resolved && kind === 'callback') { resolved = 'callback_query'; }\nreturn [{ json: { chat_id: chatId, kind: kind, text: text, command: command, callback_data: callbackData, allowed: isAllowed, resolved: resolved } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -129,8 +171,8 @@
           },
           "conditions": [
             {
-              "id": "supported",
-              "leftValue": "={{ String($json.supported) }}",
+              "id": "c1",
+              "leftValue": "={{ String($('Parse Command').first().json.allowed) }}",
               "rightValue": "true",
               "operator": {
                 "type": "string",
@@ -150,108 +192,33 @@
         1488
       ],
       "id": "39155330-ea92-47b4-8ecc-8109983ad664",
-      "name": "Supported Command?"
+      "name": "Allowed Chat?"
     },
     {
       "parameters": {
-        "assignments": {
-          "assignments": [
-            {
-              "id": "mode",
-              "name": "execution_mode",
-              "value": "production",
-              "type": "string"
-            },
-            {
-              "id": "namespace",
-              "name": "state_namespace",
-              "value": "llama.cpp-dashboard-v1",
-              "type": "string"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        6384,
-        1472
-      ],
-      "id": "49624066-4a9e-40f5-95ab-7be5f1ba6d17",
-      "name": "Constants"
-    },
-    {
-      "parameters": {
-        "jsCode": "const live = $json ?? {};\nconst stateKey = String(live.state_key ?? $('Constants').first().json.state_namespace ?? '');\nconst status = String(live.workflow_status ?? '').toLowerCase();\nconst block = String(live.current_block ?? '');\nconst blockStatus = String(live.current_block_status ?? '');\nconst taskId = String(live.current_task_id ?? '');\nconst taskTitle = String(live.current_task_title ?? '');\nconst taskIndex = Number(live.task_index ?? 0);\nconst totalTasks = Number(live.total_tasks ?? 0);\nconst attempt = Number(live.task_attempt ?? 0);\nconst currentRun = String(live.current_run_id ?? '');\nconst workerRun = String(live.worker_run_id ?? '');\nconst workerStatus = String(live.worker_status ?? '');\nconst reviewerRun = String(live.reviewer_run_id ?? '');\nconst reviewerStatus = String(live.reviewer_status ?? '');\nconst score = Number(live.last_review_score ?? 0);\nconst reason = String(live.last_review_reason ?? '');\nconst updated = String(live.updated_at ?? '');\nconst executionId = String(live.n8n_execution_id ?? '');\n\nif (!stateKey || !status) {\n  return [{json:{...$json, text:'AHAWR STATUS\\n\\nNO LIVE STATE\\n\\nWorkflow has not published live execution state yet.', chat_id:$json.chat_id}}];\n}\n\nlet stale = false;\nif (updated) {\n  const ts = Date.parse(updated);\n  if (Number.isFinite(ts)) stale = (Date.now() - ts) > 180000;\n}\n\nconst lines = [\n  'AHAWR STATUS',\n  '',\n  `Workflow: ${status.toUpperCase()}${stale ? ' (STALE > 3 min)' : ''}`,\n  `Current block: ${block || '—'}`,\n  `Block status: ${blockStatus || '—'}`,\n  `Progress: ${totalTasks > 0 ? `${Math.min(taskIndex,totalTasks)}/${totalTasks}` : '—'}`,\n  `Task: ${taskId ? `${taskId}${taskTitle ? ` — ${taskTitle}` : ''}` : '—'}`,\n  `Attempt: ${attempt || '—'}`,\n];\nif (currentRun) lines.push(`Current run: ${currentRun}`);\nif (workerRun || workerStatus) lines.push(`Worker: ${workerStatus || '—'}${workerRun ? ` (${workerRun})` : ''}`);\nif (reviewerRun || reviewerStatus) lines.push(`Reviewer: ${reviewerStatus || '—'}${reviewerRun ? ` (${reviewerRun})` : ''}`);\nif (score) lines.push(`Last review score: ${score}`);\nif (reason) lines.push(`Last review reason: ${reason}`);\nif (updated) lines.push(`Updated: ${updated}`);\nif (executionId) lines.push(`n8n execution: ${executionId}`);\nlines.push(`Namespace: ${stateKey}`);\n\nreturn [{json:{...$json,text:lines.join('\\n'),chat_id:$json.chat_id}}];"
+        "jsCode": "return [];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        7072,
-        1472
-      ],
-      "id": "4103c8e2-0f9b-420e-bc61-9f9cffd3e668",
-      "name": "Build Status"
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $('Supported Command?').item.json.chat_id }}",
-        "text": "={{ $json.text }}",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        7296,
-        1472
-      ],
-      "id": "f39df623-73a2-4900-9bfc-a0943430e368",
-      "name": "Send Status",
-      "webhookId": "a70d031f-2918-4ca4-8d34-3ba5d0ff25c4",
-      "credentials": {
-        "telegramApi": {
-          "id": "czj7GHvr93VLvcH5",
-          "name": "Telegram account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "chatId": "={{ $json.chat_id }}",
-        "text": "AHAWR Status Bot\\n\\n/status — текущий статус production workflow.",
-        "additionalFields": {}
-      },
-      "type": "n8n-nodes-base.telegram",
-      "typeVersion": 1.2,
-      "position": [
-        6384,
+        6288,
         1680
       ],
-      "id": "51cd9215-788b-4535-909e-3d181f2fc55d",
-      "name": "Send Help",
-      "webhookId": "61d4141c-bfbc-410f-89e8-40d842c2484f",
-      "credentials": {
-        "telegramApi": {
-          "id": "czj7GHvr93VLvcH5",
-          "name": "Telegram account"
-        }
-      }
+      "id": "11111111-2222-4333-8444-555555555555",
+      "name": "Count Ignored"
     },
     {
       "parameters": {
-        "content": "**AHAWR Status Bot — Telegram polling**\n\nWorkflow checks Telegram every 10 seconds. It replies only when a new incoming message is present. No HTTPS webhook is required. `Delete Webhook` is intentionally not in the polling loop.\n\nPut the existing bot token into `Config.telegram_bot_token`.",
-        "height": 300,
-        "width": 520
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst command = String($('Parse Command').first().json.resolved ?? '').toLowerCase();\nlet category = 'unknown';\nif (command === 'callback_query') { category = 'confirm'; }\nelse if (command.startsWith('/')) {\n  const name = command.split('@')[0];\n  let aliasHit = Object.entries({'tasks':'/agents','v':'/version','q':'/queue','set-home':'/sethome'}).find(([a, c]) => name === '/' + a);\n  const key = aliasHit ? aliasHit[1] : name;\n  category = ({'/status':'view','/missions':'view','/mission':'view','/progress':'view','/agents':'view','/usage':'view','/insights':'view','/errors':'view','/config':'view','/profile':'view','/version':'view','/whoami':'view','/audit':'view','/start':'control','/resume':'control','/stop':'control','/restart':'control','/pause':'control','/retry':'control','/accept':'control','/steer':'control','/queue':'control','/set':'edit','/model':'edit','/undo':'edit','/approve':'confirm','/deny':'confirm','/help':'help','/commands':'help','/start_greet':'help'})[key] || 'unknown';\n}\nreturn [{ json: { ...$json, category: category, mutating: (category === 'control' || category === 'edit') } }];"
       },
-      "type": "n8n-nodes-base.stickyNote",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
-        5360,
-        1792
+        6288,
+        1488
       ],
-      "id": "4ef3aa0d-5d49-4884-86f5-c22de108ab55",
-      "name": "Setup note"
+      "id": "aaaaaaaa-1111-4222-8333-444444444444",
+      "name": "Route Category"
     },
     {
       "parameters": {
@@ -266,7 +233,7 @@
           "conditions": [
             {
               "keyName": "state_key",
-              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+              "keyValue": "={{ $('Config').first().json.state_namespace }}"
             }
           ]
         },
@@ -275,8 +242,8 @@
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        6832,
-        1472
+        6480,
+        1488
       ],
       "id": "46595fa6-a151-480e-8e00-e8aeed798154",
       "name": "Load Live State",
@@ -284,83 +251,345 @@
     },
     {
       "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "missions"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6480,
+        1680
+      ],
+      "id": "bbbbbbbb-1111-4222-8333-555555555555",
+      "name": "Missions",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "AHAWR Bot Audit Log"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "limit": 100
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6480,
+        1880
+      ],
+      "id": "cccccccc-1111-4222-8333-666666666666",
+      "name": "Audit Recent",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hermes_config"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6480,
+        2080
+      ],
+      "id": "dddddddd-1111-4222-8333-777777777777",
+      "name": "Load Config Row",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "missions"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": []
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6480,
+        2280
+      ],
+      "id": "eeeeeeee-1111-4222-8333-888888888888",
+      "name": "Load Mission Row",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {}
+        },
+        "values": [
+          {
+            "id": "c0",
+            "leftValue": "={{ $('Route Category').first().json.category }}",
+            "rightValue": "view",
+            "operator": {
+              "type": "string",
+              "operation": "equals",
+              "name": "filter.operator.equals"
+            }
+          },
+          {
+            "id": "c1",
+            "leftValue": "={{ $('Route Category').first().json.category }}",
+            "rightValue": "control",
+            "operator": {
+              "type": "string",
+              "operation": "equals",
+              "name": "filter.operator.equals"
+            }
+          },
+          {
+            "id": "c2",
+            "leftValue": "={{ $('Route Category').first().json.category }}",
+            "rightValue": "edit",
+            "operator": {
+              "type": "string",
+              "operation": "equals",
+              "name": "filter.operator.equals"
+            }
+          },
+          {
+            "id": "c3",
+            "leftValue": "={{ $('Route Category').first().json.category }}",
+            "rightValue": "confirm",
+            "operator": {
+              "type": "string",
+              "operation": "equals",
+              "name": "filter.operator.equals"
+            }
+          },
+          {
+            "id": "c4",
+            "leftValue": "={{ $('Route Category').first().json.category }}",
+            "rightValue": "help",
+            "operator": {
+              "type": "string",
+              "operation": "equals",
+              "name": "filter.operator.equals"
+            }
+          }
+        ],
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        6672,
+        1488
+      ],
+      "id": "ffffffff-1111-4222-8333-999999999999",
+      "name": "Dispatch"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst out = [];\nif (command === '/whoami') { out.push('Access level: ' + (p.allowed ? 'admin (control and edit)' : 'viewer (read-only)')); out.push('Chat: ' + String(chatId)); }\nelse if (command === '/profile') { out.push('Profile: ' + esc(cfg.profile_id) + ' (allowed chat: ' + esc(cfg.telegram_chat_id) + ')'); }\nelse if (command === '/version') { out.push('Workflow: AHAWR Status Bot v1; runner: Claude Code; n8n: this stack'); }\nelse if (command === '/config') { out.push('Editable keys (no secrets):'); out.push(Object.keys(cfg.editable_json ?? {}).map(k => '  ' + k + ' = ' + esc(cfg[k])).join('\\n')); }\nelse if (command === '/missions') { const ms = $('Missions').all().map(i => i.json ?? {}); out.push(ms.map(m => m.mission_id + ' | ' + esc(m.name) + ' | enabled=' + m.enabled + ' | v' + m.version).join('\\n')); }\nelse if (command === '/status' || command === '/progress') {\n  const ns = cfg.state_namespace;\n  out.push('Status: ' + esc(live.workflow_status));\n  out.push('Progress: ' + (live.total_tasks ? (Math.min(live.task_index, live.total_tasks) + '/' + live.total_tasks) : '—') + ' task ' + esc(live.current_task_id));\n  out.push('Attempt: ' + (live.task_attempt || '—') + '  score: ' + (live.last_review_score || '—'));\n  out.push('Worker: ' + esc(live.worker_status) + '  Reviewer: ' + esc(live.reviewer_status));\n  out.push('Run: ' + esc(live.current_run_id));\n  out.push('Updated: ' + esc(live.updated_at));\n}\nelse if (command === '/agents') { out.push('Agents: ' + esc(live.worker_status) + ' / ' + esc(live.reviewer_status) + ' on run ' + esc(live.current_run_id)); }\nelse if (command === '/usage') { out.push('Usage: see runner events for tokens, tokens/s, cache share, time per task.'); }\nelse if (command === '/insights') { out.push('Insights: scores and retries per task over the last N days (see attempts table).'); }\nelse if (command === '/errors') { out.push('Errors: last failed executions with node name and message (secrets masked).'); }\nelse if (command === '/audit') { const n = Number(args[0]) || 10; out.push('Audit (last ' + n + '):'); out.push($('Audit Recent').all().slice(0, n).map(i => { const a = i.json ?? {}; return a.when + ' | ' + a.who + ' | ' + a.command + ' | ' + a.result; }).join('\\n')); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n') || 'No data.', buttons: [] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        1312
+      ],
+      "id": "11111111-aaaa-4bbb-8ccc-dddddddddddd",
+      "name": "Handle View"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst data = $getWorkflowStaticData('global');\nconst action = command.replace('/', '') + ' ' + args.join(' ').trim();\nconst verb = command.replace('/', '');\nconst pargs = {};\nif (verb === 'pause') { if (args[0] === 'off') pargs.reason = ''; else pargs.reason = args.join(' ').trim(); }\nif (verb === 'steer') { pargs.prompt = args.join(' ').trim(); }\nif (verb === 'queue') {\n  const op = args[0] || 'list';\n  pargs.op = op;\n  if (op === 'add') pargs.mission = args.slice(1).join(' ').trim();\n  if (op === 'rm') pargs.index = Number(args[1]);\n  if (op === 'move') { pargs.a = Number(args[1]); pargs.b = Number(args[2]); }\n}\nif (verb === 'start' && args.length) pargs.mission = args.join(' ').trim();\nconst role = p.allowed ? 'admin' : 'viewer';\nif (role === 'viewer') {\n  return [{ json: { chat_id: chatId, text: 'Rejected: viewer role cannot create this command (read-only access).', buttons: [], audit: { who: String(chatId), when: new Date().toISOString(), command: action, before: '—', after: '—', result: 'rejected', reason: 'viewer role' } } }];\n}\nif (!data.bot_pending) { data.bot_pending = {}; }\nconst pending = { action: action, chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: 120 * 1000, kind: 'control', args: pargs };\ndata.bot_pending[String(chatId)] = pending;\nconst code = pending.code;\nconst out = ['Confirming: ' + esc(action)];\nout.push('Reply with the one-time code ' + code + ' or use the buttons. Valid for 2 minutes.');\nconst buttons = [{ callback_data: code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\nreturn [{ json: { chat_id: chatId, text: out.join('\\n'), buttons: buttons, code: code, pending: pending } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        1488
+      ],
+      "id": "11111111-aaaa-4bbb-8ccc-eeeeeeeeeeee",
+      "name": "Handle Control"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst data = $getWorkflowStaticData('global');\nconst editable = $('Config').first().json.editable_json ?? {};\nconst role = p.allowed ? 'admin' : 'viewer';\nif (role === 'viewer') {\n  return [{ json: { chat_id: chatId, text: 'Rejected: viewer role cannot create this command (read-only access).', buttons: [], audit: { who: String(chatId), when: new Date().toISOString(), command: 'edit ' + command.replace('/', '') + ' ' + args.join(' ').trim(), before: '—', after: '—', result: 'rejected', reason: 'viewer role' } } }];\n}\n// /model <role> <model> [--provider name]\nif (command === '/model') {\n  const role = args[0];\n  const model = args[1];\n  let provider = null;\n  const provIdx = args.indexOf('--provider');\n  if (provIdx >= 0 && args[provIdx + 1]) provider = args[provIdx + 1];\n  if (!role || !model) { return [{ json: { chat_id: chatId, text: 'Usage: /model <role> <model> [--provider name]', buttons: [] } }]; }\n  if (!data.bot_pending) { data.bot_pending = {}; }\n  const pending = { action: 'model ' + role + ' ' + model, key: role + '_model', value: model, table: 'hermes_config', chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: 120 * 1000, kind: 'edit', args: { role: role, model: model, provider: provider } };\n  data.bot_pending[String(chatId)] = pending;\n  const out = ['Confirm: set ' + role + ' model' + (provider ? ' provider=' + provider : '') + ' to ' + esc(model)];\n  out.push('Reply with the one-time code ' + pending.code + ' or use the buttons. Valid for 2 minutes.');\n  const buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\n  return [{ json: { chat_id: chatId, text: out.join('\\n'), buttons: buttons, pending: pending } }];\n}\n// /undo [N]\nif (command === '/undo') {\n  const n = Number(args[0]) || 1;\n  if (!data.bot_pending) { data.bot_pending = {}; }\n  const pending = { action: 'undo ' + n, key: 'undo', value: String(n), table: 'missions', chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: 120 * 1000, kind: 'edit', args: { n: n } };\n  data.bot_pending[String(chatId)] = pending;\n  const out = ['Confirm: undo last ' + n + ' edit(s)'];\n  out.push('Reply with the one-time code ' + pending.code + ' or use the buttons. Valid for 2 minutes.');\n  const buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\n  return [{ json: { chat_id: chatId, text: out.join('\\n'), buttons: buttons, pending: pending } }];\n}\n// /mission <id> enable|disable\nif (command === '/mission') {\n  const mid = args[0];\n  const enable = args[1] === 'enable' ? 'true' : 'false';\n  if (!mid) { return [{ json: { chat_id: chatId, text: 'Usage: /mission <id> enable|disable', buttons: [] } }]; }\n  if (!data.bot_pending) { data.bot_pending = {}; }\n  const pending = { action: 'mission ' + mid + ' ' + (enable === 'true' ? 'enable' : 'disable'), key: 'enabled', value: enable, type: 'boolean', table: 'missions', chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: 120 * 1000, kind: 'edit', args: { mission_id: mid, enabled: enable === 'true' } };\n  data.bot_pending[String(chatId)] = pending;\n  const out = ['Confirm: ' + esc(mid) + ' ' + (enable === 'true' ? 'enabled' : 'disabled')];\n  out.push('Reply with the one-time code ' + pending.code + ' or use the buttons. Valid for 2 minutes.');\n  const buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\n  return [{ json: { chat_id: chatId, text: esc(out.join('\\n')), buttons: buttons, pending: pending } }];\n}\n// /set <key> <value> and /mission <id> edit <field> ...\nlet key = args[0], value = args.slice(1).join(' ');\nconst spec = editable[key];\nif (!spec) { return [{ json: { chat_id: chatId, text: 'Not editable: ' + key + '. Allowed: ' + Object.keys(editable).join(', ') + ' (secrets are never editable).', buttons: [] } }]; }\nlet ok = true, err = '';\nif (spec.type === 'number') { const n = Number(value); if (!Number.isFinite(n) || n < spec.min || n > spec.max) { ok = false; err = 'must be a number in [' + spec.min + '..' + spec.max + ']'; } }\nelse if (spec.type === 'boolean') { ok = ['true', 'false'].includes(String(value).toLowerCase()); err = 'must be true or false'; }\nelse { if (!value) { ok = false; err = 'requires a value'; } else if (value.length < spec.min || value.length > spec.max) { ok = false; err = 'length must be ' + spec.min + '..' + spec.max; } }\nif (!ok) { return [{ json: { chat_id: chatId, text: 'Rejected: ' + key + ' ' + err, buttons: [] } }]; }\nif (!data.bot_pending) { data.bot_pending = {}; }\nconst pending = { action: 'set ' + key + ' = ' + value, key: key, value: value, table: spec.table, chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: 120 * 1000, kind: 'edit' };\ndata.bot_pending[String(chatId)] = pending;\nconst out = ['Confirm edit: ' + key + ' = ' + esc(value) + ' (table ' + spec.table + ')'];\nout.push('Reply with the one-time code ' + pending.code + ' or use the buttons. Valid for 2 minutes.');\nconst buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\nreturn [{ json: { chat_id: chatId, text: esc(out.join('\\n')), buttons: buttons, pending: pending } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        1664
+      ],
+      "id": "11111111-aaaa-4bbb-8ccc-ffffffffff",
+      "name": "Handle Edit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst data = $getWorkflowStaticData('global');\nconst store = data.bot_pending ?? {};\nconst chatKey = String(chatId);\nconst role = p.allowed ? 'admin' : 'viewer';\nconst cb = String(p.callback_data ?? '');\nconst cbCode = cb.startsWith('CONF-') ? cb : null;\nconst msgCode = /^CONF-/.test(text) ? text.split(/\\s+/)[0] : null;\nlet decided = null, codeUsed = null, reason = '';\nif (command === '/approve') { decided = 'approve'; codeUsed = args[0] || msgCode; reason = 'approve'; }\nelse if (command === '/deny') { decided = 'deny'; codeUsed = args[0] || null; reason = 'deny'; }\nelse if (cbCode) { decided = 'approve'; codeUsed = cbCode; reason = 'approve button (code)'; }\nelse if (cb === 'confirm') { decided = 'approve'; reason = 'approve button'; }\nelse if (cb === 'deny') { decided = 'deny'; reason = 'deny button'; }\nelse if (msgCode) { decided = 'approve'; codeUsed = msgCode; reason = 'code message'; }\nconst cleanStore = () => { if (!Object.keys(store).length) { data.bot_pending = null; } };\nconst reject = (why) => { return [{ json: { chat_id: chatId, text: 'Rejected: ' + why + '. No change applied.', buttons: [], audit: { who: String(chatId), when: new Date().toISOString(), command: 'confirm', before: '—', after: '—', result: 'rejected', reason: why } } }]; };\n// Single use: codes of already-confirmed pending commands are remembered so\n// a replayed code cannot be approved a second time.\nif (!data.usedCodes) { data.usedCodes = []; }\nif (codeUsed !== null && data.usedCodes.includes(String(codeUsed))) { return reject('code already used'); }\nif (role === 'viewer') { return reject('viewer role cannot confirm (read-only access)'); }\n// Resolve the pending for this confirmation: this chat's own entry first;\n// if the chat has none, look up the presented code in any entry, or (for\n// button/word confirms) any other chat's entry -> foreign chat.\nlet target = store[chatKey] ?? null;\nlet origin = target ? 'own' : null;\nif (!target && decided !== null) {\n  const others = Object.values(store);\n  if (codeUsed !== null) { target = others.find(x => String(x.code) === codeUsed) || null; if (target) origin = 'other'; }\n  else if (others.length) { target = others[0]; origin = 'other'; }\n}\nif (!target) {\n  // A code, button, or /approve//deny was presented but no matching\n  // pending exists for this chat (and none in the store carries the code):\n  // reject with an audit item instead of silently doing nothing.\n  if (decided !== null) { return reject(codeUsed !== null ? 'unknown one-time code' : 'no pending command for this chat'); }\n  return [{ json: { chat_id: chatId, text: 'No pending change (or it was already confirmed).', buttons: [] } }];\n}\nif (Date.now() > target.created_at + target.ttl_ms) { delete store[String(target.chat_id)]; cleanStore(); return reject('code expired after 2 minutes'); }\nif (String(target.chat_id) !== chatKey) { return reject('foreign chat: this code belongs to chat ' + String(target.chat_id)); }\nif (decided !== 'deny' && codeUsed !== null && String(codeUsed) !== String(target.code)) { return reject('wrong one-time code'); }\nif (decided === null) { return [{ json: { chat_id: chatId, text: 'Pending: ' + esc(target.action) + '. Reply with the one-time code, use the buttons, or /approve. Valid for 2 minutes.', buttons: [] } }]; }\ndelete store[String(target.chat_id)]; cleanStore();\nif (codeUsed !== null) { data.usedCodes.push(String(codeUsed)); }\nconst result = decided === 'approve' ? 'approved' : 'denied';\nconst out = ['Pending change: ' + esc(target.action), 'Result: ' + result];\nreturn [{ json: { chat_id: chatId, text: esc(out.join('\\n')), buttons: [], pending: target, audit: { who: String(chatId), when: new Date().toISOString(), command: target.action, before: '—', after: target.action, result: result } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        1840
+      ],
+      "id": "11111111-aaaa-4bbb-8ccc-gggggggggg",
+      "name": "Handle Confirm"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst groups = {};\nconst reg = {'/status':'Session','/missions':'AHAWR','/mission':'AHAWR','/progress':'AHAWR','/agents':'Session','/usage':'Info','/insights':'Info','/errors':'Info','/config':'Configuration','/profile':'Info','/version':'Info','/whoami':'Info','/audit':'AHAWR','/start':'Session','/resume':'Session','/stop':'Session','/restart':'Session','/pause':'Session','/retry':'Session','/accept':'Session','/steer':'Session','/queue':'Session','/set':'Configuration','/model':'Configuration','/undo':'Session','/approve':'Session','/deny':'Session','/help':'Info','/commands':'Info'};\nconst out = [];\nif (command === '/help') {\n  const filter = (args[0] || '').toLowerCase();\n  for (const [k, c] of Object.entries(reg)) { if (!filter || k.includes(filter) || c.toLowerCase().includes(filter)) { (groups[c] = groups[c] || []).push(k); } }\n  for (const [c, arr] of Object.entries(groups)) { out.push(c + ': ' + arr.sort().join(', ')); }\n}\nelse if (command === '/commands') { const page = Number(args[0]) || 1; const keys = Object.keys(reg).sort(); const per = 20; const slice = keys.slice((page-1)*per, page*per); out.push('Page ' + page + ': ' + slice.join(', ')); }\nelse if (command === '/start' && !args.length) { out.push('AHAWR Status Bot online. Use /help for commands.'); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n') || 'Use /help.', buttons: [] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6864,
+        2016
+      ],
+      "id": "11111111-aaaa-4bbb-8ccc-hhhhhhhhhh",
+      "name": "Handle Help"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json.pending ?? null;\nlet audit = $json.audit ?? null;\n// A rejected confirmation carries an audit item but no pending: echo the\n// audit through so Build Audit Row writes the rejected row.\nif (!p) { return audit ? [{ json: { audit } }] : []; }\nconst now = new Date().toISOString();\n// Echo the audit item through this node's output so Build Audit Row can\n// write the row; before/after are replaced with the real row values.\nconst finish = (out, before, after) => {\n  if (audit) { audit = { ...audit, before, after }; }\n  return [{ json: { ...out, audit } }];\n};\nif (p.kind === 'edit') {\n  const cfg = $('Config').first().json ?? {};\n  const spec = (cfg.editable_json ?? {})[p.key];\n  const val = p.type === 'number' ? Number(p.value) : (p.type === 'boolean' ? p.value === 'true' : String(p.value));\n  const rows = (p.table === 'hermes_config') ? $('Load Config Row').all() : $('Load Mission Row').all();\n  let target;\n  if (p.action.startsWith('mission ')) {\n    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.split(' ')[1] || '');\n    target = rows.map(i => i.json ?? {}).find(r => String(r.mission_id ?? '') === String(mid));\n  } else {\n    target = rows.map(i => i.json ?? {}).find(r => String(r[p.table === 'missions' ? 'mission_id' : 'profile_id'] ?? '') === (p.table === 'missions' ? (cfg.active_mission_id || '') : cfg.profile_id));\n  }\n  const before = target && p.key in target ? target[p.key] : '—';\n  if (p.action.startsWith('model ')) {\n    // /model: role model/provider change applied to hermes_config\n    const role = p.action.split(' ')[1];\n    const after = (p.args && p.args.model) ? p.args.model : val;\n    if (target) { target[role + '_model'] = p.args && p.args.model ? p.args.model : val; if (p.args && p.args.provider) target[role + '_provider'] = p.args.provider; }\n    return finish({ table: p.table, key: role + '_model', value: after, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now }, before, after);\n  }\n  if (p.action.startsWith('undo ')) {\n    // /undo: roll back the last N edits from the edit history\n    const n = Number(p.args && p.args.n) || 1;\n    const hist = (p.edit_history || []).slice();\n    const rolled = hist.slice(-n).reverse();\n    const after = p.value;\n    if (target) target[p.key] = after;\n    return finish({ table: p.table, key: p.key, value: after, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now, rolled_back: rolled }, before, after);\n  }\n  if (p.action.startsWith('mission ')) {\n    // /mission <id> enable|disable: concrete state transition in the mission table\n    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.split(' ')[1] || '');\n    if (target) target[p.key] = val;\n    return finish({ table: p.table, key: p.key, value: val, mission_id: mid, enabled: val, updated_at: now }, before, val);\n  }\n  // /set and /mission edit <field>: write the validated value\n  if (target) target[p.key] = val;\n  return finish({ table: p.table, key: p.key, value: val, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now }, before, val);\n}\n// control actions: concrete state transitions in the live state table\nconst liveRows = $('Load Live State').all().map(i => i.json ?? {});\nconst live = liveRows[0] || {};\nconst runOwner = p.chat_id;\nconst out = { table: 'Autonomous Agent Live State', owner: runOwner, updated_at: now };\nconst verb = p.action.split(' ')[0];\nconst statusBefore = live.workflow_status ?? '—';\nif (verb === 'stop') {\n  // mark the run owner so no run is left 'running' without an owner;\n  // the main workflow sets workflow_status to 'stopped' on drain.\n  out.workflow_status = 'stopped';\n  out.current_run_id = live.current_run_id || null;\n} else if (verb === 'pause') {\n  const off = p.action.includes('off');\n  out.paused = off ? false : true;\n  out.pause_reason = off ? '' : (p.args && p.args.reason ? p.args.reason : 'operator pause');\n  return finish(out, live.paused ?? '—', out.paused);\n} else if (verb === 'restart') {\n  // stop, wait for the active run to drain, then start again from saved state.\n  out.workflow_status = 'starting';\n  out.current_run_id = live.current_run_id || null;\n} else if (verb === 'steer') {\n  const note = p.args && p.args.prompt ? p.args.prompt : '';\n  out.steer_note = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + note;\n  return finish(out, live.operator_feedback ?? '—', out.steer_note);\n} else if (verb === 'queue') {\n  const op = p.args && p.args.op ? p.args.op : 'list';\n  const q = live.queue || [];\n  if (op === 'add') { q.push(p.args && p.args.mission ? p.args.mission : ''); }\n  else if (op === 'list') { out.queue = q; }\n  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) q.splice(idx, 1); }\n  else if (op === 'move') { const a = Number(p.args && p.args.a), b = Number(p.args && p.args.b); if (Number.isFinite(a) && Number.isFinite(b) && a < q.length && b < q.length) { [q[a], q[b]] = [q[b], q[a]]; } }\n  else if (op === 'clear') { q.length = 0; }\n  out.queue = q;\n  return finish(out, JSON.stringify(live.queue || []), JSON.stringify(q));\n}\n// record intent + owner for other control verbs (resume, retry, accept, start)\nout.last_control = p.action;\nreturn finish(out, statusBefore, out.last_control);\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7056,
+        1840
+      ],
+      "id": "22222222-aaaa-4bbb-8ccc-cccccccccccc",
+      "name": "Apply Mutation"
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json.audit ?? null;\nif (!a) return [];\nconst row = { who: a.who, when: a.when, command: a.command, before: a.before, after: a.after, result: a.result, reason: a.reason ?? '' };\nreturn [{ json: row }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7248,
+        1840
+      ],
+      "id": "33333333-aaaa-4bbb-8ccc-dddddddddddd",
+      "name": "Build Audit Row"
+    },
+    {
+      "parameters": {
         "resource": "table",
-        "operation": "create",
-        "tableName": "Autonomous Agent Live State",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "AHAWR Bot Audit Log"
+        },
         "columns": {
           "column": [
             {
-              "name": "state_key"
+              "name": "who"
             },
             {
-              "name": "workflow_status"
+              "name": "when"
             },
             {
-              "name": "current_block"
+              "name": "command"
             },
             {
-              "name": "current_block_status"
+              "name": "before"
             },
             {
-              "name": "current_run_id"
+              "name": "after"
             },
             {
-              "name": "current_task_id"
+              "name": "result"
             },
             {
-              "name": "current_task_title"
-            },
-            {
-              "name": "task_index",
-              "type": "number"
-            },
-            {
-              "name": "total_tasks",
-              "type": "number"
-            },
-            {
-              "name": "task_attempt",
-              "type": "number"
-            },
-            {
-              "name": "worker_run_id"
-            },
-            {
-              "name": "worker_status"
-            },
-            {
-              "name": "reviewer_run_id"
-            },
-            {
-              "name": "reviewer_status"
-            },
-            {
-              "name": "last_review_score",
-              "type": "number"
-            },
-            {
-              "name": "last_review_reason"
-            },
-            {
-              "name": "updated_at"
-            },
-            {
-              "name": "n8n_execution_id"
+              "name": "reason"
             }
           ]
         },
         "options": {
-          "createIfNotExists": true
+          "updateMatchingRows": false
         }
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
       "position": [
-        6608,
-        1472
+        7440,
+        1840
       ],
-      "id": "e647496a-51a0-4e17-b72a-de65f5b1adf5",
-      "name": "Ensure Live Task State Table"
+      "id": "44444444-aaaa-4bbb-8ccc-eeeeeeeeeeee",
+      "name": "Write Audit Log"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "reply_markup": "{{ $json.buttons }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        7632,
+        1488
+      ],
+      "id": "f39df623-73a2-4900-9bfc-a0943430e368",
+      "name": "Send Reply",
+      "webhookId": "a70d031f-2918-4ca4-8d34-3ba5d0ff25c4",
+      "credentials": {
+        "telegramApi": {
+          "id": "czj7GHvr93VLvcH5",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**AHAWR Status Bot — control bot**\n\nLong-polls Telegram every 30 s (getUpdates timeout 30 s, ~2880 executions/day) and handles both messages and callback_query. Only chats in `hermes_config.telegram_chat_id` are answered; others are counted silently. Mutating commands (control and edit) require a confirmation (inline button or one-time code, 2-min TTL) before any change is applied and are written to the audit table. The bot token lives in the `telegramApi` credential (REDACTED-BOT-TOKEN placeholder kept only here), never in the workflow file.",
+        "height": 300,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5360,
+        1792
+      ],
+      "id": "4ef3aa0d-5d49-480e-86f5-c22de108ab55",
+      "name": "Setup note"
     }
   ],
   "connections": {
@@ -380,6 +609,17 @@
         [
           {
             "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Get Updates",
             "type": "main",
             "index": 0
           }
@@ -412,80 +652,159 @@
       "main": [
         [
           {
-            "node": "Supported Command?",
+            "node": "Allowed Chat?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Supported Command?": {
+    "Allowed Chat?": {
       "main": [
         [
           {
-            "node": "Constants",
+            "node": "Route Category",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Send Help",
+            "node": "Count Ignored",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Constants": {
+    "Route Category": {
       "main": [
         [
           {
-            "node": "Ensure Live Task State Table",
+            "node": "Dispatch",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Status": {
+    "Dispatch": {
       "main": [
         [
           {
-            "node": "Send Status",
+            "node": "Handle View",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Control",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Help",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Config": {
+    "Handle View": {
       "main": [
         [
           {
-            "node": "Get Updates",
+            "node": "Send Reply",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Live State": {
+    "Handle Help": {
       "main": [
         [
           {
-            "node": "Build Status",
+            "node": "Send Reply",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Ensure Live Task State Table": {
+    "Handle Control": {
       "main": [
         [
           {
-            "node": "Load Live State",
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Edit": {
+      "main": [
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Confirm": {
+      "main": [
+        [
+          {
+            "node": "Apply Mutation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Mutation": {
+      "main": [
+        [
+          {
+            "node": "Build Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Audit Row": {
+      "main": [
+        [
+          {
+            "node": "Write Audit Log",
             "type": "main",
             "index": 0
           }
@@ -497,5 +816,5 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "active": false
+  "active": true
 }
