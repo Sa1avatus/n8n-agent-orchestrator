@@ -141,7 +141,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\nif (index >= tasks.length) return [{ json: { ...$json, execution_route: 'all_tasks_completed' } }];\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  // the same folder block the Worker gets (Build Worker Run Input), so the notice shows it too\n  String($('Mission').first().json.working_directory_block ?? ''),\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  feedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  feedback\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, execution_route: 'run_task', current_task: task, current_task_id: task.id, worker_prompt: workerPrompt } }];"
+        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\nif (index >= tasks.length) return [{ json: { ...$json, execution_route: 'all_tasks_completed' } }];\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\n// Steer note: appended to review_feedback for the NEXT attempt only.\n// Read from the fresh pause-gate flag read; cleared after use.\nconst steer = String($('Pause Gate Flags').first().json.steer_note ?? '');\nconst combinedFeedback = feedback + (steer ? '\\nOPERATOR STEER NOTE: ' + steer : '');\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  // the same folder block the Worker gets (Build Worker Run Input), so the notice shows it too\n  String($('Mission').first().json.working_directory_block ?? ''),\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  combinedFeedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  combinedFeedback\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, execution_route: 'run_task', current_task: task, current_task_id: task.id, worker_prompt: workerPrompt, review_feedback: combinedFeedback } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -364,9 +364,19 @@
                 "operation": "equals",
                 "name": "filter.operator.equals"
               }
+            },
+            {
+              "id": "accept-requested",
+              "leftValue": "={{ $('Accept Gate Flags').first().json.accept_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
             }
           ],
-          "combinator": "and"
+          "combinator": "or"
         },
         "options": {}
       },
@@ -394,7 +404,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\n// The attempt the log records (Persist Parsed Review): the first listed node with a number.\n// `state` above can be an older node after a resumed execution; take the larger of the two.\nconst loggedAttempt = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return 0;\n})();\nconst currentAttempt = Math.max(Number(state.task_attempt ?? 1), loggedAttempt);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\nif (currentAttempt >= maxAttempts) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, execution_route: 'failed', final_status: 'failed_task_attempt_limit', failure_reason: reviewReason || 'Maximum task attempts reached.', review_feedback: reviewNext || reviewReason, last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_attempt: currentAttempt + 1, review_feedback: reviewNext || reviewReason, execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];"
+        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\n// The attempt the log records (Persist Parsed Review): the first listed node with a number.\n// `state` above can be an older node after a resumed execution; take the larger of the two.\nconst loggedAttempt = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return 0;\n})();\nconst currentAttempt = Math.max(Number(state.task_attempt ?? 1), loggedAttempt);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\n// Steer note and operator remark: appended to review_feedback for the\n// NEXT attempt only (retry).  Read from the fresh accept-gate flag read.\n// retry_requested allows one attempt beyond max_attempts_per_task.\nconst ctrl = $('Accept Gate Flags').first().json ?? {};\nconst steer = String(ctrl.steer_note ?? '');\nconst operatorFeedback = String(ctrl.operator_feedback ?? '');\nconst extraFeedback = [steer ? 'OPERATOR STEER NOTE: ' + steer : '', operatorFeedback ? 'OPERATOR REMARK: ' + operatorFeedback : ''].filter(Boolean).join('\\n');\nconst combinedFeedback = [reviewNext || reviewReason, extraFeedback].filter(Boolean).join('\\n');\nconst limit = Number(ctrl.retry_requested) ? maxAttempts + 1 : maxAttempts;\nif (currentAttempt >= limit) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, execution_route: 'failed', final_status: 'failed_task_attempt_limit', failure_reason: reviewReason || 'Maximum task attempts reached.', review_feedback: combinedFeedback, last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_attempt: currentAttempt + 1, review_feedback: combinedFeedback, execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4032,6 +4042,468 @@
       ],
       "id": "8902b199-cb94-487a-ae42-8440478a1976",
       "name": "Split Task Notice"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -17000,
+        1728
+      ],
+      "id": "aa110001-0000-4000-8000-000000000001",
+      "name": "Load Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Load Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16800,
+        1728
+      ],
+      "id": "aa110002-0000-4000-8000-000000000002",
+      "name": "Read Control Flags"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -8800,
+        1728
+      ],
+      "id": "aa110004-0000-4000-8000-000000000004",
+      "name": "Pause Gate Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Pause Gate Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8600,
+        1728
+      ],
+      "id": "aa110005-0000-4000-8000-000000000005",
+      "name": "Pause Gate Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "pause-gate",
+              "leftValue": "={{ $('Pause Gate Flags').first().json.paused }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -8600,
+        1312
+      ],
+      "id": "aa110003-0000-4000-8000-000000000003",
+      "name": "Pause Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pause gate: hold the workflow.  The operator clears the paused\n// flag in Live State and re-runs the workflow to resume.\nreturn [{ json: { ...$json, execution_route: 'paused', final_status: 'paused_by_operator' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8200,
+        1104
+      ],
+      "id": "aa110006-0000-4000-8000-000000000006",
+      "name": "Hold Paused"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_status": "={{ 'paused' }}",
+            "owner": "={{ '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -7900,
+        1104
+      ],
+      "id": "aa110007-0000-4000-8000-000000000007",
+      "name": "Hold Paused Write Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stop check: the operator requested a stop after the current step.\n// Set workflow_status = stopped and leave no run in the running state.\nconst ctrl = $('Stop Check Worker Flags').first().json ?? {};\nreturn [{ json: {\n  ...$json,\n  workflow_status: 'stopped',\n  execution_route: 'stopped',\n  final_status: 'stopped_by_operator',\n  stop_requested: Boolean(ctrl.stop_requested ?? false),\n  owner: String(ctrl.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13200,
+        1968
+      ],
+      "id": "aa110008-0000-4000-8000-000000000008",
+      "name": "Stop Workflow"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_status": "={{ 'stopped' }}",
+            "owner": "={{ '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -12900,
+        1968
+      ],
+      "id": "aa110009-0000-4000-8000-000000000009",
+      "name": "Stop Workflow Write Live State"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -13800,
+        2384
+      ],
+      "id": "aa110011-0000-4000-8000-000000000011",
+      "name": "Stop Check Worker Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Stop Check Worker Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13600,
+        2384
+      ],
+      "id": "aa110012-0000-4000-8000-000000000012",
+      "name": "Stop Check Worker Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "stop-check-worker",
+              "leftValue": "={{ $('Stop Check Worker Flags').first().json.stop_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -13500,
+        2176
+      ],
+      "id": "aa110010-0000-4000-8000-000000000010",
+      "name": "Stop Check Worker"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -11800,
+        2080
+      ],
+      "id": "aa110014-0000-4000-8000-000000000014",
+      "name": "Stop Check Reviewer Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Stop Check Reviewer Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -11600,
+        2080
+      ],
+      "id": "aa110015-0000-4000-8000-000000000015",
+      "name": "Stop Check Reviewer Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "stop-check-reviewer",
+              "leftValue": "={{ $('Stop Check Reviewer Flags').first().json.stop_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -11600,
+        1872
+      ],
+      "id": "aa110013-0000-4000-8000-000000000013",
+      "name": "Stop Check Reviewer"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -10000,
+        2600
+      ],
+      "id": "aa110016-0000-4000-8000-000000000016",
+      "name": "Accept Gate Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Accept Gate Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9800,
+        2600
+      ],
+      "id": "aa110017-0000-4000-8000-000000000017",
+      "name": "Accept Gate Flags"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clear consumed control flags before the next task starts.\n// steer_note was appended to review_feedback for this attempt (NEXT\n// attempt only); accept_requested was consumed by the Accept Gate;\n// retry_requested was consumed by Retry Current Task.\nconst ctrl = $('Pause Gate Flags').first().json ?? {};\nreturn [{ json: {\n  ...$json,\n  cleared_flags: { steer_note: ctrl.steer_note, accept_requested: ctrl.accept_requested, retry_requested: ctrl.retry_requested },\n  accept_requested_was_true: Boolean(ctrl.accept_requested ?? false),\n  accept_reason: String(ctrl.operator_feedback ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8400,
+        1312
+      ],
+      "id": "aa110018-0000-4000-8000-000000000018",
+      "name": "Clear Consumed Flags"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "steer_note": "={{ '' }}",
+            "accept_requested": "={{ false }}",
+            "retry_requested": "={{ false }}",
+            "last_control": "={{ $json.accept_requested_was_true ? 'accept: ' + String($json.accept_reason ?? '') : '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -8100,
+        1312
+      ],
+      "id": "aa110019-0000-4000-8000-000000000019",
+      "name": "Clear Consumed Flags Write Live State"
     }
   ],
   "pinData": {
@@ -4151,7 +4623,7 @@
       "main": [
         [
           {
-            "node": "Worker Completed?",
+            "node": "Stop Check Worker",
             "type": "main",
             "index": 0
           }
@@ -4191,7 +4663,7 @@
       "main": [
         [
           {
-            "node": "Reviewer Completed?",
+            "node": "Stop Check Reviewer",
             "type": "main",
             "index": 0
           }
@@ -4271,7 +4743,7 @@
       "main": [
         [
           {
-            "node": "Prepare Current Task",
+            "node": "Pause Gate",
             "type": "main",
             "index": 0
           }
@@ -4373,7 +4845,7 @@
       "main": [
         [
           {
-            "node": "Review Passed?",
+            "node": "Accept Gate Live State",
             "type": "main",
             "index": 0
           }
@@ -4395,7 +4867,7 @@
       "main": [
         [
           {
-            "node": "Resume Saved State?",
+            "node": "Load Live State",
             "type": "main",
             "index": 0
           }
@@ -5064,6 +5536,214 @@
         [
           {
             "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Live State": {
+      "main": [
+        [
+          {
+            "node": "Read Control Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Control Flags": {
+      "main": [
+        [
+          {
+            "node": "Resume Saved State?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate": {
+      "main": [
+        [
+          {
+            "node": "Clear Consumed Flags",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Hold Paused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate Live State": {
+      "main": [
+        [
+          {
+            "node": "Pause Gate Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate Flags": {
+      "main": [
+        [
+          {
+            "node": "Pause Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold Paused": {
+      "main": [
+        [
+          {
+            "node": "Hold Paused Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Consumed Flags": {
+      "main": [
+        [
+          {
+            "node": "Clear Consumed Flags Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Consumed Flags Write Live State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Current Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker Live State": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Worker Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker Flags": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker": {
+      "main": [
+        [
+          {
+            "node": "Worker Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Workflow": {
+      "main": [
+        [
+          {
+            "node": "Stop Workflow Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer Live State": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Reviewer Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer Flags": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Gate Live State": {
+      "main": [
+        [
+          {
+            "node": "Accept Gate Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Gate Flags": {
+      "main": [
+        [
+          {
+            "node": "Review Passed?",
             "type": "main",
             "index": 0
           }

@@ -133,6 +133,14 @@ services:
       - CLAUDE_RUNNER_PROVIDER_LOCAL__CONTEXT_PROBE_KEY=${LLAMACPP_API_KEY:-}
       # refuse exploratory grep/rg/find from local Workers until they have used ahawr-search
       - CLAUDE_RUNNER_PROVIDER_LOCAL__SEARCH_FIRST=${AHAWR_SEARCH_FIRST:-1}
+      # a task (Worker session) of the local model that has run longer than this gets thinking switched off (the LiteLLM flag file,
+      # no restart); back on when the task ends. 0 = never. See claude_runner/think_switch.py
+      - CLAUDE_RUNNER_THINK_OFF_AFTER_SECONDS=${AHAWR_THINK_OFF_AFTER_SECONDS:-3600}
+      - CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS=${AHAWR_THINK_OFF_AFTER_STEPS:-0}
+      - CLAUDE_RUNNER_THINK_FLAG_FILE=/app/runtime/local_thinking
+      # policy off_first: the first attempt at a task (TASK T<n>, n >= FROM_TASK) runs without thinking, a retry after a review with it
+      - CLAUDE_RUNNER_THINK_POLICY=${AHAWR_THINK_POLICY:-}
+      - CLAUDE_RUNNER_THINK_POLICY_FROM_TASK=${AHAWR_THINK_POLICY_FROM_TASK:-1}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).
@@ -144,6 +152,8 @@ services:
       # Claude Code sessions (transcripts) survive container restarts and rebuilds.
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
+      # the LiteLLM runtime switches (local_thinking): the runner writes it when a task runs too long
+      - ./litellm/runtime:/app/runtime
       # the Worker's scratch folder (missions use /tmp/dcfr-work) survives container recreation
       - type: bind
         source: ${AHAWR_SCRATCH_DIR:-D:\n8n\runner-scratch}
@@ -231,11 +241,15 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       # 1 = drop the thinking of earlier steps from the context of local models (ahawr_hooks.drop_history_thinking)
       - AHAWR_DROP_HISTORY_THINKING=${AHAWR_DROP_HISTORY_THINKING:-0}
+      - AHAWR_CACHE_TRACE=${AHAWR_CACHE_TRACE:-1}
 
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro
       - ./litellm/ahawr_hooks.py:/app/ahawr_hooks.py:ro
       - ./litellm/think_leak_guard.py:/app/think_leak_guard.py:ro
+      # prompt-cache diagnostics (AHAWR_CACHE_TRACE=1): one JSON line per local-model request in litellm/trace/cache_trace.jsonl
+      - ./litellm/cache_trace.py:/app/cache_trace.py:ro
+      - ./litellm/trace:/app/trace
       # runtime switches read on every request (no restart): local_thinking = on | off (set_local_thinking.sh)
       - ./litellm/runtime:/app/runtime:ro
 

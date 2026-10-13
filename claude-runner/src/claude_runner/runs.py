@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import re
 import signal
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -70,6 +72,13 @@ class RunnerError(Exception):
         self.status_code = status_code
 
 
+def task_number(prompt: str) -> int:
+    """The AHAWR task number in a Worker prompt (``TASK T010`` -> 10), 0 when there is none. In a first-attempt prompt it stands
+    after several thousand characters of rules, so the whole text is searched."""
+    found = re.search(r"TASK T0*(\d+)", prompt or "")
+    return int(found.group(1)) if found else 0
+
+
 @dataclass
 class StartRequest:
     input: str
@@ -78,12 +87,17 @@ class StartRequest:
     session_id: str = ""
     working_directory: str = ""
     role: str = ""
+    think_policy: str = ""
+    think_policy_from_task: int = 0
+    think_off_after_seconds: int = -1
+    think_off_after_steps: int = -1
 
 
 class RunManager:
     def __init__(self, settings: Settings, store: Store | None = None) -> None:
         self.settings = settings
         self.store = store or Store(settings.data_dir / "runner.sqlite")
+        self.on_run_start: Callable[[], object] | None = None  # set by the app: think policy (think_switch.py)
         self._slots = asyncio.Semaphore(settings.max_concurrent)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._procs: dict[str, asyncio.subprocess.Process] = {}
@@ -199,6 +213,11 @@ class RunManager:
                 provider=request.provider.strip(),
                 cwd=cwd,
                 input=prompt,
+                think_policy=request.think_policy,
+                think_from=request.think_policy_from_task,
+                think_after=request.think_off_after_seconds,
+                think_after_steps=request.think_off_after_steps,
+                think_task=task_number(prompt),
             )
             self.store.touch_session(session_id, run_id, None)
         self._launch(run_id, prompt, model, role, claude_id, resume, cwd, request.provider.strip())
@@ -278,6 +297,9 @@ class RunManager:
                 )
                 return
             self.store.update_run(run_id, status="running", started_at=now())
+            if self.on_run_start is not None:
+                with contextlib.suppress(Exception):
+                    self.on_run_start()
             profile = self.settings.profile(role)
             provider = self.settings.provider(provider_name)
             cmd = build_command(

@@ -153,3 +153,6 @@ FAIL  e2e: callback carrying code -> approved audit row
 =========================================
 TOTAL: 119 passed, 14 failed
 =========================================
+[Main Workflow Control Nodes (unpatched, before-fix)]
+FAIL  pause: the paused flag blocks the start of the next task (routes to 'paused')
+FAIL  steer: the steer note is appended to review_feedback of the next attempt

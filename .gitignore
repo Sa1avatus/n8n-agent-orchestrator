@@ -41,3 +41,4 @@ data/ARCHITECTURE_CONTRACT.md
 runner-scratch/
 *.bak-*
 check_workflows_output.txt
+litellm/trace/

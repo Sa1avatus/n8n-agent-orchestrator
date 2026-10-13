@@ -309,4 +309,44 @@ if __name__ == "__main__":
     test_mid_system_conversion_runs_before_compaction_cap()
     test_drop_history_thinking()
     test_local_thinking_flag_file()
+    test_cache_trace_first_diff(__import__("pathlib").Path(__import__("tempfile").mkdtemp()))
     print("hook unit tests passed")
+
+
+def test_cache_trace_first_diff(tmp_path) -> None:
+    import json
+
+    import cache_trace
+
+    cache_trace.TRACE_DIR = str(tmp_path)
+    cache_trace._prev.clear()
+    base = [
+        {"role": "system", "content": "S"},
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": "a1", "reasoning_content": "t1"},
+        {"role": "tool", "content": "r1"},
+    ]
+    assert cache_trace.record(base, None, "m")["first_diff"] == "new conversation"
+    ext = base + [{"role": "assistant", "content": "a2"}, {"role": "tool", "content": "r2"}]
+    assert cache_trace.record(ext, None, "m")["first_diff"] is None  # pure extension
+    changed = [dict(m) for m in ext]
+    changed[2] = {"role": "assistant", "content": "a1"}  # thinking dropped from an earlier step
+    line = cache_trace.record(changed, None, "m")
+    assert line["first_diff"] == 2 and line["from_end"] == 4 and line["redo_tokens_est"] > 0
+    assert "reasoning_content" in line["old"] and "reasoning_content" not in line["new"]
+    lines = [json.loads(x) for x in (tmp_path / "cache_trace.jsonl").read_text().splitlines()]
+    assert len(lines) == 3  # (read before the marker check)
+    # a moving cache_control marker is not a difference
+    marked = [dict(m) for m in changed]
+    marked[-1] = {"role": "tool", "content": [{"type": "text", "text": "r2", "cache_control": {"type": "ephemeral"}}]}
+    plain = [dict(m) for m in changed]
+    plain[-1] = {"role": "tool", "content": [{"type": "text", "text": "r2"}]}
+    cache_trace.record(plain, None, "m")
+    assert cache_trace.record(marked, None, "m")["first_diff"] is None
+    # one text block and the plain string are the same prompt
+    sysm = {"role": "system", "content": "S3"}
+    cache_trace.record([sysm, {"role": "user", "content": [{"type": "text", "text": "hi"}]}], None, "m2")
+    assert cache_trace.record([sysm, {"role": "user", "content": "hi"}, {"role": "assistant", "content": "x"}], None, "m2")["first_diff"] is None
+    # another conversation does not interfere
+    other = [{"role": "system", "content": "S2"}, {"role": "user", "content": "x"}]
+    assert cache_trace.record(other, None, "m")["first_diff"] == "new conversation"

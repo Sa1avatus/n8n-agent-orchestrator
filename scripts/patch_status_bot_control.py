@@ -28,11 +28,30 @@ WF_FILE = ROOT / "AHAWR_Status_Bot.json"
 LABEL = "AHAWR_Status_Bot.json"
 
 # --- constants shared by node code -------------------------------------------
-POLL_SECONDS = 30          # 86400 / 30 = 2880 executions/day (<= ~3000)
-TELEGRAM_TIMEOUT = 30      # long-polling getUpdates timeout (25..30 s)
+POLL_SECONDS = 60          # schedule interval; 86400 / 60 = 1440 executions/day (<= ~3000)
+TELEGRAM_TIMEOUT = 25      # getUpdates long-poll timeout, passed as a request parameter (25..30 s)
+HTTP_TIMEOUT_MS = 30000    # HTTP client timeout, above the 25 s long-poll
 CONFIRM_TTL_SEC = 120      # 2-minute TTL for a pending confirmation
 
 AUDIT_TABLE = "AHAWR Bot Audit Log"
+COMMAND_QUEUE_TABLE = "AHAWR Command Queue"
+
+# Confirmed /start, /resume and /restart cannot be launched by the bot
+# itself (no execution trigger in this workflow): they are recorded as rows
+# of the AHAWR Command Queue table (schema: docs/telegram/control-bot-findings.md,
+# option A) and the operator's launch line is announced in the reply.
+# /retry and /accept set the corresponding Live State flags instead; the main
+# workflow (the T010 patch) consumes them and acts on them during a running
+# mission, so the reply states that.
+QUEUED_VERBS = {
+    "start": "bash data-tables/ops/launch_mission.sh %s",
+    "resume": "bash data-tables/ops/launch_mission.sh %s",
+    "restart": "bash data-tables/ops/launch_mission.sh %s",
+}
+FLAG_VERBS = {
+    "retry": "retry_requested",
+    "accept": "accept_requested",
+}
 
 # Editable config/mission field whitelist with type/range checks.
 # Secrets (api_key, service_*, bot token, .env values) are deliberately
@@ -125,6 +144,10 @@ def set_node(name, values, pos, idv, tv=1):
 
 
 def http_node(name, url, params, timeout, pos, idv):
+    # onError continueRegularOutput: a getUpdates failure (timeout, network,
+    # expired token) emits an error item instead of killing the run, so
+    # Expand Updates can clear the poll_in_progress guard flag and the next
+    # trigger retries instead of the flag staying set forever.
     return {
         "parameters": {
             "url": url,
@@ -138,6 +161,31 @@ def http_node(name, url, params, timeout, pos, idv):
         "id": idv,
         "name": name,
         "credentials": CREDENTIAL,
+        "onError": "continueRegularOutput",
+    }
+
+
+def http_post_node(name, url, body, timeout, pos, idv):
+    # POST with a JSON body. Used for answerCallbackQuery, which the
+    # Telegram Bot API only accepts as a POST with callback_query_id in the
+    # body (a GET/query-parameter call would be rejected). The token still
+    # comes from the telegramApi credential only.
+    return {
+        "parameters": {
+            "method": "POST",
+            "url": url,
+            "sendBody": True,
+            "bodyType": "json",
+            "jsonBody": body,
+            "options": {"timeout": timeout},
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": pos,
+        "id": idv,
+        "name": name,
+        "credentials": CREDENTIAL,
+        "onError": "continueRegularOutput",
     }
 
 
@@ -213,16 +261,42 @@ def data_get_node(name, table, pos, idv, extra=None, limit=1):
         "id": idv,
         "name": name,
         "alwaysOutputData": True,
+        "onError": "continueRegularOutput",
     }
 
 
-def data_upsert_node(name, table, fields, pos, idv):
+def data_insert_node(name, table, fields, pos, idv):
+    """Insert node: one new row per item, every column value taken from the
+    item ($json.<column>). Used for the audit log: every audit item
+    (approved, rejected, failed) becomes a new row, never an update."""
+    return {
+        "parameters": {
+            "resource": "table",
+            "operation": "insert",
+            "dataTableId": {"__rl": True, "mode": "name", "value": table},
+            "columns": {"column": [{"name": k, "value": "={{ $json." + k + " }}"} for k in fields]},
+            "options": {},
+        },
+        "type": "n8n-nodes-base.dataTable",
+        "typeVersion": 1.1,
+        "position": pos,
+        "id": idv,
+        "name": name,
+        "onError": "continueRegularOutput",
+    }
+
+
+def data_update_node(name, table, key_filter, pos, idv):
+    """Update node: one column, column name and value taken from the item
+    ($json.key / $json.value), row matched by key_filter."""
     return {
         "parameters": {
             "resource": "table",
             "operation": "update",
             "dataTableId": {"__rl": True, "mode": "name", "value": table},
-            "columns": {"column": [{"name": k} for k in fields]},
+            "matchType": "allConditions",
+            "filters": {"conditions": key_filter},
+            "columns": {"column": [{"name": "={{ $json.key }}", "value": "={{ $json.value }}"}]},
             "options": {"updateMatchingRows": False},
         },
         "type": "n8n-nodes-base.dataTable",
@@ -230,6 +304,7 @@ def data_upsert_node(name, table, fields, pos, idv):
         "position": pos,
         "id": idv,
         "name": name,
+        "onError": "continueRegularOutput",
     }
 
 
@@ -263,17 +338,33 @@ def sticky_node(name, content, pos, idv, width=560, height=300):
 
 # --- shared JS (embedded in node code) ---------------------------------------
 
+# No-overlap guard: Prepare Poll sets poll_in_progress=true and emits no
+# items when a previous run is still in flight (its flag is still set), so
+# a second getUpdates can never start while the first is in flight. The flag
+# is cleared at the end of Expand Updates, on success and on failure alike
+# (Get Updates runs with onError continueRegularOutput, so a failed long-poll
+# also reaches Expand Updates and releases the guard).
 PREPARE_POLL = (
     "const data = $getWorkflowStaticData('global');\n"
+    "if (data.poll_in_progress) {\n"
+    "  data.poll_ignored_count = (Number(data.poll_ignored_count) || 0) + 1;\n"
+    "  return [];\n"
+    "}\n"
+    "data.poll_in_progress = true;\n"
     "const offset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\n"
     "return [{ json: { offset } }];"
 )
 
 EXPAND_UPDATES = (
     "const result = $json ?? {};\n"
-    "if (result.ok !== true) { throw new Error('Telegram getUpdates failed: ' + (result.description ?? 'unknown error')); }\n"
-    "const updates = Array.isArray(result.result) ? result.result : [];\n"
     "const data = $getWorkflowStaticData('global');\n"
+    "data.poll_in_progress = false;\n"
+    "const updates = Array.isArray(result.result) ? result.result : [];\n"
+    "if (result.ok !== true) {\n"
+    "  // getUpdates error item (onError continueRegularOutput): no updates\n"
+    "  // to process; the run ends here after the guard flag is cleared.\n"
+    "  return [];\n"
+    "}\n"
     "const currentOffset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\n"
     "const fresh = updates.filter(u => Number(u.update_id ?? -1) >= currentOffset);\n"
     "if (fresh.length) {\n"
@@ -289,7 +380,7 @@ PARSE_COMMAND = (
     "const cfg = $('Config').first().json ?? {};\n"
     "const allowed = String(cfg.telegram_chat_id ?? '').split(/[;\\s,]+/).map(s => s.trim()).filter(Boolean);\n"
     "const u = $json.update ?? {};\n"
-    "let chatId = null, text = '', command = '', callbackData = null, kind = $json.kind;\n"
+    "let chatId = null, text = '', command = '', callbackData = null, callbackId = null, kind = $json.kind;\n"
     "if (u.message) {\n"
     "  chatId = u.message.chat?.id;\n"
     "  text = String(u.message.text ?? '').trim();\n"
@@ -298,13 +389,14 @@ PARSE_COMMAND = (
     "} else if (u.callback_query) {\n"
     "  chatId = u.callback_query.message?.chat?.id;\n"
     "  callbackData = u.callback_query.data ?? null;\n"
+    "  callbackId = u.callback_query.id ?? null;\n"
     "  command = 'callback_query';\n"
     "}\n"
     "const isAllowed = allowed.includes(String(chatId));\n"
     "if (!isAllowed) { data.bot_ignored_count = (Number(data.bot_ignored_count) || 0) + 1; }\n"
     "let resolved = command;\n"
     "if (!resolved && kind === 'callback') { resolved = 'callback_query'; }\n"
-    "return [{ json: { chat_id: chatId, kind: kind, text: text, command: command, callback_data: callbackData, allowed: isAllowed, resolved: resolved } }];"
+    "return [{ json: { chat_id: chatId, kind: kind, text: text, command: command, callback_data: callbackData, callback_id: callbackId, allowed: isAllowed, resolved: resolved } }];"
 )
 
 ROUTE = (
@@ -361,7 +453,7 @@ VIEW_HANDLER = (
     "if (command === '/whoami') { out.push('Access level: ' + (p.allowed ? 'admin (control and edit)' : 'viewer (read-only)')); out.push('Chat: ' + String(chatId)); }\n"
     "else if (command === '/profile') { out.push('Profile: ' + esc(cfg.profile_id) + ' (allowed chat: ' + esc(cfg.telegram_chat_id) + ')'); }\n"
     "else if (command === '/version') { out.push('Workflow: AHAWR Status Bot v1; runner: Claude Code; n8n: this stack'); }\n"
-    "else if (command === '/config') { out.push('Editable keys (no secrets):'); out.push(Object.keys(cfg.editable_json ?? {}).map(k => '  ' + k + ' = ' + esc(cfg[k])).join('\\n')); }\n"
+    "else if (command === '/config') { const ed = (typeof cfg.editable_json === 'string') ? JSON.parse(cfg.editable_json) : (cfg.editable_json ?? {}); out.push('Editable keys (no secrets):'); out.push(Object.keys(ed).map(k => '  ' + k + ' (' + ed[k].type + (ed[k].min !== undefined ? ' ' + ed[k].min + '..' + ed[k].max : '') + ')').join('\\n')); }\n"
     "else if (command === '/missions') { const ms = $('Missions').all().map(i => i.json ?? {}); out.push(ms.map(m => m.mission_id + ' | ' + esc(m.name) + ' | enabled=' + m.enabled + ' | v' + m.version).join('\\n')); }\n"
     "else if (command === '/status' || command === '/progress') {\n"
     "  const ns = cfg.state_namespace;\n"
@@ -386,7 +478,7 @@ VIEW_HANDLER = (
 CONTROL_HANDLER = (
     _common_prefix() +
     "const data = $getWorkflowStaticData('global');\n"
-    "const action = command.replace('/', '') + ' ' + args.join(' ').trim();\n"
+    "const action = command.replace('/', '') + (args.length ? ' ' + args.join(' ').trim() : '');\n"
     "const verb = command.replace('/', '');\n"
     "const pargs = {};\n"
     "if (verb === 'pause') { if (args[0] === 'off') pargs.reason = ''; else pargs.reason = args.join(' ').trim(); }\n"
@@ -399,9 +491,17 @@ CONTROL_HANDLER = (
     "  if (op === 'move') { pargs.a = Number(args[1]); pargs.b = Number(args[2]); }\n"
     "}\n"
     "if (verb === 'start' && args.length) pargs.mission = args.join(' ').trim();\n"
+    "if (verb === 'resume' && args.length) pargs.mission = args.join(' ').trim();\n"
+    "if (verb === 'restart' && args.length) pargs.mission = args.join(' ').trim();\n"
+    "const queueSpec = " + json.dumps(QUEUED_VERBS) + ";\n"
+    "const flagSpec = " + json.dumps(FLAG_VERBS) + ";\n"
+    "const queued = queueSpec[verb];\n"
+    "const flag = flagSpec[verb] || null;\n"
     + _reject_viewer("action") +
     "if (!data." + PENDING_STORE_KEY + ") { data." + PENDING_STORE_KEY + " = {}; }\n"
     "const pending = { action: action, chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: " + str(CONFIRM_TTL_SEC) + " * 1000, kind: 'control', args: pargs };\n"
+    "if (queued) { pending.launch = queued; }\n"
+    "if (flag) { pending.flag = flag; }\n"
     "data." + PENDING_STORE_KEY + "[String(chatId)] = pending;\n"
     "const code = pending.code;\n"
     "const out = ['Confirming: ' + esc(action)];\n"
@@ -416,7 +516,8 @@ CONTROL_HANDLER = (
 EDIT_HANDLER = (
     _common_prefix() +
     "const data = $getWorkflowStaticData('global');\n"
-    "const editable = $('Config').first().json.editable_json ?? {};\n"
+    "let editable = $('Config').first().json.editable_json ?? {};\n"
+    "if (typeof editable === 'string') { try { editable = JSON.parse(editable); } catch (e) { editable = {}; } }\n"
     + _reject_viewer("'edit ' + command.replace('/', '') + ' ' + args.join(' ').trim()") +
     "// /model <role> <model> [--provider name]\n"
     "if (command === '/model') {\n"
@@ -434,13 +535,33 @@ EDIT_HANDLER = (
     "  const buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\n"
     "  return [{ json: { chat_id: chatId, text: out.join('\\n'), buttons: buttons, pending: pending } }];\n"
     "}\n"
-    "// /undo [N]\n"
+    "// /undo [N]: find the latest successful (approved) audit row for this\n"
+    "// chat, take its editable key from the command string and restore its\n"
+    "// 'before' value. The restored key/value is stored in the pending like\n"
+    "// any /set, so Apply Mutation re-validates it before the write; the\n"
+    "// undo itself is confirmed and audited like any edit.\n"
     "if (command === '/undo') {\n"
     "  const n = Number(args[0]) || 1;\n"
+    "  const audRows = $('Audit Recent').all().map(i => i.json ?? {});\n"
+    "  const mine = audRows.filter(a => String(a.who ?? '') === String(chatId) && a.result === 'approved');\n"
+    "  const last = mine.length ? mine[mine.length - 1] : null;\n"
+    "  if (!last) { return [{ json: { chat_id: chatId, text: 'Nothing to undo: no successful edit by this chat in the audit log.', buttons: [] } }]; }\n"
+    "  const cmd = String(last.command ?? '');\n"
+    "  const mSet = /^set\\s+(\\S+)\\s+=\\s+(.*)$/.exec(cmd);\n"
+    "  const mMod = /^model\\s+(\\S+)\\s+(.*)$/.exec(cmd);\n"
+    "  let key = null;\n"
+    "  if (mSet) { key = mSet[1]; }\n"
+    "  else if (mMod) { key = mMod[1] + '_model'; }\n"
+    "  const beforeVal = last.before ?? '—';\n"
+    "  if (!key || String(beforeVal) === '—') { return [{ json: { chat_id: chatId, text: 'Nothing to undo: last successful action (' + esc(cmd) + ') has no editable value.', buttons: [] } }]; }\n"
+    "  let editable = $('Config').first().json.editable_json ?? {};\n"
+    "  if (typeof editable === 'string') { try { editable = JSON.parse(editable); } catch (e) { editable = {}; } }\n"
+    "  const spec = editable[key];\n"
+    "  if (!spec) { return [{ json: { chat_id: chatId, text: 'Not editable: ' + key + ' (whitelist field).', buttons: [] } }]; }\n"
     "  if (!data." + PENDING_STORE_KEY + ") { data." + PENDING_STORE_KEY + " = {}; }\n"
-    "  const pending = { action: 'undo ' + n, key: 'undo', value: String(n), table: 'missions', chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: " + str(CONFIRM_TTL_SEC) + " * 1000, kind: 'edit', args: { n: n } };\n"
+    "  const pending = { action: 'undo ' + n, key: key, value: String(beforeVal), table: spec.table, chat_id: chatId, role: 'admin', code: 'CONF-' + String(chatId).replace(/\\D/g, '') + '-' + Math.random().toString(36).slice(2, 8).toUpperCase(), created_at: Date.now(), ttl_ms: " + str(CONFIRM_TTL_SEC) + " * 1000, kind: 'edit', args: { n: n } };\n"
     "  data." + PENDING_STORE_KEY + "[String(chatId)] = pending;\n"
-    "  const out = ['Confirm: undo last ' + n + ' edit(s)'];\n"
+    "  const out = ['Confirm: undo last ' + n + ' edit(s) -> ' + key + ' = ' + esc(String(beforeVal))];\n"
     "  out.push('Reply with the one-time code ' + pending.code + ' or use the buttons. Valid for 2 minutes.');\n"
     "  const buttons = [{ callback_data: pending.code, text: 'Approve' }, { callback_data: 'deny', text: 'Deny' }];\n"
     "  return [{ json: { chat_id: chatId, text: out.join('\\n'), buttons: buttons, pending: pending } }];\n"
@@ -498,7 +619,7 @@ CONFIRM_HANDLER = (
     "else if (cb === 'deny') { decided = 'deny'; reason = 'deny button'; }\n"
     "else if (msgCode) { decided = 'approve'; codeUsed = msgCode; reason = 'code message'; }\n"
     "const cleanStore = () => { if (!Object.keys(store).length) { data." + PENDING_STORE_KEY + " = null; } };\n"
-    "const reject = (why) => { return [{ json: { chat_id: chatId, text: 'Rejected: ' + why + '. No change applied.', buttons: [], audit: { who: String(chatId), when: new Date().toISOString(), command: 'confirm', before: '—', after: '—', result: 'rejected', reason: why } } }]; };\n"
+    "const reject = (why) => { return [{ json: { chat_id: chatId, text: 'Rejected: ' + why + '. No change applied.', buttons: [], approved: false, audit: { who: String(chatId), when: new Date().toISOString(), command: 'confirm', before: '—', after: '—', result: 'rejected', reason: why } } }]; };\n"
     "// Single use: codes of already-confirmed pending commands are remembered so\n"
     "// a replayed code cannot be approved a second time.\n"
     "if (!data.usedCodes) { data.usedCodes = []; }\n"
@@ -519,17 +640,20 @@ CONFIRM_HANDLER = (
     "  // pending exists for this chat (and none in the store carries the code):\n"
     "  // reject with an audit item instead of silently doing nothing.\n"
     "  if (decided !== null) { return reject(codeUsed !== null ? 'unknown one-time code' : 'no pending command for this chat'); }\n"
-    "  return [{ json: { chat_id: chatId, text: 'No pending change (or it was already confirmed).', buttons: [] } }];\n"
+    "  return [{ json: { chat_id: chatId, text: 'No pending change (or it was already confirmed).', buttons: [], approved: false } }];\n"
     "}\n"
     "if (Date.now() > target.created_at + target.ttl_ms) { delete store[String(target.chat_id)]; cleanStore(); return reject('code expired after 2 minutes'); }\n"
     "if (String(target.chat_id) !== chatKey) { return reject('foreign chat: this code belongs to chat ' + String(target.chat_id)); }\n"
     "if (decided !== 'deny' && codeUsed !== null && String(codeUsed) !== String(target.code)) { return reject('wrong one-time code'); }\n"
-    "if (decided === null) { return [{ json: { chat_id: chatId, text: 'Pending: ' + esc(target.action) + '. Reply with the one-time code, use the buttons, or /approve. Valid for 2 minutes.', buttons: [] } }]; }\n"
+    "if (decided === null) { return [{ json: { chat_id: chatId, text: 'Pending: ' + esc(target.action) + '. Reply with the one-time code, use the buttons, or /approve. Valid for 2 minutes.', buttons: [], approved: false } }]; }\n"
     "delete store[String(target.chat_id)]; cleanStore();\n"
     "if (codeUsed !== null) { data.usedCodes.push(String(codeUsed)); }\n"
     "const result = decided === 'approve' ? 'approved' : 'denied';\n"
     "const out = ['Pending change: ' + esc(target.action), 'Result: ' + result];\n"
-    "return [{ json: { chat_id: chatId, text: esc(out.join('\\n')), buttons: [], pending: target, audit: { who: String(chatId), when: new Date().toISOString(), command: target.action, before: '—', after: target.action, result: result } } }];"
+    "// approved flag: true only when a mutation may be applied; Build Reply\n"
+    "// rewrites before/after from the actual row values and sets the final\n"
+    "// audit result (approved only after the write is confirmed by re-read).\n"
+    "return [{ json: { chat_id: chatId, text: esc(out.join('\\n')), buttons: [], approved: result === 'approved', pending: target, audit: { who: String(chatId), when: new Date().toISOString(), command: target.action, before: '—', after: target.action, result: result } } }];"
 )
 
 # HELP: /help, /commands, greeting. Read-only.
@@ -561,107 +685,172 @@ AUDIT_WRITE = (
 # nothing further so no reply is sent.
 SILENCE = "return [];"
 
-# Apply the approved mutation to the appropriate data table (control/edit).
-# edit: writes the validated value to hermes_config or missions; /model and
-#   /undo handled in the edit branch.
-# control: concrete state transitions via the Autonomous Agent Live State table:
-#   /stop     -> run owner set, workflow_status 'stopped' (no orphaned 'running')
-#   /pause    -> paused=true, pause_reason set (resumed by /pause off)
-#   /restart  -> run owner set, workflow_status 'starting' (drain handled by main wf)
-#   /steer    -> steer_note appended to operator_feedback
-#   /queue    -> queue ops: add/list/rm/move/clear on the mission queue
-#   (other control verbs recorded as last_control with owner)
+# Apply the approved mutation: validate against the whitelist (field, type,
+# range) before anything is written, resolve the 'before' value from the
+# dataTable get nodes (Load Config Row / Load Mission Row / Load Live State),
+# and emit one validated (table, key, value, match) pair. The dataTable
+# update node (routed by table) writes it, then a dataTable get re-reads the
+# row; Build Reply builds the reply from the re-read value ('было -> стало')
+# and marks the audit approved only after the write is confirmed. If the
+# validation fails, no write happens and Build Reply emits an error reply with
+# an audit item result 'failed'.
 APPLY_MUTATION = (
     "const p = $json.pending ?? null;\n"
     "let audit = $json.audit ?? null;\n"
-    "// A rejected confirmation carries an audit item but no pending: echo the\n"
-    "// audit through so Build Audit Row writes the rejected row.\n"
-    "if (!p) { return audit ? [{ json: { audit } }] : []; }\n"
-    "const now = new Date().toISOString();\n"
-    "// Echo the audit item through this node's output so Build Audit Row can\n"
-    "// write the row; before/after are replaced with the real row values.\n"
-    "const finish = (out, before, after) => {\n"
-    "  if (audit) { audit = { ...audit, before, after }; }\n"
-    "  return [{ json: { ...out, audit } }];\n"
+    "// A denied confirmation has no pending and no write; it is routed to Build\n"
+    "// Reply by the 'Has Pending?' node, not through this node.\n"
+    "if (!p) { return []; }\n"
+    "const cfg = $('Config').first().json ?? {};\n"
+    "const fail = (reason) => {\n"
+    "  if (audit) { audit = { ...audit, before: '—', after: '—', result: 'failed', reason: reason } };\n"
+    "  return [{ json: { chat_id: $json.chat_id, failed: true, reason: reason, audit: audit } }];\n"
     "};\n"
     "if (p.kind === 'edit') {\n"
-    "  const cfg = $('Config').first().json ?? {};\n"
-    "  const spec = (cfg.editable_json ?? {})[p.key];\n"
-    "  const val = p.type === 'number' ? Number(p.value) : (p.type === 'boolean' ? p.value === 'true' : String(p.value));\n"
-    "  const rows = (p.table === 'hermes_config') ? $('Load Config Row').all() : $('Load Mission Row').all();\n"
-    "  let target;\n"
-    "  if (p.action.startsWith('mission ')) {\n"
-    "    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.split(' ')[1] || '');\n"
-    "    target = rows.map(i => i.json ?? {}).find(r => String(r.mission_id ?? '') === String(mid));\n"
+    "  // Resolve the target field: normally p.key (the /undo handler now\n"
+    "  // stores the restored key/value directly in the pending). The\n"
+    "  // 'undo' branch is a defensive fallback for pendings built before\n"
+    "  // that change, where the last edit_history entry carries the\n"
+    "  // rolled-back field and value.\n"
+    "  let targetKey = p.key;\n"
+    "  let rawValue = p.value;\n"
+    "  if (targetKey === 'undo') {\n"
+    "    const hist = (p.edit_history || []);\n"
+    "    const entry = hist.length ? hist[hist.length - 1] : null;\n"
+    "    if (!entry) { return fail('no edit history to undo'); }\n"
+    "    const parts = String(entry).split(' = ');\n"
+    "    targetKey = (parts[0] || '').trim();\n"
+    "    rawValue = parts.slice(1).join(' ').trim();\n"
+    "  }\n"
+    "  // Re-validate against the whitelist (field, type, range) before any\n"
+    "  // write node runs; an invalid value never reaches a write node.\n"
+    "  let editable = cfg.editable_json ?? {};\n"
+    "  if (typeof editable === 'string') { try { editable = JSON.parse(editable); } catch (e) { editable = {}; } }\n"
+    "  const spec = editable[targetKey];\n"
+    "  if (!spec) { return fail('not editable: ' + targetKey + ' (whitelist field)'); }\n"
+    "  let val;\n"
+    "  if (spec.type === 'number') {\n"
+    "    val = Number(rawValue);\n"
+    "    if (!Number.isFinite(val) || val < spec.min || val > spec.max) { return fail(targetKey + ' must be a number in [' + spec.min + '..' + spec.max + ']'); }\n"
+    "  } else if (spec.type === 'boolean') {\n"
+    "    if (!['true', 'false'].includes(String(rawValue).toLowerCase())) { return fail(targetKey + ' must be true or false'); }\n"
+    "    val = rawValue === 'true';\n"
     "  } else {\n"
-    "    target = rows.map(i => i.json ?? {}).find(r => String(r[p.table === 'missions' ? 'mission_id' : 'profile_id'] ?? '') === (p.table === 'missions' ? (cfg.active_mission_id || '') : cfg.profile_id));\n"
+    "    val = String(rawValue);\n"
+    "    if (!val || val.length < spec.min || val.length > spec.max) { return fail(targetKey + ' length must be ' + spec.min + '..' + spec.max); }\n"
     "  }\n"
-    "  const before = target && p.key in target ? target[p.key] : '—';\n"
-    "  if (p.action.startsWith('model ')) {\n"
-    "    // /model: role model/provider change applied to hermes_config\n"
-    "    const role = p.action.split(' ')[1];\n"
-    "    const after = (p.args && p.args.model) ? p.args.model : val;\n"
-    "    if (target) { target[role + '_model'] = p.args && p.args.model ? p.args.model : val; if (p.args && p.args.provider) target[role + '_provider'] = p.args.provider; }\n"
-    "    return finish({ table: p.table, key: role + '_model', value: after, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now }, before, after);\n"
+    "  const table = p.table;\n"
+    "  const rows = (table === 'hermes_config') ? $('Load Config Row').all() : $('Load Mission Row').all();\n"
+    "  let match;\n"
+    "  if (table === 'missions') {\n"
+    "    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.startsWith('mission ') ? (p.action.split(' ')[1] || '') : cfg.active_mission_id);\n"
+    "    if (!mid) { return fail('mission id missing'); }\n"
+    "    match = { field: 'mission_id', value: String(mid) };\n"
+    "  } else {\n"
+    "    match = { field: 'profile_id', value: String(cfg.profile_id) };\n"
     "  }\n"
-    "  if (p.action.startsWith('undo ')) {\n"
-    "    // /undo: roll back the last N edits from the edit history\n"
-    "    const n = Number(p.args && p.args.n) || 1;\n"
-    "    const hist = (p.edit_history || []).slice();\n"
-    "    const rolled = hist.slice(-n).reverse();\n"
-    "    const after = p.value;\n"
-    "    if (target) target[p.key] = after;\n"
-    "    return finish({ table: p.table, key: p.key, value: after, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now, rolled_back: rolled }, before, after);\n"
-    "  }\n"
-    "  if (p.action.startsWith('mission ')) {\n"
-    "    // /mission <id> enable|disable: concrete state transition in the mission table\n"
-    "    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.split(' ')[1] || '');\n"
-    "    if (target) target[p.key] = val;\n"
-    "    return finish({ table: p.table, key: p.key, value: val, mission_id: mid, enabled: val, updated_at: now }, before, val);\n"
-    "  }\n"
-    "  // /set and /mission edit <field>: write the validated value\n"
-    "  if (target) target[p.key] = val;\n"
-    "  return finish({ table: p.table, key: p.key, value: val, profile_id: cfg.profile_id, mission_id: cfg.active_mission_id, updated_at: now }, before, val);\n"
+    "  const row = rows.map(i => i.json ?? {}).find(r => String(r[match.field] ?? '') === match.value) || null;\n"
+    "  const before = row && targetKey in row ? row[targetKey] : '—';\n"
+    "  return [{ json: { chat_id: $json.chat_id, kind: p.kind, table: table, key: targetKey, value: val, match: match, before: before, audit: audit } }];\n"
     "}\n"
-    "// control actions: concrete state transitions in the live state table\n"
+    "// control actions: the target row is the live state row keyed by\n"
+    "// state_key = Config.state_namespace (row key fixed in T001/T002).\n"
     "const liveRows = $('Load Live State').all().map(i => i.json ?? {});\n"
     "const live = liveRows[0] || {};\n"
-    "const runOwner = p.chat_id;\n"
-    "const out = { table: 'Autonomous Agent Live State', owner: runOwner, updated_at: now };\n"
+    "if (!liveRows.length || String(live.state_key ?? '') !== String(cfg.state_namespace)) { return fail('live state row not found'); }\n"
     "const verb = p.action.split(' ')[0];\n"
-    "const statusBefore = live.workflow_status ?? '—';\n"
-    "if (verb === 'stop') {\n"
-    "  // mark the run owner so no run is left 'running' without an owner;\n"
-    "  // the main workflow sets workflow_status to 'stopped' on drain.\n"
-    "  out.workflow_status = 'stopped';\n"
-    "  out.current_run_id = live.current_run_id || null;\n"
-    "} else if (verb === 'pause') {\n"
-    "  const off = p.action.includes('off');\n"
-    "  out.paused = off ? false : true;\n"
-    "  out.pause_reason = off ? '' : (p.args && p.args.reason ? p.args.reason : 'operator pause');\n"
-    "  return finish(out, live.paused ?? '—', out.paused);\n"
-    "} else if (verb === 'restart') {\n"
-    "  // stop, wait for the active run to drain, then start again from saved state.\n"
-    "  out.workflow_status = 'starting';\n"
-    "  out.current_run_id = live.current_run_id || null;\n"
-    "} else if (verb === 'steer') {\n"
-    "  const note = p.args && p.args.prompt ? p.args.prompt : '';\n"
-    "  out.steer_note = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + note;\n"
-    "  return finish(out, live.operator_feedback ?? '—', out.steer_note);\n"
-    "} else if (verb === 'queue') {\n"
+    "let key, val;\n"
+    "if (verb === 'stop') { key = 'workflow_status'; val = 'stopped'; }\n"
+    "else if (verb === 'restart') { key = 'workflow_status'; val = 'starting'; }\n"
+    "else if (verb === 'pause') { key = 'paused'; val = !p.action.includes('off'); }\n"
+    "else if (verb === 'steer') { key = 'operator_feedback'; val = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + (p.args && p.args.prompt ? p.args.prompt : ''); }\n"
+    "else if (verb === 'queue') {\n"
     "  const op = p.args && p.args.op ? p.args.op : 'list';\n"
-    "  const q = live.queue || [];\n"
+    "  const q = Array.isArray(live.queue) ? live.queue.slice() : [];\n"
     "  if (op === 'add') { q.push(p.args && p.args.mission ? p.args.mission : ''); }\n"
-    "  else if (op === 'list') { out.queue = q; }\n"
-    "  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) q.splice(idx, 1); }\n"
+    "  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) { q.splice(idx, 1); } }\n"
     "  else if (op === 'move') { const a = Number(p.args && p.args.a), b = Number(p.args && p.args.b); if (Number.isFinite(a) && Number.isFinite(b) && a < q.length && b < q.length) { [q[a], q[b]] = [q[b], q[a]]; } }\n"
     "  else if (op === 'clear') { q.length = 0; }\n"
-    "  out.queue = q;\n"
-    "  return finish(out, JSON.stringify(live.queue || []), JSON.stringify(q));\n"
+    "  key = 'queue'; val = q;\n"
     "}\n"
-    "// record intent + owner for other control verbs (resume, retry, accept, start)\n"
-    "out.last_control = p.action;\n"
-    "return finish(out, statusBefore, out.last_control);\n"
+    "else { key = 'last_control'; val = p.action; }\n"
+    "const before = key in live ? live[key] : '—';\n"
+    "// Command queue branch: a confirmed /start, /resume or /restart is queued\n"
+    "// (the bot cannot launch runs itself), and a confirmed /retry or /accept\n"
+    "// sets the Live State flag the main workflow (T010 patch) consumes during\n"
+    "// a running mission. The write goes through a dataTable insert node\n"
+    "// (Write Command Queue) or the live-state update node; the reply states\n"
+    "// exactly what happens and when.\n"
+    "const queueSpec = " + json.dumps(QUEUED_VERBS) + ";\n"
+    "const flagSpec = " + json.dumps(FLAG_VERBS) + ";\n"
+    "const queued = queueSpec[verb];\n"
+    "const flag = flagSpec[verb] || null;\n"
+    "if (queued) {\n"
+    "  const mid = (p.args && p.args.mission) || cfg.active_mission_id;\n"
+    "  const launch = queued.replace('%s', mid);\n"
+    "  return [{ json: { chat_id: $json.chat_id, table: '" + COMMAND_QUEUE_TABLE + "', queued: true, action: p.action, mission_id: mid, launch: launch, state_key: cfg.state_namespace, role: p.role ?? 'admin', status: 'pending', code: p.code ?? '', created_at: p.created_at ?? new Date().toISOString(), executed_at: null, result: launch, audit: audit } }];\n"
+    "}\n"
+    "if (flag) {\n"
+    "  const when = 'as soon as the running mission reaches the next task';\n"
+    "  const note = flag === 'retry_requested' ? 'the workflow will retry the current task once more with the last review as feedback' : 'the workflow will accept the current task and continue with the next one';\n"
+    "  return [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', flag: flag, key: flag, value: true, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: (flag in live ? live[flag] : '—'), note: note, when: when, audit: audit } }];\n"
+    "}\n"
+    "// Generic control verbs (/stop, /pause, /steer, /queue, /restart ...):\n"
+    "// write the live-state key/value through the update node.\n"
+    "return [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', key: key, value: val, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: before, audit: audit } }];\n"
+)
+
+
+# Build Reply: the only node that produces the outgoing message.
+#   - confirm path (Handle Confirm item): the original text/buttons are kept
+#     and the audit item is passed through unchanged (rejected/denied).
+#   - validation failure (Apply Mutation item with failed=true): an error
+#     reply, audit result 'failed'.
+#   - success path (re-read row from the Read After get node): the reply is
+#     built from the re-read value as 'было -> стало'; the audit becomes
+#     approved only because the write was confirmed by the re-read.
+BUILD_REPLY = (
+    "const ctx = $('Apply Mutation').first() ? $('Apply Mutation').first().json : null;\n"
+    "const j = $json ?? {};\n"
+    "// Error item from a failed Write/Read node (onError continueRegularOutput):\n"
+    "// the re-read row is missing or the item carries an error -> failed audit.\n"
+    "if (j.error) {\n"
+    "  const reason = 'write failed or re-read value differs (node error: ' + JSON.stringify(j.error.message || j.error) + ')';\n"
+    "  const audit = ctx.audit ? { ...ctx.audit, before: ctx.before, after: '—', result: 'failed', reason: reason } : null;\n"
+    "  return [{ json: { chat_id: ctx.chat_id, text: 'Error: ' + reason + '. No change confirmed.', buttons: [], audit: audit } }];\n"
+    "}\n"
+    "if (ctx && ctx.failed) {\n"
+    "  return [{ json: { chat_id: ctx.chat_id, text: 'Error: ' + ctx.reason + '. No change applied.', buttons: [], audit: ctx.audit } }];\n"
+    "}\n"
+    "if (j.text !== undefined) {\n"
+    "  // confirm path: reject/deny/pending replies and their audit items\n"
+    "  return [{ json: { chat_id: j.chat_id, text: j.text, buttons: j.buttons ?? [], audit: j.audit ?? null } }];\n"
+    "}\n"
+    "// Queued command: the queue row was inserted; the launch line is given to\n"
+    "// the operator (the operator executes it; the bot never launches runs).\n"
+    "// Checked before the re-read verification: the queue row has no key/value\n"
+    "// pair to compare against, only an action/launch/result payload.\n"
+    "if (ctx.queued) {\n"
+    "  const audit = ctx.audit ? { ...ctx.audit, before: '—', after: 'queued: ' + ctx.action, result: 'approved', reason: 'command recorded in the queue table' } : null;\n"
+    "  return [{ json: { chat_id: ctx.chat_id, text: 'записано в очередь команд, исполнитель: оператор, команда: ' + ctx.launch, buttons: [], audit: audit } }];\n"
+    "}\n"
+    "// Flag command (/retry, /accept): the Live State flag is set and the main\n"
+    "// workflow consumes it during a running mission. Checked before the re-read\n"
+    "// verification: the flag row carries a boolean, not a key/value pair.\n"
+    "if (ctx.flag) {\n"
+    "  const after = j[ctx.key];\n"
+    "  const audit = ctx.audit ? { ...ctx.audit, before: ctx.before, after: String(after), result: 'approved', reason: 'flag set in the live state' } : null;\n"
+    "  return [{ json: { chat_id: ctx.chat_id, text: ctx.flag + ': было ' + ctx.before + ' -> стало ' + String(after) + '. ' + ctx.note + ' ' + ctx.when + '.', buttons: [], audit: audit } }];\n"
+    "}\n"
+    "// success path: $json is the re-read row; verify it carries the written value.\n"
+    "const after = j[ctx.key];\n"
+    "const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && JSON.stringify(a) === JSON.stringify(b));\n"
+    "if (after === undefined || !same(after, ctx.value)) {\n"
+    "  const reason = 'write failed or re-read value differs (expected ' + JSON.stringify(ctx.value) + ', got ' + JSON.stringify(after) + ')';\n"
+    "  const audit = ctx.audit ? { ...ctx.audit, before: ctx.before, after: after === undefined ? '—' : after, result: 'failed', reason: reason } : null;\n"
+    "  return [{ json: { chat_id: ctx.chat_id, text: 'Error: ' + reason + '. No change confirmed.', buttons: [], audit: audit } }];\n"
+    "}\n"
+    "const audit = ctx.audit ? { ...ctx.audit, before: ctx.before, after: after, result: 'approved' } : null;\n"
+    "return [{ json: { chat_id: ctx.chat_id, text: ctx.key + ': было ' + ctx.before + ' -> стало ' + after + '.', buttons: [], audit: audit } }];\n"
 )
 
 
@@ -678,10 +867,10 @@ def config_values():
         "architect_poll_seconds": {"type": "number", "min": 1, "max": 3600, "table": "hermes_config"},
         "worker_poll_seconds": {"type": "number", "min": 1, "max": 3600, "table": "hermes_config"},
         "reviewer_poll_seconds": {"type": "number", "min": 1, "max": 3600, "table": "hermes_config"},
-        "name": {"type": "string", "min": 1, "max": 120, "table": "hermes_config"},
-        "objective": {"type": "string", "min": 1, "max": 4000, "table": "hermes_config"},
-        "working_folder": {"type": "string", "min": 1, "max": 300, "table": "hermes_config"},
-        "enabled": {"type": "boolean", "table": "hermes_config"},
+        "name": {"type": "string", "min": 1, "max": 120, "table": "missions"},
+        "objective": {"type": "string", "min": 1, "max": 4000, "table": "missions"},
+        "working_folder": {"type": "string", "min": 1, "max": 300, "table": "missions"},
+        "enabled": {"type": "boolean", "table": "missions"},
     }
     return [
         ("state_namespace", "llama.cpp-dashboard-v1"),
@@ -708,7 +897,7 @@ def build_workflow():
                   ("limit", "100"),
                   ("timeout", str(TELEGRAM_TIMEOUT)),
                   ("allowed_updates", '["message","callback_query"]')],
-                 60000, [5536, 1488], "54757ef0-2cf7-4e7f-87d7-99610ed91bef"),
+                 HTTP_TIMEOUT_MS, [5536, 1488], "54757ef0-2cf7-4e7f-87d7-99610ed91bef"),
         code_node("Expand Updates", EXPAND_UPDATES, [5712, 1488], "a9c27c6d-b372-458c-a4c8-55ba4480a278"),
         code_node("Parse Command", PARSE_COMMAND, [5904, 1488], "9d5c4aef-37a0-4f1b-abbc-ed37bb26f606"),
         if_node("Allowed Chat?", "={{ String($('Parse Command').first().json.allowed) }}", "true", [6096, 1488], "39155330-ea92-47b4-8ecc-8109983ad664"),
@@ -728,22 +917,65 @@ def build_workflow():
         code_node("Handle Edit", EDIT_HANDLER, [6864, 1664], "11111111-aaaa-4bbb-8ccc-ffffffffff"),
         code_node("Handle Confirm", CONFIRM_HANDLER, [6864, 1840], "11111111-aaaa-4bbb-8ccc-gggggggggg"),
         code_node("Handle Help", HELP_HANDLER, [6864, 2016], "11111111-aaaa-4bbb-8ccc-hhhhhhhhhh"),
-        code_node("Apply Mutation", APPLY_MUTATION, [7056, 1840], "22222222-aaaa-4bbb-8ccc-cccccccccccc"),
-        code_node("Build Audit Row", AUDIT_WRITE, [7248, 1840], "33333333-aaaa-4bbb-8ccc-dddddddddddd"),
-        data_upsert_node("Write Audit Log", AUDIT_TABLE,
-                        ["who", "when", "command", "before", "after", "result", "reason"], [7440, 1840], "44444444-aaaa-4bbb-8ccc-eeeeeeeeeeee"),
+        if_node("Has Pending?",
+               "={{ $('Handle Confirm').first().json.approved ? 'pending' : 'none' }}", "pending",
+               [7056, 1840], "55555555-aaaa-4bbb-8ccc-111111111111"),
+        code_node("Apply Mutation", APPLY_MUTATION, [7248, 1840], "22222222-aaaa-4bbb-8ccc-cccccccccccc"),
+        if_node("Write Validated?",
+               "={{ $('Apply Mutation').first().json.failed ? 'failed' : 'valid' }}", "failed",
+               [7440, 1840], "66666666-aaaa-4bbb-8ccc-222222222222"),
+        switch_node("Write Table", "$('Apply Mutation').first().json.table",
+                   ["hermes_config", "missions", "Autonomous Agent Live State", COMMAND_QUEUE_TABLE],
+                   [7632, 1648], "77777777-aaaa-4bbb-8ccc-333333333333"),
+        data_update_node("Write hermes_config", "hermes_config",
+                        [{"keyName": "profile_id", "keyValue": "={{ $('Config').first().json.profile_id }}"}],
+                        [7824, 1520], "88888888-aaaa-4bbb-8ccc-444444444444"),
+        data_update_node("Write missions", "missions",
+                        [{"keyName": "mission_id", "keyValue": "={{ $('Apply Mutation').first().json.match.value }}"}],
+                        [7824, 1712], "99999999-aaaa-4bbb-8ccc-555555555555"),
+        data_update_node("Write Autonomous Agent Live State", "Autonomous Agent Live State",
+                        [{"keyName": "state_key", "keyValue": "={{ $('Config').first().json.state_namespace }}"}],
+                        [7824, 1904], "aaaa1111-aaaa-4bbb-8ccc-666666666666"),
+        data_insert_node("Write Command Queue", COMMAND_QUEUE_TABLE,
+                        ["action", "mission_id", "state_key", "chat_id", "role", "status", "code", "created_at", "executed_at", "result"],
+                        [7824, 2096], "bbbb2222-aaaa-4bbb-8ccc-777788888888"),
+        data_get_node("Read After Command Queue", COMMAND_QUEUE_TABLE,
+                        [8016, 2096], "bbbb3333-aaaa-4bbb-8ccc-888899999999"),
+        data_get_node("Read After hermes_config", "hermes_config",
+                     [8016, 1520], "aaaa2222-aaaa-4bbb-8ccc-777777777777",
+                     extra=[{"keyName": "profile_id", "keyValue": "={{ $('Config').first().json.profile_id }}"}]),
+        data_get_node("Read After missions", "missions",
+                     [8016, 1712], "aaaa3333-aaaa-4bbb-8ccc-888888888888",
+                     extra=[{"keyName": "mission_id", "keyValue": "={{ $('Apply Mutation').first().json.match.value }}"}]),
+        data_get_node("Read After Live State", "Autonomous Agent Live State",
+                     [8016, 1904], "aaaa4444-aaaa-4bbb-8ccc-999999999999",
+                     extra=[{"keyName": "state_key", "keyValue": "={{ $('Config').first().json.state_namespace }}"}]),
+        code_node("Build Reply", BUILD_REPLY, [8208, 1840], "bbbb1111-aaaa-4bbb-8ccc-aaaa11111111"),
+        code_node("Build Audit Row", AUDIT_WRITE, [8400, 1840], "33333333-aaaa-4bbb-8ccc-dddddddddddd"),
+        data_insert_node("Write Audit Log", AUDIT_TABLE,
+                        ["who", "when", "command", "before", "after", "result", "reason"], [8592, 1840], "44444444-aaaa-4bbb-8ccc-eeeeeeeeeeee"),
         telegram_node("Send Reply",
-                     "={{ $json.chat_id }}",
-                     "={{ $json.text }}",
-                     "{{ $json.buttons }}",
-                     [7632, 1488], "f39df623-73a2-4900-9bfc-a0943430e368",
+                     "={{ $('Build Reply').first().json.chat_id }}",
+                     "={{ $('Build Reply').first().json.text }}",
+                     "={{ $('Build Reply').first().json.buttons }}",
+                     [8784, 1840], "f39df623-73a2-4900-9bfc-a0943430e368",
                      "a70d031f-2918-4ca4-8d34-3ba5d0ff25c4"),
+        if_node("Answer Callback?",
+               "={{ ($('Parse Command').first().json.kind === 'callback' && $('Parse Command').first().json.callback_id !== null) ? 'callback' : 'none' }}",
+               "callback",
+               [8976, 1840], "55667788-aaaa-4bbb-8ccc-112233445566"),
+        http_post_node("Send Callback",
+                       "={{ 'https://api.telegram.org/bot' + $credentials('telegramApi').token + '/answerCallbackQuery' }}",
+                       "={{ { callback_query_id: $('Parse Command').first().json.callback_id } }}",
+                       HTTP_TIMEOUT_MS, [9168, 1840], "66778899-aaaa-4bbb-8ccc-112233445577"),
         sticky_node("Setup note",
                    "**AHAWR Status Bot — control bot**\n\n"
-                   "Long-polls Telegram every 30 s (getUpdates timeout 30 s, ~2880 executions/day) and handles both messages and callback_query. "
+                   "Long-polls Telegram every 60 s (getUpdates timeout 25 s as a request parameter, HTTP client timeout 30 s, ~1440 executions/day) and handles both messages and callback_query. "
+                   "Runs cannot overlap: a static-data run flag (poll_in_progress) is set before each getUpdates and cleared after it; a trigger that finds the flag set skips the run. "
                    "Only chats in `hermes_config.telegram_chat_id` are answered; others are counted silently. "
-                   "Mutating commands (control and edit) require a confirmation (inline button or one-time code, 2-min TTL) before any change is applied and are written to the audit table. "
-                   "The bot token lives in the `telegramApi` credential (REDACTED-BOT-TOKEN placeholder kept only here), never in the workflow file.",
+                   "Mutating commands (control and edit) require a confirmation (inline button or one-time code, 2-min TTL) before any change is applied and are written to the audit table; every callback_query is acknowledged with answerCallbackQuery. "
+                   "The bot cannot launch runs itself: confirmed /start, /resume and /restart insert a row into the AHAWR Command Queue table and the reply states the operator launch line (the operator executes it); confirmed /retry and /accept set the Live State flags the main workflow consumes during a running mission. "
+                   "The bot token lives in the `telegramApi` credential, never in the workflow file.",
                    [5360, 1792], "4ef3aa0d-5d49-480e-86f5-c22de108ab55"),
     ]
 
@@ -774,14 +1006,49 @@ def build_workflow():
         "Handle Help": {"main": [[{"node": "Send Reply", "type": "main", "index": 0}]]},
         "Handle Control": {"main": [[{"node": "Send Reply", "type": "main", "index": 0}]]},
         "Handle Edit": {"main": [[{"node": "Send Reply", "type": "main", "index": 0}]]},
-        "Handle Confirm": {
+        "Handle Confirm": {"main": [[{"node": "Has Pending?", "type": "main", "index": 0}]]},
+        "Has Pending?": {
             "main": [
-                [{"node": "Apply Mutation", "type": "main", "index": 0}],
-                [{"node": "Send Reply", "type": "main", "index": 0}],
+                [{"node": "Apply Mutation", "type": "main", "index": 0}],  # true -> write path
+                [{"node": "Build Reply", "type": "main", "index": 1}],   # false -> reject reply
             ]
         },
-        "Apply Mutation": {"main": [[{"node": "Build Audit Row", "type": "main", "index": 0}]]},
+        "Apply Mutation": {"main": [[{"node": "Write Validated?", "type": "main", "index": 0}]]},
+        "Write Validated?": {
+            "main": [
+                [{"node": "Build Reply", "type": "main", "index": 0}],   # failed -> error reply
+                [{"node": "Write Table", "type": "main", "index": 1}],   # valid -> write
+            ]
+        },
+        "Write Table": {
+            "main": [
+                [{"node": "Write hermes_config", "type": "main", "index": 0}],
+                [{"node": "Write missions", "type": "main", "index": 1}],
+                [{"node": "Write Autonomous Agent Live State", "type": "main", "index": 2}],
+                [{"node": "Write Command Queue", "type": "main", "index": 3}],
+            ]
+        },
+        "Write hermes_config": {"main": [[{"node": "Read After hermes_config", "type": "main", "index": 0}]]},
+        "Write missions": {"main": [[{"node": "Read After missions", "type": "main", "index": 0}]]},
+        "Write Autonomous Agent Live State": {"main": [[{"node": "Read After Live State", "type": "main", "index": 0}]]},
+        "Write Command Queue": {"main": [[{"node": "Read After Command Queue", "type": "main", "index": 0}]]},
+        "Read After hermes_config": {"main": [[{"node": "Build Reply", "type": "main", "index": 0}]]},
+        "Read After missions": {"main": [[{"node": "Build Reply", "type": "main", "index": 0}]]},
+        "Read After Live State": {"main": [[{"node": "Build Reply", "type": "main", "index": 0}]]},
+        "Read After Command Queue": {"main": [[{"node": "Build Reply", "type": "main", "index": 0}]]},
+        "Build Reply": {"main": [[{"node": "Build Audit Row", "type": "main", "index": 0}]]},
         "Build Audit Row": {"main": [[{"node": "Write Audit Log", "type": "main", "index": 0}]]},
+        "Write Audit Log": {"main": [[{"node": "Send Reply", "type": "main", "index": 0}]]},
+        "Send Reply": {
+            "main": [
+                [{"node": "Answer Callback?", "type": "main", "index": 0}],
+            ]
+        },
+        "Answer Callback?": {
+            "main": [
+                [{"node": "Send Callback", "type": "main", "index": 0}],  # true (kind == callback)
+            ]
+        },
     }
 
     return {
@@ -856,6 +1123,9 @@ def run_checks(wf, label, raw):
     allowed = qparams["allowed_updates"]
     if "callback_query" not in allowed:
         raise ValueError("%s: allowed_updates must include callback_query" % label)
+    http_timeout = int(gu["parameters"]["options"]["timeout"])
+    if http_timeout < timeout * 1000:
+        raise ValueError("%s: HTTP client timeout %d ms must be >= the %d s long-poll" % (label, http_timeout, timeout))
 
     st = find_node(wf, "Poll Telegram")
     if st is None:
@@ -864,10 +1134,14 @@ def run_checks(wf, label, raw):
     per_day = 86400 / sec
     if per_day > 3000:
         raise ValueError("%s: interval gives %d exec/day > ~3000" % (label, per_day))
+    if sec <= timeout:
+        raise ValueError("%s: schedule interval %d s must be > the %d s long-poll so runs cannot overlap" % (label, sec, timeout))
 
     wt = find_node(wf, "Write Audit Log")
     if wt is None:
         raise ValueError("%s: Write Audit Log missing" % label)
+    if wt["parameters"]["operation"] != "insert":
+        raise ValueError("%s: Write Audit Log must use the insert operation, got %r" % (label, wt["parameters"]["operation"]))
     cols = [c["name"] for c in wt["parameters"]["columns"]["column"]]
     for need in ("who", "when", "command", "before", "after", "result", "reason"):
         if need not in cols:
@@ -879,6 +1153,39 @@ def run_checks(wf, label, raw):
         n = find_node(wf, nm)
         if n is None or PENDING_STORE_KEY not in n["parameters"]["jsCode"]:
             raise ValueError("%s: %s must store a pending confirmation" % (label, nm))
+
+    # callback_query must route to the confirmation handler: Route Category
+    # maps command 'callback_query' to category 'confirm', and Dispatch must
+    # send the 'confirm' branch to Handle Confirm.
+    route = find_node(wf, "Route Category")
+    if route is None or "callback_query" not in route["parameters"]["jsCode"]:
+        raise ValueError("%s: Route Category must map callback_query to confirm" % label)
+    dispatch = find_node(wf, "Dispatch")
+    if dispatch is None:
+        raise ValueError("%s: Dispatch missing" % label)
+    for i, c in enumerate(dispatch["parameters"]["values"]):
+        if c["rightValue"] == "confirm":
+            targets = wf["connections"]["Dispatch"]["main"][i]
+            if not targets or targets[0]["node"] != "Handle Confirm":
+                raise ValueError("%s: Dispatch confirm branch must go to Handle Confirm" % label)
+            break
+
+    # answerCallbackQuery must be reachable and only via the telegramApi
+    # credential (the URL is built from $credentials, no token in file).
+    ans = find_node(wf, "Answer Callback?")
+    if ans is None:
+        raise ValueError("%s: Answer Callback? routing node missing" % label)
+    sendcb = find_node(wf, "Send Callback")
+    if sendcb is None or "answerCallbackQuery" not in sendcb["parameters"]["url"]:
+        raise ValueError("%s: Send Callback must call answerCallbackQuery" % label)
+    if "$credentials('telegramApi')" not in sendcb["parameters"]["url"]:
+        raise ValueError("%s: Send Callback URL must use the telegramApi credential" % label)
+    if "Send Reply" in wf["connections"] and not any(
+            e["node"] == "Answer Callback?" for e in wf["connections"]["Send Reply"]["main"][0]):
+        raise ValueError("%s: Send Reply must route to Answer Callback?" % label)
+    if "Answer Callback?" in wf["connections"] and not any(
+            e["node"] == "Send Callback" for e in wf["connections"]["Answer Callback?"]["main"][0]):
+        raise ValueError("%s: Answer Callback? must route to Send Callback" % label)
 
     # no switch-node leftValue may contain a double-wrapped expression
     for n in wf["nodes"]:

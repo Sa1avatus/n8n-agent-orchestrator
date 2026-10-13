@@ -679,6 +679,8 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
 **Worker tools.** The image has git, pytest, ruff and mypy; build tools can be added with `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (e.g. `patch build-essential cmake`). The Worker cannot read `.env` files (every variant except `.env.example`), `git commit` or `git push`, and its prompt forbids printing environment variables.
 
+**Thinking of the local model.** `litellm/runtime/local_thinking` (`on`/`off`) switches thinking per request without a restart; the runner turns it off by itself for a task that has run longer than `AHAWR_THINK_OFF_AFTER_SECONDS` (default 3600) and back on for the next task; the chat template `llama/templates/qwen38-same-prefix.jinja` keeps the prompt prefix identical in both modes, so a switch does not drop the llama.cpp prompt cache. Details and setup: [`docs/thinking-control.md`](docs/thinking-control.md).
+
 The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) and [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Versioning
@@ -725,7 +727,7 @@ Claude Code reports a cost for every run. For the local model the image prices i
 Task and review notices carry the task id, the attempt, the score and the reason cut at a sentence, not the whole review. The text is cut first and HTML-escaped after, because escaping first and cutting second can split an entity and make Telegram reject the message.
 
 **9. The Telegram control bot.**
-`AHAWR_Status_Bot.json` is the control bot: it long-polls Telegram (default every 30 s, getUpdates timeout 30 s, ~2880 executions/day) and answers only the chats named in `hermes_config.telegram_chat_id`; other chats are counted silently. It has two access levels — admin (control and edit commands) and viewer (view commands only) — and every mutating command (control and edit) is applied only after a confirmation (inline Approve/Deny buttons or a one-time code, 2-minute TTL). Every confirmed mutation is written to the `AHAWR Bot Audit Log` table. The bot token lives in the `telegramApi` n8n credential, never in the workflow file. If Hermes' gateway runs its own Telegram bot, that bot needs its own token: one token can have only one `getUpdates` consumer.
+`AHAWR_Status_Bot.json` is the control bot: it long-polls Telegram every 60 s (getUpdates timeout 25 s as a request parameter, HTTP client timeout 30 s, ~1440 executions/day) and answers only the chats named in `hermes_config.telegram_chat_id`; other chats are counted silently. Runs cannot overlap: a static-data `poll_in_progress` flag is set before each getUpdates and cleared after it, so a trigger that finds the flag set skips the run. It has two access levels — admin (control and edit commands) and viewer (view commands only) — and every mutating command (control and edit) is applied only after a confirmation (inline Approve/Deny buttons or a one-time code, 2-minute TTL, per-chat and one-time use). Every confirmed mutation is written to the `AHAWR Bot Audit Log` table by a dedicated insert node, and the write is verified by re-reading the row before the "было -> стало" reply. The bot cannot launch runs itself: confirmed `/start`, `/resume` and `/restart` insert a row into the `AHAWR Command Queue` table and the reply states the operator launch line (the operator executes it); confirmed `/retry` and `/accept` set the Live State flags the main workflow consumes during a running mission. The main workflow carries the control flags (`pause`, `stop_requested`, `accept_requested`, `retry_requested`, `steer_note`, `queue`) in its Live State row and gates on them between tasks (pause gate before each new task, stop check after each step, `Review Passed?` accepts on `accept_requested`, `Retry Current Task` allows one extra attempt on `retry_requested`, `Clear Consumed Flags` clears the consumed flags). The bot token lives in the `telegramApi` n8n credential, never in the workflow file. If Hermes' gateway runs its own Telegram bot, that bot needs its own token: one token can have only one `getUpdates` consumer.
 
 The commands, by category:
 
@@ -743,14 +745,7 @@ Only the fields in the allow-list in `docs/telegram-bot.md` (model/provider, pol
 - The image sets `core.autocrlf=true`, so a Windows checkout mounted into the container does not show every CRLF file as modified (85 false changes once confused a scope check).
 - Runs may last up to `CLAUDE_RUNNER_MAX_RUN_SECONDS` (10800 in this stack's `.env`); evaluation-heavy Worker runs hit two hours.
 - Live Data Table exports and mission files are kept out of git (`data-tables/`); the repository ships `hermes_config.example.csv`, `agent_prompts.example.csv` and `missions.example.csv`.
-- Data Tables live in n8n's SQLite file; editing them directly (for example to close a task or to load a mission) is only safe while n8n is stopped, with a copy of the database made first. Prefer the n8n UI where it is enough.
-- Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
-
-**9. Operational details that are easy to miss.**
-- The image sets `core.autocrlf=true`, so a Windows checkout mounted into the container does not show every CRLF file as modified (85 false changes once confused a scope check).
-- Runs may last up to `CLAUDE_RUNNER_MAX_RUN_SECONDS` (10800 in this stack's `.env`); evaluation-heavy Worker runs hit two hours.
-- Live Data Table exports and mission files are kept out of git (`data-tables/`); the repository ships `hermes_config.example.csv`, `agent_prompts.example.csv` and `missions.example.csv`.
-- Data Tables live in n8n's SQLite file; editing them directly (for example to close a task or to load a mission) is only safe while n8n is stopped, with a copy of the database made first. Prefer the n8n UI where it is enough.
+- Data Tables live in n8n's database. This installation runs n8n on Postgres 16 (`ahawr-postgres` service in `docker-compose.yml`, `N8N_PG_PASSWORD` in `.env`) because SQLite on a Windows bind mount ended executions with `SQLITE_BUSY`; the tables are named `data_table_user_<id>` (quote them: the names are mixed case). Take a `pg_dump` before editing them directly. Prefer the n8n UI where it is enough.
 - Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
 
 **Known open problems.**
@@ -1500,6 +1495,8 @@ Architect контекст из RAG не получает, только Worker �
 
 **Инструменты Worker'а.** В образе есть git, pytest, ruff и mypy. Инструменты сборки добавляются через `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (например, `patch build-essential cmake`). Worker не может читать файлы `.env` (любые варианты, кроме `.env.example`), делать `git commit` и `git push`, а промпт запрещает ему выводить переменные окружения.
 
+**Размышление локальной модели.** Файл `litellm/runtime/local_thinking` (`on`/`off`) переключает размышление на каждом запросе без перезапуска; runner сам выключает его для задачи, которая идёт дольше `AHAWR_THINK_OFF_AFTER_SECONDS` (по умолчанию 3600), и включает для следующей; шаблон чата `llama/templates/qwen38-same-prefix.jinja` делает начало промпта одинаковым в обоих режимах, поэтому переключение не сбрасывает кэш llama.cpp. Подробности: [`docs/thinking-control.md`](docs/thinking-control.md).
+
 Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) и [`CHANGELOG.md`](CHANGELOG.md).
 ### Версии
 
@@ -1548,7 +1545,7 @@ Claude Code сообщает стоимость каждого прогона. �
 - Образ ставит `core.autocrlf=true`, поэтому Windows-репозиторий, смонтированный в контейнер, не показывает все CRLF-файлы изменёнными (85 ложных изменений однажды запутали проверку области правок).
 - Прогон может идти до `CLAUDE_RUNNER_MAX_RUN_SECONDS` (в `.env` этого стека 10800); прогоны Worker'а с тяжёлой оценкой упирались в два часа.
 - Живые выгрузки Data Tables и файлы миссий хранятся вне git (`data-tables/`); в репозитории лежат `hermes_config.example.csv`, `agent_prompts.example.csv` и `missions.example.csv`.
-- Data Tables лежат в SQLite-файле n8n; править их напрямую (например, чтобы закрыть задачу или загрузить миссию) безопасно только при остановленном n8n и после копии базы. Где хватает интерфейса n8n, лучше пользоваться им.
+- Data Tables лежат в базе n8n. Эта установка запускает n8n на Postgres 16 (сервис `ahawr-postgres` в `docker-compose.yml`, `N8N_PG_PASSWORD` в `.env`), потому что SQLite на bind-mount Windows обрывал выполнения ошибкой `SQLITE_BUSY`; таблицы называются `data_table_user_<id>` (имена со смешанным регистром, нужны кавычки). Перед прямой правкой делайте `pg_dump`. Где хватает интерфейса n8n, лучше пользоваться им.
 - Worker и Reviewer не могут читать файлы `.env` (любые варианты, кроме `.env.example`) и делать `git commit` и `git push`; коммитит оператор.
 
 **Известные открытые проблемы.**

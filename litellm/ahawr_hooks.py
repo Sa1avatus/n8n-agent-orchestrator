@@ -161,6 +161,12 @@ class MidSystemMessageHook(CustomLogger):
             # Flag AHAWR_DROP_HISTORY_THINKING=1 (default 0): do not carry earlier steps' thinking in the context.
             if os.environ.get("AHAWR_DROP_HISTORY_THINKING", "0") == "1" and isinstance(data.get("messages"), list):
                 data["messages"], _ = drop_history_thinking(data["messages"])
+            # Flag AHAWR_CACHE_TRACE=1 (default 0): log where this request stops matching the previous one (cache_trace.py).
+            if os.environ.get("AHAWR_CACHE_TRACE", "0") == "1" and isinstance(data.get("messages"), list):
+                from cache_trace import record
+
+                record(data["messages"], data.get("tools"), str(data.get("model", "")),
+                       {"thinking_off": local_thinking_off()})
         return data
 
 

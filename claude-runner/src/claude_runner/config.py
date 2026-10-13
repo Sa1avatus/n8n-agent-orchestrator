@@ -394,6 +394,11 @@ class Settings:
     # so the cloud subscription's prompt stays the stock summarizer.
     local_compact_instructions: bool = True
     compact_timeout_seconds: int = 600
+    think_off_after_seconds: int = 0
+    think_off_after_steps: int = 0
+    think_flag_file: str = ""
+    think_policy: str = ""
+    think_policy_from_task: int = 1
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
     tools: str = ""
@@ -462,6 +467,11 @@ class Settings:
             compact_instructions=compact_instructions,
             local_compact_instructions=_bool(env, "CLAUDE_RUNNER_LOCAL_COMPACT_INSTRUCTIONS", True),
             compact_timeout_seconds=_int(env, "CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS", 600, 1),
+            think_off_after_seconds=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_SECONDS", 0),
+            think_off_after_steps=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS", 0),
+            think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
+            think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
+            think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env),

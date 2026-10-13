@@ -141,7 +141,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\nif (index >= tasks.length) return [{ json: { ...$json, execution_route: 'all_tasks_completed' } }];\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  // the same folder block the Worker gets (Build Worker Run Input), so the notice shows it too\n  String($('Mission').first().json.working_directory_block ?? ''),\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  feedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  feedback\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, execution_route: 'run_task', current_task: task, current_task_id: task.id, worker_prompt: workerPrompt } }];"
+        "jsCode": "const tasks = Array.isArray($json.tasks) ? $json.tasks : [];\nconst index = Number($json.task_index ?? 0);\nif (index >= tasks.length) return [{ json: { ...$json, execution_route: 'all_tasks_completed' } }];\nconst task = tasks[index];\nconst feedback = String($json.review_feedback ?? '');\n// Steer note: appended to review_feedback for the NEXT attempt only.\n// Read from the fresh pause-gate flag read; cleared after use.\nconst steer = String($('Pause Gate Flags').first().json.steer_note ?? '');\nconst combinedFeedback = feedback + (steer ? '\\nOPERATOR STEER NOTE: ' + steer : '');\nconst workerPrompt = [\n  $('Prompt Templates').first().json.worker_prompt,\n  '',\n  // the same folder block the Worker gets (Build Worker Run Input), so the notice shows it too\n  String($('Mission').first().json.working_directory_block ?? ''),\n  '',\n  `TASK ${task.id}: ${task.title}`,\n  '',\n  'OBJECTIVE:',\n  task.objective,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  task.acceptance_criteria.map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n  '',\n  'VERIFICATION:',\n  task.verification.join('\\n'),\n  '',\n  'SCOPE:',\n  task.scope.join('\\n'),\n  '',\n  combinedFeedback ? 'PREVIOUS REVIEW FEEDBACK:' : '',\n  combinedFeedback\n].filter(Boolean).join('\\n');\nreturn [{ json: { ...$json, execution_route: 'run_task', current_task: task, current_task_id: task.id, worker_prompt: workerPrompt, review_feedback: combinedFeedback } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -364,9 +364,19 @@
                 "operation": "equals",
                 "name": "filter.operator.equals"
               }
+            },
+            {
+              "id": "accept-requested",
+              "leftValue": "={{ $('Accept Gate Flags').first().json.accept_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
             }
           ],
-          "combinator": "and"
+          "combinator": "or"
         },
         "options": {}
       },
@@ -394,7 +404,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\n// The attempt the log records (Persist Parsed Review): the first listed node with a number.\n// `state` above can be an older node after a resumed execution; take the larger of the two.\nconst loggedAttempt = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return 0;\n})();\nconst currentAttempt = Math.max(Number(state.task_attempt ?? 1), loggedAttempt);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\nif (currentAttempt >= maxAttempts) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, execution_route: 'failed', final_status: 'failed_task_attempt_limit', failure_reason: reviewReason || 'Maximum task attempts reached.', review_feedback: reviewNext || reviewReason, last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_attempt: currentAttempt + 1, review_feedback: reviewNext || reviewReason, execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];"
+        "jsCode": "const state = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const j = $(n).last().json ?? {}; if (j && (Array.isArray(j.tasks) || j.plan_json || j.current_task)) return j; } } catch (_) {}\n  }\n  return $json ?? {};\n})();\nconst tasks = Array.isArray(state.tasks) ? state.tasks : [];\n// The attempt the log records (Persist Parsed Review): the first listed node with a number.\n// `state` above can be an older node after a resumed execution; take the larger of the two.\nconst loggedAttempt = (() => {\n  for (const n of ['Prepare Current Task','Restore Saved Task State','Restore Task After State Save','Restore Retry State','Restore Plan After State Save']) {\n    try { if ($(n).isExecuted) { const v = Number($(n).last().json.task_attempt ?? NaN); if (Number.isFinite(v) && v > 0) return v; } } catch (_) {}\n  }\n  return 0;\n})();\nconst currentAttempt = Math.max(Number(state.task_attempt ?? 1), loggedAttempt);\nconst maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);\nconst reviewReason = String($json.review_reason ?? $json.review?.reason ?? '');\nconst reviewNext = String($json.review_next_task ?? $json.review?.next_task ?? '');\n// Steer note and operator remark: appended to review_feedback for the\n// NEXT attempt only (retry).  Read from the fresh accept-gate flag read.\n// retry_requested allows one attempt beyond max_attempts_per_task.\nconst ctrl = $('Accept Gate Flags').first().json ?? {};\nconst steer = String(ctrl.steer_note ?? '');\nconst operatorFeedback = String(ctrl.operator_feedback ?? '');\nconst extraFeedback = [steer ? 'OPERATOR STEER NOTE: ' + steer : '', operatorFeedback ? 'OPERATOR REMARK: ' + operatorFeedback : ''].filter(Boolean).join('\\n');\nconst combinedFeedback = [reviewNext || reviewReason, extraFeedback].filter(Boolean).join('\\n');\nconst limit = Number(ctrl.retry_requested) ? maxAttempts + 1 : maxAttempts;\nif (currentAttempt >= limit) {\n  return [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, execution_route: 'failed', final_status: 'failed_task_attempt_limit', failure_reason: reviewReason || 'Maximum task attempts reached.', review_feedback: combinedFeedback, last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];\n}\nreturn [{json:{ ...state, plan_summary: String(state.plan_summary ?? ''), tasks, total_tasks: tasks.length, task_attempt: currentAttempt + 1, review_feedback: combinedFeedback, execution_route: 'run_task', last_review_score: Number($json.review_score ?? $json.review?.score ?? 0), last_review_reason: reviewReason }}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -528,7 +538,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\n// Claude Code variant: execution goes to the claude-runner container (profile 'claude-code').\nconst row = rows.find(r => String(r.profile_id ?? '').trim() === 'claude-code' && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true'));\nif (!row) throw new Error(\"No enabled 'claude-code' profile found in Data Table hermes_config.\");\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13): the ahawr-retrieval container of this compose stack.\n// Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context: it never\n// replaces or restores persisted execution state.\nfunction parseCorpora(value) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');\n    return parsed;\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)\n  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);\nconst retrievalCorpora = corpusEntries\n  .map(e => String((e && typeof e === 'object') ? (e.corpus_id ?? '') : e).trim())\n  .filter(Boolean);\nconst retrievalUrl = (String(row.retrieval_url ?? '').trim() || 'http://ahawr-retrieval:8500').replace(/\\/+$/, '');\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\nconst runnerUrl = (String(row.runner_url ?? '').trim() || 'http://claude-runner:8700').replace(/\\/+$/, '');\n// Run Manager sub-workflow to execute (n8n assigns new ids on import, so it is\n// configurable): hermes_config.run_manager_workflow_id, default nhjwX1G7FiVTO2Ah.\nconst runManagerWorkflowId = String(row.run_manager_workflow_id ?? '').trim() || 'nhjwX1G7FiVTO2Ah';\nreturn [{ json: {\n  run_manager_workflow_id: runManagerWorkflowId,\n  runner_url: runnerUrl,\n  // optional bearer token for claude-runner (CLAUDE_RUNNER_API_KEY); empty = no auth\n  runner_api_key: String(row.runner_api_key ?? '').trim(),\n  retrieval_enabled: retrievalRequested && retrievalCorpora.length > 0,\n  retrieval_url: retrievalUrl,\n  retrieval_corpora: retrievalCorpora,\n  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays\n} }];"
+        "jsCode": "const rows = $('Load Config').all().map(item => item.json || {});\n// Claude Code variant: execution goes to the claude-runner container (profile 'claude-code').\nconst row = rows.find(r => String(r.profile_id ?? '').trim() === 'claude-code' && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true'));\nif (!row) throw new Error(\"No enabled 'claude-code' profile found in Data Table hermes_config.\");\nfunction num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }\nlet retryDelays = [15, 30, 60, 120, 300];\nif (String(row.retry_delays_json ?? '').trim()) {\n  try {\n    const parsed = JSON.parse(String(row.retry_delays_json));\n    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');\n    retryDelays = parsed.map(Number);\n  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }\n}\nconst mission = $('Mission').first()?.json ?? {};\nconst stateNamespace = String(mission.state_namespace ?? '').trim();\nif (!stateNamespace) throw new Error(`Mission \"${String(mission.mission_id ?? 'unknown')}\" does not define state_namespace.`);\n// Context Retrieval Layer (AHAWR v13): the ahawr-retrieval container of this compose stack.\n// Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context: it never\n// replaces or restores persisted execution state.\nfunction parseCorpora(value) {\n  if (Array.isArray(value)) return value;\n  const text = String(value ?? '').trim();\n  if (!text) return [];\n  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);\n  try {\n    const parsed = JSON.parse(text);\n    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');\n    return parsed;\n  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }\n}\nconst corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)\n  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);\nconst retrievalCorpora = corpusEntries\n  .map(e => String((e && typeof e === 'object') ? (e.corpus_id ?? '') : e).trim())\n  .filter(Boolean);\nconst retrievalUrl = (String(row.retrieval_url ?? '').trim() || 'http://ahawr-retrieval:8500').replace(/\\/+$/, '');\nconst retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';\nfunction optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }\n\nconst runnerUrl = (String(row.runner_url ?? '').trim() || 'http://claude-runner:8700').replace(/\\/+$/, '');\n// Run Manager sub-workflow to execute (n8n assigns new ids on import, so it is\n// configurable): hermes_config.run_manager_workflow_id, default nhjwX1G7FiVTO2Ah.\nconst runManagerWorkflowId = String(row.run_manager_workflow_id ?? '').trim() || 'nhjwX1G7FiVTO2Ah';\nreturn [{ json: {\n  run_manager_workflow_id: runManagerWorkflowId,\n  runner_url: runnerUrl,\n  // optional bearer token for claude-runner (CLAUDE_RUNNER_API_KEY); empty = no auth\n  runner_api_key: String(row.runner_api_key ?? '').trim(),\n  retrieval_enabled: retrievalRequested && retrievalCorpora.length > 0,\n  retrieval_url: retrievalUrl,\n  retrieval_corpora: retrievalCorpora,\n  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),\n  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),\n  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),\n  retrieval_label: String(row.retrieval_label ?? '').trim(),\n  planner_model: String(row.architect_model ?? '').trim(),\n  planner_provider: String(row.architect_provider ?? '').trim(),\n  worker_model: String(row.worker_model ?? '').trim(),\n  worker_provider: String(row.worker_provider ?? '').trim(),\n  reviewer_model: String(row.reviewer_model ?? '').trim(),\n  reviewer_provider: String(row.reviewer_provider ?? '').trim(),\n  service_model: String(row.service_model ?? '').trim(),\n  service_provider: String(row.service_provider ?? '').trim(),\n  max_tasks: num(row.max_tasks,'max_tasks',1),\n  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),\n  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),\n  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),\n  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),\n  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),\n  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),\n  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),\n  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),\n  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),\n  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),\n  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),\n  state_namespace: stateNamespace,\n  execution_mode: String(row.execution_mode ?? 'production').trim(),\n  retry_delays: retryDelays,\n  // thinking policy of the local Worker (sent to the runner with every Worker run; empty / 0 / -1 = the runner's .env defaults)\n  worker_think_policy: String(row.worker_think_policy ?? '').trim().toLowerCase(),\n  worker_think_policy_from_task: Number(row.worker_think_policy_from_task ?? 0) || 0,\n  worker_think_off_after_seconds: (row.worker_think_off_after_seconds === null || row.worker_think_off_after_seconds === undefined || row.worker_think_off_after_seconds === '') ? -1 : Number(row.worker_think_off_after_seconds),\n  worker_think_off_after_steps: (row.worker_think_off_after_steps === null || row.worker_think_off_after_steps === undefined || row.worker_think_off_after_steps === '') ? -1 : Number(row.worker_think_off_after_steps)\n} }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3952,7 +3962,7 @@
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// Inputs of the Claude Code Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// The item is either the task state (resume path) or the previous report row read by\n// Load Previous Worker Report (the state then comes from Attach Worker Context).\nconst fromReport = !Array.isArray(($json ?? {}).tasks) && $('Attach Worker Context').isExecuted;\nconst s = fromReport ? ($('Attach Worker Context').last().json ?? {}) : ($json ?? {});\nconst previous = fromReport ? ($json ?? {}) : {};\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String(s.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String(s.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const task = tasks[Number(s.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\n\n// Fresh-session retry switch (default off: keeps the compact-then-resume\n// behaviour, so the emitted request is byte-for-byte identical to the\n// unpatched workflow when the flag is not set).\n// On: a review retry of this session starts a fresh runner session instead\n// of resuming it. `input` carries the four-part retry text (task,\n// acceptance criteria, previous review feedback, previous report, previous\n// session digest; newest last) and `session_id` is left empty so the\n// runner creates a new session. The digest is cut to retry_input_chars here;\n// the runner applies its own cut on top.\nconst freshRetry = Boolean(s.retry_fresh_session ?? false)\n  && String(s.worker_session_id ?? '').trim() !== ''\n  && String(s.review_feedback ?? '').trim() !== '';\nconst digest = String(s.previous_session_digest ?? '').trim();\nconst retryDigest = digest.length > Number(s.retry_input_chars ?? 16000)\n  ? digest.slice(0, Number(s.retry_input_chars ?? 16000))\n    + '\\n[previous session digest trimmed to the retry budget]' : digest;\nconst retryTask = (Array.isArray(s.tasks) ? s.tasks : [])[Number(s.task_index ?? 0)] ?? {};\nconst retryInput = freshRetry ? [\n  'FRESH SESSION RETRY — continue in a new session from the digest below.',\n  'Do NOT restart the task from scratch.',\n  `TASK ${String(retryTask.id ?? '')}: ${String(retryTask.title ?? '')}`,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  ((retryTask.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')),\n  '',\n  'PREVIOUS REVIEW FEEDBACK:',\n  String(s.review_feedback ?? ''),\n  '',\n  'PREVIOUS REPORT:',\n  String(previous.worker_output ?? '').trim(),\n  '',\n  'PREVIOUS SESSION DIGEST (newest last):',\n  retryDigest || '(not available)'\n].join('\\n') : '';\n// Mission acceptance criteria switch (default off: flag unset -> fullInput is\n// byte-for-byte the unpatched input; on: append the mission-level criteria\n// block, a numbered list from Mission.acceptance_criteria plus a short\n// mission goal (Mission.objective), within a char budget. Switchable per\n// request: set worker_mission_criteria=true on the state to enable it.\nconst missionCriteria = (() => {\n  if (!Boolean(s.worker_mission_criteria ?? false)) return '';\n  const m = $('Mission').first().json ?? {};\n  const list = (Array.isArray(m.acceptance_criteria) ? m.acceptance_criteria : []).map(String);\n  if (!list.length) return '';\n  const goal = String(m.objective ?? '').trim();\n  const budget = Number(s.mission_criteria_chars ?? 1600);\n  let text = 'MISSION ACCEPTANCE CRITERIA:' + '\\n' + list.map((x, i) => `${i + 1}. ${x}`).join('\\n');\n  if (goal) text += '\\n\\nMISSION GOAL: ' + goal;\n  if (budget > 0 && text.length > budget) text = text.slice(0, budget) + '\\n…(mission criteria block truncated to the budget)';\n  return text;\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const index = Number(s.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    missionCriteria,\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    s.retrieval_worker_context ? String(s.retrieval_worker_context) : '',\n    '',\n    s.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String(s.review_feedback) : '',\n    (() => {\n      // A retry after a review: the reviewer scores the final report on its own, so the\n      // Worker must hand back the whole report, not only the fixes.\n      const text = String(previous.worker_output ?? '').trim();\n      if (!s.review_feedback || !text || String(previous.task_id ?? '') !== String(task.id ?? '')) return '';\n      const report = text.length > 16000 ? text.slice(0, 16000) + '\\n…(truncated)' : text;\n      return [\n        '',\n        `YOUR PREVIOUS REPORT FOR THIS TASK (attempt ${previous.task_attempt ?? '?'}, the review above refers to it):`,\n        report,\n        '',\n        'Return the COMPLETE updated report: keep every part of the previous report that is correct, fix and add what the review asks, and re-check anything you change. Do not return only the changes: the reviewer scores your final report on its own.'\n      ].join('\\n');\n    })()\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String(s.worker_run_id ?? '')),\n  // Fresh-session retry switch (default off: flag unset -> exactly the\n  // pre-patch expressions; on: fresh runner session, digest-seeded input).\n  input: freshRetry ? retryInput : (unfinished ? resumeText : fullInput),\n  session_id: freshRetry ? '' : String(s.worker_session_id ?? ''),\n  retry_fresh_session: Boolean(s.retry_fresh_session ?? false),\n  retry_input_chars: Number.isFinite(Number(s.retry_input_chars ?? NaN)) ? Number(s.retry_input_chars) : -1,\n  previous_session_digest: String(s.previous_session_digest ?? ''),\n  resume_input: resumeText,\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory)\n} };"
+        "jsCode": "// Inputs of the Claude Code Run Manager for the Worker (passed through unchanged: the\n// Execute Workflow node has no field mapping that could be lost when the\n// sub-workflow is re-selected or re-imported).\n// The item is either the task state (resume path) or the previous report row read by\n// Load Previous Worker Report (the state then comes from Attach Worker Context).\nconst fromReport = !Array.isArray(($json ?? {}).tasks) && $('Attach Worker Context').isExecuted;\nconst s = fromReport ? ($('Attach Worker Context').last().json ?? {}) : ($json ?? {});\nconst previous = fromReport ? ($json ?? {}) : {};\n// An unfinished run of this task's session (failed, interrupted): continue it.\nconst unfinished = String(s.worker_session_id ?? '').trim() !== ''\n  && !['', 'completed'].includes(String(s.worker_status ?? '').toLowerCase());\nconst resumeText = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const task = tasks[Number(s.task_index ?? 0)] ?? {};\n  return [\n    `RESUME TASK ${task.id ?? ''}: ${task.title ?? ''}`,\n    'Your previous attempt at this task stopped before it finished. This session (possibly compacted) holds what you already did.',\n    'Continue from where you stopped: do not repeat reads or checks whose results you already have; redo a step only if the workspace may have changed.',\n    'Then return the complete result for the task in the required format.',\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')\n  ].join('\\n');\n})();\n\n// Fresh-session retry switch (default off: keeps the compact-then-resume\n// behaviour, so the emitted request is byte-for-byte identical to the\n// unpatched workflow when the flag is not set).\n// On: a review retry of this session starts a fresh runner session instead\n// of resuming it. `input` carries the four-part retry text (task,\n// acceptance criteria, previous review feedback, previous report, previous\n// session digest; newest last) and `session_id` is left empty so the\n// runner creates a new session. The digest is cut to retry_input_chars here;\n// the runner applies its own cut on top.\nconst freshRetry = Boolean(s.retry_fresh_session ?? false)\n  && String(s.worker_session_id ?? '').trim() !== ''\n  && String(s.review_feedback ?? '').trim() !== '';\nconst digest = String(s.previous_session_digest ?? '').trim();\nconst retryDigest = digest.length > Number(s.retry_input_chars ?? 16000)\n  ? digest.slice(0, Number(s.retry_input_chars ?? 16000))\n    + '\\n[previous session digest trimmed to the retry budget]' : digest;\nconst retryTask = (Array.isArray(s.tasks) ? s.tasks : [])[Number(s.task_index ?? 0)] ?? {};\nconst retryInput = freshRetry ? [\n  'FRESH SESSION RETRY — continue in a new session from the digest below.',\n  'Do NOT restart the task from scratch.',\n  `TASK ${String(retryTask.id ?? '')}: ${String(retryTask.title ?? '')}`,\n  '',\n  'ACCEPTANCE CRITERIA:',\n  ((retryTask.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n')),\n  '',\n  'PREVIOUS REVIEW FEEDBACK:',\n  String(s.review_feedback ?? ''),\n  '',\n  'PREVIOUS REPORT:',\n  String(previous.worker_output ?? '').trim(),\n  '',\n  'PREVIOUS SESSION DIGEST (newest last):',\n  retryDigest || '(not available)'\n].join('\\n') : '';\n// Mission acceptance criteria switch (default off: flag unset -> fullInput is\n// byte-for-byte the unpatched input; on: append the mission-level criteria\n// block, a numbered list from Mission.acceptance_criteria plus a short\n// mission goal (Mission.objective), within a char budget. Switchable per\n// request: set worker_mission_criteria=true on the state to enable it.\nconst missionCriteria = (() => {\n  if (!Boolean(s.worker_mission_criteria ?? false)) return '';\n  const m = $('Mission').first().json ?? {};\n  const list = (Array.isArray(m.acceptance_criteria) ? m.acceptance_criteria : []).map(String);\n  if (!list.length) return '';\n  const goal = String(m.objective ?? '').trim();\n  const budget = Number(s.mission_criteria_chars ?? 1600);\n  let text = 'MISSION ACCEPTANCE CRITERIA:' + '\\n' + list.map((x, i) => `${i + 1}. ${x}`).join('\\n');\n  if (goal) text += '\\n\\nMISSION GOAL: ' + goal;\n  if (budget > 0 && text.length > budget) text = text.slice(0, budget) + '\\n…(mission criteria block truncated to the budget)';\n  return text;\n})();\nconst fullInput = (() => {\n  const tasks = Array.isArray(s.tasks) ? s.tasks : [];\n  const index = Number(s.task_index ?? 0);\n  const task = tasks[index];\n  if (!task) return '';\n  return [\n    $('Prompt Templates').first().json.worker_prompt ?? '',\n    '',\n    $('Mission').first().json.working_directory_block ? $('Mission').first().json.working_directory_block + '\\n' : '',\n    `TASK ${task.id}: ${task.title}`,\n    '',\n    'OBJECTIVE:',\n    String(task.objective ?? ''),\n    '',\n    'ACCEPTANCE CRITERIA:',\n    (task.acceptance_criteria ?? []).map((x, i) => `${i + 1}. ${x}`).join('\\n'),\n    '',\n    missionCriteria,\n    'VERIFICATION:',\n    (task.verification ?? []).join('\\n'),\n    '',\n    'SCOPE:',\n    (task.scope ?? []).join('\\n'),\n    '',\n    s.retrieval_worker_context ? String(s.retrieval_worker_context) : '',\n    '',\n    s.review_feedback ? 'PREVIOUS REVIEW FEEDBACK:\\n' + String(s.review_feedback) : '',\n    (() => {\n      // A retry after a review: the reviewer scores the final report on its own, so the\n      // Worker must hand back the whole report, not only the fixes.\n      const text = String(previous.worker_output ?? '').trim();\n      if (!s.review_feedback || !text || String(previous.task_id ?? '') !== String(task.id ?? '')) return '';\n      const report = text.length > 16000 ? text.slice(0, 16000) + '\\n…(truncated)' : text;\n      return [\n        '',\n        `YOUR PREVIOUS REPORT FOR THIS TASK (attempt ${previous.task_attempt ?? '?'}, the review above refers to it):`,\n        report,\n        '',\n        'Return the COMPLETE updated report: keep every part of the previous report that is correct, fix and add what the review asks, and re-check anything you change. Do not return only the changes: the reviewer scores your final report on its own.'\n      ].join('\\n');\n    })()\n  ].filter(Boolean).join('\\n');\n})();\nreturn { json: {\n  role: \"worker\",\n  run_id: (String(s.worker_run_id ?? '')),\n  // Fresh-session retry switch (default off: flag unset -> exactly the\n  // pre-patch expressions; on: fresh runner session, digest-seeded input).\n  input: freshRetry ? retryInput : (unfinished ? resumeText : fullInput),\n  session_id: freshRetry ? '' : String(s.worker_session_id ?? ''),\n  retry_fresh_session: Boolean(s.retry_fresh_session ?? false),\n  retry_input_chars: Number.isFinite(Number(s.retry_input_chars ?? NaN)) ? Number(s.retry_input_chars) : -1,\n  previous_session_digest: String(s.previous_session_digest ?? ''),\n  resume_input: resumeText,\n  model: ($('Constants').first().json.worker_model),\n  provider: ($('Constants').first().json.worker_provider),\n  poll_seconds: ($('Constants').first().json.worker_poll_seconds),\n  max_polls: ($('Constants').first().json.worker_max_polls),\n  max_retries: ($('Constants').first().json.worker_max_provider_retries),\n  retry_count: 0,\n  retry_delays: ($('Constants').first().json.retry_delays),\n  state_key: ($('Constants').first().json.state_namespace),\n  service_provider: ($('Constants').first().json.service_provider),\n  service_model: ($('Constants').first().json.service_model),\n  runner_url: ($('Constants').first().json.runner_url),\n  runner_api_key: ($('Constants').first().json.runner_api_key),\n  working_directory: ($('Mission').first().json.working_directory),\n  think_policy: String($('Constants').first().json.worker_think_policy ?? ''),\n  think_policy_from_task: Number($('Constants').first().json.worker_think_policy_from_task ?? 0) || 0,\n  think_off_after_seconds: Number.isFinite(Number($('Constants').first().json.worker_think_off_after_seconds ?? NaN)) ? Number($('Constants').first().json.worker_think_off_after_seconds) : -1,\n  think_off_after_steps: Number.isFinite(Number($('Constants').first().json.worker_think_off_after_steps ?? NaN)) ? Number($('Constants').first().json.worker_think_off_after_steps) : -1\n} };"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -4161,6 +4171,468 @@
       ],
       "id": "5bd823eb-c103-4ede-b1a6-1674af4ffd65",
       "name": "Split Task Notice"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -17000,
+        1728
+      ],
+      "id": "aa110001-0000-4000-8000-000000000001",
+      "name": "Load Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Load Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16800,
+        1728
+      ],
+      "id": "aa110002-0000-4000-8000-000000000002",
+      "name": "Read Control Flags"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -8800,
+        1728
+      ],
+      "id": "aa110004-0000-4000-8000-000000000004",
+      "name": "Pause Gate Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Pause Gate Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8600,
+        1728
+      ],
+      "id": "aa110005-0000-4000-8000-000000000005",
+      "name": "Pause Gate Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "pause-gate",
+              "leftValue": "={{ $('Pause Gate Flags').first().json.paused }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -8600,
+        1312
+      ],
+      "id": "aa110003-0000-4000-8000-000000000003",
+      "name": "Pause Gate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pause gate: hold the workflow.  The operator clears the paused\n// flag in Live State and re-runs the workflow to resume.\nreturn [{ json: { ...$json, execution_route: 'paused', final_status: 'paused_by_operator' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8200,
+        1104
+      ],
+      "id": "aa110006-0000-4000-8000-000000000006",
+      "name": "Hold Paused"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_status": "={{ 'paused' }}",
+            "owner": "={{ '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -7900,
+        1104
+      ],
+      "id": "aa110007-0000-4000-8000-000000000007",
+      "name": "Hold Paused Write Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Stop check: the operator requested a stop after the current step.\n// Set workflow_status = stopped and leave no run in the running state.\nconst ctrl = $('Stop Check Worker Flags').first().json ?? {};\nreturn [{ json: {\n  ...$json,\n  workflow_status: 'stopped',\n  execution_route: 'stopped',\n  final_status: 'stopped_by_operator',\n  stop_requested: Boolean(ctrl.stop_requested ?? false),\n  owner: String(ctrl.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13200,
+        1968
+      ],
+      "id": "aa110008-0000-4000-8000-000000000008",
+      "name": "Stop Workflow"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_status": "={{ 'stopped' }}",
+            "owner": "={{ '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -12900,
+        1968
+      ],
+      "id": "aa110009-0000-4000-8000-000000000009",
+      "name": "Stop Workflow Write Live State"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -13800,
+        2384
+      ],
+      "id": "aa110011-0000-4000-8000-000000000011",
+      "name": "Stop Check Worker Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Stop Check Worker Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -13600,
+        2384
+      ],
+      "id": "aa110012-0000-4000-8000-000000000012",
+      "name": "Stop Check Worker Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "stop-check-worker",
+              "leftValue": "={{ $('Stop Check Worker Flags').first().json.stop_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -13500,
+        2176
+      ],
+      "id": "aa110010-0000-4000-8000-000000000010",
+      "name": "Stop Check Worker"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -11800,
+        2080
+      ],
+      "id": "aa110014-0000-4000-8000-000000000014",
+      "name": "Stop Check Reviewer Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Stop Check Reviewer Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -11600,
+        2080
+      ],
+      "id": "aa110015-0000-4000-8000-000000000015",
+      "name": "Stop Check Reviewer Flags"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "stop-check-reviewer",
+              "leftValue": "={{ $('Stop Check Reviewer Flags').first().json.stop_requested }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "name": "filter.operator.true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -11600,
+        1872
+      ],
+      "id": "aa110013-0000-4000-8000-000000000013",
+      "name": "Stop Check Reviewer"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 2,
+      "position": [
+        -10000,
+        2600
+      ],
+      "id": "aa110016-0000-4000-8000-000000000016",
+      "name": "Accept Gate Live State"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Accept Gate Live State').all();\nconst live = rows.length ? (rows[0].json ?? {}) : {};return [{ json: {\n  paused: Boolean(live.paused ?? false),\n  pause_reason: String(live.pause_reason ?? ''),\n  stop_requested: Boolean(live.stop_requested ?? false),\n  accept_requested: Boolean(live.accept_requested ?? false),\n  retry_requested: Boolean(live.retry_requested ?? false),\n  steer_note: String(live.steer_note ?? ''),\n  operator_feedback: String(live.operator_feedback ?? ''),\n  workflow_status: String(live.workflow_status ?? ''),\n  owner: String(live.owner ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9800,
+        2600
+      ],
+      "id": "aa110017-0000-4000-8000-000000000017",
+      "name": "Accept Gate Flags"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clear consumed control flags before the next task starts.\n// steer_note was appended to review_feedback for this attempt (NEXT\n// attempt only); accept_requested was consumed by the Accept Gate;\n// retry_requested was consumed by Retry Current Task.\nconst ctrl = $('Pause Gate Flags').first().json ?? {};\nreturn [{ json: {\n  ...$json,\n  cleared_flags: { steer_note: ctrl.steer_note, accept_requested: ctrl.accept_requested, retry_requested: ctrl.retry_requested },\n  accept_requested_was_true: Boolean(ctrl.accept_requested ?? false),\n  accept_reason: String(ctrl.operator_feedback ?? '')\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8400,
+        1312
+      ],
+      "id": "aa110018-0000-4000-8000-000000000018",
+      "name": "Clear Consumed Flags"
+    },
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Autonomous Agent Live State"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "state_key",
+              "keyValue": "={{ $('Constants').first().json.state_namespace }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "steer_note": "={{ '' }}",
+            "accept_requested": "={{ false }}",
+            "retry_requested": "={{ false }}",
+            "last_control": "={{ $json.accept_requested_was_true ? 'accept: ' + String($json.accept_reason ?? '') : '' }}"
+          }
+        },
+        "options": {
+          "updateMatchingRows": false
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -8100,
+        1312
+      ],
+      "id": "aa110019-0000-4000-8000-000000000019",
+      "name": "Clear Consumed Flags Write Live State"
     }
   ],
   "pinData": {
@@ -4280,7 +4752,7 @@
       "main": [
         [
           {
-            "node": "Worker Completed?",
+            "node": "Stop Check Worker",
             "type": "main",
             "index": 0
           }
@@ -4320,7 +4792,7 @@
       "main": [
         [
           {
-            "node": "Reviewer Completed?",
+            "node": "Stop Check Reviewer",
             "type": "main",
             "index": 0
           }
@@ -4400,7 +4872,7 @@
       "main": [
         [
           {
-            "node": "Prepare Current Task",
+            "node": "Pause Gate",
             "type": "main",
             "index": 0
           }
@@ -4507,7 +4979,7 @@
       "main": [
         [
           {
-            "node": "Review Passed?",
+            "node": "Accept Gate Live State",
             "type": "main",
             "index": 0
           }
@@ -4529,7 +5001,7 @@
       "main": [
         [
           {
-            "node": "Resume Saved State?",
+            "node": "Load Live State",
             "type": "main",
             "index": 0
           }
@@ -5280,6 +5752,214 @@
         [
           {
             "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Live State": {
+      "main": [
+        [
+          {
+            "node": "Read Control Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Control Flags": {
+      "main": [
+        [
+          {
+            "node": "Resume Saved State?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate": {
+      "main": [
+        [
+          {
+            "node": "Clear Consumed Flags",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Hold Paused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate Live State": {
+      "main": [
+        [
+          {
+            "node": "Pause Gate Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause Gate Flags": {
+      "main": [
+        [
+          {
+            "node": "Pause Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hold Paused": {
+      "main": [
+        [
+          {
+            "node": "Hold Paused Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Consumed Flags": {
+      "main": [
+        [
+          {
+            "node": "Clear Consumed Flags Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear Consumed Flags Write Live State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Current Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker Live State": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Worker Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker Flags": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Worker": {
+      "main": [
+        [
+          {
+            "node": "Worker Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Workflow": {
+      "main": [
+        [
+          {
+            "node": "Stop Workflow Write Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer Live State": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Reviewer Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer Flags": {
+      "main": [
+        [
+          {
+            "node": "Stop Check Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Check Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Gate Live State": {
+      "main": [
+        [
+          {
+            "node": "Accept Gate Flags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accept Gate Flags": {
+      "main": [
+        [
+          {
+            "node": "Review Passed?",
             "type": "main",
             "index": 0
           }

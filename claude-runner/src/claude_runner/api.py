@@ -8,6 +8,7 @@ import hmac
 import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, Query, Request
@@ -19,6 +20,7 @@ from .config import Settings
 from .handoff import session_digest
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
+from .think_switch import ThinkSwitch
 
 
 class RunBody(BaseModel):
@@ -28,6 +30,11 @@ class RunBody(BaseModel):
     session_id: str = ""
     working_directory: str = ""
     role: str = ""
+    # thinking policy of the local Worker from hermes_config (empty / 0 / -1 = use the CLAUDE_RUNNER_THINK_* defaults)
+    think_policy: str = ""
+    think_policy_from_task: int = 0
+    think_off_after_seconds: int = -1
+    think_off_after_steps: int = -1
 
 
 class CompactBody(BaseModel):
@@ -76,9 +83,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.manager = manager
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
+        switch_task = None
+        policy = settings.think_policy == "off_first"
+        if settings.think_flag_file:  # the workflow may send its own settings per run (hermes_config)
+            switch = ThinkSwitch(
+                manager.store, Path(settings.think_flag_file), settings.think_off_after_seconds, manager.events,
+                policy=policy, policy_from_task=settings.think_policy_from_task, after_steps=settings.think_off_after_steps,
+            )
+            manager.on_run_start = switch.tick  # the policy applies before the first request of the run, not 20 s later
+            switch_task = asyncio.create_task(switch.run())
         try:
             yield
         finally:
+            if switch_task is not None:
+                switch_task.cancel()
             await manager.shutdown()
 
     app = FastAPI(title="claude-runner", version="0.3.0", lifespan=lifespan)
@@ -157,6 +175,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 session_id=body.session_id or x_hermes_session_id,
                 working_directory=body.working_directory or x_hermes_working_directory,
                 role=body.role or x_ahawr_role,
+                think_policy=body.think_policy.strip().lower(),
+                think_policy_from_task=body.think_policy_from_task,
+                think_off_after_seconds=body.think_off_after_seconds,
+                think_off_after_steps=body.think_off_after_steps,
             )
         )
 
