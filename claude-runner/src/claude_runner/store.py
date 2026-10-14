@@ -205,6 +205,16 @@ class Store:
             ).fetchone()
         return row["t"] if row and row["t"] else None
 
+    def last_completed_worker_finish(self, session_id: str, exclude_run: str = "") -> str | None:
+        """When the latest finished (completed) Worker run of this session ended: the start of the current attempt (None = the first attempt)."""
+        with self._lock:
+            row = self._db.execute(
+                "SELECT MAX(finished_at) AS t FROM runs WHERE session_id = ? AND role = 'worker' AND kind != 'compact' "
+                "AND status = 'completed' AND run_id != ?",
+                (session_id, exclude_run),
+            ).fetchone()
+        return row["t"] if row and row["t"] else None
+
     def session_seconds_since(self, session_id: str, since: str) -> float:
         """Seconds the runs of a session spent running since ``since`` (a finished run from start to finish, a running one to now)."""
         moment = datetime.now(UTC)

@@ -21,6 +21,9 @@ Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `
 - Profile of cold prefill on the RTX 3060: `docs/prefill-profile-2026-10-14.md` (110 W against 170 W, Nsight kernel table); mission report of `llamacpp-prefill-cost`:
   `docs/mission-report-prefill-cost-ru.md`.
 
+- Thinking policy `pulse:O:T:P` for the local Worker (default `pulse:25:10:1`: 25 model calls without thinking, 10 with it, then without; 25 is where the pass share of attempts falls below 50%) with `|`-separated variants chosen by task
+  number for A/B tuning; `:r8` makes a retry think through the review in its first 8 calls (`think_switch.py`, `docs/thinking-control.md` section 2c); `data-tables/ops/think_report.py` gives the statistics by mode, attempt, duration, era and variant.
+
 ### Other changes of 2026-10-14
 
 - The cost shown for a local run is what it would have cost on a cloud model: the steps made without thinking are priced as Haiku, the steps made with

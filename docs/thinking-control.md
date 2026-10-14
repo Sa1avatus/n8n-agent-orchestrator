@@ -41,6 +41,34 @@ them are optional and the stack runs without them.
   three request nodes in the Claude Code Run Manager); `launch_mission.sh` applies it on every start. After adding the three columns to the
   `hermes_config` table (`hermes_config.example.csv` has them) the values take effect for the next Worker run after a workflow restart.
 
+## 2c. Step policy `pulse` and variants for tuning
+
+Measured on 326 attempts (`data-tables/ops/think_report.py`): without thinking an attempt that passes does so early (67% under 5 min, 26% at 30-60 min, about 20% after an hour,
+28% after 100 steps), thinking helps most in the 15-60 minute range and not at all after an hour, and as a first attempt it is slower (4x) and not better. So thinking is
+used as a short burst after a stretch without it:
+
+- `worker_think_policy` = `pulse:O:T:P` (also `.env` `AHAWR_THINK_POLICY`): O model calls without thinking, then T calls with it, then without again; P pulses (0 = the cycle
+  repeats for ever). `pulse` alone = `pulse:25:10:1`: calls 1-25 without thinking, 26-35 with it, 36 on without it.
+- Calls are counted per attempt: from the end of the last completed Worker run (the last review) or from the start of the first attempt; a resume after a failed run belongs
+  to the same attempt. The switch is written when the runner sees the count (every 20 s), so a burst can be a call longer or shorter.
+- A retry can start with thinking: `pulse:25:10:1:r8` makes an attempt after a review think for its first 8 model calls (to work through the review's remarks), then the
+  cycle counts from call 9 (25 calls without thinking, a 10-call burst, then without). The first attempt of a task ignores `r`. The variant belongs to the task, so
+  `pulse:25:10:1|pulse:25:10:1:r8|off` compares retries with and without the thinking start (`think_report.py` section 8 and `think_uplift.py` print the retries by variant).
+- The policy applies to the local Worker from task `worker_think_policy_from_task` on. The prompt prefix stays the same (section 3), so a switch costs only the tail.
+- Variants: `worker_think_policy` may hold several variants separated by `|`; task number n uses variant (n - 1) % count. Variants: `pulse:O:T:P`, `off` (never thinks),
+  `off_first` (section 2b). `pulse:50:10:1|off` compares the burst with no thinking inside one mission; `think_report.py` section 8 groups the attempts by variant.
+  Tasks differ in difficulty, so read the comparison over many tasks and missions, not over one.
+- Parameters to tune: O (when to start thinking; the pass share of attempts that end within a window of calls falls below 50% at about 22-25 calls - 31 for first attempts, 15 for retries - and the share of attempts that reach K calls and later pass levels off at about 30% from 30 calls on), T (the burst length; a thinking retry
+  took 15-25 calls), P (one burst or a repeating cycle).
+
+### Tuning tools (`data-tables/ops`)
+
+- `think_archive.py` keeps the step records of every local Worker run in `think_steps_archive.jsonl` beyond the runner's 14-day event retention (called by `queue_watch.py` every 6 hours);
+  a record has, per model call, the tokens, time, whether the model thought, the tools called (name, short key, error, edit size, pytest result).
+- `think_report.py`: statistics by mode, attempt, duration, era and policy variant. `think_model.py`: can the first K calls predict a failure (leave-one-mission-out; on 316 attempts
+  AUC 0.6-0.67 at 10-30 calls and no skill after 50, so no model is deployed). `think_uplift.py`: pulse variants against the `off` control (bootstrap intervals; a T-learner
+  once every arm has 100 attempts). `think_bandit.py`: Thompson sampling over the variants (passes per hour) and a policy string with matching weights; `--apply` writes it to `hermes_config`.
+
 ## 3. Same prompt prefix with thinking on and off (keeps the llama.cpp prompt cache)
 
 The stock Qwen 3.8 chat template adds the system paragraph "Reasoning effort is set to xhigh..." only when thinking is on. The

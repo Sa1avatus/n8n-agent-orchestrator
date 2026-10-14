@@ -31,12 +31,56 @@ log = logging.getLogger("claude_runner.think_switch")
 
 MARKER_SUFFIX = ".auto"
 
+DEFAULT_PULSE = (25, 10, 1)
+
+
+def variants(policy: str) -> list[str]:
+    """A policy string may hold several variants separated by '|': task number n uses variant (n - 1) % count, so one mission compares them."""
+    return [part.strip() for part in policy.split("|") if part.strip()] or [""]
+
+
+def variant_for(policy: str, task_number: int) -> str:
+    parts = variants(policy)
+    return parts[(max(task_number, 1) - 1) % len(parts)]
+
+
+def parse_pulse(variant: str) -> tuple[int, int, int] | None:
+    """'pulse:50:10:1' -> (steps without thinking, steps with thinking, number of pulses; 0 = repeat for ever). 'pulse' alone = 25:10:1."""
+    if not variant.startswith("pulse"):
+        return None
+    numbers = [part for part in re.split(r"[:,; ]+", variant[5:]) if part and not part.startswith("r")]
+    try:
+        values = [int(part) for part in numbers]
+    except ValueError:
+        return None
+    off, think, pulses = (values + list(DEFAULT_PULSE[len(values):]))[:3] if values else DEFAULT_PULSE
+    if off < 0 or think < 1 or pulses < 0:
+        return None
+    return off, think, pulses
+
+
+def retry_think(variant: str) -> int:
+    """'pulse:25:10:1:r8' -> 8: a retry (an attempt after a review) thinks for its first 8 model calls to work through the review, then follows the
+    cycle counted from call 9. 0 = no such start."""
+    match = re.search(r"[:,; ]r(\d+)", variant)
+    return int(match.group(1)) if match else 0
+
+
+def pulse_thinking(steps: int, off: int, think: int, pulses: int) -> bool:
+    """True when the model call number ``steps`` + 1 should think: ``off`` calls without thinking, ``think`` calls with it, then without
+    again (``pulses`` times; 0 = the cycle repeats for ever)."""
+    cycle = off + think
+    if pulses and steps >= pulses * cycle:
+        return False
+    return steps % cycle >= off
+
 
 class ThinkSwitch:
     def __init__(
         self, store: Store, flag_file: Path, after_seconds: int, events: Any | None = None,
-        policy: bool = False, policy_from_task: int = 1, after_steps: int = 0,
+        policy: bool = False, policy_from_task: int = 1, after_steps: int = 0, default_policy: str = "",
     ) -> None:
+        self.default_policy = default_policy
         self.after_steps = after_steps
         self._steps_seen: dict[str, tuple[int, int]] = {}  # run id -> (bytes read, steps counted)
         self.policy = policy
@@ -63,7 +107,7 @@ class ThinkSwitch:
 
     def _effective(self, run: dict[str, Any]) -> tuple[str, int, int, int]:
         """The run's own settings (sent by the workflow from hermes_config) over the CLAUDE_RUNNER_THINK_* defaults."""
-        policy = (run.get("think_policy") or "") or ("off_first" if self.policy else "")
+        policy = (run.get("think_policy") or "") or self.default_policy or ("off_first" if self.policy else "")
         from_task = int(run.get("think_from") or 0) or self.policy_from_task
         after = int(run["think_after"]) if int(run.get("think_after", -1)) >= 0 else self.after_seconds
         steps = int(run["think_after_steps"]) if int(run.get("think_after_steps", -1)) >= 0 else self.after_steps
@@ -101,12 +145,26 @@ class ThinkSwitch:
         (and the hour limit counts the retries only). Returns None when no running Worker run falls under the policy."""
         for run in self.store.running_local_workers():
             policy, from_task, after, step_limit = self._effective(run)
-            if policy != "off_first":
+            if not policy:
                 continue
             # the task number is stored with the run (from the whole prompt); runs made before that are read from the head of the prompt
             found = re.search(r"TASK T0*(\d+)", run["head"] or "")
             number = int(run.get("think_task") or 0) or (int(found.group(1)) if found else 0)
             if number == 0 or number < from_task:
+                continue
+            variant = variant_for(policy, number)
+            if variant == "off_first":
+                pass
+            elif variant == "off":
+                return self._set("off", run, "policy: this task variant never thinks")
+            elif (pulse := parse_pulse(variant)) is not None:
+                # per attempt: the model calls made since the last review (a resume after a failed run belongs to the same attempt)
+                boundary = self.store.last_completed_worker_finish(run["session_id"], run["run_id"])
+                steps = self._steps(self.store.session_run_ids(run["session_id"], boundary))
+                start = retry_think(variant) if boundary is not None else 0  # a retry first thinks through the review
+                think = steps < start or pulse_thinking(steps - start, *pulse)
+                return self._set("on" if think else "off", run, f"pulse {variant}: call {steps + 1}" + (" (review analysis)" if steps < start else ""))
+            else:
                 continue
             retry_from = self.store.first_completed_worker_finish(run["session_id"], run["run_id"])
             if retry_from is None:
@@ -132,6 +190,18 @@ class ThinkSwitch:
                 return desired
             return ""
         return None
+
+    def _set(self, desired: str, run: dict[str, Any], why: str) -> str:
+        """Writes the flag when it differs; returns what changed ('off' / 'on') or '' (the run's policy is handled, nothing to do)."""
+        if self._flag() == desired:
+            return ""
+        self._write(desired)
+        with contextlib.suppress(OSError):
+            self.marker.write_text("auto", encoding="utf-8")
+        if self.events is not None:
+            self.events.add(run["run_id"], {"kind": "thinking_switch", "thinking": desired, "reason": why})
+        log.warning("local thinking %s (%s)", desired, why)
+        return desired
 
     def tick(self) -> str:
         """One check. Returns what happened: 'off', 'on' or '' (nothing changed)."""

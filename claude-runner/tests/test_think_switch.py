@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from claude_runner.store import Store
-from claude_runner.think_switch import ThinkSwitch
+from claude_runner.think_switch import ThinkSwitch, parse_pulse, pulse_thinking, retry_think, variant_for
 
 
 def _iso(seconds_ago: float) -> str:
@@ -271,3 +271,95 @@ def test_step_limit_without_policy(tmp_path: Path) -> None:
     events.steps("r1", 2)
     assert switch.tick() == "off" and flag.read_text() == "off"
     assert events.notes[-1][1]["limit_steps"] == 25
+
+
+def test_pulse_parsing_and_cycle() -> None:
+    assert parse_pulse("pulse:50:10:1") == (50, 10, 1)
+    assert parse_pulse("pulse") == (25, 10, 1)
+    assert parse_pulse("pulse:30,5,0") == (30, 5, 0)
+    assert parse_pulse("pulse:x") is None and parse_pulse("off_first") is None and parse_pulse("pulse:10:0:1") is None
+    assert [n for n in range(80) if pulse_thinking(n, 50, 10, 1)] == list(range(50, 60))  # one pulse: calls 51..60, then off for good
+    assert [n for n in range(40) if pulse_thinking(n, 10, 5, 0)] == [10, 11, 12, 13, 14, 25, 26, 27, 28, 29, 35, 36, 37, 38, 39][:10]  # repeats for ever
+
+
+def test_variants_alternate_by_task_number() -> None:
+    policy = "pulse:50:10:1|off|off_first"
+    assert [variant_for(policy, n) for n in (1, 2, 3, 4, 5)] == ["pulse:50:10:1", "off", "off_first", "pulse:50:10:1", "off"]
+    assert variant_for("off_first", 7) == "off_first" and variant_for("", 3) == ""
+
+
+def test_pulse_policy_switches_by_model_calls_of_the_attempt(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1")
+    _prompt_run(store, "a", "s9", "running", 60, None, "TASK T009: x")
+    events.steps("a", 3)
+    assert switch.tick() == "off" and flag.read_text() == "off"
+    events.steps("a", 2)  # 5 calls made: the next one thinks
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "pulse" in events.notes[-1][1]["reason"]
+    assert switch.tick() == ""
+    events.steps("a", 2)  # 7 calls: the pulse is over, off for good
+    assert switch.tick() == "off"
+    events.steps("a", 20)
+    assert switch.tick() == "" and flag.read_text() == "off"
+
+
+def test_pulse_counts_each_attempt_from_the_last_review(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1")
+    _prompt_run(store, "a", "s9", "completed", 900, 600, "TASK T009: x")
+    events.steps("a", 40)  # the first attempt made 40 calls: they do not count for the retry
+    _prompt_run(store, "b", "s9", "running", 60, None, "TASK T009: x (retry)")
+    events.steps("b", 1)
+    assert switch.tick() == "off"
+    events.steps("b", 4)
+    assert switch.tick() == "on"  # 5 calls into the retry
+
+
+def test_variant_off_never_thinks_and_variant_per_task(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("on")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1|off")
+    _prompt_run(store, "a", "s2", "running", 60, None, "TASK T002: x")  # task 2 -> variant 'off'
+    events.steps("a", 5)
+    assert switch.tick() == "off" and flag.read_text() == "off"
+    assert events.notes[-1][1]["reason"].startswith("policy:")
+
+
+def test_retry_start_parsing() -> None:
+    assert parse_pulse("pulse:25:10:1:r8") == (25, 10, 1) and retry_think("pulse:25:10:1:r8") == 8
+    assert retry_think("pulse:25:10:1") == 0 and retry_think("off") == 0 and parse_pulse("pulse:r5") == (25, 10, 1)
+
+
+def test_a_retry_thinks_through_the_review_first_then_follows_the_cycle(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1:r3")
+    _prompt_run(store, "a", "s9", "completed", 900, 600, "TASK T009: x")
+    events.steps("a", 40)
+    _prompt_run(store, "b", "s9", "running", 60, None, "TASK T009: x (retry)")
+    flag.write_text("off")
+    assert switch.tick() == "on" and flag.read_text() == "on"  # call 1 of the retry: thinks about the review
+    assert "review analysis" in events.notes[-1][1]["reason"]
+    events.steps("b", 3)  # 3 calls made: the analysis is over
+    assert switch.tick() == "off"
+    events.steps("b", 5)  # 8 calls = 3 + 5 without thinking: the pulse of the cycle starts
+    assert switch.tick() == "on"
+    events.steps("b", 2)
+    assert switch.tick() == "off"
+
+
+def test_the_first_attempt_ignores_the_retry_start(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1:r3")
+    _prompt_run(store, "a", "s9", "running", 60, None, "TASK T009: x")
+    assert switch.tick() == "off" and flag.read_text() == "off"
