@@ -91,6 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 policy=policy, policy_from_task=settings.think_policy_from_task, after_steps=settings.think_off_after_steps,
             )
             manager.on_run_start = switch.tick  # the policy applies before the first request of the run, not 20 s later
+            manager.think_flag = switch.flag  # the run's first thinking mode goes to its event log (the local price depends on it)
             switch_task = asyncio.create_task(switch.run())
         try:
             yield
@@ -99,7 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 switch_task.cancel()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.4.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

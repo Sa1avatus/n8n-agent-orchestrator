@@ -534,6 +534,9 @@ def test_reviewer_boost_is_indexed_point_query_not_scan(
     assert any("retrieval_requests_component" in r[3] for r in plan), (
         "last_worker_request is not indexed"
     )
+    if not hasattr(indexed.store, "_conn"):
+        # PostgreSQL store: the planner may scan a tiny table; the index exists by DDL (files_corpus_indexed)
+        return
     plan = indexed.store._conn.execute(
         "EXPLAIN QUERY PLAN SELECT corpus_id, path FROM files "
         "WHERE corpus_id IN (?) AND indexed_at > ? ORDER BY corpus_id, path",
@@ -1416,3 +1419,37 @@ def test_token_budget_is_never_exceeded_with_related_tests() -> None:
     for c in selected[1:]:
         assert c.selection_reason == "related_test"
         assert c.final < source.final
+
+
+def test_background_sync_does_not_block_the_request(
+    indexed: RetrievalService, workspace: Path
+) -> None:
+    """With sync_wait_seconds >= 0 the request answers from the current index while a slow sync keeps running."""
+    import threading
+    import time as _time
+
+    release = threading.Event()
+    real_sync = indexed.indexer.sync
+
+    def slow_sync(corpus_id, paths=None):
+        release.wait(timeout=30)
+        return real_sync(corpus_id, paths)
+
+    indexed.indexer.sync = slow_sync  # type: ignore[method-assign]
+    indexed.settings.sync_wait_seconds = 0.2
+    parser = workspace / "app" / "parser.py"
+    parser.write_text(parser.read_text() + chr(10) + "def apply_discount(total):" + chr(10) + "    return total" + chr(10))
+    started = _time.perf_counter()
+    response = retrieve(indexed, freshness_mode="sync", cache="bypass")
+    elapsed = _time.perf_counter() - started
+    assert elapsed < 5, "the request waited for the slow sync"
+    assert any(n.startswith("index_syncing:ws") for n in response.notes)
+    assert response.chunks  # answered from the current index
+    # a second request does not start a second sync of the same corpus while the first one runs
+    first = indexed._sync_job("ws")
+    assert indexed._sync_job("ws") is first
+    release.set()
+    first.result(timeout=30)
+    after = retrieve(indexed, freshness_mode="sync", query="apply_discount for invoice totals", cache="bypass", task={})
+    assert any(c.symbol == "apply_discount" for c in after.chunks)
+    assert not any(n.startswith("index_syncing") for n in after.notes)

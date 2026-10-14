@@ -78,6 +78,13 @@ class Settings:
     cache_max_entries: int = 5000
     log_query_text: bool = True
     sync_min_interval_seconds: float = 2.0
+    # >= 0: corpora are synced in background threads and a retrieve request waits for them at most this many seconds (then it answers
+    # from the current index); < 0: sync inline in the request, as before
+    sync_wait_seconds: float = -1.0
+    # PostgreSQL index store (optional, needs psycopg): RETRIEVAL_DATABASE_URL=postgresql://user:pass@host:5432/db; the tables live in
+    # the schema RETRIEVAL_DATABASE_SCHEMA. Unset = the SQLite file in the data dir (the default and the built-in fallback).
+    database_url: str | None = None
+    database_schema: str = "retrieval"
     backend: str = "auto"
     rag_url: str | None = None
     rag_api_key: str | None = None
@@ -148,6 +155,9 @@ class Settings:
             cache_max_entries=int(e.get("RETRIEVAL_CACHE_MAX_ENTRIES", "5000")),
             log_query_text=_bool(e.get("RETRIEVAL_LOG_QUERY_TEXT"), True),
             sync_min_interval_seconds=float(e.get("RETRIEVAL_SYNC_MIN_INTERVAL_SECONDS", "2")),
+            sync_wait_seconds=float(e.get("RETRIEVAL_SYNC_WAIT_SECONDS", "-1")),
+            database_url=(e.get("RETRIEVAL_DATABASE_URL") or "").strip() or None,
+            database_schema=(e.get("RETRIEVAL_DATABASE_SCHEMA") or "retrieval").strip(),
             backend=e.get("RETRIEVAL_BACKEND", "auto"),
             rag_url=e.get("RETRIEVAL_RAG_URL") or None,
             rag_api_key=e.get("RETRIEVAL_RAG_API_KEY") or None,

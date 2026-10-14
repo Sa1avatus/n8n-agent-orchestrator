@@ -17,7 +17,9 @@ messages and does not break the llama.cpp prefix cache.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from typing import Any
 
 from litellm.integrations.custom_logger import CustomLogger
@@ -39,6 +41,125 @@ def _blocks(content: Any) -> list[dict[str, Any]]:
     if content is None:
         return []
     return [{"type": "text", "text": str(content)}]
+
+
+# Variable inserts (token counters, dates, run ids, attempt numbers, working-directory
+# text, ...) that Claude Code appends as mid-conversation ``system`` messages and the
+# hook folds into user turns. When folded into the first user turn they sit in the
+# prefix; moving them to the tail of that turn keeps the prefix stable across sessions
+# that only differ in those values (flag AHAWR_STABLE_PREFIX=1, default 0).
+VARIABLE_TAGS = (
+    "<total_tokens>",
+    "<date>",
+    "<run id>",
+    "<run_id>",
+    "run id:",
+    "<attempt>",
+    "attempt:",
+    "<working directory>",
+    "<working_directory>",
+    "<working directory in bash>",
+)
+REMINDER_SEGMENT_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+
+
+def _split_text_block(text: str) -> tuple[list[str], list[str]]:
+    """(stable pieces, reminder segments) of one text block, in original order.
+
+    A reminder segment is a <system-reminder>...</system-reminder> part of the block;
+    everything else (plain text, including any reminder text that is not closed) is a
+    stable piece. Nothing is dropped: the two lists reassemble the block exactly."""
+    stable: list[str] = []
+    segments: list[str] = []
+    last = 0
+    for m in REMINDER_SEGMENT_RE.finditer(text):
+        piece = text[last:m.start()]
+        if piece:
+            stable.append(piece)
+        segments.append(m.group(0))
+        last = m.end()
+    piece = text[last:]
+    if piece:
+        stable.append(piece)
+    return stable, segments
+
+
+def _is_variable_segment(segment: str) -> bool:
+    body = segment.strip()
+    return bool(body) and any(tag in body for tag in VARIABLE_TAGS)
+
+
+def _first_user_index(messages: list[Any]) -> int | None:
+    for index, message in enumerate(messages):
+        if isinstance(message, dict) and message.get("role") == "user":
+            return index
+    return None
+
+
+def move_variable_reminders_to_tail(messages: list[Any]) -> list[Any]:
+    """Move the variable-insert reminders of the first user turn out of its prefix and
+    into one block at its tail. Everything else — static prompt text, CLAUDE.md-style
+    reminders, non-text blocks — keeps its original relative order, so no text is
+    dropped and two sessions that differ only in run id, date or attempt share the same
+    prefix up to the variable tail. Only the first user turn is touched; later turns
+    are left alone. Returns the messages unchanged when there is no variable reminder."""
+    first_user = _first_user_index(messages)
+    if first_user is None:
+        return messages
+    message = messages[first_user]
+    blocks = _blocks(message.get("content"))
+    stable_pieces: list[dict[str, Any]] = []
+    variable_segments: list[str] = []
+    for block in blocks:
+        if block.get("type") != "text":
+            stable_pieces.append(block)
+            continue
+        text = str(block.get("text", ""))
+        stable, segments = _split_text_block(text)
+        # Determine the interleaved order of pieces and segments.
+        # If the text starts with a segment, the first element is a segment;
+        # otherwise it is a piece.
+        starts_with_segment = text.lstrip().startswith("<system-reminder>")
+        # Build the ordered sequence: alternate piece/segment starting from
+        # whichever comes first in the text.
+        ordered: list[tuple[str, str]] = []  # (kind, content) kind='p'|'s'
+        p_idx = 0
+        s_idx = 0
+        if starts_with_segment:
+            while s_idx < len(segments) or p_idx < len(stable):
+                if s_idx < len(segments):
+                    ordered.append(("s", segments[s_idx]))
+                    s_idx += 1
+                if p_idx < len(stable):
+                    ordered.append(("p", stable[p_idx]))
+                    p_idx += 1
+        else:
+            while p_idx < len(stable) or s_idx < len(segments):
+                if p_idx < len(stable):
+                    ordered.append(("p", stable[p_idx]))
+                    p_idx += 1
+                if s_idx < len(segments):
+                    ordered.append(("s", segments[s_idx]))
+                    s_idx += 1
+        # Now emit: pieces (trimmed if bordered) and non-variable segments stay in
+        # order; variable segments are collected for the tail.
+        for pos, (kind, content) in enumerate(ordered):
+            if kind == "p":
+                bordered = pos > 0 or pos < len(ordered) - 1
+                trimmed = content.strip() if bordered else content
+                if trimmed:
+                    stable_pieces.append({"type": "text", "text": trimmed})
+            else:
+                if _is_variable_segment(content):
+                    variable_segments.append(content)
+                else:
+                    stable_pieces.append({"type": "text", "text": content})
+    if not variable_segments:
+        return messages
+    stable_pieces.append({"type": "text", "text": "\n".join(variable_segments)})
+    out = [dict(m) for m in messages]
+    out[first_user] = {**out[first_user], "content": stable_pieces}
+    return out
 
 
 def _text(content: Any) -> str:
@@ -143,6 +264,12 @@ class MidSystemMessageHook(CustomLogger):
         messages = data.get("messages")
         if isinstance(messages, list):
             data["messages"] = move_mid_system_messages(messages)
+            # Flag AHAWR_STABLE_PREFIX=1 (default 0): move the variable inserts (total
+            # tokens, date, run id, attempt, working directory, ...) out of the first
+            # user turn's prefix and into its tail, so two sessions that differ only in
+            # those values share the same prefix up to the variable tail.
+            if os.environ.get("AHAWR_STABLE_PREFIX", "0") == "1":
+                data["messages"] = move_variable_reminders_to_tail(data["messages"])
             if _is_compaction_request(data["messages"]):
                 data["max_tokens"] = COMPACTION_MAX_TOKENS
         # Local Qwen: Claude Code turns its thinking setting into reasoning_effort=high, which the Qwen chat template

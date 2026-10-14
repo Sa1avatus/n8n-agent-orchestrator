@@ -47,6 +47,10 @@ class ThinkSwitch:
         self.after_seconds = after_seconds
         self.events = events
 
+    def flag(self) -> str:
+        """The current value of the flag file ('on' / 'off'); 'on' when it cannot be read."""
+        return self._flag()
+
     def _flag(self) -> str:
         try:
             return self.flag_file.read_text(encoding="utf-8").strip().lower()

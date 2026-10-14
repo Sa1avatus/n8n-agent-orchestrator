@@ -399,6 +399,8 @@ class Settings:
     think_flag_file: str = ""
     think_policy: str = ""
     think_policy_from_task: int = 1
+    # Local runs priced as a cloud model by thinking mode (local_pricing.py); the raw environment is kept for it
+    local_pricing_env: dict[str, str] = field(default_factory=dict)
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
     tools: str = ""
@@ -414,6 +416,10 @@ class Settings:
     # Fresh-session retry: off by default (a retry compacts and resumes the old session).
     retry_fresh_session: bool = False
     retry_input_chars: int = DEFAULT_RETRY_INPUT_CHARS
+    # Tool output limits (Part B): off by default so the env Claude Code gets is unchanged
+    # until the operator enables them; then they are injected only on the local Worker,
+    # per the values measured in docs/cold-prefill.md (Part B, section 3).
+    local_tool_output_limits: bool = False
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -472,6 +478,7 @@ class Settings:
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
             think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
             think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
+            local_pricing_env={k: v for k, v in env.items() if k.startswith("CLAUDE_RUNNER_LOCAL_PRICE_")},
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env),
@@ -486,6 +493,7 @@ class Settings:
             retry_input_chars=_int(
                 env, "CLAUDE_RUNNER_RETRY_INPUT_CHARS", DEFAULT_RETRY_INPUT_CHARS, minimum=1
             ),
+            local_tool_output_limits=_bool(env, "CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS", False),
         )
 
     def profile(self, role: str) -> RoleProfile:

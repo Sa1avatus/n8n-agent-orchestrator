@@ -71,6 +71,8 @@ def main() -> int:
                     "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
                     "CONTEXT_PROBE_KEY",
                     "CONTEXT_PROBE_URL",
+                    "BASH_MAX_OUTPUT_LENGTH",
+                    "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS",
                 )
                 if k in os.environ
             }

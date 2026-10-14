@@ -153,10 +153,14 @@ def test_run_gets_the_servers_window(settings: Settings, llama: str, tmp_path: P
     (worker,) = calls(tmp_path)
     # the probed window replaces the static 65536 and the percentage of it
     # the block's CLAUDE_AUTOCOMPACT_PCT_OVERRIDE=67 now means 67% of the probed window
+    # fake_claude records the tool output limits too; the LOCAL provider block sets them
+    # (via the provider env overlay) whether or not the Part B flag is on.
     assert worker["window"] == {
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "98304",
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "98304",
         "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "67.00",
+        "BASH_MAX_OUTPUT_LENGTH": "12000",
+        "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS": "10000",
     }
     assert _Llama.auth == ["Bearer llama-key"]  # the key goes to llama-server only
     (ev,) = [e for e in run_events(settings, rid) if e.get("kind") == "context_window"]
@@ -175,6 +179,8 @@ def test_unreachable_server_keeps_static_settings(settings: Settings, tmp_path: 
     assert worker["window"] == {
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "65536",
         "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "67",
+        "BASH_MAX_OUTPUT_LENGTH": "12000",
+        "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS": "10000",
     }
     (ev,) = [e for e in run_events(settings, rid) if e.get("kind") == "context_window"]
     assert ev["source"] == "static" and ev["probed"] is None

@@ -12,7 +12,13 @@ Status labels used throughout:
 
 One Telegram bot token can have only one consumer of `getUpdates`. The AHAWR control bot uses its own token; a separate Hermes gateway bot (own token) is needed for Hermes chat commands (`docs/telegram/hermes-commands.md`). Do not share the token.
 
-## Polling parameters and executions per day
+## Update delivery (since 0.4.0)
+
+The workflow does not poll Telegram any more (the shipped `Get Updates` node used `$credentials('telegramApi').token`, which n8n does not provide, so the first versions never read a message). `data-tables/ops/tg_relay.py` long-polls `getUpdates` (timeout 50 s, `allowed_updates` message and callback_query) with `TELEGRAM_BOT_TOKEN` from `.env` and posts every update to the `Telegram Update` webhook node (`POST /webhook/<AHAWR_TG_WEBHOOK_PATH>`); the offset is saved in `tg_relay.offset` only after n8n answered 2xx, so nothing is lost while n8n is down. At start it calls `setMyCommands` with the list from `data-tables/ops/tg_commands.py` (the "/" menu with descriptions); `/help` and `/commands` print the same list. `queue_watch.py` starts the relay again when it is gone. Only one consumer of `getUpdates` may run: do not start the old schedule version next to the relay. The workflow file in the repository holds placeholders (`REDACTED-CHAT-ID`, `tg-REPLACE-WITH-AHAWR_TG_WEBHOOK_PATH-FROM-ENV`); `data-tables/ops/patch_bot_webhook.py <export.json> <out.json>` fills the chat id from `hermes_config` and the path from `.env`, then `n8n import:workflow`, `n8n update:workflow --active=true` and an n8n restart deploy it.
+
+Other fixes of the same release: the update item passed to `Parse Command` is `{update, kind}`; `Load Live State` reads the task state of the most recently updated active mission (`Shape Live State` maps it to the fields `/status` prints); the data-loading nodes are connected before `Dispatch`; the Switch nodes use `rules.values`; replies pass `Pick Reply` and `Has Buttons?` (HTML, no n8n footer, `reply_markup` only with buttons).
+
+## Polling parameters and executions per day (before 0.4.0, replaced by the relay)
 
 From the workflow:
 

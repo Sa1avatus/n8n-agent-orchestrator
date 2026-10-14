@@ -45,6 +45,12 @@ $2.50 cache write), the model it is usually compared with. It is an estimate for
 not a bill: the local model costs nothing per token. Edit the file to change the model id
 or the rates, then rebuild the image.
 
+The figure the runner stores for a local run is computed by the runner itself (`local_pricing.py`) when the run ends: the steps made
+without thinking are priced as Haiku, the steps made with thinking as Sonnet, from the token counts of the run's own steps, so the number is what the
+run saved against a cloud model. The mode of a step is the last `thinking_state` / `thinking_switch` entry of the run's event log before the step started.
+Rates and the mapping come from `CLAUDE_RUNNER_LOCAL_PRICE_*` (see `.env.example`); `details.local_cost.by_profile` keeps the whole run at each rate table.
+With the two mode variables unset the flat Claude Code figure is kept.
+
 ## API (Hermes-compatible)
 
 | Endpoint | Behaviour |

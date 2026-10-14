@@ -271,11 +271,10 @@ def data_insert_node(name, table, fields, pos, idv):
     (approved, rejected, failed) becomes a new row, never an update."""
     return {
         "parameters": {
-            "resource": "table",
             "operation": "insert",
             "dataTableId": {"__rl": True, "mode": "name", "value": table},
-            "columns": {"column": [{"name": k, "value": "={{ $json." + k + " }}"} for k in fields]},
-            "options": {},
+            "columns": {"mappingMode": "defineBelow", "value": {k: "={{ $json." + k + " }}" for k in fields},
+                        "matchingColumns": [], "schema": []},
         },
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 1.1,
@@ -291,12 +290,12 @@ def data_update_node(name, table, key_filter, pos, idv):
     ($json.key / $json.value), row matched by key_filter."""
     return {
         "parameters": {
-            "resource": "table",
             "operation": "update",
             "dataTableId": {"__rl": True, "mode": "name", "value": table},
             "matchType": "allConditions",
             "filters": {"conditions": key_filter},
-            "columns": {"column": [{"name": "={{ $json.key }}", "value": "={{ $json.value }}"}]},
+            # the item holds exactly one column (see Shape Row): autoMapInputData writes it; any other field would be rejected
+            "columns": {"mappingMode": "autoMapInputData", "value": None, "matchingColumns": [], "schema": []},
             "options": {"updateMatchingRows": False},
         },
         "type": "n8n-nodes-base.dataTable",
@@ -694,6 +693,15 @@ SILENCE = "return [];"
 # and marks the audit approved only after the write is confirmed. If the
 # validation fails, no write happens and Build Reply emits an error reply with
 # an audit item result 'failed'.
+# The Data Table update nodes take their columns from the item (autoMapInputData) and reject unknown fields: the item must hold exactly the
+# edited column. The command-queue insert reads its columns from $json, so that item passes through unchanged.
+SHAPE_ROW = (
+    "const m = $('Apply Mutation').first().json;\n"
+    "if (m.table === '" + COMMAND_QUEUE_TABLE + "') { return [{ json: m }]; }\n"
+    "const v = Array.isArray(m.value) ? JSON.stringify(m.value) : m.value;\n"
+    "return [{ json: { [m.key]: v } }];"
+)
+
 APPLY_MUTATION = (
     "const p = $json.pending ?? null;\n"
     "let audit = $json.audit ?? null;\n"
@@ -765,7 +773,7 @@ APPLY_MUTATION = (
     "else if (verb === 'steer') { key = 'operator_feedback'; val = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + (p.args && p.args.prompt ? p.args.prompt : ''); }\n"
     "else if (verb === 'queue') {\n"
     "  const op = p.args && p.args.op ? p.args.op : 'list';\n"
-    "  const q = Array.isArray(live.queue) ? live.queue.slice() : [];\n"
+    "  const q = (() => { try { const x = typeof live.queue === 'string' ? JSON.parse(live.queue) : live.queue; return Array.isArray(x) ? x.slice() : []; } catch (e) { return []; } })();\n"
     "  if (op === 'add') { q.push(p.args && p.args.mission ? p.args.mission : ''); }\n"
     "  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) { q.splice(idx, 1); } }\n"
     "  else if (op === 'move') { const a = Number(p.args && p.args.a), b = Number(p.args && p.args.b); if (Number.isFinite(a) && Number.isFinite(b) && a < q.length && b < q.length) { [q[a], q[b]] = [q[b], q[a]]; } }\n"
@@ -924,6 +932,7 @@ def build_workflow():
         if_node("Write Validated?",
                "={{ $('Apply Mutation').first().json.failed ? 'failed' : 'valid' }}", "failed",
                [7440, 1840], "66666666-aaaa-4bbb-8ccc-222222222222"),
+        code_node("Shape Row", SHAPE_ROW, [7536, 1744], "77777777-aaaa-4bbb-8ccc-444444444455"),
         switch_node("Write Table", "$('Apply Mutation').first().json.table",
                    ["hermes_config", "missions", "Autonomous Agent Live State", COMMAND_QUEUE_TABLE],
                    [7632, 1648], "77777777-aaaa-4bbb-8ccc-333333333333"),
@@ -1017,9 +1026,10 @@ def build_workflow():
         "Write Validated?": {
             "main": [
                 [{"node": "Build Reply", "type": "main", "index": 0}],   # failed -> error reply
-                [{"node": "Write Table", "type": "main", "index": 1}],   # valid -> write
+                [{"node": "Shape Row", "type": "main", "index": 0}],   # valid -> shape the row -> write
             ]
         },
+        "Shape Row": {"main": [[{"node": "Write Table", "type": "main", "index": 0}]]},
         "Write Table": {
             "main": [
                 [{"node": "Write hermes_config", "type": "main", "index": 0}],
@@ -1142,7 +1152,7 @@ def run_checks(wf, label, raw):
         raise ValueError("%s: Write Audit Log missing" % label)
     if wt["parameters"]["operation"] != "insert":
         raise ValueError("%s: Write Audit Log must use the insert operation, got %r" % (label, wt["parameters"]["operation"]))
-    cols = [c["name"] for c in wt["parameters"]["columns"]["column"]]
+    cols = list(wt["parameters"]["columns"]["value"])
     for need in ("who", "when", "command", "before", "after", "result", "reason"):
         if need not in cols:
             raise ValueError("%s: audit column %r missing" % (label, need))

@@ -269,6 +269,35 @@ def test_child_env_carries_the_local_provider_output_limits() -> None:
     assert not any(key.startswith("CLAUDE_RUNNER_") for key in env)
 
 
+def test_local_tool_output_limits_apply_only_to_the_local_worker() -> None:
+    # Off by default: no role gets the caps, so the env Claude Code receives is unchanged.
+    s = Settings.from_env({})
+    assert s.local_tool_output_limits is False
+    local = ProviderProfile(
+        name="LOCAL",
+        env={"ANTHROPIC_BASE_URL": "http://litellm:4000", "ANTHROPIC_AUTH_TOKEN": "sk-litellm"},
+    )
+    for role in ("worker", "reviewer", "architect"):
+        env = child_env(local, role=role)
+        assert "BASH_MAX_OUTPUT_LENGTH" not in env
+        assert "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS" not in env
+
+    # Enabled: the Worker on the local model gets the Part B caps (docs/cold-prefill.md,
+    # section 3) and nothing else new; the Anthropic provider gets nothing.
+    on = Settings.from_env({"CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS": "1"})
+    assert on.local_tool_output_limits is True
+    env = child_env(local, "m", "worker", True)
+    assert env["BASH_MAX_OUTPUT_LENGTH"] == "12000"
+    assert env["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] == "16000"
+    env = child_env(None, "m", "worker", True)  # no local provider: still no caps
+    assert "BASH_MAX_OUTPUT_LENGTH" not in env
+    # The Reviewer and Architect never carry the caps, enabled or not.
+    for role in ("reviewer", "architect"):
+        env = child_env(local, "m", role, True)
+        assert "BASH_MAX_OUTPUT_LENGTH" not in env
+        assert "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS" not in env
+
+
 def test_child_env_hides_runner_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLAUDE_RUNNER_API_KEY", "x")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")

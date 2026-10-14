@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -128,13 +130,29 @@ def workspace(tmp_path: Path) -> Path:
     return root
 
 
-@pytest.fixture
-def settings(tmp_path: Path, workspace: Path) -> Settings:
-    return Settings(
+# Every test runs against SQLite; with RETRIEVAL_TEST_DATABASE_URL set (a PostgreSQL DSN) it runs against PostgreSQL too,
+# each test in its own schema.
+BACKENDS = ["sqlite"] + (["postgres"] if os.environ.get("RETRIEVAL_TEST_DATABASE_URL") else [])
+
+
+@pytest.fixture(params=BACKENDS)
+def settings(request: pytest.FixtureRequest, tmp_path: Path, workspace: Path) -> Iterator[Settings]:
+    extra: dict = {}
+    schema = None
+    if request.param == "postgres":
+        schema = "t_" + uuid.uuid4().hex[:12]
+        extra = {"database_url": os.environ["RETRIEVAL_TEST_DATABASE_URL"], "database_schema": schema}
+    yield Settings(
         data_dir=tmp_path / "data",
         allowed_roots=[str(tmp_path)],
         sync_min_interval_seconds=0.0,
+        **extra,
     )
+    if schema:
+        import psycopg
+
+        with psycopg.connect(os.environ["RETRIEVAL_TEST_DATABASE_URL"], autocommit=True) as conn:
+            conn.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
 
 
 def make_service(settings: Settings, reranker: Reranker | None = None) -> RetrievalService:

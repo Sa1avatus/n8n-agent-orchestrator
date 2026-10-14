@@ -1,39 +1,8 @@
 {
   "name": "AHAWR Status Bot",
+  "description": null,
+  "active": true,
   "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "seconds",
-              "secondsInterval": 60
-            }
-          ]
-        }
-      },
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        4880,
-        1488
-      ],
-      "id": "c0639be1-71ef-407f-8519-20d1d9e9d9af",
-      "name": "Poll Telegram"
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $getWorkflowStaticData('global');\nif (data.poll_in_progress) {\n  data.poll_ignored_count = (Number(data.poll_ignored_count) || 0) + 1;\n  return [];\n}\ndata.poll_in_progress = true;\nconst offset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nreturn [{ json: { offset } }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        5120,
-        1488
-      ],
-      "id": "b69d96c2-a240-442d-ab1b-dd574f42ad7d",
-      "name": "Prepare Poll"
-    },
     {
       "parameters": {
         "values": {
@@ -93,51 +62,7 @@
     },
     {
       "parameters": {
-        "url": "={{ 'https://api.telegram.org/bot' + $credentials('telegramApi').token + '/getUpdates' }}",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "offset",
-              "value": "={{ $json.offset }}"
-            },
-            {
-              "name": "limit",
-              "value": "100"
-            },
-            {
-              "name": "timeout",
-              "value": "25"
-            },
-            {
-              "name": "allowed_updates",
-              "value": "[\"message\",\"callback_query\"]"
-            }
-          ]
-        },
-        "options": {
-          "timeout": 30000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        5536,
-        1488
-      ],
-      "id": "54757ef0-2cf7-4e7f-87d7-99610ed91bef",
-      "name": "Get Updates",
-      "credentials": {
-        "telegramApi": {
-          "id": "czj7GHvr93VLvcH5",
-          "name": "Telegram account"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const result = $json ?? {};\nconst data = $getWorkflowStaticData('global');\ndata.poll_in_progress = false;\nconst updates = Array.isArray(result.result) ? result.result : [];\nif (result.ok !== true) {\n  // getUpdates error item (onError continueRegularOutput): no updates\n  // to process; the run ends here after the guard flag is cleared.\n  return [];\n}\nconst currentOffset = Number.isFinite(Number(data.telegram_update_offset)) ? Number(data.telegram_update_offset) : 0;\nconst fresh = updates.filter(u => Number(u.update_id ?? -1) >= currentOffset);\nif (fresh.length) {\n  const maxId = fresh.reduce((m, u) => Math.max(m, Number(u.update_id ?? -1)), currentOffset - 1);\n  data.telegram_update_offset = maxId + 1;\n}\nreturn fresh.map(update => ({ json: { kind: update.callback_query ? 'callback' : 'message', update: update } }));"
+        "jsCode": "const u = $json.body ?? {};\nif (u.update_id === undefined) { return []; }\nreturn [{ json: { update: u, kind: u.callback_query ? 'callback' : 'message' } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -227,18 +152,18 @@
         "dataTableId": {
           "__rl": true,
           "mode": "name",
-          "value": "Autonomous Agent Live State"
+          "value": "Autonomous Agent Task State"
         },
         "matchType": "allConditions",
         "filters": {
           "conditions": [
             {
-              "keyName": "state_key",
-              "keyValue": "={{ $('Config').first().json.state_namespace }}"
+              "keyName": "status",
+              "keyValue": "active"
             }
           ]
         },
-        "limit": 1
+        "limit": 50
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -263,7 +188,7 @@
         "filters": {
           "conditions": []
         },
-        "limit": 1
+        "limit": 100
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -353,63 +278,133 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "combinator": "and",
-          "options": {}
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c0",
+                    "leftValue": "={{ $('Route Category').first().json.category }}",
+                    "rightValue": "view",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $('Route Category').first().json.category }}",
+                    "rightValue": "control",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $('Route Category').first().json.category }}",
+                    "rightValue": "edit",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c3",
+                    "leftValue": "={{ $('Route Category').first().json.category }}",
+                    "rightValue": "confirm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c4",
+                    "leftValue": "={{ $('Route Category').first().json.category }}",
+                    "rightValue": "help",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
         },
-        "values": [
-          {
-            "id": "c0",
-            "leftValue": "={{ $('Route Category').first().json.category }}",
-            "rightValue": "view",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c1",
-            "leftValue": "={{ $('Route Category').first().json.category }}",
-            "rightValue": "control",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c2",
-            "leftValue": "={{ $('Route Category').first().json.category }}",
-            "rightValue": "edit",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c3",
-            "leftValue": "={{ $('Route Category').first().json.category }}",
-            "rightValue": "confirm",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c4",
-            "leftValue": "={{ $('Route Category').first().json.category }}",
-            "rightValue": "help",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          }
-        ],
-        "options": {}
+        "options": {
+          "fallbackOutput": "extra"
+        }
       },
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
@@ -422,7 +417,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst out = [];\nif (command === '/whoami') { out.push('Access level: ' + (p.allowed ? 'admin (control and edit)' : 'viewer (read-only)')); out.push('Chat: ' + String(chatId)); }\nelse if (command === '/profile') { out.push('Profile: ' + esc(cfg.profile_id) + ' (allowed chat: ' + esc(cfg.telegram_chat_id) + ')'); }\nelse if (command === '/version') { out.push('Workflow: AHAWR Status Bot v1; runner: Claude Code; n8n: this stack'); }\nelse if (command === '/config') { const ed = (typeof cfg.editable_json === 'string') ? JSON.parse(cfg.editable_json) : (cfg.editable_json ?? {}); out.push('Editable keys (no secrets):'); out.push(Object.keys(ed).map(k => '  ' + k + ' (' + ed[k].type + (ed[k].min !== undefined ? ' ' + ed[k].min + '..' + ed[k].max : '') + ')').join('\\n')); }\nelse if (command === '/missions') { const ms = $('Missions').all().map(i => i.json ?? {}); out.push(ms.map(m => m.mission_id + ' | ' + esc(m.name) + ' | enabled=' + m.enabled + ' | v' + m.version).join('\\n')); }\nelse if (command === '/status' || command === '/progress') {\n  const ns = cfg.state_namespace;\n  out.push('Status: ' + esc(live.workflow_status));\n  out.push('Progress: ' + (live.total_tasks ? (Math.min(live.task_index, live.total_tasks) + '/' + live.total_tasks) : '—') + ' task ' + esc(live.current_task_id));\n  out.push('Attempt: ' + (live.task_attempt || '—') + '  score: ' + (live.last_review_score || '—'));\n  out.push('Worker: ' + esc(live.worker_status) + '  Reviewer: ' + esc(live.reviewer_status));\n  out.push('Run: ' + esc(live.current_run_id));\n  out.push('Updated: ' + esc(live.updated_at));\n}\nelse if (command === '/agents') { out.push('Agents: ' + esc(live.worker_status) + ' / ' + esc(live.reviewer_status) + ' on run ' + esc(live.current_run_id)); }\nelse if (command === '/usage') { out.push('Usage: see runner events for tokens, tokens/s, cache share, time per task.'); }\nelse if (command === '/insights') { out.push('Insights: scores and retries per task over the last N days (see attempts table).'); }\nelse if (command === '/errors') { out.push('Errors: last failed executions with node name and message (secrets masked).'); }\nelse if (command === '/audit') { const n = Number(args[0]) || 10; out.push('Audit (last ' + n + '):'); out.push($('Audit Recent').all().slice(0, n).map(i => { const a = i.json ?? {}; return a.when + ' | ' + a.who + ' | ' + a.command + ' | ' + a.result; }).join('\\n')); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n') || 'No data.', buttons: [] } }];"
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Shape Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst out = [];\nif (command === '/whoami') { out.push('Access level: ' + (p.allowed ? 'admin (control and edit)' : 'viewer (read-only)')); out.push('Chat: ' + String(chatId)); }\nelse if (command === '/profile') { out.push('Profile: ' + esc(cfg.profile_id) + ' (allowed chat: ' + esc(cfg.telegram_chat_id) + ')'); }\nelse if (command === '/version') { out.push('Workflow: AHAWR Status Bot v1; runner: Claude Code; n8n: this stack'); }\nelse if (command === '/config') { const ed = (typeof cfg.editable_json === 'string') ? JSON.parse(cfg.editable_json) : (cfg.editable_json ?? {}); out.push('Editable keys (no secrets):'); out.push(Object.keys(ed).map(k => '  ' + k + ' (' + ed[k].type + (ed[k].min !== undefined ? ' ' + ed[k].min + '..' + ed[k].max : '') + ')').join('\\n')); }\nelse if (command === '/missions') { const ms = $('Missions').all().map(i => i.json ?? {}); out.push(ms.filter(m => m.mission_id).map(m => m.mission_id + ' | ' + esc(String(m.name ?? '').slice(0, 45)) + ' | ' + (m.enabled ? 'on' : 'off')).join('\\n').slice(0, 3800)); }\nelse if (command === '/status' || command === '/progress') {\n  const ns = cfg.state_namespace;\n  out.push('Mission: ' + esc(live.state_key)); out.push('Status: ' + esc(live.workflow_status));\n  out.push('Progress: ' + (live.total_tasks ? (Math.min(live.task_index, live.total_tasks) + '/' + live.total_tasks) : '—') + ' task ' + esc(live.current_task_id));\n  out.push('Attempt: ' + (live.task_attempt || '—') + '  score: ' + (live.last_review_score || '—'));\n  out.push('Worker: ' + esc(live.worker_status) + '  Reviewer: ' + esc(live.reviewer_status));\n  out.push('Run: ' + esc(live.current_run_id));\n  out.push('Updated: ' + esc(live.updated_at));\n}\nelse if (command === '/agents') { out.push('Agents: ' + esc(live.worker_status) + ' / ' + esc(live.reviewer_status) + ' on run ' + esc(live.current_run_id)); }\nelse if (command === '/usage') { out.push('Usage: see runner events for tokens, tokens/s, cache share, time per task.'); }\nelse if (command === '/insights') { out.push('Insights: scores and retries per task over the last N days (see attempts table).'); }\nelse if (command === '/errors') { out.push('Errors: last failed executions with node name and message (secrets masked).'); }\nelse if (command === '/audit') { const n = Number(args[0]) || 10; out.push('Audit (last ' + n + '):'); out.push($('Audit Recent').all().filter(i => i.json && i.json.command !== undefined).slice(0, n).map(i => { const a = i.json ?? {}; return a.when + ' | ' + a.who + ' | ' + a.command + ' | ' + a.result; }).join('\\n') || 'no entries'); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n') || 'No data.', buttons: [] } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -474,7 +469,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst live = $('Load Live State').first()?.json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\nconst groups = {};\nconst reg = {'/status':'Session','/missions':'AHAWR','/mission':'AHAWR','/progress':'AHAWR','/agents':'Session','/usage':'Info','/insights':'Info','/errors':'Info','/config':'Configuration','/profile':'Info','/version':'Info','/whoami':'Info','/audit':'AHAWR','/start':'Session','/resume':'Session','/stop':'Session','/restart':'Session','/pause':'Session','/retry':'Session','/accept':'Session','/steer':'Session','/queue':'Session','/set':'Configuration','/model':'Configuration','/undo':'Session','/approve':'Session','/deny':'Session','/help':'Info','/commands':'Info'};\nconst out = [];\nif (command === '/help') {\n  const filter = (args[0] || '').toLowerCase();\n  for (const [k, c] of Object.entries(reg)) { if (!filter || k.includes(filter) || c.toLowerCase().includes(filter)) { (groups[c] = groups[c] || []).push(k); } }\n  for (const [c, arr] of Object.entries(groups)) { out.push(c + ': ' + arr.sort().join(', ')); }\n}\nelse if (command === '/commands') { const page = Number(args[0]) || 1; const keys = Object.keys(reg).sort(); const per = 20; const slice = keys.slice((page-1)*per, page*per); out.push('Page ' + page + ': ' + slice.join(', ')); }\nelse if (command === '/start' && !args.length) { out.push('AHAWR Status Bot online. Use /help for commands.'); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n') || 'Use /help.', buttons: [] } }];"
+        "jsCode": "const cfg = $('Config').first().json ?? {};\nconst p = $('Parse Command').first().json ?? {};\nconst chatId = p.chat_id;\nconst text = String(p.text ?? '').trim();\nconst command = p.command.toLowerCase().split('@')[0];\nconst args = text.split(/\\s+/).slice(1);\nconst reg = {\"/status\": [\"Session\", \"Состояние текущей миссии: задача, попытка, оценка, агенты\"], \"/progress\": [\"Session\", \"То же, что /status\"], \"/agents\": [\"Session\", \"Что сейчас делают Worker и Reviewer\"], \"/tasks\": [\"Session\", \"То же, что /agents\"], \"/queue\": [\"Session\", \"Очередь миссий: list, add, rm, move, clear\"], \"/start\": [\"Session\", \"Запустить миссию: /start id (без аргумента - приветствие)\"], \"/resume\": [\"Session\", \"Продолжить миссию: /resume id\"], \"/restart\": [\"Session\", \"Перезапустить миссию: /restart id\"], \"/stop\": [\"Session\", \"Остановить миссию после текущего шага\"], \"/pause\": [\"Session\", \"Пауза: /pause причина, снять - /pause off\"], \"/retry\": [\"Session\", \"Разрешить ещё одну попытку текущей задачи\"], \"/accept\": [\"Session\", \"Принять текущую задачу как выполненную\"], \"/steer\": [\"Session\", \"Добавить указание агентам: /steer текст\"], \"/approve\": [\"Session\", \"Подтвердить ожидающее изменение: /approve код\"], \"/deny\": [\"Session\", \"Отклонить ожидающее изменение\"], \"/undo\": [\"Session\", \"Отменить последнее подтверждённое изменение настроек\"], \"/missions\": [\"AHAWR\", \"Список миссий: id, название, включена ли\"], \"/mission\": [\"AHAWR\", \"Включить или выключить миссию: /mission id enable\"], \"/audit\": [\"AHAWR\", \"Журнал команд бота: /audit N\"], \"/config\": [\"Configuration\", \"Какие настройки можно менять\"], \"/set\": [\"Configuration\", \"Изменить настройку: /set ключ значение\"], \"/model\": [\"Configuration\", \"Модель роли: /model role model\"], \"/usage\": [\"Info\", \"Где смотреть токены, скорость и кэш\"], \"/insights\": [\"Info\", \"Оценки и повторы по задачам\"], \"/errors\": [\"Info\", \"Последние ошибки выполнения\"], \"/profile\": [\"Info\", \"Профиль и разрешённые чаты\"], \"/version\": [\"Info\", \"Версии workflow, runner и n8n\"], \"/whoami\": [\"Info\", \"Ваш уровень доступа и номер чата\"], \"/help\": [\"Info\", \"Список команд с описанием: /help фильтр\"], \"/commands\": [\"Info\", \"Полный список команд по страницам\"]};\nconst out = [];\nif (command === '/help') {\n  const filter = (args[0] || '').toLowerCase();\n  const groups = {};\n  for (const [k, [c, d]] of Object.entries(reg)) { if (!filter || k.includes(filter) || c.toLowerCase().includes(filter)) { (groups[c] = groups[c] || []).push(k + ' - ' + d); } }\n  for (const [c, arr] of Object.entries(groups)) { out.push(c + ':\\n' + arr.join('\\n')); }\n}\nelse if (command === '/commands') {\n  const page = Number(args[0]) || 1; const keys = Object.keys(reg).sort(); const per = 20;\n  out.push('Page ' + page + ' of ' + Math.ceil(keys.length / per) + ':\\n' + keys.slice((page - 1) * per, page * per).map(k => k + ' - ' + reg[k][1]).join('\\n'));\n}\nelse if (command === '/start' && !args.length) { out.push('AHAWR Status Bot online. Use /help for commands.'); }\nreturn [{ json: { chat_id: chatId, text: out.join('\\n\\n') || 'Use /help.', buttons: [] } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -521,7 +516,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $json.pending ?? null;\nlet audit = $json.audit ?? null;\n// A denied confirmation has no pending and no write; it is routed to Build\n// Reply by the 'Has Pending?' node, not through this node.\nif (!p) { return []; }\nconst cfg = $('Config').first().json ?? {};\nconst fail = (reason) => {\n  if (audit) { audit = { ...audit, before: '—', after: '—', result: 'failed', reason: reason } };\n  return [{ json: { chat_id: $json.chat_id, failed: true, reason: reason, audit: audit } }];\n};\nif (p.kind === 'edit') {\n  // Resolve the target field: normally p.key (the /undo handler now\n  // stores the restored key/value directly in the pending). The\n  // 'undo' branch is a defensive fallback for pendings built before\n  // that change, where the last edit_history entry carries the\n  // rolled-back field and value.\n  let targetKey = p.key;\n  let rawValue = p.value;\n  if (targetKey === 'undo') {\n    const hist = (p.edit_history || []);\n    const entry = hist.length ? hist[hist.length - 1] : null;\n    if (!entry) { return fail('no edit history to undo'); }\n    const parts = String(entry).split(' = ');\n    targetKey = (parts[0] || '').trim();\n    rawValue = parts.slice(1).join(' ').trim();\n  }\n  // Re-validate against the whitelist (field, type, range) before any\n  // write node runs; an invalid value never reaches a write node.\n  let editable = cfg.editable_json ?? {};\n  if (typeof editable === 'string') { try { editable = JSON.parse(editable); } catch (e) { editable = {}; } }\n  const spec = editable[targetKey];\n  if (!spec) { return fail('not editable: ' + targetKey + ' (whitelist field)'); }\n  let val;\n  if (spec.type === 'number') {\n    val = Number(rawValue);\n    if (!Number.isFinite(val) || val < spec.min || val > spec.max) { return fail(targetKey + ' must be a number in [' + spec.min + '..' + spec.max + ']'); }\n  } else if (spec.type === 'boolean') {\n    if (!['true', 'false'].includes(String(rawValue).toLowerCase())) { return fail(targetKey + ' must be true or false'); }\n    val = rawValue === 'true';\n  } else {\n    val = String(rawValue);\n    if (!val || val.length < spec.min || val.length > spec.max) { return fail(targetKey + ' length must be ' + spec.min + '..' + spec.max); }\n  }\n  const table = p.table;\n  const rows = (table === 'hermes_config') ? $('Load Config Row').all() : $('Load Mission Row').all();\n  let match;\n  if (table === 'missions') {\n    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.startsWith('mission ') ? (p.action.split(' ')[1] || '') : cfg.active_mission_id);\n    if (!mid) { return fail('mission id missing'); }\n    match = { field: 'mission_id', value: String(mid) };\n  } else {\n    match = { field: 'profile_id', value: String(cfg.profile_id) };\n  }\n  const row = rows.map(i => i.json ?? {}).find(r => String(r[match.field] ?? '') === match.value) || null;\n  const before = row && targetKey in row ? row[targetKey] : '—';\n  return [{ json: { chat_id: $json.chat_id, kind: p.kind, table: table, key: targetKey, value: val, match: match, before: before, audit: audit } }];\n}\n// control actions: the target row is the live state row keyed by\n// state_key = Config.state_namespace (row key fixed in T001/T002).\nconst liveRows = $('Load Live State').all().map(i => i.json ?? {});\nconst live = liveRows[0] || {};\nif (!liveRows.length || String(live.state_key ?? '') !== String(cfg.state_namespace)) { return fail('live state row not found'); }\nconst verb = p.action.split(' ')[0];\nlet key, val;\nif (verb === 'stop') { key = 'workflow_status'; val = 'stopped'; }\nelse if (verb === 'restart') { key = 'workflow_status'; val = 'starting'; }\nelse if (verb === 'pause') { key = 'paused'; val = !p.action.includes('off'); }\nelse if (verb === 'steer') { key = 'operator_feedback'; val = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + (p.args && p.args.prompt ? p.args.prompt : ''); }\nelse if (verb === 'queue') {\n  const op = p.args && p.args.op ? p.args.op : 'list';\n  const q = Array.isArray(live.queue) ? live.queue.slice() : [];\n  if (op === 'add') { q.push(p.args && p.args.mission ? p.args.mission : ''); }\n  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) { q.splice(idx, 1); } }\n  else if (op === 'move') { const a = Number(p.args && p.args.a), b = Number(p.args && p.args.b); if (Number.isFinite(a) && Number.isFinite(b) && a < q.length && b < q.length) { [q[a], q[b]] = [q[b], q[a]]; } }\n  else if (op === 'clear') { q.length = 0; }\n  key = 'queue'; val = q;\n}\nelse { key = 'last_control'; val = p.action; }\nconst before = key in live ? live[key] : '—';\n// Command queue branch: a confirmed /start, /resume or /restart is queued\n// (the bot cannot launch runs itself), and a confirmed /retry or /accept\n// sets the Live State flag the main workflow (T010 patch) consumes during\n// a running mission. The write goes through a dataTable insert node\n// (Write Command Queue) or the live-state update node; the reply states\n// exactly what happens and when.\nconst queueSpec = {\"start\": \"bash data-tables/ops/launch_mission.sh %s\", \"resume\": \"bash data-tables/ops/launch_mission.sh %s\", \"restart\": \"bash data-tables/ops/launch_mission.sh %s\"};\nconst flagSpec = {\"retry\": \"retry_requested\", \"accept\": \"accept_requested\"};\nconst queued = queueSpec[verb];\nconst flag = flagSpec[verb] || null;\nif (queued) {\n  const mid = (p.args && p.args.mission) || cfg.active_mission_id;\n  const launch = queued.replace('%s', mid);\n  return [{ json: { chat_id: $json.chat_id, table: 'AHAWR Command Queue', queued: true, action: p.action, mission_id: mid, launch: launch, state_key: cfg.state_namespace, role: p.role ?? 'admin', status: 'pending', code: p.code ?? '', created_at: p.created_at ?? new Date().toISOString(), executed_at: null, result: launch, audit: audit } }];\n}\nif (flag) {\n  const when = 'as soon as the running mission reaches the next task';\n  const note = flag === 'retry_requested' ? 'the workflow will retry the current task once more with the last review as feedback' : 'the workflow will accept the current task and continue with the next one';\n  return [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', flag: flag, key: flag, value: true, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: (flag in live ? live[flag] : '—'), note: note, when: when, audit: audit } }];\n}\n// Generic control verbs (/stop, /pause, /steer, /queue, /restart ...):\n// write the live-state key/value through the update node.\nreturn [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', key: key, value: val, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: before, audit: audit } }];\n"
+        "jsCode": "const p = $json.pending ?? null;\nlet audit = $json.audit ?? null;\n// A denied confirmation has no pending and no write; it is routed to Build\n// Reply by the 'Has Pending?' node, not through this node.\nif (!p) { return []; }\nconst cfg = $('Config').first().json ?? {};\nconst fail = (reason) => {\n  if (audit) { audit = { ...audit, before: '—', after: '—', result: 'failed', reason: reason } };\n  return [{ json: { chat_id: $json.chat_id, failed: true, reason: reason, audit: audit } }];\n};\nif (p.kind === 'edit') {\n  // Resolve the target field: normally p.key (the /undo handler now\n  // stores the restored key/value directly in the pending). The\n  // 'undo' branch is a defensive fallback for pendings built before\n  // that change, where the last edit_history entry carries the\n  // rolled-back field and value.\n  let targetKey = p.key;\n  let rawValue = p.value;\n  if (targetKey === 'undo') {\n    const hist = (p.edit_history || []);\n    const entry = hist.length ? hist[hist.length - 1] : null;\n    if (!entry) { return fail('no edit history to undo'); }\n    const parts = String(entry).split(' = ');\n    targetKey = (parts[0] || '').trim();\n    rawValue = parts.slice(1).join(' ').trim();\n  }\n  // Re-validate against the whitelist (field, type, range) before any\n  // write node runs; an invalid value never reaches a write node.\n  let editable = cfg.editable_json ?? {};\n  if (typeof editable === 'string') { try { editable = JSON.parse(editable); } catch (e) { editable = {}; } }\n  const spec = editable[targetKey];\n  if (!spec) { return fail('not editable: ' + targetKey + ' (whitelist field)'); }\n  let val;\n  if (spec.type === 'number') {\n    val = Number(rawValue);\n    if (!Number.isFinite(val) || val < spec.min || val > spec.max) { return fail(targetKey + ' must be a number in [' + spec.min + '..' + spec.max + ']'); }\n  } else if (spec.type === 'boolean') {\n    if (!['true', 'false'].includes(String(rawValue).toLowerCase())) { return fail(targetKey + ' must be true or false'); }\n    val = rawValue === 'true';\n  } else {\n    val = String(rawValue);\n    if (!val || val.length < spec.min || val.length > spec.max) { return fail(targetKey + ' length must be ' + spec.min + '..' + spec.max); }\n  }\n  const table = p.table;\n  const rows = (table === 'hermes_config') ? $('Load Config Row').all() : $('Load Mission Row').all();\n  let match;\n  if (table === 'missions') {\n    const mid = p.args && p.args.mission_id ? p.args.mission_id : (p.action.startsWith('mission ') ? (p.action.split(' ')[1] || '') : cfg.active_mission_id);\n    if (!mid) { return fail('mission id missing'); }\n    match = { field: 'mission_id', value: String(mid) };\n  } else {\n    match = { field: 'profile_id', value: String(cfg.profile_id) };\n  }\n  const row = rows.map(i => i.json ?? {}).find(r => String(r[match.field] ?? '') === match.value) || null;\n  const before = row && targetKey in row ? row[targetKey] : '—';\n  return [{ json: { chat_id: $json.chat_id, kind: p.kind, table: table, key: targetKey, value: val, match: match, before: before, audit: audit } }];\n}\n// control actions: the target row is the live state row keyed by\n// state_key = Config.state_namespace (row key fixed in T001/T002).\nconst liveRows = $('Load Live State').all().map(i => i.json ?? {});\nconst live = liveRows[0] || {};\nif (!liveRows.length || String(live.state_key ?? '') !== String(cfg.state_namespace)) { return fail('live state row not found'); }\nconst verb = p.action.split(' ')[0];\nlet key, val;\nif (verb === 'stop') { key = 'workflow_status'; val = 'stopped'; }\nelse if (verb === 'restart') { key = 'workflow_status'; val = 'starting'; }\nelse if (verb === 'pause') { key = 'paused'; val = !p.action.includes('off'); }\nelse if (verb === 'steer') { key = 'operator_feedback'; val = (live.operator_feedback ? live.operator_feedback + '\\n' : '') + (p.args && p.args.prompt ? p.args.prompt : ''); }\nelse if (verb === 'queue') {\n  const op = p.args && p.args.op ? p.args.op : 'list';\n  const q = (() => { try { const x = typeof live.queue === 'string' ? JSON.parse(live.queue) : live.queue; return Array.isArray(x) ? x.slice() : []; } catch (e) { return []; } })();\n  if (op === 'add') { q.push(p.args && p.args.mission ? p.args.mission : ''); }\n  else if (op === 'rm') { const idx = Number(p.args && p.args.index); if (Number.isFinite(idx)) { q.splice(idx, 1); } }\n  else if (op === 'move') { const a = Number(p.args && p.args.a), b = Number(p.args && p.args.b); if (Number.isFinite(a) && Number.isFinite(b) && a < q.length && b < q.length) { [q[a], q[b]] = [q[b], q[a]]; } }\n  else if (op === 'clear') { q.length = 0; }\n  key = 'queue'; val = q;\n}\nelse { key = 'last_control'; val = p.action; }\nconst before = key in live ? live[key] : '—';\n// Command queue branch: a confirmed /start, /resume or /restart is queued\n// (the bot cannot launch runs itself), and a confirmed /retry or /accept\n// sets the Live State flag the main workflow (T010 patch) consumes during\n// a running mission. The write goes through a dataTable insert node\n// (Write Command Queue) or the live-state update node; the reply states\n// exactly what happens and when.\nconst queueSpec = {\"start\": \"bash data-tables/ops/launch_mission.sh %s\", \"resume\": \"bash data-tables/ops/launch_mission.sh %s\", \"restart\": \"bash data-tables/ops/launch_mission.sh %s\"};\nconst flagSpec = {\"retry\": \"retry_requested\", \"accept\": \"accept_requested\"};\nconst queued = queueSpec[verb];\nconst flag = flagSpec[verb] || null;\nif (queued) {\n  const mid = (p.args && p.args.mission) || cfg.active_mission_id;\n  const launch = queued.replace('%s', mid);\n  return [{ json: { chat_id: $json.chat_id, table: 'AHAWR Command Queue', queued: true, action: p.action, mission_id: mid, launch: launch, state_key: cfg.state_namespace, role: p.role ?? 'admin', status: 'pending', code: p.code ?? '', created_at: p.created_at ?? new Date().toISOString(), executed_at: null, result: launch, audit: audit } }];\n}\nif (flag) {\n  const when = 'as soon as the running mission reaches the next task';\n  const note = flag === 'retry_requested' ? 'the workflow will retry the current task once more with the last review as feedback' : 'the workflow will accept the current task and continue with the next one';\n  return [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', flag: flag, key: flag, value: true, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: (flag in live ? live[flag] : '—'), note: note, when: when, audit: audit } }];\n}\n// Generic control verbs (/stop, /pause, /steer, /queue, /restart ...):\n// write the live-state key/value through the update node.\nreturn [{ json: { chat_id: $json.chat_id, table: 'Autonomous Agent Live State', key: key, value: val, match: { field: 'state_key', value: String(cfg.state_namespace) }, before: before, audit: audit } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -568,52 +563,119 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "combinator": "and",
-          "options": {}
+        "jsCode": "const m = $('Apply Mutation').first().json;\nif (m.table === 'AHAWR Command Queue') { return [{ json: m }]; }\nconst v = Array.isArray(m.value) ? JSON.stringify(m.value) : m.value;\nreturn [{ json: { [m.key]: v } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7536,
+        1744
+      ],
+      "id": "77777777-aaaa-4bbb-8ccc-444444444455",
+      "name": "Shape Row"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c0",
+                    "leftValue": "={{ $('Apply Mutation').first().json.table }}",
+                    "rightValue": "hermes_config",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c1",
+                    "leftValue": "={{ $('Apply Mutation').first().json.table }}",
+                    "rightValue": "missions",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c2",
+                    "leftValue": "={{ $('Apply Mutation').first().json.table }}",
+                    "rightValue": "Autonomous Agent Live State",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "c3",
+                    "leftValue": "={{ $('Apply Mutation').first().json.table }}",
+                    "rightValue": "AHAWR Command Queue",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": false
+            }
+          ]
         },
-        "values": [
-          {
-            "id": "c0",
-            "leftValue": "={{ $('Apply Mutation').first().json.table }}",
-            "rightValue": "hermes_config",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c1",
-            "leftValue": "={{ $('Apply Mutation').first().json.table }}",
-            "rightValue": "missions",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c2",
-            "leftValue": "={{ $('Apply Mutation').first().json.table }}",
-            "rightValue": "Autonomous Agent Live State",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          },
-          {
-            "id": "c3",
-            "leftValue": "={{ $('Apply Mutation').first().json.table }}",
-            "rightValue": "AHAWR Command Queue",
-            "operator": {
-              "type": "string",
-              "operation": "equals",
-              "name": "filter.operator.equals"
-            }
-          }
-        ],
         "options": {}
       },
       "type": "n8n-nodes-base.switch",
@@ -627,7 +689,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -644,12 +705,10 @@
           ]
         },
         "columns": {
-          "column": [
-            {
-              "name": "={{ $json.key }}",
-              "value": "={{ $json.value }}"
-            }
-          ]
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false
@@ -667,7 +726,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -684,12 +742,10 @@
           ]
         },
         "columns": {
-          "column": [
-            {
-              "name": "={{ $json.key }}",
-              "value": "={{ $json.value }}"
-            }
-          ]
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false
@@ -707,7 +763,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -724,12 +779,10 @@
           ]
         },
         "columns": {
-          "column": [
-            {
-              "name": "={{ $json.key }}",
-              "value": "={{ $json.value }}"
-            }
-          ]
+          "mappingMode": "autoMapInputData",
+          "value": null,
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false
@@ -747,7 +800,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "insert",
         "dataTableId": {
           "__rl": true,
@@ -755,50 +807,22 @@
           "value": "AHAWR Command Queue"
         },
         "columns": {
-          "column": [
-            {
-              "name": "action",
-              "value": "={{ $json.action }}"
-            },
-            {
-              "name": "mission_id",
-              "value": "={{ $json.mission_id }}"
-            },
-            {
-              "name": "state_key",
-              "value": "={{ $json.state_key }}"
-            },
-            {
-              "name": "chat_id",
-              "value": "={{ $json.chat_id }}"
-            },
-            {
-              "name": "role",
-              "value": "={{ $json.role }}"
-            },
-            {
-              "name": "status",
-              "value": "={{ $json.status }}"
-            },
-            {
-              "name": "code",
-              "value": "={{ $json.code }}"
-            },
-            {
-              "name": "created_at",
-              "value": "={{ $json.created_at }}"
-            },
-            {
-              "name": "executed_at",
-              "value": "={{ $json.executed_at }}"
-            },
-            {
-              "name": "result",
-              "value": "={{ $json.result }}"
-            }
-          ]
-        },
-        "options": {}
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "={{ $json.action }}",
+            "mission_id": "={{ $json.mission_id }}",
+            "state_key": "={{ $json.state_key }}",
+            "chat_id": "={{ $json.chat_id }}",
+            "role": "={{ $json.role }}",
+            "status": "={{ $json.status }}",
+            "code": "={{ $json.code }}",
+            "created_at": "={{ $json.created_at }}",
+            "executed_at": "={{ $json.executed_at }}",
+            "result": "={{ $json.result }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -953,7 +977,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "insert",
         "dataTableId": {
           "__rl": true,
@@ -961,38 +984,19 @@
           "value": "AHAWR Bot Audit Log"
         },
         "columns": {
-          "column": [
-            {
-              "name": "who",
-              "value": "={{ $json.who }}"
-            },
-            {
-              "name": "when",
-              "value": "={{ $json.when }}"
-            },
-            {
-              "name": "command",
-              "value": "={{ $json.command }}"
-            },
-            {
-              "name": "before",
-              "value": "={{ $json.before }}"
-            },
-            {
-              "name": "after",
-              "value": "={{ $json.after }}"
-            },
-            {
-              "name": "result",
-              "value": "={{ $json.result }}"
-            },
-            {
-              "name": "reason",
-              "value": "={{ $json.reason }}"
-            }
-          ]
-        },
-        "options": {}
+          "mappingMode": "defineBelow",
+          "value": {
+            "who": "={{ $json.who }}",
+            "when": "={{ $json.when }}",
+            "command": "={{ $json.command }}",
+            "before": "={{ $json.before }}",
+            "after": "={{ $json.after }}",
+            "result": "={{ $json.result }}",
+            "reason": "={{ $json.reason }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        }
       },
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
@@ -1006,17 +1010,18 @@
     },
     {
       "parameters": {
-        "chatId": "={{ $('Build Reply').first().json.chat_id }}",
-        "text": "={{ $('Build Reply').first().json.text }}",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
         "additionalFields": {
-          "reply_markup": "={{ $('Build Reply').first().json.buttons }}"
+          "parse_mode": "HTML",
+          "appendAttribution": false
         }
       },
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
         8784,
-        1840
+        1960
       ],
       "id": "f39df623-73a2-4900-9bfc-a0943430e368",
       "name": "Send Reply",
@@ -1064,17 +1069,13 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ 'https://api.telegram.org/bot' + $credentials('telegramApi').token + '/answerCallbackQuery' }}",
-        "sendBody": true,
-        "bodyType": "json",
-        "jsonBody": "={{ { callback_query_id: $('Parse Command').first().json.callback_id } }}",
-        "options": {
-          "timeout": 30000
-        }
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $('Parse Command').first().json.callback_id }}",
+        "additionalFields": {}
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
       "position": [
         9168,
         1840
@@ -1103,43 +1104,113 @@
       ],
       "id": "4ef3aa0d-5d49-480e-86f5-c22de108ab55",
       "name": "Setup note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tg-REPLACE-WITH-AHAWR_TG_WEBHOOK_PATH-FROM-ENV",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Telegram Update",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        4880,
+        1488
+      ],
+      "webhookId": "5bb2d442-0c75-460a-9538-15aa7bf262e2",
+      "id": "40bd7b70-ec25-4a7c-a621-8c8d71e7d098"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Load Live State').all().map(i => i.json ?? {}).filter(x => x.state_key);\nrows.sort((a, b) => String(b.updatedAt ?? b.updated_at ?? '').localeCompare(String(a.updatedAt ?? a.updated_at ?? '')));\nconst r = rows[0] ?? {};\nlet plan = {}; try { plan = JSON.parse(r.plan_json || '{}'); } catch (e) {}\nconst tasks = Array.isArray(plan.tasks) ? plan.tasks : [];\nconst idx = Number(r.task_index);\nconst cur = Number.isFinite(idx) ? tasks[idx] : null;\nreturn [{ json: { state_key: r.state_key ?? '', workflow_status: r.status ?? '', task_index: Number.isFinite(idx) ? idx + 1 : 0, total_tasks: tasks.length, current_task_id: cur ? (cur.id || '') : '', current_task_title: cur ? (cur.title || '') : '', task_attempt: r.task_attempt ?? '', last_review_score: r.last_review_score ?? '', current_run_id: r.worker_run_id || r.reviewer_run_id || r.architect_run_id || '', worker_status: r.worker_status ?? '', reviewer_status: r.reviewer_status ?? '', updated_at: r.updated_at ?? '' } }];"
+      },
+      "name": "Shape Live State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6656,
+        1488
+      ],
+      "id": "5cb726cb-6834-46d3-a732-885c3cf31579"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $json ?? {};\nconst r = (j.text !== undefined) ? j : $('Build Reply').first().json;\nreturn [{ json: { chat_id: r.chat_id, text: r.text, buttons: Array.isArray(r.buttons) ? r.buttons : [] } }];"
+      },
+      "name": "Pick Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8432,
+        1840
+      ],
+      "id": "881353cc-a1b5-4581-a9e6-d2513bd3875f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b1",
+              "leftValue": "={{ $json.buttons.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Has Buttons?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        8608,
+        1840
+      ],
+      "id": "c5add656-0b2e-4ce0-9500-86f23d28bda2"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "appendAttribution": false,
+          "reply_markup": "={{ { inline_keyboard: [$json.buttons] } }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        8784,
+        1720
+      ],
+      "id": "2ce07ab0-c391-40db-bbbc-938f324d7668",
+      "name": "Send Reply Buttons",
+      "webhookId": "b234d18d-26b8-44ae-b779-c4b4bb8ed1ad",
+      "credentials": {
+        "telegramApi": {
+          "id": "czj7GHvr93VLvcH5",
+          "name": "Telegram account"
+        }
+      }
     }
   ],
   "connections": {
-    "Poll Telegram": {
-      "main": [
-        [
-          {
-            "node": "Prepare Poll",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Poll": {
-      "main": [
-        [
-          {
-            "node": "Config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Config": {
-      "main": [
-        [
-          {
-            "node": "Get Updates",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Updates": {
       "main": [
         [
           {
@@ -1194,7 +1265,7 @@
       "main": [
         [
           {
-            "node": "Dispatch",
+            "node": "Load Live State",
             "type": "main",
             "index": 0
           }
@@ -1237,6 +1308,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Handle Help",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -1244,7 +1322,7 @@
       "main": [
         [
           {
-            "node": "Send Reply",
+            "node": "Pick Reply",
             "type": "main",
             "index": 0
           }
@@ -1255,7 +1333,7 @@
       "main": [
         [
           {
-            "node": "Send Reply",
+            "node": "Pick Reply",
             "type": "main",
             "index": 0
           }
@@ -1266,7 +1344,7 @@
       "main": [
         [
           {
-            "node": "Send Reply",
+            "node": "Pick Reply",
             "type": "main",
             "index": 0
           }
@@ -1277,7 +1355,7 @@
       "main": [
         [
           {
-            "node": "Send Reply",
+            "node": "Pick Reply",
             "type": "main",
             "index": 0
           }
@@ -1335,9 +1413,20 @@
         ],
         [
           {
+            "node": "Shape Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Row": {
+      "main": [
+        [
+          {
             "node": "Write Table",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -1488,7 +1577,7 @@
       "main": [
         [
           {
-            "node": "Send Reply",
+            "node": "Pick Reply",
             "type": "main",
             "index": 0
           }
@@ -1516,11 +1605,113 @@
           }
         ]
       ]
+    },
+    "Telegram Update": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Live State": {
+      "main": [
+        [
+          {
+            "node": "Shape Live State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Live State": {
+      "main": [
+        [
+          {
+            "node": "Missions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missions": {
+      "main": [
+        [
+          {
+            "node": "Audit Recent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Recent": {
+      "main": [
+        [
+          {
+            "node": "Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Reply": {
+      "main": [
+        [
+          {
+            "node": "Has Buttons?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Buttons?": {
+      "main": [
+        [
+          {
+            "node": "Send Reply Buttons",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Reply Buttons": {
+      "main": [
+        [
+          {
+            "node": "Answer Callback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "active": true
+  "meta": null,
+  "nodeGroups": [],
+  "versionCounter": 55,
+  "sourceWorkflowId": null,
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
 }

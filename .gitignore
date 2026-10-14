@@ -42,3 +42,8 @@ runner-scratch/
 *.bak-*
 check_workflows_output.txt
 litellm/trace/
+
+# bulk measurement copies made by the llamacpp-prefill-cost mission (138 MB of run events, 50 MB sqlite): not for git, and the retrieval index must not embed them
+docs/cold-prefill/partB-runner-events/
+docs/cold-prefill/partB-runner.sqlite
+docs/cold-prefill/partB-cache-trace-snapshot.jsonl

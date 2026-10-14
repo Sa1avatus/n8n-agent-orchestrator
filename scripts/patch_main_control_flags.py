@@ -131,6 +131,8 @@ def live_state_get_node(node_id, name, position):
             "filters": LIVE_STATE_FILTERS,
             "limit": 1,
         },
+        # a mission without a Live State row must not end the run silently: the flags then read as "not set"
+        "alwaysOutputData": True,
         "type": "n8n-nodes-base.dataTable",
         "typeVersion": 2,
         "position": position,
@@ -145,7 +147,6 @@ def live_state_update_node(node_id, name, position, column_exprs):
     against the node's input item ($json)."""
     return {
         "parameters": {
-            "resource": "table",
             "operation": "update",
             "dataTableId": {
                 "__rl": True,
@@ -157,6 +158,8 @@ def live_state_update_node(node_id, name, position, column_exprs):
             "columns": {
                 "mappingMode": "defineBelow",
                 "value": column_exprs,
+                "matchingColumns": [],
+                "schema": [],
             },
             "options": {"updateMatchingRows": False},
         },

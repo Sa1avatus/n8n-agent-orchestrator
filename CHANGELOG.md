@@ -3,7 +3,32 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.3.0** (claude-runner `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+
+## 2026-10-14 (0.4.0)
+
+- Telegram control bot works (it never did: it read no messages). `tg_relay.py` long-polls Telegram with the token from `.env` (`TELEGRAM_BOT_TOKEN`) and posts each update to
+  the bot workflow's webhook (`AHAWR_TG_WEBHOOK_PATH`); the workflow no longer polls. Fixed in `AHAWR_Status_Bot.json`: placeholder chat id, the update
+  shape passed to Parse Command, data-loading nodes that had no incoming connection (status reads the active mission from the task state table), Switch nodes in a
+  shape n8n ignores (every command went to the view handler), replies that referenced a node absent on most paths (HTML mode, buttons only when there are any).
+  The bot menu ("/" list with descriptions) is set with `setMyCommands`; `/help` and `/commands` list the commands with descriptions (`tg_commands.py`).
+  Commands that change the running mission still need the control-flag patch of the main workflow (not wired yet).
+- Retrieval service uses PostgreSQL (`RETRIEVAL_DATABASE_URL`, database `retrieval` in `ahawr-postgres`, `sqlite_to_postgres.py` copied the embeddings) and runs with a
+  1.5 GB memory limit; agents use it again (`hermes_config.retrieval_enabled`).
+- Slot cache: `slot_keeper.py` runs in the `llama-cpp-dashboard` container (restores the slot when llama is healthy and again after a restart, runs the save loop,
+  samples the GPU to a CSV); the watchdog and the apply scripts restore the slot after a llama restart; `slot_cache.py` reads the key from `.env` when the environment has none.
+- The Reviewer may read the llama.cpp tree (`CLAUDE_RUNNER_REVIEWER_ADD_DIRS`), so missions that check files there are not judged from the text alone.
+- Profile of cold prefill on the RTX 3060: `docs/prefill-profile-2026-10-14.md` (110 W against 170 W, Nsight kernel table); mission report of `llamacpp-prefill-cost`:
+  `docs/mission-report-prefill-cost-ru.md`.
+
+### Other changes of 2026-10-14
+
+- The cost shown for a local run is what it would have cost on a cloud model: the steps made without thinking are priced as Haiku, the steps made with
+  thinking as Sonnet (`claude_runner/local_pricing.py`, settings `AHAWR_LOCAL_PRICE_*`). The runner writes the thinking mode the run starts in
+  (`thinking_state`) to its event log, the switches are already there (`thinking_switch`); the figure is computed from the steps' token counts when the
+  run ends, with the Sonnet and Haiku totals of the whole run kept in `details.local_cost.by_profile`. Rebuild the runner image to apply.
+- `slot_cache.py`: works with the router mode of llama-server (model in every request, slot report from `GET /slots?model=`, the model is loaded before a restore)
+  and accepts Git Bash paths (`/d/llama-slots`).
 
 ## 2026-10-13
 

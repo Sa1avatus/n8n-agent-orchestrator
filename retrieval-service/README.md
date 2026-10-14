@@ -9,7 +9,7 @@ flowchart LR
     subgraph STACK["docker compose stack"]
         N8N["n8n-autonomous-agents<br/>AHAWR v13 (fail-open)"] -->|"POST http://ahawr-retrieval:8500/retrieve"| API["ahawr-retrieval<br/>FastAPI"]
         API --> P["sync → query → cache → lexical+vector+symbol → RRF →<br/>hard filters → text-only rerank → deterministic ranking → budgeted context"]
-        P <--> L[("/data volume<br/>SQLite: FTS5 · vectors · symbols · change log · cache · logs")]
+        P <--> L[("/data volume<br/>SQLite (default) or PostgreSQL: FTS · vectors · symbols · change log · cache · logs")]
         WS[("/workspace (read-only)")] --> P
     end
     P -->|optional| R["reranker-service /v1/rerank"]
@@ -151,3 +151,12 @@ Context Retrieval Layer для AHAWR работает как контейнер 
 - `ahawr-search "запрос" [--k N] [--budget T]` — команда в образе claude-runner для агентов: ищет по папке, из которой вызвана (`/tmp/<X>` — симлинк в `/d/rag-tmp/<X>`), бюджет по умолчанию 1500 токенов, печатает фрагменты как `path:start-end`. При любой ошибке сервиса пишет `retrieval unavailable` и завершается с кодом 0.
 - Метрика использования: `docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://claude-runner:8700 --since -24h` — по профилям точность и полнота на уровне файлов, доля использованных токенов, вызовы `ahawr-search` и чаще всего пропущенные файлы (журнал retrieval + события claude-runner).
 - A/B на живой задаче (с RAG и без) — раздел «Live-task A/B» выше и `docs/retrieval/EVALUATION.md`; пример сравнения на одном корпусе — `eval/results/2026-09-30-rag-usage-after.md`.
+
+## PostgreSQL index store (used by the stack since 0.4.0)
+
+`RETRIEVAL_DATABASE_URL=postgresql://retrieval:<password>@ahawr-postgres:5432/retrieval` (and `RETRIEVAL_DATABASE_SCHEMA`, default `retrieval`) selects the PostgreSQL store (`pg_store.py`, needs `psycopg`, which the image installs); empty keeps the SQLite file in `/data`.
+The compose service runs with `mem_limit: 1536m` (a runaway indexer is killed alone instead of stalling the Docker VM); the e5-small embedder and the caches settle around 1.2-1.4 GB.
+
+Moving an existing SQLite index: `scripts/sqlite_to_postgres.py --sqlite /data/index.sqlite --dsn "$RETRIEVAL_DATABASE_URL"` copies the embeddings (the expensive part) and the corpus rows; files, chunks, the full-text index and symbols are rebuilt by the first sync of each corpus and reuse the copied embeddings by content hash.
+In the stack: `docker compose run --rm --no-deps -v "<repo>/retrieval-service/scripts:/scripts:ro" --entrypoint sh ahawr-retrieval -c 'python /scripts/sqlite_to_postgres.py --sqlite /data/index.sqlite --dsn "$RETRIEVAL_DATABASE_URL"'`, then `docker compose up -d ahawr-retrieval`.
+`tests/parity_check.py` (manual) compares the top results of both stores for the same folder and queries.

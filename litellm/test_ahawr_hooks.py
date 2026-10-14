@@ -24,6 +24,8 @@ if "litellm" not in sys.modules:
     sys.modules["litellm.integrations"] = integrations
     sys.modules["litellm.integrations.custom_logger"] = custom_logger
 
+import os
+
 from ahawr_hooks import MidSystemMessageHook, move_mid_system_messages
 
 
@@ -295,22 +297,222 @@ def test_local_thinking_flag_file() -> None:
     ahawr_hooks._thinking_cache = (0.0, False)
 
 
-if __name__ == "__main__":
-    test_leading_system_message_is_left_alone()
-    test_mid_system_message_merges_into_preceding_user_message()
-    test_mid_system_message_without_preceding_user_becomes_its_own_user_message()
-    test_empty_mid_system_message_is_dropped()
-    test_async_pre_call_hook_moves_mid_system_messages()
-    test_compaction_request_is_capped()
-    test_ordinary_request_with_quoted_marker_mid_text_keeps_max_tokens()
-    test_compaction_request_without_max_tokens_gets_one()
-    test_ordinary_request_keeps_max_tokens()
-    test_compaction_marker_only_in_last_user_message_counts()
-    test_mid_system_conversion_runs_before_compaction_cap()
-    test_drop_history_thinking()
-    test_local_thinking_flag_file()
-    test_cache_trace_first_diff(__import__("pathlib").Path(__import__("tempfile").mkdtemp()))
-    print("hook unit tests passed")
+def _first_user_text(messages) -> str:
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "user":
+            return _reminder_text(m.get("content"))
+    return ""
+
+
+def _first_user_pieces(messages) -> list[str]:
+    """Plain-text and reminder-segment pieces of the first user turn, in order."""
+    import ahawr_hooks
+
+    first = next(
+        (m for m in messages if isinstance(m, dict) and m.get("role") == "user"), None
+    )
+    pieces: list[str] = []
+    if first is None:
+        return pieces
+    for block in ahawr_hooks._blocks(first.get("content")):
+        if block.get("type") != "text":
+            continue
+        stable, segments = ahawr_hooks._split_text_block(str(block.get("text", "")))
+        pieces.extend(p for p in stable if p)
+        pieces.extend(segments)
+    return pieces
+
+
+def test_variable_reminders_moved_to_tail() -> None:
+    import ahawr_hooks
+
+    os.environ["AHAWR_STABLE_PREFIX"] = "1"
+    try:
+        hook = MidSystemMessageHook()
+        messages = [
+            {"role": "system", "content": "You are an agent."},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "static prompt text"},
+                    {
+                        "type": "text",
+                        "text": "<system-reminder>\n<total_tokens>14995511 tokens left</total_tokens>\n</system-reminder>\n<system-reminder>\n<date>2026-10-13</date>\n</system-reminder>",
+                    },
+                ],
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+        data = {"messages": copy.deepcopy(messages)}
+        result = asyncio.run(hook.async_pre_call_hook(None, None, data, "completion"))
+        first_user = result["messages"][1]
+        # the static prompt text stays first; the variable reminders are one block at the tail
+        assert first_user["content"][0] == {"type": "text", "text": "static prompt text"}
+        tail = first_user["content"][1]["text"]
+        assert tail.count("<system-reminder>") == 2
+        assert "<total_tokens>" in tail and "<date>" in tail
+        # lossless: the multiset of pieces (plain text + reminder segments) of the first
+        # user turn is the same before and after
+        assert sorted(_first_user_pieces(messages)) == sorted(_first_user_pieces(result["messages"]))
+    finally:
+        os.environ.pop("AHAWR_STABLE_PREFIX", None)
+
+
+def test_variable_reminder_before_task_text_moved_past_it() -> None:
+    import ahawr_hooks
+
+    os.environ["AHAWR_STABLE_PREFIX"] = "1"
+    try:
+        hook = MidSystemMessageHook()
+        messages = [
+            {"role": "system", "content": "You are an agent."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "<system-reminder>\n<date>2026-10-13</date>\n</system-reminder>\n"
+                        "<system-reminder>\nrun id: run_a\n</system-reminder>",
+                    },
+                    {"type": "text", "text": "Fix bug X in module Y."},
+                    {
+                        "type": "text",
+                        "text": "<system-reminder>\n# CLAUDE.md-style static notes\n</system-reminder>",
+                    },
+                ],
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+        data = {"messages": copy.deepcopy(messages)}
+        result = asyncio.run(hook.async_pre_call_hook(None, None, data, "completion"))
+        first_user = result["messages"][1]
+        content = first_user["content"]
+        # the task text and the CLAUDE.md-style reminder survive, in their order,
+        # ahead of the variable tail
+        assert content[0] == {"type": "text", "text": "Fix bug X in module Y."}
+        assert content[1] == {
+            "type": "text",
+            "text": "<system-reminder>\n# CLAUDE.md-style static notes\n</system-reminder>",
+        }
+        tail = content[2]["text"]
+        assert "<date>2026-10-13</date>" in tail and "run id: run_a" in tail
+        # lossless: same pieces as before, only reordered
+        assert sorted(_first_user_pieces(messages)) == sorted(_first_user_pieces(result["messages"]))
+    finally:
+        os.environ.pop("AHAWR_STABLE_PREFIX", None)
+
+
+def test_single_block_static_then_task_then_variable_tail() -> None:
+    import ahawr_hooks
+
+    os.environ["AHAWR_STABLE_PREFIX"] = "1"
+    try:
+        hook = MidSystemMessageHook()
+        messages = [
+            {"role": "system", "content": "You are an agent."},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "<system-reminder>\n# CLAUDE.md\n</system-reminder>\n"
+                            "Fix bug X\n"
+                            "<system-reminder>\n<date>2026-10-13</date>\n</system-reminder>"
+                        ),
+                    },
+                ],
+            },
+            {"role": "assistant", "content": "ok"},
+        ]
+        data = {"messages": copy.deepcopy(messages)}
+        result = asyncio.run(hook.async_pre_call_hook(None, None, data, "completion"))
+        first_user = result["messages"][1]
+        content = first_user["content"]
+        # exact order: static reminder, task text, then the variable tail
+        assert content[0] == {
+            "type": "text",
+            "text": "<system-reminder>\n# CLAUDE.md\n</system-reminder>",
+        }
+        assert content[1] == {"type": "text", "text": "Fix bug X"}
+        tail = content[2]["text"]
+        assert "<date>2026-10-13</date>" in tail
+    finally:
+        os.environ.pop("AHAWR_STABLE_PREFIX", None)
+
+
+def test_stable_prefix_across_simulated_sessions() -> None:
+    import ahawr_hooks
+    import json
+
+    os.environ["AHAWR_STABLE_PREFIX"] = "1"
+    try:
+        hook = MidSystemMessageHook()
+
+        def build(run_id: str, date: str) -> dict:
+            return {
+                "messages": [
+                    {"role": "system", "content": "You are an agent."},
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "<system-reminder>\n<total_tokens>14995511 tokens left</total_tokens>\n</system-reminder>\n"
+                                    f"<system-reminder>\n<date>{date}</date>\n</system-reminder>\n"
+                                    f"<system-reminder>\nrun id: {run_id}\n</system-reminder>\n"
+                                    "static prompt text"
+                                ),
+                            },
+                        ],
+                    },
+                    {"role": "assistant", "content": "ok"},
+                ]
+            }
+
+        data_a = build("run_a", "2026-10-13")
+        data_b = build("run_b", "2026-10-14")
+        result_a = asyncio.run(hook.async_pre_call_hook(None, None, data_a, "completion"))
+        result_b = asyncio.run(hook.async_pre_call_hook(None, None, data_b, "completion"))
+        # identical prefix up to the first user message's variable tail:
+        # the messages with the first user's last (variable) block removed are byte-identical
+        msgs_a = [dict(m) for m in result_a["messages"]]
+        msgs_b = [dict(m) for m in result_b["messages"]]
+        for msgs in (msgs_a, msgs_b):
+            msgs[1]["content"] = msgs[1]["content"][:-1]
+        assert json.dumps(msgs_a) == json.dumps(msgs_b)
+        # and the variable tails are the only difference: each keeps its own variable values
+        tail_a = result_a["messages"][1]["content"][-1]["text"]
+        tail_b = result_b["messages"][1]["content"][-1]["text"]
+        assert "run_a" in tail_a and "2026-10-13" in tail_a
+        assert "run_b" in tail_b and "2026-10-14" in tail_b
+    finally:
+        os.environ.pop("AHAWR_STABLE_PREFIX", None)
+
+
+def test_flag_off_keeps_original_message() -> None:
+    import ahawr_hooks
+
+    os.environ.pop("AHAWR_STABLE_PREFIX", None)
+    hook = MidSystemMessageHook()
+    messages = [
+        {"role": "system", "content": "You are an agent."},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "static prompt text"},
+                {
+                    "type": "text",
+                    "text": "<system-reminder>\n<total_tokens>14995511 tokens left</total_tokens>\n</system-reminder>",
+                },
+            ],
+        },
+        {"role": "assistant", "content": "ok"},
+    ]
+    data = {"messages": copy.deepcopy(messages)}
+    result = asyncio.run(hook.async_pre_call_hook(None, None, data, "completion"))
+    assert result["messages"] == data["messages"]
 
 
 def test_cache_trace_first_diff(tmp_path) -> None:
@@ -350,3 +552,26 @@ def test_cache_trace_first_diff(tmp_path) -> None:
     # another conversation does not interfere
     other = [{"role": "system", "content": "S2"}, {"role": "user", "content": "x"}]
     assert cache_trace.record(other, None, "m")["first_diff"] == "new conversation"
+
+
+if __name__ == "__main__":
+    test_leading_system_message_is_left_alone()
+    test_mid_system_message_merges_into_preceding_user_message()
+    test_mid_system_message_without_preceding_user_becomes_its_own_user_message()
+    test_empty_mid_system_message_is_dropped()
+    test_async_pre_call_hook_moves_mid_system_messages()
+    test_compaction_request_is_capped()
+    test_ordinary_request_with_quoted_marker_mid_text_keeps_max_tokens()
+    test_compaction_request_without_max_tokens_gets_one()
+    test_ordinary_request_keeps_max_tokens()
+    test_compaction_marker_only_in_last_user_message_counts()
+    test_mid_system_conversion_runs_before_compaction_cap()
+    test_drop_history_thinking()
+    test_local_thinking_flag_file()
+    test_variable_reminders_moved_to_tail()
+    test_variable_reminder_before_task_text_moved_past_it()
+    test_single_block_static_then_task_then_variable_tail()
+    test_stable_prefix_across_simulated_sessions()
+    test_flag_off_keeps_original_message()
+    test_cache_trace_first_diff(__import__("pathlib").Path(__import__("tempfile").mkdtemp()))
+    print("hook unit tests passed")

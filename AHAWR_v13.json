@@ -4069,7 +4069,8 @@
         1728
       ],
       "id": "aa110001-0000-4000-8000-000000000001",
-      "name": "Load Live State"
+      "name": "Load Live State",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -4110,7 +4111,8 @@
         1728
       ],
       "id": "aa110004-0000-4000-8000-000000000004",
-      "name": "Pause Gate Live State"
+      "name": "Pause Gate Live State",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -4174,7 +4176,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -4195,7 +4196,9 @@
           "value": {
             "workflow_status": "={{ 'paused' }}",
             "owner": "={{ '' }}"
-          }
+          },
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false
@@ -4225,7 +4228,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -4246,7 +4248,9 @@
           "value": {
             "workflow_status": "={{ 'stopped' }}",
             "owner": "={{ '' }}"
-          }
+          },
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false
@@ -4287,7 +4291,8 @@
         2384
       ],
       "id": "aa110011-0000-4000-8000-000000000011",
-      "name": "Stop Check Worker Live State"
+      "name": "Stop Check Worker Live State",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -4362,7 +4367,8 @@
         2080
       ],
       "id": "aa110014-0000-4000-8000-000000000014",
-      "name": "Stop Check Reviewer Live State"
+      "name": "Stop Check Reviewer Live State",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -4437,7 +4443,8 @@
         2600
       ],
       "id": "aa110016-0000-4000-8000-000000000016",
-      "name": "Accept Gate Live State"
+      "name": "Accept Gate Live State",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -4467,7 +4474,6 @@
     },
     {
       "parameters": {
-        "resource": "table",
         "operation": "update",
         "dataTableId": {
           "__rl": true,
@@ -4490,7 +4496,9 @@
             "accept_requested": "={{ false }}",
             "retry_requested": "={{ false }}",
             "last_control": "={{ $json.accept_requested_was_true ? 'accept: ' + String($json.accept_reason ?? '') : '' }}"
-          }
+          },
+          "matchingColumns": [],
+          "schema": []
         },
         "options": {
           "updateMatchingRows": false

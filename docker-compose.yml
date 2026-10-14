@@ -82,10 +82,19 @@ services:
     environment:
       - RETRIEVAL_DATA_DIR=/data
       - RETRIEVAL_ALLOWED_ROOTS=/workspace,/d
+      # sync corpora in the background; a request waits for it at most this long, then answers from the current index
+      # (2026-10-13: a request used to wait for the whole sync, 5+ minutes, and the n8n node timed out five times in a row)
+      - RETRIEVAL_SYNC_WAIT_SECONDS=${RETRIEVAL_SYNC_WAIT_SECONDS:-15}
+      # index store: empty = the SQLite file in /data (default); a postgresql:// DSN = PostgreSQL (database retrieval in ahawr-postgres)
+      - RETRIEVAL_DATABASE_URL=${RETRIEVAL_DATABASE_URL:-}
+      - RETRIEVAL_DATABASE_SCHEMA=${RETRIEVAL_DATABASE_SCHEMA:-retrieval}
       - RETRIEVAL_BOOTSTRAP_CORPORA=${RETRIEVAL_BOOTSTRAP_CORPORA:-ahawr-workspace=/workspace}
       # missions.working_directory (e.g. D:\OpenAIProjects\app) → /d/OpenAIProjects/app
       - RETRIEVAL_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
 
+    # 2026-10-13: the Docker VM hung for lack of memory (swap full, PSI 60%); a runaway indexer must be killed alone, not stall the VM
+    mem_limit: 1536m
+    memswap_limit: 1536m
     volumes:
       # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
@@ -141,6 +150,16 @@ services:
       # policy off_first: the first attempt at a task (TASK T<n>, n >= FROM_TASK) runs without thinking, a retry after a review with it
       - CLAUDE_RUNNER_THINK_POLICY=${AHAWR_THINK_POLICY:-}
       - CLAUDE_RUNNER_THINK_POLICY_FROM_TASK=${AHAWR_THINK_POLICY_FROM_TASK:-1}
+      # what a local run would have cost on a cloud model (USD per MTok: input, output, cache read, cache write): steps made without thinking
+      # at the Haiku rates, with thinking at the Sonnet rates (claude_runner/local_pricing.py). Empty modes = the flat Claude Code price.
+      - CLAUDE_RUNNER_LOCAL_PRICE_SONNET=${AHAWR_LOCAL_PRICE_SONNET:-2,10,0.2,4}
+      - CLAUDE_RUNNER_LOCAL_PRICE_HAIKU=${AHAWR_LOCAL_PRICE_HAIKU:-1,5,0.1,1.25}
+      - CLAUDE_RUNNER_LOCAL_PRICE_THINKING_OFF=${AHAWR_LOCAL_PRICE_THINKING_OFF:-haiku}
+      - CLAUDE_RUNNER_LOCAL_PRICE_THINKING_ON=${AHAWR_LOCAL_PRICE_THINKING_ON:-sonnet}
+      # Tool output limits for the local Worker only (Part B): off by default so behavior is
+      # unchanged until the operator enables it; when on, only the Worker on the local provider
+      # gets BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=16000.
+      - CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS=${AHAWR_LOCAL_TOOL_OUTPUT_LIMITS:-0}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).

@@ -7,8 +7,10 @@ rerank → deterministic ranking layer → budgeted context assembly → cache s
 
 from __future__ import annotations
 
+import concurrent.futures
 import contextlib
 import json
+import threading
 import time
 import uuid
 from collections.abc import Sequence
@@ -149,7 +151,12 @@ class RetrievalService:
         profiles: dict[str, Profile] | None = None,
     ) -> None:
         self.settings = settings
-        self.store = Store(settings.store_path)
+        if settings.database_url:
+            from .pg_store import PgStore
+
+            self.store: Store = PgStore(settings.database_url, settings.database_schema)
+        else:
+            self.store = Store(settings.store_path)
         self.log = RetrievalLog(settings.log_path)
         self.embedder = embedder or build_embedder(settings)
         self.reranker = reranker or build_reranker(settings)
@@ -164,8 +171,35 @@ class RetrievalService:
             RagPlatformClient(settings, state=self.store) if settings.rag_configured else None
         )
         self.mirror = RagMirror(self.store, self.rag) if self.rag and settings.rag_mirror else None
+        self._sync_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="sync")
+        self._sync_jobs: dict[str, concurrent.futures.Future] = {}
+        self._sync_jobs_lock = threading.Lock()
+
+    def _sync_job(self, corpus_id: str) -> concurrent.futures.Future:
+        """The running background sync of a corpus, or a new one (never two at once for the same corpus)."""
+        with self._sync_jobs_lock:
+            job = self._sync_jobs.get(corpus_id)
+            if job is None or job.done():
+                job = self._sync_pool.submit(self._sync_one, corpus_id)
+                self._sync_jobs[corpus_id] = job
+            return job
+
+    def _sync_one(self, corpus_id: str) -> list[str]:
+        """Sync one corpus; returns the degraded reasons (the exceptions of the inline path become reasons)."""
+        reasons: list[str] = []
+        try:
+            result = self.indexer.sync(corpus_id)
+            if result is not None:
+                reasons.extend(result.degraded_reasons)
+                reasons.extend(self._push_mirror(corpus_id))
+        except IndexingError as exc:
+            reasons.append(f"sync_failed:{corpus_id}:{exc}")
+        except IndexStale:
+            pass  # root vanished during sync; the corpus is now stale and serves no fragments
+        return reasons
 
     def close(self) -> None:
+        self._sync_pool.shutdown(wait=False, cancel_futures=True)
         self.store.close()
         self.log.close()
 
@@ -268,7 +302,16 @@ class RetrievalService:
 
         mark = time.perf_counter()
         corpora = self._corpora(request.corpora, request.corpus_roots)
-        if freshness_mode == "sync":
+        if freshness_mode == "sync" and self.settings.sync_wait_seconds >= 0:
+            jobs = {cid: self._sync_job(cid) for cid, corpus in corpora.items() if corpus.root}
+            done, _ = concurrent.futures.wait(list(jobs.values()), timeout=self.settings.sync_wait_seconds)
+            for cid, job in jobs.items():
+                if job in done:
+                    degraded.extend(job.result())
+                else:
+                    notes.append(f"index_syncing:{cid}: the sync is still running, answered from the current index")
+            corpora = self._corpora(request.corpora, request.corpus_roots)
+        elif freshness_mode == "sync":
             for corpus_id, corpus in list(corpora.items()):
                 if not corpus.root:
                     continue

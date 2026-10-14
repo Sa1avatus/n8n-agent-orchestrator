@@ -25,6 +25,7 @@ from .claude_cli import (
 from .config import ROLES, Settings
 from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
+from .local_pricing import LocalPricing
 from .store import Store, now
 
 STDERR_TAIL = 8000
@@ -98,6 +99,8 @@ class RunManager:
         self.settings = settings
         self.store = store or Store(settings.data_dir / "runner.sqlite")
         self.on_run_start: Callable[[], object] | None = None  # set by the app: think policy (think_switch.py)
+        self.think_flag: Callable[[], str] | None = None  # set by the app: 'on' / 'off' now (think_switch.py)
+        self.local_pricing = LocalPricing.from_env(settings.local_pricing_env)
         self._slots = asyncio.Semaphore(settings.max_concurrent)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._procs: dict[str, asyncio.subprocess.Process] = {}
@@ -300,6 +303,9 @@ class RunManager:
             if self.on_run_start is not None:
                 with contextlib.suppress(Exception):
                     self.on_run_start()
+            if self.think_flag is not None and provider_name == "local":
+                with contextlib.suppress(Exception):  # the thinking mode the first request of the run starts in (the local price depends on it)
+                    self.events.add(run_id, {"kind": "thinking_state", "thinking": self.think_flag()})
             profile = self.settings.profile(role)
             provider = self.settings.provider(provider_name)
             cmd = build_command(
@@ -315,7 +321,12 @@ class RunManager:
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
             )
-            env = child_env(provider, model)
+            env = child_env(
+                provider,
+                model,
+                role=role,
+                local_tool_output_limits=self.settings.local_tool_output_limits,
+            )
             if provider is not None and provider.context_probe_url:
                 # the window of the model as llama-server runs it now, not a fixed 65536
                 window = await asyncio.to_thread(
@@ -431,6 +442,14 @@ class RunManager:
         )
         if api_ms is not None:
             details["run_duration_api_ms"] = int(api_ms)
+        cost = run_cost(details.get("total_cost_usd"), previous)
+        if record.get("provider") == "local" and self.local_pricing.enabled:
+            # what the run would have cost on a cloud model: steps made without thinking at the cheaper model's rates, with thinking at the other's
+            with contextlib.suppress(Exception):
+                local = self.local_pricing.cost_from_events(self.events.directory / f"{run_id}.jsonl")
+                if local is not None:
+                    details["local_cost"] = local
+                    cost = local["cost_usd"]
         self.store.update_run(
             run_id,
             status=outcome.status,
@@ -438,7 +457,7 @@ class RunManager:
             error_code=outcome.error_code,
             error_message=outcome.error_message,
             http_code=outcome.http_code,
-            cost_usd=run_cost(details.get("total_cost_usd"), previous),
+            cost_usd=cost,
             num_turns=details.get("num_turns"),
             context_tokens=state.final_context_tokens() if state else None,
             details=details,

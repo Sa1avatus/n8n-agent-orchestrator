@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from claude_runner.api import create_app
-from claude_runner.config import Settings
+from claude_runner.config import ProviderProfile, Settings
 from claude_runner.store import Store
 
 from .conftest import calls, wait_for
@@ -98,6 +98,41 @@ def test_retry_fresh_session_default_off_keeps_resuming(settings: Settings, tmp_
         second_call = calls(tmp_path)[-1]
         assert "--resume" in second_call["args"]
         assert second_call["prompt"] == "x" * 5000
+
+
+def test_local_tool_output_limits_env_reaches_only_the_local_worker(
+    settings: Settings, tmp_path: Path
+) -> None:
+    object.__setattr__(settings, "local_tool_output_limits", True)
+    object.__setattr__(
+        settings,
+        "providers",
+        {
+            "LOCAL": ProviderProfile(
+                name="LOCAL",
+                env={
+                    "ANTHROPIC_BASE_URL": "http://litellm:4000",
+                    "ANTHROPIC_AUTH_TOKEN": "sk-litellm",
+                },
+            )
+        },
+    )
+    with TestClient(create_app(settings)) as client:
+        worker = start(client, role="worker", provider="local", input="task")
+        wait_for(client, worker["run_id"])
+        reviewer = start(client, role="reviewer", provider="local", input="review")
+        wait_for(client, reviewer["run_id"])
+        architect = start(client, role="architect", provider="anthropic", input="plan")
+        wait_for(client, architect["run_id"])
+    worker_call, reviewer_call, architect_call = calls(tmp_path)
+    # The local Worker's CLI process gets the Part B caps...
+    assert worker_call["window"]["BASH_MAX_OUTPUT_LENGTH"] == "12000"
+    assert worker_call["window"]["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] == "16000"
+    # ...and no other role does, so the Reviewer/Architect env is unchanged.
+    assert "BASH_MAX_OUTPUT_LENGTH" not in reviewer_call["window"]
+    assert "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS" not in reviewer_call["window"]
+    assert "BASH_MAX_OUTPUT_LENGTH" not in architect_call["window"]
+    assert "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS" not in architect_call["window"]
 
 
 def test_retry_fresh_session_per_provider_override(settings: Settings) -> None:

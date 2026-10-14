@@ -183,11 +183,20 @@ SECONDARY_MODEL_VARS = (
 )
 
 
-def child_env(provider: ProviderProfile | None = None, model: str = "") -> dict[str, str]:
+def child_env(
+    provider: ProviderProfile | None = None,
+    model: str = "",
+    role: str = "",
+    local_tool_output_limits: bool = False,
+) -> dict[str, str]:
     """The CLI inherits the container env (model credentials) minus the runner's own settings,
     with the run's provider block on top. A provider with its own endpoint or credential does
     not inherit the container's credentials, and all of Claude Code's secondary model names
-    default to the run's model, so hermes_config *_model alone decides the model."""
+    default to the run's model, so hermes_config *_model alone decides the model.
+
+    With ``local_tool_output_limits`` the caps from docs/cold-prefill.md Part B are added
+    only for the Worker on the local provider; the default settings (flag off) add nothing,
+    so the env every role gets is unchanged."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_RUNNER_")}
     if provider is not None:
         if provider.isolates_credentials:
@@ -198,6 +207,9 @@ def child_env(provider: ProviderProfile | None = None, model: str = "") -> dict[
                 if model and key not in provider.env:
                     env[key] = model
         env.update(provider.env)
+    if local_tool_output_limits and role == "worker" and provider is not None:
+        env["BASH_MAX_OUTPUT_LENGTH"] = "12000"
+        env["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] = "16000"
     env.setdefault("DISABLE_AUTOUPDATER", "1")
     env.setdefault("CLAUDE_CODE_RESUME_INTERRUPTED_TURN", "1")
     return env

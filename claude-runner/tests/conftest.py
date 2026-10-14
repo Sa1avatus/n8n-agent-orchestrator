@@ -49,6 +49,8 @@ def claude_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
         "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
         "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
+        "BASH_MAX_OUTPUT_LENGTH",
+        "CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS",
     ):
         monkeypatch.delenv(name, raising=False)
     return config

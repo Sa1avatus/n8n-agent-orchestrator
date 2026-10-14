@@ -19,7 +19,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir ".[server,local-rerank]" \
+RUN pip install --no-cache-dir ".[server,local-rerank,postgres]" \
     && useradd --uid 10001 --create-home retrieval \
     && mkdir -p /data /models \
     && python -c "import os; from fastembed.rerank.cross_encoder import TextCrossEncoder as T; T(os.environ['RETRIEVAL_RERANKER_MODEL'], cache_dir='/models', providers=['CPUExecutionProvider'], cuda=False)" \
