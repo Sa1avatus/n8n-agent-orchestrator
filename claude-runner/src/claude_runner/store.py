@@ -82,7 +82,9 @@ class Store:
             ("think_after_steps", "INTEGER NOT NULL DEFAULT -1"),
             ("think_task", "INTEGER NOT NULL DEFAULT 0"),
         ):
-            if column not in have:  # databases created before the thinking policy came from hermes_config
+            if (
+                column not in have
+            ):  # databases created before the thinking policy came from hermes_config
                 self._db.execute(f"ALTER TABLE runs ADD COLUMN {column} {ddl}")
 
     def close(self) -> None:
@@ -181,48 +183,58 @@ class Store:
         """Run ids of the running compactions of local Worker sessions."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT run_id FROM runs WHERE role = 'worker' AND provider = 'local' AND status = 'running' AND kind = 'compact'"
+                "SELECT run_id FROM runs WHERE role = 'worker' "
+                "AND provider = 'local' AND status = 'running' AND kind = 'compact'"
             ).fetchall()
         return [r["run_id"] for r in rows]
 
     def running_local_workers(self) -> list[dict[str, Any]]:
-        """Running local Worker runs: run id, session id and the head of the prompt (it names the task)."""
+        """Running local Worker runs: run id, session id and the head of the
+        prompt (it names the task)."""
         with self._lock:
             rows = self._db.execute(
-                "SELECT run_id, session_id, substr(input, 1, 600) AS head, think_policy, think_from, think_after, think_after_steps, think_task "
+                "SELECT run_id, session_id, substr(input, 1, 600) AS head, "
+                "think_policy, think_from, think_after, think_after_steps, think_task "
                 "FROM runs WHERE role = 'worker' "
-                "AND provider = 'local' AND status = 'running' AND kind != 'compact' ORDER BY created_at"
+                "AND provider = 'local' AND status = 'running' "
+                "AND kind != 'compact' ORDER BY created_at"
             ).fetchall()
         return [dict(r) for r in rows]
 
     def first_completed_worker_finish(self, session_id: str, exclude_run: str = "") -> str | None:
-        """When the first finished (completed) Worker run of this session ended: later runs are retries after a review."""
+        """When the first finished (completed) Worker run of this session ended:
+        later runs are retries after a review."""
         with self._lock:
             row = self._db.execute(
-                "SELECT MIN(finished_at) AS t FROM runs WHERE session_id = ? AND role = 'worker' AND kind != 'compact' "
+                "SELECT MIN(finished_at) AS t FROM runs WHERE session_id = ? "
+                "AND role = 'worker' AND kind != 'compact' "
                 "AND status = 'completed' AND run_id != ?",
                 (session_id, exclude_run),
             ).fetchone()
         return row["t"] if row and row["t"] else None
 
     def last_completed_worker_finish(self, session_id: str, exclude_run: str = "") -> str | None:
-        """When the latest finished (completed) Worker run of this session ended: the start of the current attempt (None = the first attempt)."""
+        """When the latest finished (completed) Worker run of this session ended:
+        the start of the current attempt (None = the first attempt)."""
         with self._lock:
             row = self._db.execute(
-                "SELECT MAX(finished_at) AS t FROM runs WHERE session_id = ? AND role = 'worker' AND kind != 'compact' "
+                "SELECT MAX(finished_at) AS t FROM runs WHERE session_id = ? "
+                "AND role = 'worker' AND kind != 'compact' "
                 "AND status = 'completed' AND run_id != ?",
                 (session_id, exclude_run),
             ).fetchone()
         return row["t"] if row and row["t"] else None
 
     def session_seconds_since(self, session_id: str, since: str) -> float:
-        """Seconds the runs of a session spent running since ``since`` (a finished run from start to finish, a running one to now)."""
+        """Seconds the runs of a session spent running since ``since`` (a
+        finished run from start to finish, a running one to now)."""
         moment = datetime.now(UTC)
         floor = datetime.fromisoformat(since)
         total = 0.0
         with self._lock:
             rows = self._db.execute(
-                "SELECT started_at, finished_at FROM runs WHERE session_id = ? AND started_at IS NOT NULL AND kind != 'compact'",
+                "SELECT started_at, finished_at FROM runs WHERE session_id = ? "
+                "AND started_at IS NOT NULL AND kind != 'compact'",
                 (session_id,),
             ).fetchall()
         for row in rows:
@@ -232,8 +244,12 @@ class Store:
         return total
 
     def session_run_ids(self, session_id: str, since: str | None = None) -> list[str]:
-        """Runs of a Worker session (compactions left out); with ``since`` only those that started at or after it."""
-        sql = "SELECT run_id FROM runs WHERE session_id = ? AND started_at IS NOT NULL AND kind != 'compact'"
+        """Runs of a Worker session (compactions left out); with ``since`` only
+        those that started at or after it."""
+        sql = (
+            "SELECT run_id FROM runs WHERE session_id = ? "
+            "AND started_at IS NOT NULL AND kind != 'compact'"
+        )
         args: list[Any] = [session_id]
         if since:
             sql += " AND started_at >= ?"
@@ -244,9 +260,13 @@ class Store:
     def local_worker_running(self) -> bool:
         """A local Worker run is running right now."""
         with self._lock:
-            return self._db.execute(
-                "SELECT 1 FROM runs WHERE role = 'worker' AND provider = 'local' AND status = 'running' LIMIT 1"
-            ).fetchone() is not None
+            return (
+                self._db.execute(
+                    "SELECT 1 FROM runs WHERE role = 'worker' "
+                    "AND provider = 'local' AND status = 'running' LIMIT 1"
+                ).fetchone()
+                is not None
+            )
 
     def local_worker_sessions_over(self, limit_seconds: int) -> list[dict[str, Any]]:
         """Sessions of a running local Worker run whose runs add up to more than ``limit_seconds``.
@@ -271,10 +291,18 @@ class Store:
                 seconds = 0.0
                 for row in rows:
                     start = datetime.fromisoformat(row["started_at"])
-                    end = datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else moment
+                    end = (
+                        datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else moment
+                    )
                     seconds += max(0.0, (end - start).total_seconds())
                 if seconds > limit_seconds:
-                    out.append({"run_id": item["run_id"], "session_id": item["session_id"], "seconds": int(seconds)})
+                    out.append(
+                        {
+                            "run_id": item["run_id"],
+                            "session_id": item["session_id"],
+                            "seconds": int(seconds),
+                        }
+                    )
         return out
 
     def list_runs(

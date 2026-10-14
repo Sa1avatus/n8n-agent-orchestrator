@@ -1,4 +1,6 @@
-"""Local runs priced as a cloud model by the thinking mode of each step (claude_runner/local_pricing.py)."""
+"""Local runs priced as a cloud model by the thinking mode of each step
+(claude_runner/local_pricing.py)."""
+
 import json
 
 import pytest
@@ -14,8 +16,16 @@ ENV = {
 
 
 def step(started, inp=0, out=0, cr=0, cw=0):
-    return {"kind": "step", "step": 1, "t": started + 5, "started": started, "input_tokens": inp, "output_tokens": out,
-            "cache_read_tokens": cr, "cache_write_tokens": cw}
+    return {
+        "kind": "step",
+        "step": 1,
+        "t": started + 5,
+        "started": started,
+        "input_tokens": inp,
+        "output_tokens": out,
+        "cache_read_tokens": cr,
+        "cache_write_tokens": cw,
+    }
 
 
 def write(tmp_path, entries):
@@ -43,7 +53,9 @@ def test_disabled_without_modes_or_with_unknown_profile():
     assert not LocalPricing.from_env({}).enabled
     only_profiles = {k: v for k, v in ENV.items() if "THINKING" not in k}
     assert not LocalPricing.from_env(only_profiles).enabled
-    assert not LocalPricing.from_env({**ENV, "CLAUDE_RUNNER_LOCAL_PRICE_THINKING_ON": "gpt"}).enabled
+    assert not LocalPricing.from_env(
+        {**ENV, "CLAUDE_RUNNER_LOCAL_PRICE_THINKING_ON": "gpt"}
+    ).enabled
 
 
 def test_one_mode_named_prices_both():
@@ -54,12 +66,17 @@ def test_one_mode_named_prices_both():
 
 def test_steps_are_priced_by_the_mode_in_force(tmp_path):
     p = LocalPricing.from_env(ENV)
-    path = write(tmp_path, [
-        {"kind": "thinking_state", "t": 100, "thinking": "off"},
-        step(110, inp=1_000_000, out=100_000),                      # off -> haiku: 1 + 0.5
-        {"kind": "thinking_switch", "t": 200, "thinking": "on"},
-        step(210, inp=1_000_000, out=100_000, cr=500_000, cw=250_000),  # on -> sonnet: 2 + 1 + 0.1 + 1
-    ])
+    path = write(
+        tmp_path,
+        [
+            {"kind": "thinking_state", "t": 100, "thinking": "off"},
+            step(110, inp=1_000_000, out=100_000),  # off -> haiku: 1 + 0.5
+            {"kind": "thinking_switch", "t": 200, "thinking": "on"},
+            step(
+                210, inp=1_000_000, out=100_000, cr=500_000, cw=250_000
+            ),  # on -> sonnet: 2 + 1 + 0.1 + 1
+        ],
+    )
     result = p.cost_from_events(path)
     assert result["cost_usd"] == pytest.approx(1.5 + 4.1)
     assert result["by_mode"]["off"] == {"steps": 1, "usd": pytest.approx(1.5), "profile": "haiku"}
@@ -71,12 +88,17 @@ def test_steps_are_priced_by_the_mode_in_force(tmp_path):
 
 def test_a_step_that_started_before_the_switch_keeps_the_old_mode(tmp_path):
     p = LocalPricing.from_env(ENV)
-    path = write(tmp_path, [
-        {"kind": "thinking_state", "t": 100, "thinking": "off"},
-        {"kind": "thinking_switch", "t": 150, "thinking": "on"},
-        step(140, out=1_000_000),  # started at 140, the switch came at 150 while it ran: still off
-        step(160, out=1_000_000),
-    ])
+    path = write(
+        tmp_path,
+        [
+            {"kind": "thinking_state", "t": 100, "thinking": "off"},
+            {"kind": "thinking_switch", "t": 150, "thinking": "on"},
+            step(
+                140, out=1_000_000
+            ),  # started at 140, the switch came at 150 while it ran: still off
+            step(160, out=1_000_000),
+        ],
+    )
     result = p.cost_from_events(path)
     assert result["by_mode"]["off"]["steps"] == 1 and result["by_mode"]["on"]["steps"] == 1
     assert result["cost_usd"] == pytest.approx(5 + 10)

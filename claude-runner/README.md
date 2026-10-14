@@ -257,6 +257,32 @@ The layout follows DeepSeek Harness' *Trajectory* view:
 * **RAG:** when a prompt carries ahawr-retrieval context (`=== RETRIEVED CONTEXT … ===`), a RAG row follows it in the ledger. It lists the chunks with their source, file, lines, symbol and score, and the inspector shows the full context. The summary strip shows `RAG N chunks`. A Worker or Reviewer run without context shows `RAG none`: retrieval is off in `hermes_config`, there is no corpus, or the request failed (see the main README).
 * **Export:** the header links download the run, or the whole session with all its runs oldest first, as Markdown or JSON (`GET /api/runs/{id}/export?format=md|json`, `GET /api/sessions/{id}/export?format=md|json`). The Markdown mirrors the ledger: turns, steps with timings and tokens, thinking, answers, tool calls with results, the RAG chunk list, retries and the outcome. The JSON keeps every entry.
 
+### Filters: click values to toggle
+
+The run list and the selected run's header show several clickable values — status, source, role, model, provider (and, in the header, cwd and the session). Clicking one adds that value to the active filter and re-loads the list; clicking it again removes it. A row of tag chips appears at the top of the sidebar, one chip per (field, value) plus a session chip, and a **clear all** button that removes every filter at once. A hint line under the chips states the rule: **fields are combined with AND; values of one field are combined with OR.**
+
+A filter is just a map from a field name to the list of values selected for it; a run matches a field when its value (a missing value counts as the empty string) is one of the selected values (OR within a field), and it matches the whole filter when it matches every field (AND across fields). Changing a tag re-runs an active search.
+
+The filter is persisted in the URL hash as `#field=value&...` (the hash also carries the deep link `#run=<id>`), so a filtered list can be shared or restored. The page parses that hash on load (garbage is tolerated and dropped).
+
+### Auto-switch rule
+
+When the dashboard is idle and a new run starts, it selects that run automatically — but only if the new run matches the active filter. If the filter already holds a session, a fresh run is never auto-selected: the dashboard follows only the run the user has selected.
+
+### `GET /api/runs` params
+
+The list endpoint takes repeated query params for each filter field — `model`, `provider`, `cwd`, `role`, `status` (each may be given several times, matched with OR; the fields combine with AND), plus `session_id` (a `hermes:`-prefixed id selects a Hermes session, a bare id selects a Claude Code session; a session belongs to exactly one source) and `source`. `limit` (default 100, max 500) is applied *after* the filter, and the underlying fetch is capped at 500 runs regardless of the filter, so a very narrow filter still only scans up to 500.
+
+Hermes runs have `provider` `"hermes"` and `cwd` `""`, so a non-matching `provider` or `cwd` filter hides them (a `provider=hermes` filter shows only Hermes runs).
+
+### Full-text search
+
+The sidebar's search box sends the query to `GET /api/search` with the active filter tags as extra params (`q`, `limit`, `role`, `model`, `provider`, `cwd`, `status`, `session_id`, `source`). The query is debounced (~300 ms), needs at least 2 characters, and the matched part is highlighted in each snippet. Results are grouped by session; each run shows its short snippets (matched part highlighted), and an `incomplete` note appears when the search stopped early (the run-scan limit, per-run match cap, result limit or the 3-second time budget ended it).
+
+`GET /v1/search` (the claude-runner endpoint, bearer auth when `CLAUDE_RUNNER_API_KEY` is set) searches the per-run event logs with the same filters. Its limits are module constants: a minimum query length of 2 characters, at most 5 matches per run, a default result limit of 50, a hard cap of 200 results, a maximum of 2000 runs scanned, a 3-second time budget, and a 160-character snippet radius on each side of a match.
+
+**Hermes coverage:** search covers Claude Code runs only — Hermes text lives in session messages, not in per-run event logs, so a search from the Hermes source returns no runs and notes "search covers Claude Code runs only".
+
 What each source can show:
 
 * **Claude Code:** timings are exact. They are measured from the token stream (`--include-partial-messages`), and tokens come from each request's usage.

@@ -64,7 +64,9 @@ def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
             elif kind == "step":
                 uncached += int(entry.get("input_tokens") or 0)
                 cached += int(entry.get("cache_read_tokens") or 0)
-                if local_worker and entry.get("generation_ms"):  # steps the proxy sent at once have no measured speed
+                if local_worker and entry.get(
+                    "generation_ms"
+                ):  # steps the proxy sent at once have no measured speed
                     out_tokens += int(entry.get("output_tokens") or 0)
                     gen_ms += int(entry.get("generation_ms") or 0)
     return {

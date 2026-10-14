@@ -1,6 +1,8 @@
-"""JSON thinking policy for the local Worker (``hermes_config.worker_think_policy`` / ``CLAUDE_RUNNER_THINK_POLICY``).
+"""JSON thinking policy for the local Worker
+(``hermes_config.worker_think_policy`` / ``CLAUDE_RUNNER_THINK_POLICY``).
 
-A policy is a JSON object; every variant is a timeline of segments counted in model calls of one attempt::
+A policy is a JSON object; every variant is a timeline of segments counted in model
+calls of one attempt::
 
     {
       "variants": [
@@ -12,14 +14,20 @@ A policy is a JSON object; every variant is a timeline of segments counted in mo
       "from_task": 1
     }
 
-- a segment is ``[mode, calls]``: mode ``think`` or ``off``; ``null`` calls = until the attempt ends (only the last segment may have it);
-- ``first`` is the first attempt at a task, ``retry`` an attempt after a review (missing = the other one; both missing = never thinks);
-- ``repeat: true`` repeats the timeline from the start when it is over (every segment then needs a number of calls);
-- ``weight`` (1..20, default 1) is the share of tasks: task n uses the variant at position (n - 1) mod (sum of weights) of the weights laid out in order,
-  so one mission compares the variants;
-- ``from_task``: the policy applies from this task number on (default 0 = the workflow's setting).
+- a segment is ``[mode, calls]``: mode ``think`` or ``off``; ``null`` calls = until the
+  attempt ends (only the last segment may have it);
+- ``first`` is the first attempt at a task, ``retry`` an attempt after a review (missing
+  = the other one; both missing = never thinks);
+- ``repeat: true`` repeats the timeline from the start when it is over (every segment then
+  needs a number of calls);
+- ``weight`` (1..20, default 1) is the share of tasks: task n uses the variant at position
+  (n - 1) mod (sum of weights) of the weights laid out in order, so one mission compares
+  the variants;
+- ``from_task``: the policy applies from this task number on (default 0 = the workflow's
+  setting).
 
-The text is lower-cased on its way from the workflow, so names and modes are lower-case. ``validate`` tells what is wrong before the value is stored.
+The text is lower-cased on its way from the workflow, so names and modes are lower-case.
+``validate`` tells what is wrong before the value is stored.
 """
 
 from __future__ import annotations
@@ -41,7 +49,8 @@ class Variant:
     repeat: bool = False
 
     def mode_at(self, calls_made: int, retry: bool) -> tuple[str, str]:
-        """('think' | 'off', label of the segment) for the model call number ``calls_made`` + 1 of an attempt."""
+        """('think' | 'off', label of the segment) for the model call number
+        ``calls_made`` + 1 of an attempt."""
         segments = self.retry if retry else self.first
         position = calls_made
         total = sum(count for _, count in segments if count is not None)
@@ -65,7 +74,9 @@ class Policy:
         return layout[(max(task_number, 1) - 1) % len(layout)]
 
 
-def _segments(value: Any, where: str, errors: list[str]) -> tuple[tuple[str, int | None], ...] | None:
+def _segments(
+    value: Any, where: str, errors: list[str]
+) -> tuple[tuple[str, int | None], ...] | None:
     if not isinstance(value, list) or not value:
         errors.append(f"{where}: a non-empty list of [mode, calls] is required")
         return None
@@ -97,7 +108,11 @@ def parse(text: str) -> tuple[Policy | None, list[str]]:
         data = json.loads(text)
     except ValueError as exc:
         return None, [f"not valid JSON: {exc}"]
-    if not isinstance(data, dict) or not isinstance(data.get("variants"), list) or not data["variants"]:
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("variants"), list)
+        or not data["variants"]
+    ):
         return None, ['an object with a non-empty "variants" list is required']
     variants: list[Variant] = []
     names: set[str] = set()
@@ -124,7 +139,9 @@ def parse(text: str) -> tuple[Policy | None, list[str]]:
         elif "retry" not in raw:
             retry = first
         repeat = bool(raw.get("repeat", False))
-        if repeat and any(segs and any(count is None for _, count in segs) for segs in (first, retry)):
+        if repeat and any(
+            segs and any(count is None for _, count in segs) for segs in (first, retry)
+        ):
             errors.append(f"{where}: repeat needs a number of calls in every segment (no null)")
         if first is None or retry is None:
             continue
@@ -150,7 +167,8 @@ def validate(text: str) -> tuple[bool, str]:
 
 
 def variant_name(text: str, task_number: int) -> str:
-    """The variant a task gets under a policy text of either kind (JSON or the old 'a|b|c' string); '' when there is none."""
+    """The variant a task gets under a policy text of either kind
+    (JSON or the old 'a|b|c' string); '' when there is none."""
     stripped = text.strip().lower()
     if stripped.startswith("{"):
         policy, _ = parse(stripped)

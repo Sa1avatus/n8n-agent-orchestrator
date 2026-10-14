@@ -292,10 +292,12 @@ def dashboard(runner_app: TestClient, **overrides: Any) -> TestClient:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.host == "hermes":
             return hermes_handler(request)
+        # preserve multi-value query params (repeated fields like role=a&role=b)
+        params = {k: request.url.params.get_list(k) for k in request.url.params}
         response = runner_app.request(
             request.method,
             request.url.path,
-            params=dict(request.url.params),
+            params=params,
             headers=dict(request.headers),
             content=request.content,
         )
@@ -343,6 +345,104 @@ def test_dashboard_theme_switcher(client: TestClient) -> None:
         assert vars_of(r":root\[data-theme=\"dark\"\]") >= vars_of(r":root ")
 
 
+def test_dashboard_data_attributes_and_handler(client: TestClient) -> None:
+    """The served HTML contains data-field attributes in both the renderList body
+    and the renderHead (header builder) body, the delegated click handler wires
+    #head and #list to onValueClick, the tag row has 'clear all' and the AND/OR
+    hint, the search input and the api/search call exist, and the old
+    f-source/f-role/f-status selects are gone."""
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+
+        # --- slice the renderList body: from "function renderList()" up to the
+        #     next "// ----" comment
+        list_start = text.index("function renderList()")
+        list_end = text.index("// ----", list_start + 1)
+        list_slice = text[list_start:list_end]
+
+        # --- slice the header builder body: from 'setHTML($("#head")' up to
+        #     the '<div class="stats">' marker
+        head_start = text.index('setHTML($("#head")')
+        head_end = text.index('<div class="stats">', head_start)
+        head_slice = text[head_start:head_end]
+
+        # --- data-field attributes in the renderList slice
+        for field in ("status", "source", "role", "model", "provider"):
+            assert f'data-field="{field}"' in list_slice, f"data-field={field!r} not in renderList"
+
+        # --- data-field attributes in the renderHead (header builder) slice
+        for field in ("status", "source", "role", "model", "provider"):
+            assert f'data-field="{field}"' in head_slice, f"data-field={field!r} not in renderHead"
+
+        # --- cwd and session are only in the header builder slice
+        assert 'data-field="cwd"' in head_slice
+        assert "data-session=" in head_slice
+
+        # --- the delegated click handler: both #head and #list reach onValueClick
+        # #head handler (in select() or the render init):
+        #   $("#head").addEventListener("click", (e) => {
+        #     ...
+        #     if (!a) { onValueClick(e); return; }
+        assert '$("#head").addEventListener("click"' in text
+        assert "if (!a) { onValueClick(e); return; }" in text
+        # #list handler:
+        #   $("#list").addEventListener("click", (e) => {
+        #     if (onValueClick(e)) return;
+        assert '$("#list").addEventListener("click"' in text
+        assert "if (onValueClick(e)) return;" in text
+        # onValueClick itself reads dataset and calls toggleValue:
+        assert "el.dataset.field" in text
+        assert "el.dataset.value" in text
+        assert "toggleValue(S.filter" in text
+
+        # --- the tag row with 'clear all' and the AND/OR hint
+        assert "clear all" in text
+        assert 'id="taghint"' in text
+        assert "Fields are combined with AND" in text
+        assert "values of one field are combined with OR" in text
+
+        # --- the search input and the api/search call
+        assert 'id="fq"' in text
+        assert 'type="search"' in text
+        assert "api/search" in text
+
+        # --- the old selects are gone: no f-source, f-role, f-status, no #sessionchip
+        assert "f-source" not in text
+        assert "f-role" not in text
+        assert "f-status" not in text
+        assert "sessionchip" not in text
+
+
+def test_dashboard_escaping_in_html(client: TestClient) -> None:
+    """Values never reach data attributes unescaped: each data-value in the
+    renderList and renderHead bodies wraps its value in esc()."""
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+
+        # The esc function exists
+        assert "const esc" in text
+
+        # --- slice the renderList body
+        list_start = text.index("function renderList()")
+        list_end = text.index("// ----", list_start + 1)
+        list_slice = text[list_start:list_end]
+
+        # --- slice the header builder body
+        head_start = text.index('setHTML($("#head")')
+        head_end = text.index('<div class="stats">', head_start)
+        head_slice = text[head_start:head_end]
+
+        # renderList: model value (falls back to "") and model in data-value
+        assert 'data-value="${esc(r.model || "")}"' in list_slice
+        # renderHead: model and cwd in data-value
+        assert 'data-value="${esc(r.model)}"' in head_slice
+        assert 'data-value="${esc(r.cwd)}"' in head_slice
+
+
 def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:
     run = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
     wait_for(client, run["run_id"])
@@ -383,6 +483,257 @@ def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:
     with dashboard(client, hermes_api_key="wrong") as dash:
         states = dash.get("/api/runs").json()["sources"]
         assert states == {"claude-runner": "ok", "hermes": "Hermes: 401 (check the API key)"}
+
+
+def test_dashboard_multi_value_filters(client: TestClient) -> None:
+    w = start(client, role="worker", input="x", provider="local")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # two values of one field match with OR: the fetch is not narrowed by
+        # role[0], so both runner roles and both Hermes roles come back
+        both = dash.get("/api/runs", params={"role": ["worker", "reviewer"]}).json()["runs"]
+        assert {run["run_id"] for run in both} == {
+            w["run_id"],
+            r["run_id"],
+            "hermes:w1",
+            "hermes:r1",
+        }
+        # different fields match with AND: only the worker run has provider "local"
+        combo = dash.get(
+            "/api/runs", params={"role": ["worker", "reviewer"], "provider": "local"}
+        ).json()["runs"]
+        assert [run["run_id"] for run in combo] == [w["run_id"]]
+        # the limit is applied after the filter: all four runs match, one is returned
+        capped = dash.get("/api/runs", params={"role": ["worker", "reviewer"], "limit": 1}).json()
+        assert len(capped["runs"]) == 1
+        # a provider filter excludes Hermes runs (their provider is "hermes", cwd is "")
+        no_hermes = dash.get("/api/runs", params={"provider": "x"}).json()["runs"]
+        assert no_hermes == []
+        # an empty filter gives the same response as the unfiltered list
+        body = dash.get("/api/runs").json()
+        empty = dash.get("/api/runs", params={"role": [], "source": [], "session_id": []}).json()
+        assert body["runs"] == empty["runs"] and body["sources"] == empty["sources"]
+
+
+def test_dashboard_filter_by_model_provider_cwd(client: TestClient) -> None:
+    """Filter by model, provider, and cwd individually."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # read the cwd from the dashboard's own unfiltered list
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # model filter: the worker run uses "local-model", the reviewer uses "sonnet"
+        by_model = dash.get("/api/runs", params={"model": ["sonnet"]}).json()["runs"]
+        assert [run["run_id"] for run in by_model] == [r["run_id"]]
+        by_local_model = dash.get("/api/runs", params={"model": ["local-model"]}).json()["runs"]
+        assert [run["run_id"] for run in by_local_model] == [w["run_id"]]
+
+        # provider filter: "local" matches only the worker run; "hermes" matches both
+        # Hermes sessions
+        by_provider_local = dash.get("/api/runs", params={"provider": "local"}).json()["runs"]
+        assert [run["run_id"] for run in by_provider_local] == [w["run_id"]]
+        by_provider_hermes = dash.get("/api/runs", params={"provider": "hermes"}).json()["runs"]
+        assert {run["run_id"] for run in by_provider_hermes} == {"hermes:w1", "hermes:r1"}
+
+        # cwd filter: both runner runs share the workspace cwd; Hermes runs have cwd ""
+        ws_cwd = dash.get("/api/runs", params={"cwd": [w_cwd]}).json()["runs"]
+        assert {run["run_id"] for run in ws_cwd} == {w["run_id"], r["run_id"]}
+        # an empty-string value is stripped from the filter set (like an empty list),
+        # so cwd=[""] is unfiltered, not "cwd must be empty"
+        unfiltered = dash.get("/api/runs").json()["runs"]
+        empty_cwd = dash.get("/api/runs", params={"cwd": [""]}).json()["runs"]
+        assert {run["run_id"] for run in empty_cwd} == {run["run_id"] for run in unfiltered}
+
+
+def test_dashboard_filter_or_multiple_values(client: TestClient) -> None:
+    """Several values of one field are matched with OR."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # two provider values match with OR: local + hermes → worker + both Hermes
+        both = dash.get("/api/runs", params={"provider": ["local", "hermes"]}).json()["runs"]
+        assert {run["run_id"] for run in both} == {w["run_id"], "hermes:w1", "hermes:r1"}
+        # two model values (sonnet + qwen-local) match with OR: reviewer + Hermes w1
+        models = dash.get("/api/runs", params={"model": ["sonnet", "qwen-local"]}).json()["runs"]
+        assert {run["run_id"] for run in models} == {r["run_id"], "hermes:w1"}
+
+
+def test_dashboard_filter_and_across_fields(client: TestClient) -> None:
+    """Different fields combine with AND."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # role=worker AND provider=local → only the runner worker run
+        combo = dash.get("/api/runs", params={"role": "worker", "provider": "local"}).json()["runs"]
+        assert [run["run_id"] for run in combo] == [w["run_id"]]
+        # role=worker AND model=qwen-local → only the Hermes worker (hermes:w1)
+        combo2 = dash.get("/api/runs", params={"role": "worker", "model": "qwen-local"}).json()[
+            "runs"
+        ]
+        assert [run["run_id"] for run in combo2] == ["hermes:w1"]
+        # provider=local AND cwd=workspace → only the runner worker run
+        combo3 = dash.get("/api/runs", params={"provider": "local", "cwd": [w_cwd]}).json()["runs"]
+        assert [run["run_id"] for run in combo3] == [w["run_id"]]
+
+
+def test_dashboard_limit_counted_after_filter(client: TestClient) -> None:
+    """The limit applies to the filtered result, not the raw fetch."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # without a filter, limit=1 returns one of four runs
+        unfiltered = dash.get("/api/runs", params={"limit": 1}).json()
+        assert len(unfiltered["runs"]) == 1
+        # with a filter that matches all four, limit=1 still returns one
+        all_matched = dash.get(
+            "/api/runs", params={"role": ["worker", "reviewer"], "limit": 1}
+        ).json()
+        assert len(all_matched["runs"]) == 1
+        # limit=1 with provider=local returns the worker run: the newest unfiltered
+        # run is the reviewer, so this fails if the limit is applied before the filter
+        local_capped = dash.get("/api/runs", params={"provider": "local", "limit": 1}).json()
+        assert [run["run_id"] for run in local_capped["runs"]] == [w["run_id"]]
+        # limit=1 with provider=hermes returns exactly one Hermes run (the newer one)
+        hermes_capped = dash.get("/api/runs", params={"provider": "hermes", "limit": 1}).json()
+        assert [run["run_id"] for run in hermes_capped["runs"]] == ["hermes:w1"]
+
+
+def test_dashboard_hermes_hidden_under_provider_cwd_filter(client: TestClient) -> None:
+    """Hermes runs have provider "hermes" and cwd "", so a non-matching filter hides them."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # provider=local hides both Hermes runs
+        no_hermes = dash.get("/api/runs", params={"provider": "local"}).json()["runs"]
+        assert all(run["source"] != "hermes" for run in no_hermes)
+        # cwd=workspace hides both Hermes runs (their cwd is "")
+        no_hermes_cwd = dash.get("/api/runs", params={"cwd": [w_cwd]}).json()["runs"]
+        assert all(run["source"] != "hermes" for run in no_hermes_cwd)
+        # provider=hermes shows only Hermes runs
+        only_hermes = dash.get("/api/runs", params={"provider": "hermes"}).json()["runs"]
+        assert {run["run_id"] for run in only_hermes} == {"hermes:w1", "hermes:r1"}
+
+
+def test_dashboard_hermes_session_filter_unchanged(client: TestClient) -> None:
+    """'hermes:' session filtering still works as before."""
+    with dashboard(client) as dash:
+        by_hermes = dash.get("/api/runs", params={"session_id": "hermes:w1"}).json()["runs"]
+        assert [run["run_id"] for run in by_hermes] == ["hermes:w1"]
+        by_r1 = dash.get("/api/runs", params={"session_id": "hermes:r1"}).json()["runs"]
+        assert [run["run_id"] for run in by_r1] == ["hermes:r1"]
+        # an unknown 'hermes:' session id matches nothing at all
+        no_match = dash.get("/api/runs", params={"session_id": "hermes:nope"}).json()["runs"]
+        assert no_match == []
+
+
+def test_dashboard_search_merges_sources(client: TestClient) -> None:
+    """GET /api/search merges per-run results from all sources, newest first."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle"}).json()
+        ids = {r["run_id"] for r in body["runs"]}
+        assert ids == {a["run_id"], b["run_id"]}
+        # each run carries snippets
+        assert all(r["snippets"] for r in body["runs"])
+        # newest first: the reviewer run is newer
+        assert body["runs"][0]["run_id"] == b["run_id"]
+        # incomplete is False when both sources complete
+        assert body["incomplete"] is False
+        assert body["sources"] == {"claude-runner": "ok", "hermes": "ok"}
+
+
+def test_dashboard_search_filter_forwarding(client: TestClient) -> None:
+    """Filter params are forwarded to sources, so tags narrow the search."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        # role=worker narrows to the worker run
+        only_worker = dash.get("/api/search", params={"q": "needle", "role": "worker"}).json()
+        assert [r["run_id"] for r in only_worker["runs"]] == [a["run_id"]]
+        # multi-value role: both worker and reviewer
+        both = dash.get(
+            "/api/search", params={"q": "needle", "role": ["worker", "reviewer"]}
+        ).json()
+        assert {r["run_id"] for r in both["runs"]} == {a["run_id"], b["run_id"]}
+        # provider=local narrows to the worker run (Hermes runs have provider "hermes")
+        by_provider = dash.get("/api/search", params={"q": "needle", "provider": "local"}).json()
+        assert [r["run_id"] for r in by_provider["runs"]] == [a["run_id"]]
+        # a non-matching filter returns no results
+        no_match = dash.get("/api/search", params={"q": "needle", "role": ["architect"]}).json()
+        assert no_match["runs"] == []
+
+
+def test_dashboard_search_short_query(client: TestClient) -> None:
+    """Short or empty q returns empty results."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    with dashboard(client) as dash:
+        # empty query
+        empty = dash.get("/api/search", params={"q": ""}).json()
+        assert empty["runs"] == []
+        assert empty["incomplete"] is False
+        # single-char query (below MIN_QUERY_LEN=2)
+        short = dash.get("/api/search", params={"q": "n"}).json()
+        assert short["runs"] == []
+        assert short["incomplete"] is False
+
+
+def test_dashboard_search_hermes_behaviour(client: TestClient) -> None:
+    """Hermes source returns empty results with a note (search covers Claude Code only)."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle"}).json()
+        # Hermes returned no results, but the note is visible
+        assert body["note"] == "search covers Claude Code runs only"
+        # the only results come from the claude-runner source
+        assert all(r["source"] == "claude-code" for r in body["runs"])
+        # Hermes source state is "ok" (it completed, just returned nothing)
+        assert body["sources"]["hermes"] == "ok"
+
+
+def test_dashboard_search_limit_capped(client: TestClient) -> None:
+    """The limit caps the merged result."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle", "limit": 1}).json()
+        assert len(body["runs"]) == 1
+        # the newest run is returned
+        assert body["runs"][0]["run_id"] == b["run_id"]
 
 
 def test_dashboard_stops_a_run(client: TestClient) -> None:

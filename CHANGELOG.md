@@ -7,6 +7,14 @@ Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `
 
 ## 2026-10-14 (0.4.0)
 
+- Dashboard: clickable filter values and full-text search. Clicking a status/source/role/model/provider value in the list (or cwd/session in the run header) toggles it in
+  the active filter; fields combine with AND and values of one field with OR. A tag chip row with a "clear all" button replaces the old f-source/f-role/f-status
+  selects and session chip. The filter is persisted in the URL hash (`#field=value&…`) and parsed back on load. A new run is auto-selected only when it matches
+  the filter, and never when the filter already holds a session. `GET /api/runs` takes repeated params (model, provider, cwd, role, status), `session_id`, `source`
+  and `limit` (after the filter, capped at 500); a non-matching provider/cwd filter hides the Hermes runs (provider `hermes`, cwd `""`). `GET /api/search` and
+  `GET /v1/search` do case-insensitive full-text search over the per-run event logs with the same filters; limits are module constants (≥2-char query, 5 matches/run,
+  default 50, max 200 results, 2000 runs scanned, 3 s budget, 160-char snippets) and a search stopped early sets the `incomplete` flag. Search covers Claude Code
+  runs only — Hermes text lives in session messages, so that source returns no runs and notes it.
 - Telegram control bot works (it never did: it read no messages). `tg_relay.py` long-polls Telegram with the token from `.env` (`TELEGRAM_BOT_TOKEN`) and posts each update to
   the bot workflow's webhook (`AHAWR_TG_WEBHOOK_PATH`); the workflow no longer polls. Fixed in `AHAWR_Status_Bot.json`: placeholder chat id, the update
   shape passed to Parse Command, data-loading nodes that had no incoming connection (status reads the active mission from the task state table), Switch nodes in a

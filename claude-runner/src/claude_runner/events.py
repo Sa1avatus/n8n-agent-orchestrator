@@ -223,8 +223,9 @@ class StepTracker:
             if generation > 0 and step["output_tokens"]:
                 tps = step["output_tokens"] / generation
                 if tps > MAX_PLAUSIBLE_TPS:
-                    # the proxy held the reply and sent it at once (think-leak guard): first token == last token,
-                    # so generation time and speed are not measured; do not report a made-up speed
+                    # the proxy held the reply and sent it at once (think-leak guard):
+                    # first token == last token, so generation time and speed are not
+                    # measured; do not report a made-up speed
                     step["stream_buffered"] = True
                     step.pop("generation_ms", None)
                 else:

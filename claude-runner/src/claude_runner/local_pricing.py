@@ -1,16 +1,20 @@
 """What a local run would have cost on a cloud model, by whether the local model was thinking.
 
-The local model costs nothing per token; the dashboard still shows a price so that runs can be compared with cloud runs. Claude Code prices a
-model it does not know with one flat rate table (``managed-settings.json``), whatever the thinking mode. Here the price is computed by the
-runner from the token counts of the run's own steps (the ``step`` entries of its event log) with the rate table of a cloud model chosen
-per thinking mode: for example the steps made without thinking at Haiku rates and the steps made with thinking at Sonnet rates.
-The mode of a step is the last ``thinking_state`` / ``thinking_switch`` entry before the step started. Every run also gets the whole run at
-each configured profile (``by_profile``), so Sonnet and Haiku equivalents can be compared whatever the mapping is.
+The local model costs nothing per token; the dashboard still shows a price so that runs can be
+compared with cloud runs. Claude Code prices a model it does not know with one flat rate
+table (``managed-settings.json``), whatever the thinking mode. Here the price is computed by
+the runner from the token counts of the run's own steps (the ``step`` entries of its event
+log) with the rate table of a cloud model chosen per thinking mode: for example the steps
+made without thinking at Haiku rates and the steps made with thinking at Sonnet rates.
+The mode of a step is the last ``thinking_state`` / ``thinking_switch`` entry before the step
+started. Every run also gets the whole run at each configured profile (``by_profile``), so
+Sonnet and Haiku equivalents can be compared whatever the mapping is.
 
 Rates are USD per million tokens: input, output, cache read, cache write.
-Settings (environment): CLAUDE_RUNNER_LOCAL_PRICE_<PROFILE>="in,out,cache_read,cache_write" (PROFILE = SONNET, HAIKU, ...),
-CLAUDE_RUNNER_LOCAL_PRICE_THINKING_OFF=<profile name>, CLAUDE_RUNNER_LOCAL_PRICE_THINKING_ON=<profile name>. Both mode names unset =
-the feature is off and the Claude Code figure is kept.
+Settings (environment): CLAUDE_RUNNER_LOCAL_PRICE_<PROFILE>="in,out,cache_read,cache_write"
+(PROFILE = SONNET, HAIKU, ...), CLAUDE_RUNNER_LOCAL_PRICE_THINKING_OFF=<profile name>,
+CLAUDE_RUNNER_LOCAL_PRICE_THINKING_ON=<profile name>. Both mode names unset = the feature is
+off and the Claude Code figure is kept.
 """
 
 from __future__ import annotations
@@ -40,7 +44,11 @@ def parse_rates(text: str) -> tuple[float, float, float, float] | None:
 
 
 class LocalPricing:
-    def __init__(self, profiles: Mapping[str, tuple[float, float, float, float]], mode_profile: Mapping[str, str]) -> None:
+    def __init__(
+        self,
+        profiles: Mapping[str, tuple[float, float, float, float]],
+        mode_profile: Mapping[str, str],
+    ) -> None:
         self.profiles = dict(profiles)
         self.mode_profile = {m: p for m, p in mode_profile.items() if p in self.profiles}
 
@@ -51,7 +59,7 @@ class LocalPricing:
             if key.startswith(PREFIX) and not key.endswith(("THINKING_OFF", "THINKING_ON")):
                 rates = parse_rates(value)
                 if rates is not None:
-                    profiles[key[len(PREFIX):].lower()] = rates
+                    profiles[key[len(PREFIX) :].lower()] = rates
         modes = {
             "off": (env.get(PREFIX + "THINKING_OFF") or "").strip().lower(),
             "on": (env.get(PREFIX + "THINKING_ON") or "").strip().lower(),
@@ -68,8 +76,9 @@ class LocalPricing:
         return len(self.mode_profile) == 2
 
     def cost_from_events(self, path: Path, default_mode: str = "on") -> dict[str, Any] | None:
-        """Cost of the run from its event log, or None when the log has no steps. ``default_mode`` is used before the first
-        thinking_state / thinking_switch entry (a run of an older runner version has none)."""
+        """Cost of the run from its event log, or None when the log has no steps.
+        ``default_mode`` is used before the first thinking_state / thinking_switch entry
+        (a run of an older runner version has none)."""
         if not self.enabled:
             return None
         try:
@@ -110,7 +119,9 @@ class LocalPricing:
                     break
             tokens = [int(step.get(field) or 0) for field in FIELDS]
             for name, rates in self.profiles.items():
-                by_profile[name] += sum(n * r for n, r in zip(tokens, rates, strict=True)) / 1_000_000
+                by_profile[name] += (
+                    sum(n * r for n, r in zip(tokens, rates, strict=True)) / 1_000_000
+                )
             rates = self.profiles[self.mode_profile[mode]]
             usd = sum(n * r for n, r in zip(tokens, rates, strict=True)) / 1_000_000
             total += usd
@@ -119,5 +130,8 @@ class LocalPricing:
         return {
             "cost_usd": round(total, 6),
             "by_profile": {k: round(v, 6) for k, v in by_profile.items()},
-            "by_mode": {k: {"steps": v["steps"], "usd": round(v["usd"], 6), "profile": self.mode_profile[k]} for k, v in per_mode.items()},
+            "by_mode": {
+                k: {"steps": v["steps"], "usd": round(v["usd"], 6), "profile": self.mode_profile[k]}
+                for k, v in per_mode.items()
+            },
         }

@@ -65,12 +65,28 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 #theme button { font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; }
 #theme button:hover { background: var(--hover); }
 #theme button:active { background: var(--sel); }
-.filters { display: flex; gap: 6px; flex-wrap: wrap; }
-.filters select { flex: 1 1 90px; min-width: 0; font-size: 12px; padding: 3px 4px; }
+.tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tags:empty { margin-top: 0; }
+.tag { display: inline-flex; gap: 3px; align-items: baseline; font-size: 11.5px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 2px 5px; }
+.tag b { font-weight: 550; color: var(--muted); }
+.tag .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; line-height: 1; }
+.tag .x:hover { color: var(--err); }
+.tag.all { background: none; border-color: transparent; padding: 2px 4px; color: var(--muted); font-size: 11.5px; }
+.tag.all:hover { color: var(--err); }
+.taghint { margin-top: 6px; font-size: 11px; color: var(--faint); line-height: 1.35; }
+#fqrow { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+#fqrow input[type=search] { flex: 1; min-width: 0; }
+#fqrow .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
+#fqrow .x:hover { color: var(--err); }
+mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--ink); border-radius: 2px; padding: 0 1px; }
+.sgroup { border-bottom: 1px solid var(--line); }
+.sg { padding: 7px 14px 3px; font-size: 11.5px; color: var(--muted); }
+.sgroup .item.sres { padding-bottom: 6px; }
+.sres .snip { font-size: 11.5px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sres .snip .sf { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--faint); margin-right: 5px; }
+.snote { color: var(--retry); }
 #srcstate { font-size: 11.5px; color: var(--muted); margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
 #srcstate .bad { color: var(--err); }
-#sessionchip { margin-top: 6px; font-size: 12px; color: var(--muted); }
-#sessionchip button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0 0 0 4px; }
 #list { overflow-y: auto; flex: 1; border-top: 1px solid var(--line); }
 .item { padding: 8px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .item:hover { background: var(--hover); }
@@ -95,6 +111,8 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 5px; font-size: 12px; color: var(--muted); }
 .meta b { color: var(--ink); font-weight: 520; }
 .meta a { color: var(--accent); cursor: pointer; }
+.fv { cursor: pointer; }
+.fv:hover { color: var(--accent); text-decoration: underline; }
 .stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
 .stat { border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; font-size: 12px; color: var(--muted); background: var(--bg); }
 .stat b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -202,13 +220,13 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   <header>
     <h1>AHAWR <small>trajectory</small></h1>
     <div id="theme"><button id="themebtn" type="button" data-theme="auto" aria-label="Theme: Auto" title="Theme: Auto">Theme: Auto</button></div>
-    <div class="filters">
-      <select id="f-source" aria-label="Source"><option value="">sources</option><option value="claude-runner">Claude Code</option><option value="hermes">Hermes</option></select>
-      <select id="f-role" aria-label="Role"><option value="">roles</option><option>architect</option><option>worker</option><option>reviewer</option><option>hermes</option><option>generic</option></select>
-      <select id="f-status" aria-label="Status"><option value="">status</option><option>running</option><option>idle</option><option>completed</option><option>failed</option><option>interrupted</option><option>cancelled</option><option>queued</option></select>
-    </div>
-    <div id="sessionchip" hidden>session <b id="sessionid"></b><button id="sessionx" title="Clear">✕ clear</button></div>
+    <div id="tags" class="tags" hidden></div>
+    <div id="taghint" class="taghint" hidden>Fields are combined with AND; values of one field are combined with OR.</div>
     <div id="srcstate"></div>
+    <div id="fqrow">
+      <input type="search" id="fq" placeholder="Search events (2+ chars)" aria-label="Search run events" title="Full-text search over run events; Esc or × clears">
+      <button id="fqx" type="button" class="x" title="Clear search" aria-label="Clear search">✕</button>
+    </div>
   </header>
   <nav id="list"></nav>
 </aside>
@@ -250,7 +268,72 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 "use strict";
 const $ = (s, r = document) => r.querySelector(s);
 const S = { runs: [], sel: null, run: null, entries: [], next: 0, live: null, pick: null, tab: "summary",
-  session: "", known: null, timer: 0, show: { thinking: true, system: true }, q: "", model: null };
+  session: "", known: null, timer: 0, fq: "", fres: null, goto: null, fqTimer: 0,
+  show: { thinking: true, system: true }, q: "", model: null, filter: {} };
+
+// === pure filter functions (no DOM) ===
+// A filter is a plain object mapping a field name to the list of selected values.
+// These helpers are pure: they read and write only the filter object passed in,
+// so they can be unit-tested in node without a browser.
+function toggleValue(filter, field, value) {
+  const v = String(value ?? "").trim();
+  if (!v) return filter;
+  const list = (filter[field] ||= []);
+  const i = list.indexOf(v);
+  if (i < 0) list.push(v);
+  else list.splice(i, 1);
+  if (!list.length) delete filter[field];
+  return filter;
+}
+function removeValue(filter, field, value) {
+  const v = String(value ?? "").trim();
+  const list = filter[field];
+  if (list) {
+    const i = list.indexOf(v);
+    if (i >= 0) list.splice(i, 1);
+    if (!list.length) delete filter[field];
+  }
+  return filter;
+}
+function clearFilter(filter) {
+  for (const k of Object.keys(filter)) delete filter[k];
+  return filter;
+}
+// AND across fields, OR within a field; a missing field counts as ""
+function runMatches(filter, run) {
+  for (const [field, values] of Object.entries(filter)) {
+    if (!values || !values.length) continue;
+    if (!values.includes(String(run[field] ?? ""))) return false;
+  }
+  return true;
+}
+// repeated params, as the multi-value filters of T003 send them
+function filterToQuery(filter) {
+  const q = [];
+  for (const [field, values] of Object.entries(filter))
+    for (const v of values || [])
+      if (String(v ?? "").trim()) q.push(field + "=" + encodeURIComponent(String(v)));
+  return q.join("&");
+}
+// the inverse of filterToQuery; tolerates a search string, a "#hash" fragment,
+// a "?query" string, and garbage (returns an empty filter for no values)
+function parseFilter(str) {
+  const s = String(str ?? "").trim();
+  if (!s) return {};
+  const body = s[0] === "#" || s[0] === "?" ? s.slice(1) : s;
+  const filter = {};
+  for (const part of body.split("&")) {
+    if (!part) continue;
+    const i = part.indexOf("=");
+    if (i <= 0) continue;
+    let field, value;
+    try { field = decodeURIComponent(part.slice(0, i)); value = decodeURIComponent(part.slice(i + 1)); } catch (e) { continue; }
+    if (!field || !value) continue;
+    (filter[field] ||= []).push(value);
+  }
+  return filter;
+}
+// === end pure filter functions ===
 
 // ---------------------------------------------------------------- formatting
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -281,40 +364,220 @@ async function getJSON(url) {
 }
 
 // ---------------------------------------------------------------- run list
+// one delegated handler for the clickable filter values in the #head builder and the list rows
+function onValueClick(e) {
+  const el = e.target.closest("[data-field]");
+  if (!el) return false;
+  e.stopPropagation();
+  toggleValue(S.filter, el.dataset.field, el.dataset.value);
+  S.known = null;
+  renderTags();
+  writeUrl(S.filter);
+  loadRuns();
+  if (S.fq) doSearch(); // a tag change re-runs an active search
+  return true;
+}
+// the URL holds the filter (as "#field=value&..."); the hash also carries "#run=..." for deep links
+function urlFilter() {
+  try {
+    const h = location.hash || "";
+    const i = h.indexOf("#run=");
+    const body = i >= 0 ? h.slice(0, i) : h.slice(1);
+    return parseFilter(body);
+  } catch (e) { return {}; }
+}
+function writeUrl(filter) {
+  try {
+    const runHash = S.sel ? "#run=" + encodeURIComponent(S.sel) : "";
+    history.replaceState(null, "", "#" + filterToQuery(filter) + runHash);
+  } catch (e) { /* a failing history API must never throw */ }
+}
 async function loadRuns() {
-  const q = new URLSearchParams({ limit: "150" });
-  for (const [k, id] of [["source", "#f-source"], ["role", "#f-role"], ["status", "#f-status"]]) if ($(id).value) q.set(k, $(id).value);
-  if (S.session) q.set("session_id", S.session);
+  const f = filterToQuery(S.filter);
+  const q = "limit=150" + (f ? "&" + f : "");
   let data;
   try { data = await getJSON("api/runs?" + q); } catch (e) { $("#srcstate").innerHTML = `<span class="bad">dashboard offline: ${esc(e.message)}</span>`; return; }
   $("#srcstate").innerHTML = Object.entries(data.sources || {}).map(([k, v]) => `<span class="${v === "ok" ? "" : "bad"}">${esc(k)}: ${esc(v)}</span>`).join("");
   const ids = new Set(data.runs.map((r) => r.run_id));
-  if (S.known && !S.session) {
-    const fresh = data.runs.find((r) => !S.known.has(r.run_id));
-    if (fresh && (!S.run || !isActive(S.run))) select(fresh.run_id);  // follow a run that just started
+  // never auto-select a fresh run when the filter holds a session; otherwise only follow a
+  // run that just started when it matches the filter (runMatches)
+  if (S.known && !S.filter.session) {
+    const fresh = data.runs.find((r) => !S.known.has(r.run_id) && runMatches(S.filter, r));
+    if (fresh && (!S.run || !isActive(S.run))) select(fresh.run_id);
   }
   S.known = ids;
   S.runs = data.runs;
-  renderList();
+  renderListOrSearch();
 }
 function renderList() {
   $("#list").innerHTML = S.runs.length ? S.runs.map((r) => `
     <div class="item ${r.run_id === S.sel ? "sel" : ""}" data-id="${esc(r.run_id)}">
       <div class="t">${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</div>
-      <div class="m"><span class="dot ${esc(r.status)}"></span><span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
-        <span class="role ${esc(r.role)}">${esc(r.role)}</span><span>${esc(r.model || "")}${r.provider && r.provider !== "hermes" ? " · " + esc(r.provider) : ""}</span>
+      <div class="m"><span class="dot ${esc(r.status)}"></span>
+        <span class="fv" data-field="status" data-value="${esc(r.status)}" title="Filter by status">${esc(r.status)}</span>
+        <span class="src fv ${esc(r.source)}" data-field="source" data-value="${esc(r.source)}" title="Filter by source">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
+        <span class="role fv ${esc(r.role)}" data-field="role" data-value="${esc(r.role)}" title="Filter by role">${esc(r.role)}</span>
+        <span class="fv" data-field="model" data-value="${esc(r.model || "")}" title="Filter by model">${esc(r.model || "")}</span>${r.provider && r.provider !== "hermes" ? `<span class="fv" data-field="provider" data-value="${esc(r.provider)}" title="Filter by provider">${esc(r.provider)}</span>` : ""}
         <span>${esc(ago(r.updated_at || r.created_at))}</span></div>
     </div>`).join("") : '<div class="item" style="cursor:default" class="t-mut">No runs yet.</div>';
 }
-$("#list").addEventListener("click", (e) => { const it = e.target.closest(".item[data-id]"); if (it) select(it.dataset.id); });
-for (const id of ["#f-source", "#f-role", "#f-status"]) $(id).addEventListener("change", () => { S.known = null; loadRuns(); });
-$("#sessionx").addEventListener("click", () => { S.session = ""; $("#sessionchip").hidden = true; S.known = null; loadRuns(); });
+// ---------------------------------------------------------------- full-text search (sidebar)
+// The query is debounced (~300 ms), needs at least 2 characters, and is sent to
+// api/search with the active filter tags (filterToQuery fields) as extra params.
+// Snippets are fully escaped before the matched part is wrapped in <mark>:
+// no regex is built from the input, no raw text reaches innerHTML.
+function searchUrl(q) {
+  const p = new URLSearchParams();
+  p.set("q", q);
+  for (const [field, values] of Object.entries(S.filter))
+    for (const v of values || [])
+      if (String(v ?? "").trim()) p.append(field, v);
+  return "api/search?" + p.toString();
+}
+function highlight(snippet, q) {
+  const needle = String(q).toLowerCase();
+  const hay = String(snippet ?? "").toLowerCase();
+  const i = needle ? hay.indexOf(needle) : -1;
+  if (i < 0) return esc(snippet);
+  return esc(snippet.slice(0, i)) + "<mark>" + esc(snippet.slice(i, i + needle.length)) + "</mark>" + esc(snippet.slice(i + needle.length));
+}
+async function doSearch() {
+  const q = S.fq.trim();
+  if (q.length < 2) { S.fq = ""; S.fres = null; renderList(); return; }
+  S.fq = q;
+  const inp = $("#fq");
+  if (inp && inp.value !== q) inp.value = q;
+  let data;
+  try { data = await getJSON(searchUrl(q)); }
+  catch (e) { data = { runs: [], incomplete: false, note: "search failed: " + e.message }; }
+  S.fres = data;
+  renderSearch();
+}
+function scheduleSearch(delay = 300) {
+  clearTimeout(S.fqTimer);
+  S.fqTimer = setTimeout(doSearch, delay);
+}
+function clearSearch() {
+  clearTimeout(S.fqTimer);
+  S.fq = ""; S.fres = null;
+  const inp = $("#fq");
+  if (inp) inp.value = "";
+  renderList();
+}
+function renderListOrSearch() {
+  if (S.fq && S.fres) renderSearch();
+  else renderList();
+}
+// results grouped by session: session, match count, role, model, time; each run
+// shows its short snippets with the matched part highlighted
+function renderSearch() {
+  const d = S.fres, box = $("#list");
+  const out = [];
+  if (!d.runs.length) out.push(`<div class="item" style="cursor:default" class="t-mut">${esc(d.note || "No matches.")}</div>`);
+  const groups = new Map();
+  for (const r of d.runs) {
+    const key = r.session_id || r.run_id;
+    let g = groups.get(key);
+    if (!g) { g = { key, matches: 0, roles: [], models: [], time: null, runs: [] }; groups.set(key, g); }
+    g.matches += r.matches || 0;
+    if (r.role && !g.roles.includes(r.role)) g.roles.push(r.role);
+    if (r.model && !g.models.includes(r.model)) g.models.push(r.model);
+    const t = epoch(r.started_at);
+    if (t != null && (g.time == null || t > g.time)) g.time = t;
+    g.runs.push(r);
+  }
+  for (const g of groups.values()) {
+    const time = g.time != null ? ago(g.time) : "";
+    out.push(`<div class="sgroup"><div class="sg"><b>${esc(String(g.key).slice(0, 14))}</b>${g.roles.length ? " · " + g.roles.map(esc).join(", ") : ""}${g.models.length ? " · " + esc(g.models[0]) : ""} · ${g.matches} match${g.matches === 1 ? "" : "es"}${time ? " · " + esc(time) : ""}</div>
+      ${g.runs.map((r) => `<div class="item sres" data-id="${esc(r.run_id)}" data-seq="${r.snippets && r.snippets.length ? Number(r.snippets[0].seq) : ""}">
+        <div class="t">${esc(r.run_id)}</div>
+        ${r.snippets.map((s) => `<div class="snip"><span class="sf">${esc(s.field)}</span>${highlight(s.snippet, S.fq)}</div>`).join("")}
+      </div>`).join("")}</div>`);
+  }
+  if (d.incomplete) out.push(`<div class="item snote" style="cursor:default">Results may be incomplete — the search stopped early.</div>`);
+  if (d.note) out.push(`<div class="item snote" style="cursor:default">${esc(d.note)}</div>`);
+  setHTML(box, out.join(""));
+}
+$("#fq").addEventListener("input", (e) => {
+  S.fq = e.target.value;
+  const q = S.fq.trim();
+  if (q.length < 2) { S.fq = ""; S.fres = null; renderList(); return; }
+  scheduleSearch(300);
+});
+$("#fq").addEventListener("keydown", (e) => { if (e.key === "Escape") clearSearch(); });
+$("#fqx").onclick = clearSearch;
+
+$("#list").addEventListener("click", (e) => {
+  if (onValueClick(e)) return;
+  const it = e.target.closest(".item[data-id]");
+  if (!it) return;
+  // a search-result click remembers the matched event: scroll there once the run opens
+  if (S.fq) S.goto = { run: it.dataset.id, seq: it.dataset.seq ? Number(it.dataset.seq) : null };
+  select(it.dataset.id);
+});
+// tag row: one chip per (field, value), a session chip, and 'clear all'
+function renderTags() {
+  const chips = [];
+  const sf = S.filter.session;
+  if (sf) {
+    const v = sf.split(":").pop();
+    chips.push(`<span class="tag" title="${esc(sf)}">session <b>${esc(String(v).slice(0, 12))}</b><button class="x" title="Remove session" data-field="session" data-value="${esc(sf)}">✕</button></span>`);
+  }
+  for (const [field, values] of Object.entries(S.filter)) {
+    if (field === "session") continue;
+    for (const v of values || []) if (String(v ?? "").trim())
+      chips.push(`<span class="tag"><b>${esc(field)}</b>: ${esc(v)}<button class="x" title="Remove ${esc(field)}: ${esc(v)}" data-field="${esc(field)}" data-value="${esc(v)}">✕</button></span>`);
+  }
+  if (chips.length) chips.push(`<button class="tag all" title="Clear all filters">clear all</button>`);
+  const box = $("#tags");
+  setHTML(box, chips.join(""));
+  box.hidden = !chips.length;
+  $("#taghint").hidden = !chips.length;
+}
+$("#tags").addEventListener("click", (e) => {
+  const x = e.target.closest(".tag .x");
+  if (x) { removeValue(S.filter, x.dataset.field, x.dataset.value); }
+  else if (e.target.closest(".tag.all")) { clearFilter(S.filter); }
+  else return;
+  S.known = null;
+  renderTags();
+  writeUrl(S.filter);
+  loadRuns();
+  if (S.fq) doSearch(); // a tag change re-runs an active search
+});
 
 // ---------------------------------------------------------------- selection + polling
+// a search-result click asked to scroll to the matched event; apply it once the
+// event is in S.entries, drop the request if the run will not deliver it
+function applyGoto() {
+  if (!S.goto || !S.sel || S.goto.run !== S.sel) return;
+  const g = S.goto;
+  const e = g.seq != null ? S.entries.find((x) => x.seq === g.seq) : null;
+  if (!e) { if (!isActive(S.run)) S.goto = null; return; }
+  // a tool result scrolls to its tool call row, which is what the ledger shows
+  const target = e.kind === "tool_result" ? (S.entries.find((x) => x.kind === "tool_use" && x.id === e.id) || e) : e;
+  // make sure the row is not filtered out: force the display toggles and drop the text filter
+  if (target.kind === "thinking") S.show.thinking = true;
+  if (target.kind === "init" || target.kind === "end") S.show.system = true;
+  if (S.q) {
+    S.q = "";
+    const qin = $("#o-q");
+    if (qin) qin.value = "";
+  }
+  const tin = $("#o-think");
+  if (tin) tin.checked = S.show.thinking;
+  const sin = $("#o-sys");
+  if (sin) sin.checked = S.show.system;
+  S.pick = "e" + target.seq;
+  S.goto = null;
+  render();
+  const row = $(`#ledger [data-key="e${target.seq}"]`);
+  if (row) row.scrollIntoView({ block: "center" });
+}
 function select(id) {
-  if (S.sel === id) return;
+  if (S.sel === id) { applyGoto(); return; }
   Object.assign(S, { sel: id, run: null, entries: [], next: 0, live: null, pick: null, model: null });
-  if (location.hash !== "#run=" + encodeURIComponent(id)) history.replaceState(null, "", "#run=" + encodeURIComponent(id));
+  writeUrl(S.filter);
   $("#main").innerHTML = `<section id="head"></section>
     <div id="toolbar"><label><input type="checkbox" id="o-think" ${S.show.thinking ? "checked" : ""}> thinking</label>
       <label><input type="checkbox" id="o-sys" ${S.show.system ? "checked" : ""}> system rows</label>
@@ -329,11 +592,17 @@ function select(id) {
   $("#head").addEventListener("click", (e) => {
     const b = e.target.closest("[data-stop]");
     if (b) { stopRun(b.dataset.stop); return; }
+    const it = e.target.closest(".item[data-id]");
     const a = e.target.closest("[data-session]");
-    if (!a) return;
-    S.session = a.dataset.session; $("#sessionid").textContent = a.textContent; $("#sessionchip").hidden = false; S.known = null; loadRuns();
+    if (!a) { onValueClick(e); return; }
+    toggleValue(S.filter, "session", a.dataset.session);
+    S.known = null;
+    renderTags();
+    writeUrl(S.filter);
+    loadRuns();
+    if (S.fq) doSearch(); // a tag change re-runs an active search
   });
-  renderList();
+  renderListOrSearch();
   clearTimeout(S.timer);
   poll();
 }
@@ -358,6 +627,7 @@ async function poll() {
   if (id !== S.sel) return;
   const grew = data.events.length > 0 || JSON.stringify(data.live) !== JSON.stringify(S.live) || JSON.stringify(data.run) !== JSON.stringify(S.run);
   S.run = data.run; S.entries = S.entries.concat(data.events); S.next = data.next; S.live = data.live;
+  applyGoto(); // scroll to the matched event once its entry arrived
   if (grew || isActive(S.run)) render();
   S.timer = setTimeout(poll, isActive(S.run) ? 1000 : 8000);
 }
@@ -457,13 +727,13 @@ function renderHead(m) {
   const wall = t.durationMs || (r.started_at && end ? (end - epoch(r.started_at)) * 1000 : null);
   setHTML($("#head"), `
     <h2>${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</h2>
-    <div class="meta"><span><span class="dot ${esc(r.status)}"></span> <b>${esc(r.status)}</b></span>
+    <div class="meta"><span><span class="dot ${esc(r.status)}"></span> <b class="fv" data-field="status" data-value="${esc(r.status)}" title="Filter by status">${esc(r.status)}</b></span>
       ${isActive(r) && r.source === "claude-code" ? `<button class="stop" data-stop="${esc(r.run_id)}" title="Stop the Claude Code process and its tools (cancelling the n8n execution does not)"${S.stopping === r.run_id ? " disabled" : ""}>${S.stopping === r.run_id ? "stopping…" : "■ Stop"}</button>` : ""}
-      <span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE CODE"}</span>
-      <span class="role ${esc(r.role)}">${esc(r.role)}</span>
-      <span>model <b>${esc(r.model || "default")}</b></span>${r.provider ? `<span>provider <b>${esc(r.provider)}</b></span>` : ""}
-      <span>session <a data-session="${esc(sessionKey)}" title="All runs of this session">${esc(String(r.session_id).slice(0, 12))}</a></span>
-      ${r.cwd ? `<span>cwd <b>${esc(r.cwd)}</b></span>` : ""}<span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleString() : "queued")}</b></span></div>
+      <span class="src fv ${esc(r.source)}" data-field="source" data-value="${esc(r.source)}" title="Filter by source">${r.source === "hermes" ? "HERMES" : "CLAUDE CODE"}</span>
+      <span class="role fv ${esc(r.role)}" data-field="role" data-value="${esc(r.role)}" title="Filter by role">${esc(r.role)}</span>
+      <span>model ${r.model ? `<b class="fv" data-field="model" data-value="${esc(r.model)}" title="Filter by model">${esc(r.model)}</b>` : `<b>default</b>`}</span>${r.provider ? `<span>provider <b class="fv" data-field="provider" data-value="${esc(r.provider)}" title="Filter by provider">${esc(r.provider)}</b></span>` : ""}
+      <span>session <a class="fv" data-session="${esc(sessionKey)}" title="Filter by session">${esc(String(r.session_id).slice(0, 12))}</a></span>
+      ${r.cwd ? `<span>cwd <b class="fv" data-field="cwd" data-value="${esc(r.cwd)}" title="Filter by cwd">${esc(r.cwd)}</b></span>` : ""}<span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleString() : "queued")}</b></span></div>
     <div class="stats">
       <span class="stat"><b>${m.turns}</b> turns · <b>${t.steps}</b> steps</span>
       ${wall ? `<span class="stat">wall <b>${ms(wall)}</b>${t.apiMs ? ` · api <b>${ms(t.apiMs)}</b>` : ""}</span>` : ""}
@@ -726,6 +996,9 @@ function toolPayload(e) {
 function fromHash() { const m = location.hash.match(/run=([^&]+)/); if (m) select(decodeURIComponent(m[1])); }
 window.addEventListener("hashchange", fromHash);
 (async () => {
+  const f = urlFilter();
+  if (Object.keys(f).length) S.filter = f;
+  renderTags();
   await loadRuns();
   fromHash();
   if (!S.sel && S.runs[0]) select(S.runs[0].run_id);

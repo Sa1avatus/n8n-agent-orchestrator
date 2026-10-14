@@ -74,8 +74,9 @@ class RunnerError(Exception):
 
 
 def task_number(prompt: str) -> int:
-    """The AHAWR task number in a Worker prompt (``TASK T010`` -> 10), 0 when there is none. In a first-attempt prompt it stands
-    after several thousand characters of rules, so the whole text is searched."""
+    """The AHAWR task number in a Worker prompt (``TASK T010`` -> 10), 0 when
+    there is none. In a first-attempt prompt it stands after several thousand
+    characters of rules, so the whole text is searched."""
     found = re.search(r"TASK T0*(\d+)", prompt or "")
     return int(found.group(1)) if found else 0
 
@@ -98,8 +99,12 @@ class RunManager:
     def __init__(self, settings: Settings, store: Store | None = None) -> None:
         self.settings = settings
         self.store = store or Store(settings.data_dir / "runner.sqlite")
-        self.on_run_start: Callable[[], object] | None = None  # set by the app: think policy (think_switch.py)
-        self.think_flag: Callable[[], str] | None = None  # set by the app: 'on' / 'off' now (think_switch.py)
+        self.on_run_start: Callable[[], object] | None = (
+            None  # set by the app: think policy (think_switch.py)
+        )
+        self.think_flag: Callable[[], str] | None = (
+            None  # set by the app: 'on' / 'off' now (think_switch.py)
+        )
         self.local_pricing = LocalPricing.from_env(settings.local_pricing_env)
         self._slots = asyncio.Semaphore(settings.max_concurrent)
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -304,8 +309,12 @@ class RunManager:
                 with contextlib.suppress(Exception):
                     self.on_run_start()
             if self.think_flag is not None and provider_name == "local":
-                with contextlib.suppress(Exception):  # the thinking mode the first request of the run starts in (the local price depends on it)
-                    self.events.add(run_id, {"kind": "thinking_state", "thinking": self.think_flag()})
+                with contextlib.suppress(Exception):
+                    # the thinking mode the first request of the run starts in
+                    # (the local price depends on it)
+                    self.events.add(
+                        run_id, {"kind": "thinking_state", "thinking": self.think_flag()}
+                    )
             profile = self.settings.profile(role)
             provider = self.settings.provider(provider_name)
             cmd = build_command(
@@ -444,9 +453,12 @@ class RunManager:
             details["run_duration_api_ms"] = int(api_ms)
         cost = run_cost(details.get("total_cost_usd"), previous)
         if record.get("provider") == "local" and self.local_pricing.enabled:
-            # what the run would have cost on a cloud model: steps made without thinking at the cheaper model's rates, with thinking at the other's
+            # what the run would have cost on a cloud model: steps made without
+            # thinking at the cheaper model's rates, with thinking at the other's
             with contextlib.suppress(Exception):
-                local = self.local_pricing.cost_from_events(self.events.directory / f"{run_id}.jsonl")
+                local = self.local_pricing.cost_from_events(
+                    self.events.directory / f"{run_id}.jsonl"
+                )
                 if local is not None:
                     details["local_cost"] = local
                     cost = local["cost_usd"]

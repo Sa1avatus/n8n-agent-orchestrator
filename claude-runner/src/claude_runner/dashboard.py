@@ -106,27 +106,60 @@ def create_dashboard_app(
     async def list_runs(
         request: Request,
         limit: int = Query(100, ge=1, le=500),
-        session_id: str = "",
-        role: str = "",
-        status: str = "",
-        source: str = "",
+        session_id: list[str] = Query([]),  # noqa: B008
+        role: list[str] = Query([]),  # noqa: B008
+        status: list[str] = Query([]),  # noqa: B008
+        model: list[str] = Query([]),  # noqa: B008
+        provider: list[str] = Query([]),  # noqa: B008
+        cwd: list[str] = Query([]),  # noqa: B008
+        source: list[str] = Query([]),  # noqa: B008
     ) -> dict[str, Any]:
-        chosen = [s for s in sources(request) if not source or s.name == source]
-        if session_id:  # a session belongs to exactly one source
-            hermes = session_id.startswith(HERMES_PREFIX)
-            session_id = session_id.removeprefix(HERMES_PREFIX)
-            chosen = [s for s in chosen if isinstance(s, HermesSource) == hermes]
-        results = await asyncio.gather(
-            *(s.list_runs(limit, session_id, role, status) for s in chosen), return_exceptions=True
-        )
+        # repeated values of one field are matched with OR; fields combine with AND
+        values: dict[str, set[str]] = {}
+        for field, seen in (
+            ("model", model),
+            ("provider", provider),
+            ("cwd", cwd),
+            ("role", role),
+            ("status", status),
+        ):
+            values[field] = {v for v in seen if v}
+        hermes_sessions = {
+            v.removeprefix(HERMES_PREFIX) for v in session_id if v.startswith(HERMES_PREFIX)
+        }
+        runner_sessions = {v for v in session_id if v and not v.startswith(HERMES_PREFIX)}
+        chosen = [s for s in sources(request) if not source or s.name in {v for v in source if v}]
+        if hermes_sessions or runner_sessions:  # a session belongs to exactly one source
+            chosen = [
+                s
+                for s in chosen
+                if (isinstance(s, HermesSource) and hermes_sessions)
+                or (not isinstance(s, HermesSource) and runner_sessions)
+            ]
+        # role/status/model/provider/cwd are matched after the fetch, so the sources are
+        # not narrowed by them (narrowing by role[0] would drop the other role values)
+        fetch = 500 if any(values.values()) else limit
+        # each source serves the sessions of its kind (the 'hermes:' prefix is
+        # stripped before the call); with no session of its kind it is read unfiltered
+        calls: list[tuple[Any, Any]] = []
+        for s in chosen:
+            is_hermes = isinstance(s, HermesSource)
+            ids = [
+                v.removeprefix(HERMES_PREFIX) if is_hermes else v
+                for v in session_id
+                if v.startswith(HERMES_PREFIX) == is_hermes
+            ] or [""]
+            calls.extend((s, s.list_runs(fetch, sid, "", "")) for sid in ids)
+        results = await asyncio.gather(*(c[1] for c in calls), return_exceptions=True)
         runs: list[dict[str, Any]] = []
         states: dict[str, str] = {}
-        for src, result in zip(chosen, results, strict=True):
+        for (src, _), result in zip(calls, results, strict=True):
             if isinstance(result, BaseException):
                 states[src.name] = _describe_error(result)
             else:
-                states[src.name] = "ok"
+                states.setdefault(src.name, "ok")
                 runs += result
+        runs = _runs_match(runs, values)
         runs.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
         return {"runs": runs[:limit], "sources": states}
 
@@ -146,6 +179,48 @@ def create_dashboard_app(
         if body is None:
             return JSONResponse({"error": f"run {run_id} not found"}, status_code=404)
         return body
+
+    @app.get("/api/search")
+    async def api_search(
+        request: Request,
+        q: str = Query(""),
+        limit: int = Query(50, ge=1, le=200),
+        role: list[str] = Query([]),  # noqa: B008
+        model: list[str] = Query([]),  # noqa: B008
+        provider: list[str] = Query([]),  # noqa: B008
+        cwd: list[str] = Query([]),  # noqa: B008
+        status: list[str] = Query([]),  # noqa: B008
+        session_id: list[str] = Query([]),  # noqa: B008
+        source: list[str] = Query([]),  # noqa: B008
+    ) -> dict[str, Any]:
+        query = q.strip()
+        if len(query) < 2:
+            return {"runs": [], "incomplete": False, "note": "query too short"}
+        chosen = [s for s in sources(request) if not source or s.name in {v for v in source if v}]
+        calls = [
+            (
+                s,
+                s.search(query, limit, role, model, provider, cwd, status, session_id),
+            )
+            for s in chosen
+        ]
+        results = await asyncio.gather(*(c[1] for c in calls), return_exceptions=True)
+        runs: list[dict[str, Any]] = []
+        states: dict[str, str] = {}
+        incomplete = False
+        note: str | None = None
+        for (src, _), result in zip(calls, results, strict=True):
+            if isinstance(result, BaseException):
+                states[src.name] = _describe_error(result)
+            else:
+                states.setdefault(src.name, "ok")
+                runs += result.get("runs", [])
+                if result.get("incomplete"):
+                    incomplete = True
+                if result.get("note") and not note:
+                    note = result["note"]
+        runs.sort(key=lambda r: str(r.get("started_at") or r.get("created_at") or ""), reverse=True)
+        return {"runs": runs[:limit], "incomplete": incomplete, "sources": states, "note": note}
 
     @app.get("/api/runs/{run_id}/events")
     async def run_events(request: Request, run_id: str, after: int = Query(0, ge=0)) -> Any:
@@ -233,6 +308,26 @@ def _download(
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+def _runs_match(runs: list[dict[str, Any]], values: dict[str, set[str]]) -> list[dict[str, Any]]:
+    """Filter runs after the sources have been read.
+
+    Each field keeps its active values in ``values``; a run matches a field when its
+    value (a missing provider/cwd counts as ``""``) is one of them (OR within a field,
+    AND across fields).
+    """
+    active = {field: allowed for field, allowed in values.items() if allowed}
+    if not active:
+        return runs
+    out: list[dict[str, Any]] = []
+    for run in runs:
+        for field, allowed in active.items():
+            if str(run.get(field) or "") not in allowed:
+                break
+        else:
+            out.append(run)
+    return out
 
 
 def _describe_error(exc: BaseException) -> str:

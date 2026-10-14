@@ -20,6 +20,8 @@ from .config import Settings
 from .handoff import session_digest
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
+from .search import DEFAULT_LIMIT, MAX_LIMIT
+from .search import search as run_search
 from .think_switch import ThinkSwitch
 
 
@@ -30,7 +32,8 @@ class RunBody(BaseModel):
     session_id: str = ""
     working_directory: str = ""
     role: str = ""
-    # thinking policy of the local Worker from hermes_config (empty / 0 / -1 = use the CLAUDE_RUNNER_THINK_* defaults)
+    # thinking policy of the local Worker from hermes_config
+    # (empty / 0 / -1 = use the CLAUDE_RUNNER_THINK_* defaults)
     think_policy: str = ""
     think_policy_from_task: int = 0
     think_off_after_seconds: int = -1
@@ -85,13 +88,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.cli_version = await _cli_version(settings)
         switch_task = None
         policy = settings.think_policy == "off_first"
-        if settings.think_flag_file:  # the workflow may send its own settings per run (hermes_config)
+        if (
+            settings.think_flag_file
+        ):  # the workflow may send its own settings per run (hermes_config)
             switch = ThinkSwitch(
-                manager.store, Path(settings.think_flag_file), settings.think_off_after_seconds, manager.events,
-                policy=policy, policy_from_task=settings.think_policy_from_task, after_steps=settings.think_off_after_steps, default_policy=settings.think_policy,
+                manager.store,
+                Path(settings.think_flag_file),
+                settings.think_off_after_seconds,
+                manager.events,
+                policy=policy,
+                policy_from_task=settings.think_policy_from_task,
+                after_steps=settings.think_off_after_steps,
+                default_policy=settings.think_policy,
             )
-            manager.on_run_start = switch.tick  # the policy applies before the first request of the run, not 20 s later
-            manager.think_flag = switch.flag  # the run's first thinking mode goes to its event log (the local price depends on it)
+            manager.on_run_start = (
+                switch.tick
+            )  # the policy applies before the first request of the run, not 20 s later
+            manager.think_flag = (
+                switch.flag
+            )  # the run's first thinking mode goes to its event log (the local price depends on it)
             switch_task = asyncio.create_task(switch.run())
         try:
             yield
@@ -214,6 +229,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not runs.store.get_session(session_id):
             raise RunnerError("session_not_found", f"Session {session_id} not found.", 404)
         return session_digest(runs, session_id, max_chars)
+
+    @app.get("/v1/search", dependencies=[Depends(authorize)])
+    async def search_endpoint(
+        request: Request,
+        q: str = Query(""),
+        limit: int = Query(DEFAULT_LIMIT, ge=0),
+        role: list[str] = Query([]),  # noqa: B008
+        model: list[str] = Query([]),  # noqa: B008
+        provider: list[str] = Query([]),  # noqa: B008
+        cwd: list[str] = Query([]),  # noqa: B008
+        status: list[str] = Query([]),  # noqa: B008
+        session_id: list[str] = Query([]),  # noqa: B008
+    ) -> dict[str, Any]:
+        """Search the per-run event logs (case-insensitive substring), the same filters the
+        dashboard uses. Runs on a thread so a slow scan never blocks the event loop."""
+        runs = manager(request)
+        filters = {
+            "role": role,
+            "model": model,
+            "provider": provider,
+            "cwd": cwd,
+            "status": status,
+            "session_id": session_id,
+        }
+        result = await asyncio.to_thread(
+            run_search,
+            runs.events.directory,
+            q,
+            filters,
+            store=runs.store,
+            limit=min(limit, MAX_LIMIT),
+        )
+        return result
 
     @app.post("/v1/sessions/{session_id}/compact", dependencies=[Depends(authorize)])
     async def compact(

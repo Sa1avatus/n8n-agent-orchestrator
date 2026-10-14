@@ -111,6 +111,39 @@ class RunnerSource:
             body["source"] = "claude-code"
         return body  # type: ignore[no-any-return]
 
+    async def search(
+        self,
+        query: str,
+        limit: int,
+        role: list[str],
+        model: list[str],
+        provider: list[str],
+        cwd: list[str],
+        status: list[str],
+        session_id: list[str],
+    ) -> dict[str, Any]:
+        """Search claude-runner's per-run event logs via its /v1/search endpoint."""
+        filters = {
+            "role": role,
+            "model": model,
+            "provider": provider,
+            "cwd": cwd,
+            "status": status,
+            "session_id": session_id,
+        }
+        params: dict[str, str | list[str]] = {"q": query, "limit": str(limit)}
+        for field, values in filters.items():
+            active = [v for v in values if v]
+            if active:
+                params[field] = active
+        response = await self.client.get(
+            f"{self.url}/v1/search", params=params, headers=self.headers
+        )
+        body = _check(response, "claude-runner") or {"runs": [], "incomplete": False}
+        for run in body.get("runs", []):
+            run["source"] = "claude-code"
+        return body
+
 
 def _parse_arguments(raw: Any) -> Any:
     if isinstance(raw, str):
@@ -339,4 +372,23 @@ class HermesSource:
             "events": entries[after:],
             "next": len(entries),
             "live": None,
+        }
+
+    async def search(
+        self,
+        query: str,
+        limit: int,
+        role: list[str],
+        model: list[str],
+        provider: list[str],
+        cwd: list[str],
+        status: list[str],
+        session_id: list[str],
+    ) -> dict[str, Any]:
+        """Hermes text is not cheap to get (it lives in session messages, not in
+        per-run event logs), so search covers Claude Code runs only."""
+        return {
+            "runs": [],
+            "incomplete": False,
+            "note": "search covers Claude Code runs only",
         }

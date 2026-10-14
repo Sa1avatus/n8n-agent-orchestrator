@@ -399,7 +399,8 @@ class Settings:
     think_flag_file: str = ""
     think_policy: str = ""
     think_policy_from_task: int = 1
-    # Local runs priced as a cloud model by thinking mode (local_pricing.py); the raw environment is kept for it
+    # Local runs priced as a cloud model by thinking mode (local_pricing.py);
+    # the raw environment is kept for it
     local_pricing_env: dict[str, str] = field(default_factory=dict)
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
@@ -478,7 +479,9 @@ class Settings:
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
             think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
             think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
-            local_pricing_env={k: v for k, v in env.items() if k.startswith("CLAUDE_RUNNER_LOCAL_PRICE_")},
+            local_pricing_env={
+                k: v for k, v in env.items() if k.startswith("CLAUDE_RUNNER_LOCAL_PRICE_")
+            },
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env),

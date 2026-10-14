@@ -25,29 +25,61 @@ def test_timeline_modes() -> None:
     assert policy is not None and errors == []
     variant = policy.variants[0]
     modes = [variant.mode_at(n, False)[0] for n in range(0, 60)]
-    assert modes[:8] == ["think"] * 8 and modes[8:33] == ["off"] * 25 and modes[33:43] == ["think"] * 10 and modes[43:] == ["off"] * 17
+    assert (
+        modes[:8] == ["think"] * 8
+        and modes[8:33] == ["off"] * 25
+        and modes[33:43] == ["think"] * 10
+        and modes[43:] == ["off"] * 17
+    )
 
 
 def test_weights_lay_out_the_tasks() -> None:
     policy, _ = think_policy.parse(json.dumps(POLICY))
-    assert [policy.variant_for(n).name for n in (1, 2, 3, 4, 5, 6)] == ["plan+pulse", "plan+pulse", "control", "plan+pulse", "plan+pulse", "control"]
+    assert [policy.variant_for(n).name for n in (1, 2, 3, 4, 5, 6)] == [
+        "plan+pulse",
+        "plan+pulse",
+        "control",
+        "plan+pulse",
+        "plan+pulse",
+        "control",
+    ]
     assert think_policy.variant_name(json.dumps(POLICY), 3) == "control"
-    assert think_policy.variant_name("pulse:25:10:1|off", 2) == "off" and think_policy.variant_name("", 1) == ""
+    assert (
+        think_policy.variant_name("pulse:25:10:1|off", 2) == "off"
+        and think_policy.variant_name("", 1) == ""
+    )
 
 
 def test_first_and_retry_can_differ_and_missing_side_copies_the_other() -> None:
-    text = json.dumps({"variants": [{"name": "a", "first": [["off", None]], "retry": [["think", 5], ["off", None]]}, {"name": "b", "first": [["think", 3], ["off", None]]}]})
+    text = json.dumps(
+        {
+            "variants": [
+                {"name": "a", "first": [["off", None]], "retry": [["think", 5], ["off", None]]},
+                {"name": "b", "first": [["think", 3], ["off", None]]},
+            ]
+        }
+    )
     policy, errors = think_policy.parse(text)
     assert errors == []
     a, b = policy.variants
-    assert a.mode_at(0, False)[0] == "off" and a.mode_at(0, True)[0] == "think" and a.mode_at(5, True)[0] == "off"
+    assert (
+        a.mode_at(0, False)[0] == "off"
+        and a.mode_at(0, True)[0] == "think"
+        and a.mode_at(5, True)[0] == "off"
+    )
     assert b.mode_at(0, True)[0] == "think"  # retry copies first
 
 
 def test_repeat_cycles_the_timeline() -> None:
-    policy, errors = think_policy.parse(json.dumps({"variants": [{"name": "r", "repeat": True, "first": [["off", 3], ["think", 2]]}]}))
+    policy, errors = think_policy.parse(
+        json.dumps(
+            {"variants": [{"name": "r", "repeat": True, "first": [["off", 3], ["think", 2]]}]}
+        )
+    )
     assert errors == []
-    assert [policy.variants[0].mode_at(n, False)[0] for n in range(10)] == ["off"] * 3 + ["think"] * 2 + ["off"] * 3 + ["think"] * 2
+    assert [policy.variants[0].mode_at(n, False)[0] for n in range(10)] == ["off"] * 3 + [
+        "think"
+    ] * 2 + ["off"] * 3 + ["think"] * 2
 
 
 def test_validation_names_the_problem() -> None:
@@ -61,7 +93,9 @@ def test_validation_names_the_problem() -> None:
     assert ">= 1" in think_policy.validate(zero)[1]
     repeat_null = json.dumps({"variants": [{"repeat": True, "first": [["off", None]]}]})
     assert "repeat" in think_policy.validate(repeat_null)[1]
-    twice = json.dumps({"variants": [{"name": "x", "first": [["off", 1]]}, {"name": "x", "first": [["off", 1]]}]})
+    twice = json.dumps(
+        {"variants": [{"name": "x", "first": [["off", 1]]}, {"name": "x", "first": [["off", 1]]}]}
+    )
     assert "twice" in think_policy.validate(twice)[1]
     ok, message = think_policy.validate(json.dumps(POLICY))
     assert ok and "plan+pulse" in message
@@ -72,7 +106,15 @@ def test_switch_follows_a_json_policy(tmp_path: Path) -> None:
     flag = tmp_path / "local_thinking"
     flag.write_text("off")
     events = _Events(tmp_path / "events")
-    policy = {"variants": [{"name": "plan", "first": [["think", 2], ["off", None]], "retry": [["think", 3], ["off", None]]}]}
+    policy = {
+        "variants": [
+            {
+                "name": "plan",
+                "first": [["think", 2], ["off", None]],
+                "retry": [["think", 3], ["off", None]],
+            }
+        ]
+    }
     switch = ThinkSwitch(store, flag, 0, events, default_policy=json.dumps(policy))
     _prompt_run(store, "a", "s1", "running", 60, None, "TASK T001: x")
     assert switch.tick() == "on" and "policy plan" in events.notes[-1][1]["reason"]

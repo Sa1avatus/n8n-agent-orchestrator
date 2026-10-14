@@ -96,8 +96,8 @@ services:
     # 2026-10-13: the Docker VM hung for lack of memory (swap full, PSI 60%); a runaway indexer must be killed alone, not stall the VM
     # 2026-10-14: 1536m was too little for the working set (ONNX e5 ~0.8 GB + vectors of the 58k-chunk docs corpus ~0.3 GB + request peaks up to 2.7 GB):
     # the container was OOM-killed on the first search of every start (122 restarts). 2560m with fewer malloc arenas; still a hard cap for a runaway indexer.
-    mem_limit: 2560m
-    memswap_limit: 2560m
+    mem_limit: 4g
+    memswap_limit: 4g
     volumes:
       # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
@@ -126,6 +126,10 @@ services:
 
     container_name: claude-runner
     restart: unless-stopped
+    # 2026-10-15: there was no limit; Worker python scripts that read the 9 GB GGUF into RAM (anon-rss 7-9 GB, six times in a night) made the kernel of the
+    # Docker VM kill processes VM-wide and finally restart the VM. With a cap only the offending process dies inside this container.
+    mem_limit: 6g
+    memswap_limit: 6g
 
     # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN and CLAUDE_RUNNER_* settings. See .env.example.
     env_file:

@@ -4,20 +4,47 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from claude_runner.store import Store
-from claude_runner.think_switch import ThinkSwitch, parse_pulse, pulse_thinking, start_think, variant_for
+from claude_runner.think_switch import (
+    ThinkSwitch,
+    parse_pulse,
+    pulse_thinking,
+    start_think,
+    variant_for,
+)
 
 
 def _iso(seconds_ago: float) -> str:
     return (datetime.now(UTC) - timedelta(seconds=seconds_ago)).isoformat(timespec="seconds")
 
 
-def _run(store: Store, run_id: str, session: str, status: str, started: float, finished: float | None,
-         role: str = "worker", provider: str = "local") -> None:
+def _run(
+    store: Store,
+    run_id: str,
+    session: str,
+    status: str,
+    started: float,
+    finished: float | None,
+    role: str = "worker",
+    provider: str = "local",
+) -> None:
     store.create_run(
-        run_id=run_id, kind="run", session_id=session, claude_session_id=session, role=role,
-        model="m", provider=provider, cwd="/w", input="", status=status, created_at=_iso(started),
+        run_id=run_id,
+        kind="run",
+        session_id=session,
+        claude_session_id=session,
+        role=role,
+        model="m",
+        provider=provider,
+        cwd="/w",
+        input="",
+        status=status,
+        created_at=_iso(started),
     )
-    store.update_run(run_id, started_at=_iso(started), finished_at=_iso(finished) if finished is not None else None)
+    store.update_run(
+        run_id,
+        started_at=_iso(started),
+        finished_at=_iso(finished) if finished is not None else None,
+    )
 
 
 def test_switch_off_after_limit_and_back_on(tmp_path: Path) -> None:
@@ -69,12 +96,33 @@ def test_disabled_with_zero(tmp_path: Path) -> None:
     assert ThinkSwitch(store, tmp_path / "f", 0).tick() == ""
 
 
-def _prompt_run(store: Store, run_id: str, session: str, status: str, started: float, finished: float | None, text: str) -> None:
+def _prompt_run(
+    store: Store,
+    run_id: str,
+    session: str,
+    status: str,
+    started: float,
+    finished: float | None,
+    text: str,
+) -> None:
     store.create_run(
-        run_id=run_id, kind="run", session_id=session, claude_session_id=session, role="worker",
-        model="m", provider="local", cwd="/w", input=text, status=status, created_at=_iso(started),
+        run_id=run_id,
+        kind="run",
+        session_id=session,
+        claude_session_id=session,
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input=text,
+        status=status,
+        created_at=_iso(started),
     )
-    store.update_run(run_id, started_at=_iso(started), finished_at=_iso(finished) if finished is not None else None)
+    store.update_run(
+        run_id,
+        started_at=_iso(started),
+        finished_at=_iso(finished) if finished is not None else None,
+    )
 
 
 def test_policy_first_attempt_off_retry_on(tmp_path: Path) -> None:
@@ -93,7 +141,15 @@ def test_policy_first_attempt_off_retry_on(tmp_path: Path) -> None:
     assert switch.tick() == ""
     # a resume after a failed run is still the first attempt
     store.update_run("b", status="failed", finished_at=_iso(30))
-    _prompt_run(store, "b2", "s10", "running", 20, None, "The previous attempt stopped.\n\nRESUME TASK T010: something")
+    _prompt_run(
+        store,
+        "b2",
+        "s10",
+        "running",
+        20,
+        None,
+        "The previous attempt stopped.\n\nRESUME TASK T010: something",
+    )
     assert switch.tick() == ""  # still off
     # the run completes and goes to review; the retry has thinking on
     store.update_run("b2", status="completed", finished_at=_iso(10))
@@ -129,30 +185,68 @@ def test_run_settings_from_hermes_config_win_over_defaults(tmp_path: Path) -> No
     flag.write_text("on")
     switch = ThinkSwitch(store, flag, 3600)  # no policy in the defaults (the .env is empty)
     store.create_run(
-        run_id="a", kind="run", session_id="s5", claude_session_id="s5", role="worker", model="m", provider="local",
-        cwd="/w", input="TASK T005: x", status="running", created_at=_iso(60),
-        think_policy="off_first", think_from=5, think_after=120,
+        run_id="a",
+        kind="run",
+        session_id="s5",
+        claude_session_id="s5",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="TASK T005: x",
+        status="running",
+        created_at=_iso(60),
+        think_policy="off_first",
+        think_from=5,
+        think_after=120,
     )
     store.update_run("a", started_at=_iso(60))
-    assert switch.tick() == "off"  # the run asks for the policy from T5 on: first attempt without thinking
+    assert (
+        switch.tick() == "off"
+    )  # the run asks for the policy from T5 on: first attempt without thinking
     store.update_run("a", status="completed", finished_at=_iso(10))
     flag.write_text("on")
     store.create_run(
-        run_id="b", kind="run", session_id="s5", claude_session_id="s5", role="worker", model="m", provider="local",
-        cwd="/w", input="TASK T005: x", status="running", created_at=_iso(5),
-        think_policy="off_first", think_from=5, think_after=120,
+        run_id="b",
+        kind="run",
+        session_id="s5",
+        claude_session_id="s5",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="TASK T005: x",
+        status="running",
+        created_at=_iso(5),
+        think_policy="off_first",
+        think_from=5,
+        think_after=120,
     )
     store.update_run("b", started_at=_iso(5))
     assert switch.tick() == ""  # retry: thinking on, the 120 s limit is not reached yet
     assert flag.read_text() == "on"
     store.update_run("b", started_at=_iso(5))
     store.create_run(
-        run_id="c", kind="run", session_id="s6", claude_session_id="s6", role="worker", model="m", provider="local",
-        cwd="/w", input="TASK T006: y", status="running", created_at=_iso(5), think_policy="", think_from=0, think_after=-1,
+        run_id="c",
+        kind="run",
+        session_id="s6",
+        claude_session_id="s6",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="TASK T006: y",
+        status="running",
+        created_at=_iso(5),
+        think_policy="",
+        think_from=0,
+        think_after=-1,
     )
     store.update_run("c", started_at=_iso(5))
     store.update_run("b", status="completed", finished_at=_iso(1))
-    switch.tick()  # T6 asks for nothing and the defaults have no policy: the old behaviour (marker cleared, thinking on)
+    # T6 asks for nothing and the defaults have no policy: the old behaviour
+    # (marker cleared, thinking on)
+    switch.tick()
     assert flag.read_text() == "on"
 
 
@@ -163,13 +257,23 @@ def test_thinking_is_off_during_a_compaction(tmp_path: Path) -> None:
     switch = ThinkSwitch(store, flag, 3600)
     _prompt_run(store, "w", "s1", "completed", 600, 400, "TASK T001: x")
     store.create_run(
-        run_id="cmp", kind="compact", session_id="s1", claude_session_id="s1", role="worker", model="m", provider="local",
-        cwd="/w", input="/compact", status="running", created_at=_iso(30),
+        run_id="cmp",
+        kind="compact",
+        session_id="s1",
+        claude_session_id="s1",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="/compact",
+        status="running",
+        created_at=_iso(30),
     )
     store.update_run("cmp", started_at=_iso(30))
     assert switch.tick() == "off" and flag.read_text() == "off"
     assert switch.tick() == ""
-    # the compaction ends and the Worker resumes: the old rule turns thinking back on (no policy here)
+    # the compaction ends and the Worker resumes: the old rule turns thinking
+    # back on (no policy here)
     store.update_run("cmp", status="completed", finished_at=_iso(1))
     _prompt_run(store, "w2", "s1", "running", 5, None, "RESUME TASK T001: x")
     assert switch.tick() == "on" and flag.read_text() == "on"
@@ -178,7 +282,11 @@ def test_thinking_is_off_during_a_compaction(tmp_path: Path) -> None:
 def test_task_number_is_read_from_the_whole_prompt(tmp_path: Path) -> None:
     from claude_runner.runs import task_number
 
-    long_prompt = "You are a local coding Worker.\n" + "rules " * 1500 + "\nTASK T010: Patch script for main workflow\nObjective: x"
+    long_prompt = (
+        "You are a local coding Worker.\n"
+        + "rules " * 1500
+        + "\nTASK T010: Patch script for main workflow\nObjective: x"
+    )
     assert task_number(long_prompt) == 10
     assert task_number("RESUME TASK T009: x") == 9
     assert task_number("no task here") == 0
@@ -188,12 +296,23 @@ def test_task_number_is_read_from_the_whole_prompt(tmp_path: Path) -> None:
     flag.write_text("on")
     switch = ThinkSwitch(store, flag, 3600, policy=True, policy_from_task=10)
     store.create_run(
-        run_id="a", kind="run", session_id="s10", claude_session_id="s10", role="worker", model="m", provider="local",
-        cwd="/w", input=long_prompt, status="running", created_at=_iso(30), think_task=task_number(long_prompt),
+        run_id="a",
+        kind="run",
+        session_id="s10",
+        claude_session_id="s10",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input=long_prompt,
+        status="running",
+        created_at=_iso(30),
+        think_task=task_number(long_prompt),
     )
     store.update_run("a", started_at=_iso(30))
     # the head of the prompt (600 chars) does not name the task; the stored number does
     assert switch.tick() == "off" and flag.read_text() == "off"
+
 
 class _Events:
     """Stand-in for EventLog: a directory with <run_id>.jsonl files and a recorder of the notes."""
@@ -241,13 +360,35 @@ def test_step_limit_from_the_run_wins_and_zero_disables(tmp_path: Path) -> None:
     events = _Events(tmp_path / "events")
     switch = ThinkSwitch(store, flag, 0, events, policy=True, policy_from_task=1, after_steps=1000)
     store.create_run(
-        run_id="a", kind="run", session_id="s4", claude_session_id="s4", role="worker", model="m", provider="local",
-        cwd="/w", input="TASK T004: x", status="completed", created_at=_iso(900), think_policy="off_first", think_from=1,
+        run_id="a",
+        kind="run",
+        session_id="s4",
+        claude_session_id="s4",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="TASK T004: x",
+        status="completed",
+        created_at=_iso(900),
+        think_policy="off_first",
+        think_from=1,
     )
     store.update_run("a", started_at=_iso(900), finished_at=_iso(600))
     store.create_run(
-        run_id="b", kind="run", session_id="s4", claude_session_id="s4", role="worker", model="m", provider="local",
-        cwd="/w", input="TASK T004: x", status="running", created_at=_iso(60), think_policy="off_first", think_from=1,
+        run_id="b",
+        kind="run",
+        session_id="s4",
+        claude_session_id="s4",
+        role="worker",
+        model="m",
+        provider="local",
+        cwd="/w",
+        input="TASK T004: x",
+        status="running",
+        created_at=_iso(60),
+        think_policy="off_first",
+        think_from=1,
         think_after_steps=10,
     )
     store.update_run("b", started_at=_iso(60))
@@ -277,14 +418,42 @@ def test_pulse_parsing_and_cycle() -> None:
     assert parse_pulse("pulse:50:10:1") == (50, 10, 1)
     assert parse_pulse("pulse") == (25, 10, 1)
     assert parse_pulse("pulse:30,5,0") == (30, 5, 0)
-    assert parse_pulse("pulse:x") is None and parse_pulse("off_first") is None and parse_pulse("pulse:10:0:1") is None
-    assert [n for n in range(80) if pulse_thinking(n, 50, 10, 1)] == list(range(50, 60))  # one pulse: calls 51..60, then off for good
-    assert [n for n in range(40) if pulse_thinking(n, 10, 5, 0)] == [10, 11, 12, 13, 14, 25, 26, 27, 28, 29, 35, 36, 37, 38, 39][:10]  # repeats for ever
+    assert (
+        parse_pulse("pulse:x") is None
+        and parse_pulse("off_first") is None
+        and parse_pulse("pulse:10:0:1") is None
+    )
+    assert [n for n in range(80) if pulse_thinking(n, 50, 10, 1)] == list(
+        range(50, 60)
+    )  # one pulse: calls 51..60, then off for good
+    assert [n for n in range(40) if pulse_thinking(n, 10, 5, 0)] == [
+        10,
+        11,
+        12,
+        13,
+        14,
+        25,
+        26,
+        27,
+        28,
+        29,
+        35,
+        36,
+        37,
+        38,
+        39,
+    ][:10]  # repeats for ever
 
 
 def test_variants_alternate_by_task_number() -> None:
     policy = "pulse:50:10:1|off|off_first"
-    assert [variant_for(policy, n) for n in (1, 2, 3, 4, 5)] == ["pulse:50:10:1", "off", "off_first", "pulse:50:10:1", "off"]
+    assert [variant_for(policy, n) for n in (1, 2, 3, 4, 5)] == [
+        "pulse:50:10:1",
+        "off",
+        "off_first",
+        "pulse:50:10:1",
+        "off",
+    ]
     assert variant_for("off_first", 7) == "off_first" and variant_for("", 3) == ""
 
 
@@ -333,9 +502,20 @@ def test_variant_off_never_thinks_and_variant_per_task(tmp_path: Path) -> None:
 
 
 def test_retry_start_parsing() -> None:
-    assert parse_pulse("pulse:25:10:1:r8") == (25, 10, 1) and start_think("pulse:25:10:1:r8", True) == 8 and start_think("pulse:25:10:1:r8", False) == 0
-    assert start_think("pulse:25:10:1:f6:r8", False) == 6 and start_think("pulse:25:10:1:f6:r8", True) == 8
-    assert start_think("pulse:25:10:1", True) == 0 and start_think("off", False) == 0 and parse_pulse("pulse:r5") == (25, 10, 1)
+    assert (
+        parse_pulse("pulse:25:10:1:r8") == (25, 10, 1)
+        and start_think("pulse:25:10:1:r8", True) == 8
+        and start_think("pulse:25:10:1:r8", False) == 0
+    )
+    assert (
+        start_think("pulse:25:10:1:f6:r8", False) == 6
+        and start_think("pulse:25:10:1:f6:r8", True) == 8
+    )
+    assert (
+        start_think("pulse:25:10:1", True) == 0
+        and start_think("off", False) == 0
+        and parse_pulse("pulse:r5") == (25, 10, 1)
+    )
     assert parse_pulse("pulse:30:5:0:f8:r8") == (30, 5, 0)
 
 
@@ -348,7 +528,9 @@ def test_a_retry_thinks_through_the_review_first_then_follows_the_cycle(tmp_path
     events.steps("a", 40)
     _prompt_run(store, "b", "s9", "running", 60, None, "TASK T009: x (retry)")
     flag.write_text("off")
-    assert switch.tick() == "on" and flag.read_text() == "on"  # call 1 of the retry: thinks about the review
+    assert (
+        switch.tick() == "on" and flag.read_text() == "on"
+    )  # call 1 of the retry: thinks about the review
     assert "review analysis" in events.notes[-1][1]["reason"]
     events.steps("b", 3)  # 3 calls made: the analysis is over
     assert switch.tick() == "off"
@@ -365,9 +547,13 @@ def test_a_first_attempt_plans_with_thinking_when_the_variant_asks(tmp_path: Pat
     switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1:f3")
     _prompt_run(store, "a", "s8", "running", 60, None, "TASK T008: x")
     flag.write_text("off")
-    assert switch.tick() == "on" and "planning" in events.notes[-1][1]["reason"]  # call 1: thinks about the plan
+    assert (
+        switch.tick() == "on" and "planning" in events.notes[-1][1]["reason"]
+    )  # call 1: thinks about the plan
     events.steps("a", 3)
-    assert switch.tick() == "off"  # the plan is made: without thinking, the cycle counts from call 4
+    assert (
+        switch.tick() == "off"
+    )  # the plan is made: without thinking, the cycle counts from call 4
     events.steps("a", 5)
     assert switch.tick() == "on"  # 8 calls: 3 + 5 without thinking, then the burst
 
