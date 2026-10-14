@@ -41,25 +41,41 @@ them are optional and the stack runs without them.
   three request nodes in the Claude Code Run Manager); `launch_mission.sh` applies it on every start. After adding the three columns to the
   `hermes_config` table (`hermes_config.example.csv` has them) the values take effect for the next Worker run after a workflow restart.
 
-## 2c. Step policy `pulse` and variants for tuning
+## 2c. Step policy (JSON) and variants for tuning
 
 Measured on 326 attempts (`data-tables/ops/think_report.py`): without thinking an attempt that passes does so early (67% under 5 min, 26% at 30-60 min, about 20% after an hour,
-28% after 100 steps), thinking helps most in the 15-60 minute range and not at all after an hour, and as a first attempt it is slower (4x) and not better. So thinking is
-used as a short burst after a stretch without it:
+28% after 100 steps), thinking helps most in the 15-60 minute range and not at all after an hour, and as a whole first attempt it is slower (4x) and not better. The pass share of
+attempts that end within a window of calls falls below 50% at about 22-25 calls (31 for first attempts, 15 for retries). So thinking is used in short stretches.
 
-- `worker_think_policy` = `pulse:O:T:P` (also `.env` `AHAWR_THINK_POLICY`): O model calls without thinking, then T calls with it, then without again; P pulses (0 = the cycle
-  repeats for ever). `pulse` alone = `pulse:25:10:1`: calls 1-25 without thinking, 26-35 with it, 36 on without it.
-- Calls are counted per attempt: from the end of the last completed Worker run (the last review) or from the start of the first attempt; a resume after a failed run belongs
-  to the same attempt. The switch is written when the runner sees the count (every 20 s), so a burst can be a call longer or shorter.
-- A retry can start with thinking: `pulse:25:10:1:r8` makes an attempt after a review think for its first 8 model calls (to work through the review's remarks), then the
-  cycle counts from call 9 (25 calls without thinking, a 10-call burst, then without). The first attempt of a task ignores `r`. The variant belongs to the task, so
-  `pulse:25:10:1|pulse:25:10:1:r8|off` compares retries with and without the thinking start (`think_report.py` section 8 and `think_uplift.py` print the retries by variant).
-- The policy applies to the local Worker from task `worker_think_policy_from_task` on. The prompt prefix stays the same (section 3), so a switch costs only the tail.
-- Variants: `worker_think_policy` may hold several variants separated by `|`; task number n uses variant (n - 1) % count. Variants: `pulse:O:T:P`, `off` (never thinks),
-  `off_first` (section 2b). `pulse:50:10:1|off` compares the burst with no thinking inside one mission; `think_report.py` section 8 groups the attempts by variant.
-  Tasks differ in difficulty, so read the comparison over many tasks and missions, not over one.
-- Parameters to tune: O (when to start thinking; the pass share of attempts that end within a window of calls falls below 50% at about 22-25 calls - 31 for first attempts, 15 for retries - and the share of attempts that reach K calls and later pass levels off at about 30% from 30 calls on), T (the burst length; a thinking retry
-  took 15-25 calls), P (one burst or a repeating cycle).
+`hermes_config.worker_think_policy` (also `.env` `AHAWR_THINK_POLICY`) holds a JSON object (the runner reads it at the start of every Worker run; the workflow lower-cases it, so keep names and
+modes lower-case). Every variant is a timeline of segments counted in model calls of ONE attempt:
+
+```json
+{
+  "variants": [
+    {"name": "plan+pulse", "weight": 2,
+     "first": [["think", 8], ["off", 25], ["think", 10], ["off", null]],
+     "retry": [["think", 8], ["off", 25], ["think", 10], ["off", null]]},
+    {"name": "control", "weight": 1, "first": [["off", null]], "retry": [["off", null]]}
+  ],
+  "from_task": 1
+}
+```
+
+- A segment is `[mode, calls]`: `think` or `off`; `null` calls = until the attempt ends (only the last segment). The example: the first 8 calls think (the plan of the task, or the remarks of the
+  review on a retry), 25 calls without thinking, a 10-call burst, then without.
+- `first` = the first attempt at a task, `retry` = an attempt after a review (a resume after a failed run belongs to the same attempt). One of them missing = a copy of the other; both missing = never thinks.
+- `repeat: true` repeats the timeline when it is over (every segment then needs a number of calls).
+- `weight` (1..20, default 1): the share of tasks. Task n uses the variant at position (n - 1) mod (sum of weights) of the variants laid out by weight, so one mission compares the variants. Tasks differ in
+  difficulty: read the comparison over many tasks and missions.
+- `from_task`: the policy applies from this task number on (default 0 = the workflow's `worker_think_policy_from_task`).
+- Calls are counted per attempt from the end of the last completed Worker run (the last review) or from the start of the first attempt. The flag is written when the runner sees the count
+  (every 20 s), so a segment can be a call longer or shorter. The prompt prefix stays the same (section 3), so a switch costs only the tail.
+- The value is checked before it is stored: `python data-tables/ops/set_think_policy.py policy.json` (`--check` only validates, `--show` prints the stored one). An invalid value that gets in anyway is
+  reported in the runner log and the last valid policy keeps working.
+- The older text forms still work: `off_first` (section 2b) and `pulse:O:T:P[:fN][:rN]` with `|`-separated variants (O calls without thinking, T with, P pulses, 0 = for ever; `fN` / `rN` = N calls of
+  thinking at the start of a first attempt / a retry).
+- What to tune: the lengths of the segments (when to start thinking after the opening stretch, how long the burst is, whether the opening stretch is the same for first attempts and retries) and the weights.
 
 ### Tuning tools (`data-tables/ops`)
 

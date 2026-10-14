@@ -81,6 +81,7 @@ services:
 
     environment:
       - RETRIEVAL_DATA_DIR=/data
+      - MALLOC_ARENA_MAX=2
       - RETRIEVAL_ALLOWED_ROOTS=/workspace,/d
       # sync corpora in the background; a request waits for it at most this long, then answers from the current index
       # (2026-10-13: a request used to wait for the whole sync, 5+ minutes, and the n8n node timed out five times in a row)
@@ -93,8 +94,10 @@ services:
       - RETRIEVAL_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
 
     # 2026-10-13: the Docker VM hung for lack of memory (swap full, PSI 60%); a runaway indexer must be killed alone, not stall the VM
-    mem_limit: 1536m
-    memswap_limit: 1536m
+    # 2026-10-14: 1536m was too little for the working set (ONNX e5 ~0.8 GB + vectors of the 58k-chunk docs corpus ~0.3 GB + request peaks up to 2.7 GB):
+    # the container was OOM-killed on the first search of every start (122 restarts). 2560m with fewer malloc arenas; still a hard cap for a runaway indexer.
+    mem_limit: 2560m
+    memswap_limit: 2560m
     volumes:
       # Workspace Hermes works in, read-only (set AHAWR_WORKSPACE_DIR in .env).
       - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro

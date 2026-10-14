@@ -88,7 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.think_flag_file:  # the workflow may send its own settings per run (hermes_config)
             switch = ThinkSwitch(
                 manager.store, Path(settings.think_flag_file), settings.think_off_after_seconds, manager.events,
-                policy=policy, policy_from_task=settings.think_policy_from_task, after_steps=settings.think_off_after_steps,
+                policy=policy, policy_from_task=settings.think_policy_from_task, after_steps=settings.think_off_after_steps, default_policy=settings.think_policy,
             )
             manager.on_run_start = switch.tick  # the policy applies before the first request of the run, not 20 s later
             manager.think_flag = switch.flag  # the run's first thinking mode goes to its event log (the local price depends on it)

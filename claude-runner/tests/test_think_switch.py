@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from claude_runner.store import Store
-from claude_runner.think_switch import ThinkSwitch, parse_pulse, pulse_thinking, retry_think, variant_for
+from claude_runner.think_switch import ThinkSwitch, parse_pulse, pulse_thinking, start_think, variant_for
 
 
 def _iso(seconds_ago: float) -> str:
@@ -333,8 +333,10 @@ def test_variant_off_never_thinks_and_variant_per_task(tmp_path: Path) -> None:
 
 
 def test_retry_start_parsing() -> None:
-    assert parse_pulse("pulse:25:10:1:r8") == (25, 10, 1) and retry_think("pulse:25:10:1:r8") == 8
-    assert retry_think("pulse:25:10:1") == 0 and retry_think("off") == 0 and parse_pulse("pulse:r5") == (25, 10, 1)
+    assert parse_pulse("pulse:25:10:1:r8") == (25, 10, 1) and start_think("pulse:25:10:1:r8", True) == 8 and start_think("pulse:25:10:1:r8", False) == 0
+    assert start_think("pulse:25:10:1:f6:r8", False) == 6 and start_think("pulse:25:10:1:f6:r8", True) == 8
+    assert start_think("pulse:25:10:1", True) == 0 and start_think("off", False) == 0 and parse_pulse("pulse:r5") == (25, 10, 1)
+    assert parse_pulse("pulse:30:5:0:f8:r8") == (30, 5, 0)
 
 
 def test_a_retry_thinks_through_the_review_first_then_follows_the_cycle(tmp_path: Path) -> None:
@@ -356,7 +358,21 @@ def test_a_retry_thinks_through_the_review_first_then_follows_the_cycle(tmp_path
     assert switch.tick() == "off"
 
 
-def test_the_first_attempt_ignores_the_retry_start(tmp_path: Path) -> None:
+def test_a_first_attempt_plans_with_thinking_when_the_variant_asks(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1:f3")
+    _prompt_run(store, "a", "s8", "running", 60, None, "TASK T008: x")
+    flag.write_text("off")
+    assert switch.tick() == "on" and "planning" in events.notes[-1][1]["reason"]  # call 1: thinks about the plan
+    events.steps("a", 3)
+    assert switch.tick() == "off"  # the plan is made: without thinking, the cycle counts from call 4
+    events.steps("a", 5)
+    assert switch.tick() == "on"  # 8 calls: 3 + 5 without thinking, then the burst
+
+
+def test_the_first_attempt_ignores_the_retry_only_start(tmp_path: Path) -> None:
     store = Store(tmp_path / "r.sqlite")
     flag = tmp_path / "local_thinking"
     events = _Events(tmp_path / "events")

@@ -25,6 +25,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from . import think_policy
 from .store import Store
 
 log = logging.getLogger("claude_runner.think_switch")
@@ -48,7 +49,7 @@ def parse_pulse(variant: str) -> tuple[int, int, int] | None:
     """'pulse:50:10:1' -> (steps without thinking, steps with thinking, number of pulses; 0 = repeat for ever). 'pulse' alone = 25:10:1."""
     if not variant.startswith("pulse"):
         return None
-    numbers = [part for part in re.split(r"[:,; ]+", variant[5:]) if part and not part.startswith("r")]
+    numbers = [part for part in re.split(r"[:,; ]+", variant[5:]) if part and not part.startswith(("r", "f"))]
     try:
         values = [int(part) for part in numbers]
     except ValueError:
@@ -59,10 +60,10 @@ def parse_pulse(variant: str) -> tuple[int, int, int] | None:
     return off, think, pulses
 
 
-def retry_think(variant: str) -> int:
-    """'pulse:25:10:1:r8' -> 8: a retry (an attempt after a review) thinks for its first 8 model calls to work through the review, then follows the
-    cycle counted from call 9. 0 = no such start."""
-    match = re.search(r"[:,; ]r(\d+)", variant)
+def start_think(variant: str, retry: bool) -> int:
+    """'pulse:25:10:1:f8:r8' -> the number of model calls an attempt thinks at its start: f8 = a first attempt (it plans the task), r8 = a retry (it works through
+    the review's remarks); the cycle then counts from the call after that. 0 = no such start."""
+    match = re.search(r"[:,; ]" + ("r" if retry else "f") + r"(\d+)", variant)
     return int(match.group(1)) if match else 0
 
 
@@ -81,6 +82,8 @@ class ThinkSwitch:
         policy: bool = False, policy_from_task: int = 1, after_steps: int = 0, default_policy: str = "",
     ) -> None:
         self.default_policy = default_policy
+        self._json_cache: dict[str, think_policy.Policy | None] = {}
+        self._last_valid_json: think_policy.Policy | None = None
         self.after_steps = after_steps
         self._steps_seen: dict[str, tuple[int, int]] = {}  # run id -> (bytes read, steps counted)
         self.policy = policy
@@ -140,6 +143,18 @@ class ThinkSwitch:
             total += count
         return total
 
+    def _json_policy(self, text: str) -> think_policy.Policy | None:
+        """The parsed JSON policy; a text that does not parse is reported once and the last valid policy keeps working (None when there never was one)."""
+        if text not in self._json_cache:
+            policy, errors = think_policy.parse(text.strip().lower())
+            self._json_cache[text] = policy
+            if policy is not None:
+                self._last_valid_json = policy
+                log.warning("thinking policy loaded: %s", ", ".join(f"{v.name} x{v.weight}" for v in policy.variants))
+            else:
+                log.error("thinking policy is not valid (%s); %s", "; ".join(errors), "the last valid one stays" if self._last_valid_json else "none is applied")
+        return self._json_cache[text] or self._last_valid_json
+
     def _policy_tick(self) -> str | None:
         """Policy 'off first': the first attempt at a task runs without thinking, a retry after a review runs with it
         (and the hour limit counts the retries only). Returns None when no running Worker run falls under the policy."""
@@ -150,8 +165,19 @@ class ThinkSwitch:
             # the task number is stored with the run (from the whole prompt); runs made before that are read from the head of the prompt
             found = re.search(r"TASK T0*(\d+)", run["head"] or "")
             number = int(run.get("think_task") or 0) or (int(found.group(1)) if found else 0)
+            parsed = self._json_policy(policy) if policy.lstrip().startswith("{") else None
+            if policy.lstrip().startswith("{"):
+                if parsed is None:
+                    continue
+                from_task = parsed.from_task or from_task
             if number == 0 or number < from_task:
                 continue
+            if parsed is not None:
+                chosen = parsed.variant_for(number)
+                boundary = self.store.last_completed_worker_finish(run["session_id"], run["run_id"])
+                steps = self._steps(self.store.session_run_ids(run["session_id"], boundary))
+                mode, label = chosen.mode_at(steps, boundary is not None)
+                return self._set("on" if mode == "think" else "off", run, f"policy {chosen.name}: call {steps + 1} ({label})")
             variant = variant_for(policy, number)
             if variant == "off_first":
                 pass
@@ -161,9 +187,9 @@ class ThinkSwitch:
                 # per attempt: the model calls made since the last review (a resume after a failed run belongs to the same attempt)
                 boundary = self.store.last_completed_worker_finish(run["session_id"], run["run_id"])
                 steps = self._steps(self.store.session_run_ids(run["session_id"], boundary))
-                start = retry_think(variant) if boundary is not None else 0  # a retry first thinks through the review
+                start = start_think(variant, boundary is not None)  # a first attempt plans, a retry works through the review
                 think = steps < start or pulse_thinking(steps - start, *pulse)
-                return self._set("on" if think else "off", run, f"pulse {variant}: call {steps + 1}" + (" (review analysis)" if steps < start else ""))
+                return self._set("on" if think else "off", run, f"pulse {variant}: call {steps + 1}" + ((" (review analysis)" if boundary is not None else " (planning)") if steps < start else ""))
             else:
                 continue
             retry_from = self.store.first_completed_worker_finish(run["session_id"], run["run_id"])
