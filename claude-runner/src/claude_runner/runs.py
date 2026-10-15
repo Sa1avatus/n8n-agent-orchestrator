@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import os
 import re
+import shutil
 import signal
 import uuid
 from collections.abc import Callable
@@ -326,6 +327,7 @@ class RunManager:
                 compact=compact,
                 provider=provider,
                 search_first=self.settings.search_first_for(role, provider),
+                memory_rule=role == "worker" and self.settings.proc_data_limit_mb > 0,
             )
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
@@ -361,7 +363,7 @@ class RunManager:
             timed_out = False
             try:
                 proc = await asyncio.create_subprocess_exec(
-                    *cmd,
+                    *self._limited(cmd),
                     cwd=cwd,
                     env=env,
                     stdin=asyncio.subprocess.PIPE,
@@ -432,6 +434,16 @@ class RunManager:
             if state.compact_result:
                 outcome.details["compact_result"] = state.compact_result
             self._finish(run_id, outcome, state)
+
+    def _limited(self, cmd: list[str]) -> list[str]:
+        """The command under ``prlimit --data``: the claude process and everything a Worker
+        starts get MemoryError (a traceback they can act on) instead of an OOM kill when they
+        allocate more than the limit."""
+        limit = self.settings.proc_data_limit_mb
+        prlimit = shutil.which("prlimit") if limit > 0 else None
+        if prlimit is None:
+            return cmd
+        return [prlimit, f"--data={limit * 1024 * 1024}", "--", *cmd]
 
     def _finish(self, run_id: str, outcome: Outcome, state: StreamState | None) -> None:
         self._cancelled.discard(run_id)

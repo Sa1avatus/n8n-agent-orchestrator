@@ -359,6 +359,14 @@ What the local-provider settings do:
 
 **Expectations.** Anthropic does not support running Claude Code on non-Claude models. Quality depends on how reliably the model makes tool calls in long agent sessions. Test a model on a few Worker tasks before relying on it.
 
+## Memory limits for Worker scripts
+
+A Worker runs shell and Python in the container, and a careless script (`bytes()` of a 9 GB model file, `read()` of a huge log) can take all the memory of the Docker VM. Three layers, innermost first:
+
+1. **`prlimit --data`** (`CLAUDE_RUNNER_PROC_DATA_LIMIT_MB`, default 4096): the `claude` process and its children cannot allocate more than this. Python raises `MemoryError` with a traceback, so the Worker sees *where* and rewrites the code to stream; a memory-mapped file (`mmap`, `GGUFReader`) is not counted and still works.
+2. **System prompt rule** (`MEMORY RULE`, Worker role only): tells the model what `MemoryError` / `Killed` / exit 137 mean and how to read big files (mmap, `seek`/`read(n)`, `head -c`, `gguf`).
+3. **`mem_guard.py`**, the backstop: once a second it kills the biggest non-`claude` process when it holds more than `CLAUDE_RUNNER_MEM_GUARD_PROC_MB` of anonymous memory (default 5000) or when the container's anonymous memory passes `CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT` (85) of its limit; a `mem_guard` event with the command goes to the run's log. Set the container limit in `docker-compose.yml` (`mem_limit`, 6g).
+
 ## Development
 
 ```bash

@@ -565,3 +565,43 @@ def test_the_first_attempt_ignores_the_retry_only_start(tmp_path: Path) -> None:
     switch = ThinkSwitch(store, flag, 0, events, default_policy="pulse:5:2:1:r3")
     _prompt_run(store, "a", "s9", "running", 60, None, "TASK T009: x")
     assert switch.tick() == "off" and flag.read_text() == "off"
+
+
+def _calls(events: _Events, run_id: str, commands: list[str], first_step: int = 0) -> None:
+    import json
+
+    with (events.directory / f"{run_id}.jsonl").open("a", encoding="utf-8") as handle:
+        for number, command in enumerate(commands, first_step):
+            event = {"kind": "tool_use", "name": "Bash", "input": {"command": command}}
+            handle.write(json.dumps({**event, "step": number}) + chr(10))
+
+
+def test_repeated_tool_call_turns_thinking_on_and_holds_it(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, loop_repeats=4, loop_hold_steps=3)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T002: x")
+    _calls(events, "a", ["ls", "grep -c layer f", "grep -c layer f", "grep -c layer f"])
+    assert switch.tick() == "" and flag.read_text() == "off"  # only 3 repeats
+    _calls(events, "a", ["grep -c layer f"], first_step=4)
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "loop" in events.notes[-1][1]["reason"]
+    _calls(events, "a", ["cat notes"], first_step=5)  # the model changed course
+    assert switch.tick() == ""  # held for 3 more calls
+    _calls(events, "a", ["ls", "ls", "pwd"], first_step=6)
+    switch.tick()
+    assert switch._loop_hold == {}  # the hold is over
+
+
+def test_loop_detection_off_by_default_and_different_arguments_do_not_count(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T002: x")
+    _calls(events, "a", ["grep a f", "grep b f", "grep c f", "grep d f", "grep e f"])
+    assert ThinkSwitch(store, flag, 0, events, loop_repeats=4).tick() == ""
+    _calls(events, "a", ["x"] * 6, first_step=5)
+    assert ThinkSwitch(store, flag, 0, events).tick() == "" and flag.read_text() == "off"

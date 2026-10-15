@@ -5,6 +5,12 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 
 Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
 
+## 2026-10-15
+
+- Loop guard for the local Worker thinking: the same tool call (name and arguments) 4 times in a row turns thinking on and holds it for 12 more model calls (`CLAUDE_RUNNER_THINK_LOOP_REPEATS`, `CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS`; 0 = off). Seen: 170 identical `grep -c` calls in 11 minutes.
+
+- Worker memory safety. A Worker script that read the 9 GB model file into RAM (anon-rss 7-9 GB, six times in a night) made the Docker VM kernel kill processes and restart the VM. Now: `claude-runner` has `mem_limit: 6g`, `ahawr-retrieval` 4g; the claude process and everything a Worker starts run under `prlimit --data` (`CLAUDE_RUNNER_PROC_DATA_LIMIT_MB`, default 4096), so a script that allocates too much gets a `MemoryError` with a traceback and can fix itself, while a memory-mapped big file still works; the Worker's system prompt carries a MEMORY RULE (stream big files, use `gguf`); `mem_guard.py` is the backstop (kills the biggest process when one holds more than `CLAUDE_RUNNER_MEM_GUARD_PROC_MB`, default 5000, or the container passes `CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT`, default 85, of its limit) and writes a `mem_guard` event to the run log.
+
 ## 2026-10-14 (0.4.0)
 
 - Dashboard: clickable filter values and full-text search. Clicking a status/source/role/model/provider value in the list (or cwd/session in the run header) toggles it in

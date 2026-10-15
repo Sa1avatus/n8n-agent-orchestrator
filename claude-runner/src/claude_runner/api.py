@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from .claude_cli import child_env
 from .config import Settings
 from .handoff import session_digest
+from .mem_guard import MemGuard
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
 from .search import DEFAULT_LIMIT, MAX_LIMIT
@@ -100,6 +101,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 policy_from_task=settings.think_policy_from_task,
                 after_steps=settings.think_off_after_steps,
                 default_policy=settings.think_policy,
+                loop_repeats=settings.think_loop_repeats,
+                loop_hold_steps=settings.think_loop_hold_steps,
             )
             manager.on_run_start = (
                 switch.tick
@@ -108,11 +111,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 switch.flag
             )  # the run's first thinking mode goes to its event log (the local price depends on it)
             switch_task = asyncio.create_task(switch.run())
+        guard_task = None
+        if (
+            settings.mem_guard_proc_mb > 0
+        ):  # kills a Worker process that eats the container's memory (mem_guard.py)
+            guard = MemGuard(
+                manager.store,
+                manager.events,
+                proc_limit_mb=settings.mem_guard_proc_mb,
+                cgroup_percent=settings.mem_guard_cgroup_percent,
+            )
+            guard_task = asyncio.create_task(guard.run())
         try:
             yield
         finally:
             if switch_task is not None:
                 switch_task.cancel()
+            if guard_task is not None:
+                guard_task.cancel()
             await manager.shutdown()
 
     app = FastAPI(title="claude-runner", version="0.4.0", lifespan=lifespan)

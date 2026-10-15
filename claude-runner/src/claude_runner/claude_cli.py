@@ -103,6 +103,18 @@ def _search_first_settings_path(every: int, compact_instructions: str) -> str:
     return str(path)
 
 
+MEMORY_RULE = (
+    "MEMORY RULE: the machine has a hard memory limit. A MemoryError, 'Killed' or exit code"
+    " 137 means your script tried to hold too much in RAM (a whole big file, a huge slice "
+    "or list). Do not retry the same code: read big files (model weights .gguf, logs, "
+    "datasets, archives) in a streaming way - mmap or file.seek()/read(n) of small pieces, "
+    "line-by-line iteration, 'head -c', 'strings', 'grep -a' - and never "
+    "bytes()/read()/list() a whole large file or a slice whose length you have not checked."
+    " For GGUF use the 'gguf' package (GGUFReader, which memory-maps) or an existing dump "
+    "of the tensors if the project has one."
+)
+
+
 def build_command(
     settings: Settings,
     profile: RoleProfile,
@@ -113,6 +125,7 @@ def build_command(
     compact: bool = False,
     provider: ProviderProfile | None = None,
     search_first: bool = False,
+    memory_rule: bool = False,
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
     if settings.live_tokens and not compact:
@@ -136,8 +149,13 @@ def build_command(
             # A smaller tool set shrinks the system prompt (~15k → ~4k tokens), which matters
             # for local models with small context windows.
             cmd += ["--tools", tools]
-        if profile.append_system_prompt:
-            cmd += ["--append-system-prompt", profile.append_system_prompt]
+        appended = chr(10).join(
+            part
+            for part in (profile.append_system_prompt, MEMORY_RULE if memory_rule else "")
+            if part
+        )
+        if appended:
+            cmd += ["--append-system-prompt", appended]
         max_turns = profile.max_turns or settings.max_turns
         if max_turns:
             cmd += ["--max-turns", str(max_turns)]

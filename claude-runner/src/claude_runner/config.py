@@ -396,7 +396,18 @@ class Settings:
     compact_timeout_seconds: int = 600
     think_off_after_seconds: int = 0
     think_off_after_steps: int = 0
+    think_loop_repeats: int = 4
+    think_loop_hold_steps: int = 12
     think_flag_file: str = ""
+    # memory guard (mem_guard.py): kill a process that holds more than this many MB of
+    # anonymous memory (0 = off) or the biggest one when the container passes this share
+    # of its limit
+    mem_guard_proc_mb: int = 5000
+    # data-segment limit (RLIMIT_DATA) of the claude process and everything the Worker
+    # starts: a script that allocates more gets MemoryError with a traceback (it can fix
+    # itself) instead of an OOM kill; a memory-mapped file is not counted. 0 = off
+    proc_data_limit_mb: int = 4096
+    mem_guard_cgroup_percent: int = 85
     think_policy: str = ""
     think_policy_from_task: int = 1
     # Local runs priced as a cloud model by thinking mode (local_pricing.py);
@@ -476,7 +487,12 @@ class Settings:
             compact_timeout_seconds=_int(env, "CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS", 600, 1),
             think_off_after_seconds=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_SECONDS", 0),
             think_off_after_steps=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS", 0),
+            think_loop_repeats=_int(env, "CLAUDE_RUNNER_THINK_LOOP_REPEATS", 4),
+            think_loop_hold_steps=_int(env, "CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS", 12),
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
+            mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
+            proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
+            mem_guard_cgroup_percent=_int(env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", 85),
             think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
             think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
             local_pricing_env={
