@@ -512,3 +512,22 @@ def test_result_placement_rule_in_prompts_keeps_reviewer_read_only(tmp_path: Pat
     joined = " ".join(prof.allowed_tools)
     for word in ("commit", "push", "rm ", "sed", "tee", "make"):
         assert word not in joined
+
+
+def test_child_env_local_runs_get_a_task_independent_prompt_start() -> None:
+    s = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_BASE_URL": "http://litellm:4000",
+            "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_AUTH_TOKEN": "sk-litellm",
+        }
+    )
+    assert s.local_shared_prefix is True
+    local = s.provider("local")
+    env = child_env(local, shared_prefix=True)
+    assert env["CLAUDE_CODE_ATTRIBUTION_HEADER"] == "0"
+    assert env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] == "1"
+    # no provider (the cloud roles) and the switch off: nothing is added
+    assert "CLAUDE_CODE_ATTRIBUTION_HEADER" not in child_env(None, shared_prefix=True)
+    assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in child_env(local)
+    off = Settings.from_env({"CLAUDE_RUNNER_LOCAL_SHARED_PREFIX": "0"})
+    assert off.local_shared_prefix is False

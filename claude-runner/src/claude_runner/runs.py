@@ -337,6 +337,7 @@ class RunManager:
                 model,
                 role=role,
                 local_tool_output_limits=self.settings.local_tool_output_limits,
+                shared_prefix=self.settings.local_shared_prefix,
             )
             if provider is not None and provider.context_probe_url:
                 # the window of the model as llama-server runs it now, not a fixed 65536

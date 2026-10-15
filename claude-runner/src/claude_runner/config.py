@@ -432,6 +432,8 @@ class Settings:
     # until the operator enables them; then they are injected only on the local Worker,
     # per the values measured in docs/cold-prefill.md (Part B, section 3).
     local_tool_output_limits: bool = False
+    # local runs: no billing-header hash and no auto-memory path at the start of the prompt
+    local_shared_prefix: bool = True
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -513,6 +515,7 @@ class Settings:
                 env, "CLAUDE_RUNNER_RETRY_INPUT_CHARS", DEFAULT_RETRY_INPUT_CHARS, minimum=1
             ),
             local_tool_output_limits=_bool(env, "CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS", False),
+            local_shared_prefix=_bool(env, "CLAUDE_RUNNER_LOCAL_SHARED_PREFIX", True),
         )
 
     def profile(self, role: str) -> RoleProfile:

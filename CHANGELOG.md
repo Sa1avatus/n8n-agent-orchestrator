@@ -7,6 +7,8 @@ Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `
 
 ## 2026-10-15
 
+- Local runs get `CLAUDE_CODE_ATTRIBUTION_HEADER=0` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (`AHAWR_LOCAL_SHARED_PREFIX`, default on): the first request of every task started with a per-task hash (char 47) and a working-directory path (char ~2700), so no two tasks shared a prefix; now 85% of it is the same. Measured by capturing the first request of three tasks.
+
 - Loop guard for the local Worker thinking: the same tool call (name and arguments) 4 times in a row turns thinking on and holds it for 12 more model calls (`CLAUDE_RUNNER_THINK_LOOP_REPEATS`, `CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS`; 0 = off). Seen: 170 identical `grep -c` calls in 11 minutes.
 
 - Worker memory safety. A Worker script that read the 9 GB model file into RAM (anon-rss 7-9 GB, six times in a night) made the Docker VM kernel kill processes and restart the VM. Now: `claude-runner` has `mem_limit: 6g`, `ahawr-retrieval` 4g; the claude process and everything a Worker starts run under `prlimit --data` (`CLAUDE_RUNNER_PROC_DATA_LIMIT_MB`, default 4096), so a script that allocates too much gets a `MemoryError` with a traceback and can fix itself, while a memory-mapped big file still works; the Worker's system prompt carries a MEMORY RULE (stream big files, use `gguf`); `mem_guard.py` is the backstop (kills the biggest process when one holds more than `CLAUDE_RUNNER_MEM_GUARD_PROC_MB`, default 5000, or the container passes `CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT`, default 85, of its limit) and writes a `mem_guard` event to the run log.

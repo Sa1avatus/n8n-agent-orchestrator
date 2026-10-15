@@ -167,6 +167,7 @@ services:
       # unchanged until the operator enables it; when on, only the Worker on the local provider
       # gets BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=16000.
       - CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS=${AHAWR_LOCAL_TOOL_OUTPUT_LIMITS:-0}
+      - CLAUDE_RUNNER_LOCAL_SHARED_PREFIX=${AHAWR_LOCAL_SHARED_PREFIX:-1}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).

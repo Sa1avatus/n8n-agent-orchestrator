@@ -206,6 +206,7 @@ def child_env(
     model: str = "",
     role: str = "",
     local_tool_output_limits: bool = False,
+    shared_prefix: bool = False,
 ) -> dict[str, str]:
     """The CLI inherits the container env (model credentials) minus the runner's own settings,
     with the run's provider block on top. A provider with its own endpoint or credential does
@@ -214,7 +215,8 @@ def child_env(
 
     With ``local_tool_output_limits`` the caps from docs/cold-prefill.md Part B are added
     only for the Worker on the local provider; the default settings (flag off) add nothing,
-    so the env every role gets is unchanged."""
+    so the env every role gets is unchanged. With ``shared_prefix`` a run on a custom provider
+    (the local model) gets the two switches that make the start of its prompt task-independent."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_RUNNER_")}
     if provider is not None:
         if provider.isolates_credentials:
@@ -228,6 +230,13 @@ def child_env(
     if local_tool_output_limits and role == "worker" and provider is not None:
         env["BASH_MAX_OUTPUT_LENGTH"] = "12000"
         env["CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS"] = "16000"
+    if shared_prefix and provider is not None:
+        # The start of the prompt must not depend on the task: the billing header carries a hash
+        # of the first message (char 47) and the auto-memory block a path of the working
+        # directory (char ~2700); with both off 85% of the first request is the same for every
+        # task, which is what a prefix cache needs.
+        env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
+        env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     env.setdefault("DISABLE_AUTOUPDATER", "1")
     env.setdefault("CLAUDE_CODE_RESUME_INTERRUPTED_TURN", "1")
     return env
