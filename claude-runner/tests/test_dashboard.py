@@ -368,9 +368,8 @@ def test_dashboard_data_attributes_and_handler(client: TestClient) -> None:
         head_end = text.index('<div class="stats">', head_start)
         head_slice = text[head_start:head_end]
 
-        # --- data-field attributes in the renderList slice
-        for field in ("status", "source", "role", "model", "provider"):
-            assert f'data-field="{field}"' in list_slice, f"data-field={field!r} not in renderList"
+        # --- the list makes no filters: no clickable values and no data-field in renderList
+        assert "data-field" not in list_slice and "fv" not in list_slice
 
         # --- data-field attributes in the renderHead (header builder) slice
         for field in ("status", "source", "role", "model", "provider"):
@@ -387,11 +386,10 @@ def test_dashboard_data_attributes_and_handler(client: TestClient) -> None:
         #     if (!a) { onValueClick(e); return; }
         assert '$("#head").addEventListener("click"' in text
         assert "if (!a) { onValueClick(e); return; }" in text
-        # #list handler:
-        #   $("#list").addEventListener("click", (e) => {
-        #     if (onValueClick(e)) return;
+        # #list handler only selects a run (it never calls onValueClick)
         assert '$("#list").addEventListener("click"' in text
-        assert "if (onValueClick(e)) return;" in text
+        list_handler = text[text.index('$("#list").addEventListener("click"') :][:400]
+        assert "onValueClick" not in list_handler
         # onValueClick itself reads dataset and calls toggleValue:
         assert "el.dataset.field" in text
         assert "el.dataset.value" in text
@@ -436,8 +434,9 @@ def test_dashboard_escaping_in_html(client: TestClient) -> None:
         head_end = text.index('<div class="stats">', head_start)
         head_slice = text[head_start:head_end]
 
-        # renderList: model value (falls back to "") and model in data-value
-        assert 'data-value="${esc(r.model || "")}"' in list_slice
+        # renderList: values are escaped text, no data-value attributes
+        assert "data-value" not in list_slice
+        assert '${esc(r.model || "")}' in list_slice
         # renderHead: model and cwd in data-value
         assert 'data-value="${esc(r.model)}"' in head_slice
         assert 'data-value="${esc(r.cwd)}"' in head_slice

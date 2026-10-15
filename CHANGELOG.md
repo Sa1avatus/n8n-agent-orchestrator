@@ -3,7 +3,13 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.4.0** (claude-runner `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning".
+Version: **0.4.100** (claude-runner `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-15 (0.4.100)
+
+Bug-fix step.
+
+- Fixed: in the dashboard a click on the role, model, provider, status or source in a run card of the left list created a filter, so merely selecting a run could change the filter by accident. The list no longer makes filters; only the values in the header of the open run do (`dashboard.html`, `renderList`; tests in `test_dashboard.py` updated).
 
 ## 2026-10-15
 

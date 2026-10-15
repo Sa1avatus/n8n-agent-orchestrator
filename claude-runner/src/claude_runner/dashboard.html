@@ -414,10 +414,10 @@ function renderList() {
     <div class="item ${r.run_id === S.sel ? "sel" : ""}" data-id="${esc(r.run_id)}">
       <div class="t">${esc(r.kind === "compact" ? "/compact" : r.title || r.run_id)}</div>
       <div class="m"><span class="dot ${esc(r.status)}"></span>
-        <span class="fv" data-field="status" data-value="${esc(r.status)}" title="Filter by status">${esc(r.status)}</span>
-        <span class="src fv ${esc(r.source)}" data-field="source" data-value="${esc(r.source)}" title="Filter by source">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
-        <span class="role fv ${esc(r.role)}" data-field="role" data-value="${esc(r.role)}" title="Filter by role">${esc(r.role)}</span>
-        <span class="fv" data-field="model" data-value="${esc(r.model || "")}" title="Filter by model">${esc(r.model || "")}</span>${r.provider && r.provider !== "hermes" ? `<span class="fv" data-field="provider" data-value="${esc(r.provider)}" title="Filter by provider">${esc(r.provider)}</span>` : ""}
+        <span>${esc(r.status)}</span>
+        <span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
+        <span class="role ${esc(r.role)}">${esc(r.role)}</span>
+        <span>${esc(r.model || "")}</span>${r.provider && r.provider !== "hermes" ? `<span>${esc(r.provider)}</span>` : ""}
         <span>${esc(ago(r.updated_at || r.created_at))}</span></div>
     </div>`).join("") : '<div class="item" style="cursor:default" class="t-mut">No runs yet.</div>';
 }
@@ -507,8 +507,8 @@ $("#fq").addEventListener("input", (e) => {
 $("#fq").addEventListener("keydown", (e) => { if (e.key === "Escape") clearSearch(); });
 $("#fqx").onclick = clearSearch;
 
+// the list never makes filters: only the values in the header of the open run do
 $("#list").addEventListener("click", (e) => {
-  if (onValueClick(e)) return;
   const it = e.target.closest(".item[data-id]");
   if (!it) return;
   // a search-result click remembers the matched event: scroll there once the run opens
