@@ -131,7 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 guard_task.cancel()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.4.100", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.4.200", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

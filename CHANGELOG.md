@@ -3,7 +3,15 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.4.100** (claude-runner `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.4.200** (claude-runner `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-15 (0.4.200)
+
+Bug-fix step (retrieval).
+
+- Fixed: the retrieval lexical query took minutes on large corpora. A task text gives 64 terms joined by OR, which matched every chunk of the corpus (78 232 of 78 232), and `ts_rank_cd` scored them all (median 121 s on `routeweaver-test`; 8 terms 3 s, 16 terms 18 s, 32 terms 54 s). The Postgres store now keeps the rarest terms by document frequency within a budget of 10 000 matched chunks (at least 3, at most 16; frequencies cached for ten minutes). New queries on the largest corpus take 0.4-1.7 s in the lexical stage and about 3-4 s end to end.
+- Fixed: every request waited up to 15 s for a corpus sync that was already running and never finished while files changed. A request that finds a sync running now waits at most 1 s; only the request that starts a sync waits for it.
+- Fixed: the usage metric (`ahawr-retrieval usage`) reported 0 opened files and 0 searches for every profile. The runner API gives a run only a title, so no run was matched to a request; the correlation keys are now taken from the nearest earlier request of the same role (and task id from the title), command words (`grep`, `echo`, `-20;`) are no longer counted as opened files, and `--runner-key` is accepted. Measured 11-15.10: Worker precision 8.6%, recall 16.9%; Reviewer 5.4% and 44%.
 
 ## 2026-10-15 (0.4.100)
 

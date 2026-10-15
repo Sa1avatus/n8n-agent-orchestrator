@@ -673,3 +673,50 @@ def test_usage_report_since_window(tmp_log: RetrievalLog) -> None:
     assert report["worker"]["selected_files"] == 1
     assert report["worker"]["selected_tokens"] == 20
     assert report["worker"]["precision"] == pytest.approx(1.0)
+
+
+def test_enrich_runs_takes_the_keys_from_the_requests_of_the_same_role() -> None:
+    # The runner API gives a run only a title: the Worker's carries the task id, the
+    # Reviewer's does not. Both get the mission and task of the latest earlier request.
+    from ahawr_retrieval.usage import enrich_runs
+
+    requests = [
+        _log_row("r1", 100.0, "worker", "m1", "T004", 10),
+        _log_row("r2", 5000.0, "worker", "m2", "T004", 10),
+        _log_row("r3", 5200.0, "reviewer", "m2", "T004", 10),
+    ]
+    runs = [
+        {"run_id": "W1", "role": "worker", "title": "TASK T004: x", "started_at": 150.0},
+        {"run_id": "W2", "role": "worker", "title": "RESUME TASK T004: x", "started_at": 5100.0},
+        {"run_id": "W3", "role": "worker", "title": "TASK T009: x", "started_at": 5100.0},
+        {"run_id": "R1", "role": "reviewer", "title": "Review: x", "started_at": 5260.0},
+        {"run_id": "R2", "role": "reviewer", "title": "Review: x", "started_at": 9000.0},
+        {"run_id": "K1", "role": "worker", "title": "t", "mission_id": "m9", "task_id": "T1"},
+    ]
+    got = {
+        r["run_id"]: (r.get("mission_id"), r.get("task_id")) for r in enrich_runs(runs, requests)
+    }
+    assert got["W1"] == ("m1", "T004")
+    assert got["W2"] == ("m2", "T004")  # the nearest earlier request of that task
+    assert got["W3"] == (None, None)  # no request of task T009
+    assert got["R1"] == ("m2", "T004")
+    assert got["R2"] == (None, None)  # too long after the last reviewer request
+    assert got["K1"] == ("m9", "T1")  # already has keys
+
+
+def test_usage_counts_opened_files_for_runs_that_only_have_a_title() -> None:
+    from ahawr_retrieval.usage import enrich_runs
+
+    requests = [_log_row("r1", 100.0, "worker", "m1", "T004", 100)]
+    candidates = [_cand("r1", "c1", "ws", "app/parser.py", 30, True)]
+    runs = enrich_runs(
+        [{"run_id": "W1", "role": "worker", "title": "TASK T004: x", "started_at": 110.0}],
+        requests,
+    )
+    events = _events(
+        {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/app/parser.py"}},
+        {"kind": "tool_use", "name": "Bash", "input": {"command": 'ahawr-search "where"'}},
+    )
+    worker = compute_usage(requests, candidates, runs, {"W1": events})["worker"]
+    assert worker["opened_files"] == 1 and worker["precision"] == 1.0
+    assert worker["ahawr_search_calls"] == 1

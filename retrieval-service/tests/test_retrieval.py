@@ -1438,7 +1438,14 @@ def test_background_sync_does_not_block_the_request(
     indexed.indexer.sync = slow_sync  # type: ignore[method-assign]
     indexed.settings.sync_wait_seconds = 0.2
     parser = workspace / "app" / "parser.py"
-    parser.write_text(parser.read_text() + chr(10) + "def apply_discount(total):" + chr(10) + "    return total" + chr(10))
+    parser.write_text(
+        parser.read_text()
+        + chr(10)
+        + "def apply_discount(total):"
+        + chr(10)
+        + "    return total"
+        + chr(10)
+    )
     started = _time.perf_counter()
     response = retrieve(indexed, freshness_mode="sync", cache="bypass")
     elapsed = _time.perf_counter() - started
@@ -1446,10 +1453,25 @@ def test_background_sync_does_not_block_the_request(
     assert any(n.startswith("index_syncing:ws") for n in response.notes)
     assert response.chunks  # answered from the current index
     # a second request does not start a second sync of the same corpus while the first one runs
-    first = indexed._sync_job("ws")
-    assert indexed._sync_job("ws") is first
+    first, created = indexed._sync_job("ws")
+    assert not created  # the first request started it and it is still running
+    again, created_again = indexed._sync_job("ws")
+    assert again is first and not created_again
+    # a request that finds a sync running does not wait for it (1 s at most, here the test cap)
+    indexed.settings.sync_wait_seconds = 30
+    started2 = _time.perf_counter()
+    retrieve(indexed, freshness_mode="sync", cache="bypass")
+    assert _time.perf_counter() - started2 < 10, (
+        "the second request queued up behind the running sync"
+    )
     release.set()
     first.result(timeout=30)
-    after = retrieve(indexed, freshness_mode="sync", query="apply_discount for invoice totals", cache="bypass", task={})
+    after = retrieve(
+        indexed,
+        freshness_mode="sync",
+        query="apply_discount for invoice totals",
+        cache="bypass",
+        task={},
+    )
     assert any(c.symbol == "apply_discount" for c in after.chunks)
     assert not any(n.startswith("index_syncing") for n in after.notes)

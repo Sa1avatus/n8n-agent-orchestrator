@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
@@ -33,7 +34,8 @@ _PRIMARY_KEYS = {
     "rag_mirror_state": ("corpus_id",),
 }
 _INSERT_OR = re.compile(
-    r"^\s*INSERT OR (REPLACE|IGNORE) INTO\s+(\w+)\s*\(([^)]*)\)\s*VALUES\s*\((.*)\)\s*$", re.S | re.I
+    r"^\s*INSERT OR (REPLACE|IGNORE) INTO\s+(\w+)\s*\(([^)]*)\)\s*VALUES\s*\((.*)\)\s*$",
+    re.S | re.I,
 )
 _TERM = re.compile(r'"((?:[^"]|"")*)"')
 _ADVISORY_LOCK = 7_242_001
@@ -102,7 +104,9 @@ def translate(sql: str) -> str:
         columns = [c.strip() for c in cols.split(",")]
         keys = _PRIMARY_KEYS[table]
         updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c not in keys)
-        action = "DO NOTHING" if kind.upper() == "IGNORE" or not updates else f"DO UPDATE SET {updates}"
+        action = (
+            "DO NOTHING" if kind.upper() == "IGNORE" or not updates else f"DO UPDATE SET {updates}"
+        )
         sql = f"INSERT INTO {table}({cols}) VALUES ({values}) ON CONFLICT ({', '.join(keys)}) {action}"
     return sql.replace("%", "%%").replace("?", "%s")
 
@@ -120,6 +124,44 @@ def tsquery_from_match(match_query: str) -> str:
             if word not in terms:
                 terms.append(word)
     return " | ".join(terms)
+
+
+# A task text gives up to 64 terms and an OR of common words matches every chunk of a corpus
+# (78 232 of 78 232 on the largest one), so ts_rank_cd had to score them all: 8 terms 3 s,
+# 16 terms 18 s, 32 terms 54 s, 64 terms over two minutes. Only the rarest terms carry the
+# signal (their document frequency is the inverse of an idf weight), so the query keeps the
+# LEXICAL_MAX_TERMS rarest terms that occur at all: about half a second on the same corpus.
+LEXICAL_MAX_TERMS = 16
+LEXICAL_ROW_BUDGET = (
+    10_000  # chunks the chosen terms may match in total (ts_rank_cd cost grows with it)
+)
+LEXICAL_MIN_TERMS = 3
+_DF_TTL_SECONDS = 600.0
+
+
+def select_rarest_terms(
+    terms: Sequence[str],
+    frequency: dict[str, int],
+    limit: int,
+    row_budget: int = LEXICAL_ROW_BUDGET,
+    min_terms: int = LEXICAL_MIN_TERMS,
+) -> list[str]:
+    """Terms with the lowest document frequency, rarest first, while their frequencies add up to
+    ``row_budget`` chunks (at least ``min_terms``, at most ``limit``). Terms that occur in no
+    chunk (frequency 0) are dropped. Ties keep the order of ``terms`` (identifiers come first)."""
+    present = [(frequency.get(term, 0), index, term) for index, term in enumerate(terms)]
+    present = [item for item in present if item[0] > 0]
+    present.sort()
+    chosen: list[str] = []
+    total = 0
+    for count, _, term in present:
+        if len(chosen) >= limit:
+            break
+        if len(chosen) >= min_terms and total + count > row_budget:
+            break
+        chosen.append(term)
+        total += count
+    return chosen
 
 
 def _clean(params: Sequence[Any] | None) -> list[Any] | None:
@@ -264,6 +306,26 @@ class PgStore(Store):
 
     # ----------------------------------------------------------------- search
 
+    def _document_frequency(self, terms: Sequence[str]) -> dict[str, int]:
+        """Chunks that contain each term (GIN index, cached for ten minutes per term)."""
+        now = time.monotonic()
+        cache = self.__dict__.setdefault("_df_cache", {})
+        out: dict[str, int] = {}
+        for term in terms:
+            hit = cache.get(term)
+            if hit is None or now - hit[0] > _DF_TTL_SECONDS:
+                try:
+                    rows = self._query(
+                        "SELECT count(*) AS n FROM chunks_fts WHERE tsv @@ to_tsquery('english', ?)",
+                        [term],
+                    )
+                    hit = (now, int(rows[0]["n"]))
+                except Exception:  # a term that cannot be parsed matches nothing
+                    hit = (now, 0)
+                cache[term] = hit
+            out[term] = hit[1]
+        return out
+
     def lexical_search(
         self,
         match_query: str,
@@ -275,6 +337,12 @@ class PgStore(Store):
         query = tsquery_from_match(match_query)
         if not query or not corpora or not source_types:
             return []
+        terms = select_rarest_terms(
+            terms := query.split(" | "), self._document_frequency(terms), LEXICAL_MAX_TERMS
+        )
+        if not terms:
+            return []  # none of the terms occurs in the index
+        query = " | ".join(terms)
         sql = (
             "SELECT c.chunk_id AS chunk_id, ts_rank_cd(f.tsv, q.query, 1) AS score "
             "FROM chunks_fts f JOIN chunks c ON c.id = f.id, to_tsquery('english', ?) AS q(query) "

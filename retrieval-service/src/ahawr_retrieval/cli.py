@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -46,6 +47,11 @@ def main(argv: list[str] | None = None) -> int:
         "ahawr-search calls) from the log and the claude-runner API",
     )
     usage.add_argument("--runner-url", required=True, help="claude-runner base URL")
+    usage.add_argument(
+        "--runner-key",
+        default=os.environ.get("RETRIEVAL_RUNNER_API_KEY", ""),
+        help="claude-runner API key (default: $RETRIEVAL_RUNNER_API_KEY; empty = none)",
+    )
     usage.add_argument(
         "--since",
         nargs="?",
@@ -180,7 +186,9 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
 
     log = RetrievalLog(db)
     try:
-        report = await usage_report(log, args.runner_url, args.since, args.profile)
+        report = await usage_report(
+            log, args.runner_url, args.since, args.profile, api_key=args.runner_key
+        )
     except Exception as exc:
         print(f"error: claude-runner not reachable at {args.runner_url}: {exc}", file=sys.stderr)
         return 1

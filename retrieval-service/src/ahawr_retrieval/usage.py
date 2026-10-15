@@ -52,6 +52,47 @@ _VALUE_FLAGS = frozenset(
 )
 
 
+# A run of the runner API carries no mission or task id, only a title ("TASK T004: ...",
+# "RESUME TASK T004: ..." for a Worker, "Review: ..." for a Reviewer). The correlation keys
+# are taken from the request the run belongs to: the latest request of the same role that
+# started before the run (a Worker run of task T004 only from a request of T004).
+WORKER_RUN_GAP_S = 6 * 3600
+REVIEWER_RUN_GAP_S = 600
+_TITLE_TASK = re.compile(r"\bTASK (T\d+)\b")
+
+
+def enrich_runs(runs: list[dict[str, Any]], requests: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Runs with ``mission_id`` / ``task_id`` filled from the matching request (runs that
+    already carry both keys, or find no request, are returned unchanged)."""
+    by_role: dict[str, list[tuple[float, str, str]]] = {}
+    for request in requests:
+        mission, task = request_scope(request)
+        if mission and task:
+            by_role.setdefault(str(request.get("profile") or ""), []).append(
+                (float(request.get("ts") or 0.0), mission, task)
+            )
+    for items in by_role.values():
+        items.sort()
+    out: list[dict[str, Any]] = []
+    for run in runs:
+        if (run.get("mission_id") or run.get("correlation_mission_id")) and (
+            run.get("task_id") or run.get("correlation_task_id")
+        ):
+            out.append(run)
+            continue
+        found = _TITLE_TASK.search(str(run.get("title") or ""))
+        task_id = found.group(1) if found else ""
+        started = _timestamp(run.get("started_at"))
+        best: tuple[float, str, str] | None = None
+        if started is not None:
+            gap = WORKER_RUN_GAP_S if task_id else REVIEWER_RUN_GAP_S
+            for ts, mission, task in by_role.get(str(run.get("role") or ""), []):
+                if ts <= started and started - ts <= gap and (not task_id or task == task_id):
+                    best = (ts, mission, task)
+        out.append({**run, "mission_id": best[1], "task_id": best[2]} if best else run)
+    return out
+
+
 def normalize_path(path: str, corpus_root: str) -> str:
     """``/corpus_root/app/parser.py`` -> ``app/parser.py``.
 
@@ -87,6 +128,9 @@ def _timestamp(value: Any) -> float | None:
         return None
 
 
+_EXTENSION_RE = re.compile(r"[.][A-Za-z0-9]{1,8}$")
+
+
 def _is_flag(token: str) -> bool:
     """A shell flag: ``--`` or ``-X`` where X is a single letter (or ``--flag``)."""
     if token.startswith("--"):
@@ -103,7 +147,12 @@ def _path_arg(token: str) -> str | None:
     flag, redirection target, number, or shell operator."""
     if _is_flag(token) or _REDIRECT_RE.match(token) or _is_number_or_op(token):
         return None
-    return token.strip("'\"")
+    path = token.strip("'\"").rstrip(";")
+    # a file operand has a directory part or an extension; a bare word is a command or a
+    # pattern left over from a loop or a one-liner (`echo`, `grep`, `ls`, `-20;`)
+    if "/" not in path and not _EXTENSION_RE.search(path):
+        return None
+    return path
 
 
 def _split_commands(command: str) -> list[str]:
@@ -450,6 +499,7 @@ async def usage_report(
     runner_url: str,
     since: float | None = None,
     profile: str | None = None,
+    api_key: str = "",
 ) -> dict[str, Any]:
     """Read the retrieval log and the claude-runner API, then compute usage metrics.
 
@@ -462,15 +512,19 @@ async def usage_report(
     candidates = [row for row in log.iter_feature_rows(since) if row["request_id"] in request_ids]
     log.close()
 
-    async with httpx.AsyncClient() as client:
-        runs: list[dict[str, Any]] = []
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with httpx.AsyncClient(headers=headers) as client:
         response = await client.get(f"{runner_url}/v1/runs", params={"limit": "500"})
+        response.raise_for_status()
         runs = response.json().get("runs") or []
+        if since:
+            runs = [r for r in runs if (_timestamp(r.get("started_at")) or 0.0) >= since]
+        runs = enrich_runs(runs, requests)
         run_events: dict[str, list[dict[str, Any]]] = {}
         for run in runs:
             run_id = run.get("run_id")
-            if not run_id:
-                continue
+            if not run_id or not (run.get("mission_id") and run.get("task_id")):
+                continue  # not matched to any request: its events cannot count
             body = (
                 await client.get(f"{runner_url}/v1/runs/{run_id}/events", params={"after": "0"})
             ).json()

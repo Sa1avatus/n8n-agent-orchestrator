@@ -141,6 +141,9 @@ def fts_match_query(query: BuiltQuery) -> str:
     return " OR ".join('"' + term.replace('"', '""') + '"' for term in selected)
 
 
+RUNNING_SYNC_WAIT_SECONDS = 1.0
+
+
 class RetrievalService:
     def __init__(
         self,
@@ -171,18 +174,22 @@ class RetrievalService:
             RagPlatformClient(settings, state=self.store) if settings.rag_configured else None
         )
         self.mirror = RagMirror(self.store, self.rag) if self.rag and settings.rag_mirror else None
-        self._sync_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="sync")
+        self._sync_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="sync"
+        )
         self._sync_jobs: dict[str, concurrent.futures.Future] = {}
         self._sync_jobs_lock = threading.Lock()
 
-    def _sync_job(self, corpus_id: str) -> concurrent.futures.Future:
-        """The running background sync of a corpus, or a new one (never two at once for the same corpus)."""
+    def _sync_job(self, corpus_id: str) -> tuple[concurrent.futures.Future, bool]:
+        """The running background sync of a corpus, or a new one (never two at once for the same
+        corpus); the flag tells whether this call started it."""
         with self._sync_jobs_lock:
             job = self._sync_jobs.get(corpus_id)
             if job is None or job.done():
                 job = self._sync_pool.submit(self._sync_one, corpus_id)
                 self._sync_jobs[corpus_id] = job
-            return job
+                return job, True
+            return job, False
 
     def _sync_one(self, corpus_id: str) -> list[str]:
         """Sync one corpus; returns the degraded reasons (the exceptions of the inline path become reasons)."""
@@ -303,13 +310,22 @@ class RetrievalService:
         mark = time.perf_counter()
         corpora = self._corpora(request.corpora, request.corpus_roots)
         if freshness_mode == "sync" and self.settings.sync_wait_seconds >= 0:
-            jobs = {cid: self._sync_job(cid) for cid, corpus in corpora.items() if corpus.root}
-            done, _ = concurrent.futures.wait(list(jobs.values()), timeout=self.settings.sync_wait_seconds)
+            sync_jobs = {cid: self._sync_job(cid) for cid, corpus in corpora.items() if corpus.root}
+            jobs = {cid: job for cid, (job, _) in sync_jobs.items()}
+            # A request that finds a sync already running does not queue up behind it: on a big
+            # corpus the sync never ends while files change, and every request waited the whole
+            # budget (15 s each). Only the request that starts a sync waits for it.
+            budget = self.settings.sync_wait_seconds
+            if sync_jobs and not any(created for _, created in sync_jobs.values()):
+                budget = min(budget, RUNNING_SYNC_WAIT_SECONDS)
+            done, _ = concurrent.futures.wait(list(jobs.values()), timeout=budget)
             for cid, job in jobs.items():
                 if job in done:
                     degraded.extend(job.result())
                 else:
-                    notes.append(f"index_syncing:{cid}: the sync is still running, answered from the current index")
+                    notes.append(
+                        f"index_syncing:{cid}: the sync is still running, answered from the current index"
+                    )
             corpora = self._corpora(request.corpora, request.corpus_roots)
         elif freshness_mode == "sync":
             for corpus_id, corpus in list(corpora.items()):
