@@ -359,6 +359,11 @@ What the local-provider settings do:
 
 **Expectations.** Anthropic does not support running Claude Code on non-Claude models. Quality depends on how reliably the model makes tool calls in long agent sessions. Test a model on a few Worker tasks before relying on it.
 
+## Thinking of the local Worker: loop guard and a shared prompt start
+
+* **Loop guard.** The same tool call (name and arguments) four times in a row turns thinking on for that run and keeps it on for twelve more model calls (`CLAUDE_RUNNER_THINK_LOOP_REPEATS`, `CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS`; `0` turns it off). Without it a Worker in a "no thinking" phase of the pulse policy can repeat one command for ever (170 identical `grep -c` calls in 11 minutes were seen). The switch is written to the run log as a `thinking_switch` event with the reason `loop`. See `docs/thinking-control.md` for the policies.
+* **Shared prompt start.** Runs on the local provider get `CLAUDE_CODE_ATTRIBUTION_HEADER=0` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (`AHAWR_LOCAL_SHARED_PREFIX`, default `1`). Without them the first request of every task began with a per-task hash (character 47) and a working-directory path (character ~2700), so no two tasks shared a prompt prefix; with them about 85% of the first request is the same for every task. Cloud roles are not changed.
+
 ## Memory limits for Worker scripts
 
 A Worker runs shell and Python in the container, and a careless script (`bytes()` of a 9 GB model file, `read()` of a huge log) can take all the memory of the Docker VM. Three layers, innermost first:

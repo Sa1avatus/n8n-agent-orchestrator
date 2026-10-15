@@ -314,6 +314,8 @@ The repository contains:
 ├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
 ├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
 ├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
+├── AHAWR_Mission_Results.json       # writes the mission_results table (time, cost, speed, cache per mission)
+├── AHAWR_Status_Bot.json            # Telegram status/control bot (see docs/telegram-bot.md)
 ├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
 ├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
 ├── missions.example.csv             # Data Table example: one mission
@@ -321,7 +323,7 @@ The repository contains:
 ├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
-├── docs/                            # retrieval docs, compaction analysis
+├── docs/                            # retrieval, Telegram bot, thinking control, cold-prefill analysis, mission reports
 ├── scripts/                         # helper scripts
 ├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
 ├── .env.example                     # every setting, with comments (copy to .env)

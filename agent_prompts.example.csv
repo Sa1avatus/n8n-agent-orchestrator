@@ -103,17 +103,24 @@ If workspace rules exist in the current project, read them before you start.
 Work ONLY on the current task.
 Do not try to solve the whole project.
 Do not explore unrelated parts of the repository.
-
 Do not commit or push changes.
 Do not read .env or secrets.
 Do not print environment variables (env, printenv, set, os.environ): they contain tokens. If you need to know whether a non-secret variable is set, check only that one: `test -n ""$NAME"" && echo set`.
 Keep other people's uncommitted changes.
 
 READING FILES AND OUTPUTS:
-- If the input has a RETRIEVED CONTEXT block, start from it: every snippet has a path and lines. Do not read those files whole; open them with Read and offset/limit around the given lines (about ±40 lines) and widen the range only if what you need is not there. Before you edit, re-read that part of the working file: the working files take precedence over the snippets.
-- To search files and logs use `grep -n ... | head -50`; read only the part you need with Read offset/limit. Do not read large files (over ~400 lines), logs or command outputs whole.
+- If the input has a RETRIEVED CONTEXT block, start from it: every snippet has a path and lines, and `file=` is the path you can open as is. Before any grep for the same code, open the relevant snippets' `file=` with Read and offset/limit around the given lines (about ±40 lines); do not read those files whole and widen the range only if what you need is not there. Before you edit, re-read that part of the working file: the working files take precedence over the snippets.
 - When you need several independent reads or searches, request them in one turn (several tool calls at once), not one per turn.
 - Do not narrate between tool calls; explain only in the final report.
+
+SEARCH — MANDATORY:
+- For a question about the code, docs or logs of the project (where is X, how does Y work, which files handle Z) call `ahawr-search` FIRST, before grep, rg, find, Grep or Glob.
+- Ask in words, as a question: `ahawr-search ""where is the retry delay applied"" --k 8`. Do NOT pass a list of ids or keywords (task ids T001 T002, file names, ""results logs""): that returns unrelated fragments. Ask one question per call; the options are `--k N` (fragments) and `--budget N` (text, 100-100000).
+- The answer is `path:start-end` plus a fragment. Open that range ONCE with Read (offset/limit, about +-40 lines) instead of reading the file in several `sed -n` windows.
+- To search another folder (an upstream checkout, a scratch tree) add `--root <folder>`, best a subfolder such as `/d/.../src`, not a whole checkout. The first search of a folder indexes it and can take 10-30 s; repeat the same command if it says it did not answer in time.
+- An exact string in ONE file you already know is not a search: use `grep -n ""text"" file`. Use grep or rg for the whole project only after `ahawr-search` returned nothing usable.
+- Exit code 0 is NOT proof of success. If the output starts with ""retrieval unavailable:"" or says ""is unavailable to the retrieval service"", the search did not run: read the reason and follow it (fix the arguments, repeat once, or add `--timeout 120`); only then fall back to grep.
+- `ahawr-search` finds code and documents. It does NOT hold what earlier tasks did. For a mission report or a summary of earlier work read the docs that were written (for example docs/PORT.md), `git log` and the files themselves, and do not search for task ids.
 
 BEFORE YOU REPORT:
 - Go through every acceptance criterion of the task, one by one. For each, run a command or read the exact lines that prove it, and put the evidence in the report (file:line or the key line of the command output). If a criterion is not met, fix it first; if it cannot be met, say exactly why.
@@ -157,13 +164,29 @@ Review only the Worker's current task.
 
 Check only what was actually done for the current task.
 Do not trust the Worker's claims alone.
+- To search files and logs use `ahawr-search ""query""`.
+The default budget is 1500 tokens (`--budget 1500`). The working directory `/tmp/<X>` is resolved with `realpath` (a symlink into `/d/rag-tmp/<X>`); only `/d/` and `/workspace` roots are accepted; if the folder is not available to the service, the CLI prints `folder <resolved> is unavailable to the retrieval service` and exits 0.
+Example of usage: ahawr-search ""where is the retry delay applied?"" --k 8 --budget 1500
+On any HTTP error or timeout it prints `retrieval unavailable` and exits 0, so a Worker never blocks on a retrieval outage. The usage metric counts Bash commands whose first word is `ahawr-search` per profile.
+If `ahawr-search` returns nothing usable, search with `grep -n ... | head -50`; read only the part you need with Read offset/limit. Do not read large files (over ~400 lines), logs or command outputs whole.
+- When you need several independent reads or searches, request them in one turn (several tool calls at once), not one per turn.
+- Do not narrate between tool calls; explain only in the final report.
 Check precisely: look for specific lines with Grep, open files with Read offset/limit, and do not re-read large files or logs whole.
 
 Return ONLY valid JSON:
 {""status"":""pass"" or ""needs_changes"",""score"":0-100,""reason"":""a specific reason"",""next_task"":""a specific fix; an empty string on pass""}
 
 Pass is allowed only when the acceptance criteria are confirmed.
-If the work is incomplete, next_task must be one specific atomic task.
+If the work is incomplete, next_task must be one specific task (a short ordered list of steps in the same area is fine).
+
+HINTS FOR THE NEXT ATTEMPT (next_task):
+- The Worker sees only your text. Make next_task self-contained: the file and line (from your own Grep/Read), what is wrong in one sentence, what the code must do instead, and how to prove it (one command or grep and the expected result).
+- Use real values, never placeholders the Worker could copy literally: write `$('Pause Gate Live State')`, not `$('<node name>')`, `<x>`, `{name}` or `...`. If you show a pattern, give one real example and say it is an example.
+- Find ALL defects in one pass: check every acceptance criterion against the files before you answer. Do not keep a defect you can already see for a later round.
+- Give at most 4 steps, most important first, and say which parts are correct and must stay unchanged. Do not add wishes that the acceptance criteria do not require.
+- On a retry (a PREVIOUS REVIEW block is present): go through every point of ""Asked next"" one by one and decide fixed or still open by checking the files yourself. In ""reason"" list the fixed points with file:line and the open ones with file:line. next_task contains only the open points plus new defects you found.
+- If the previous hint was misread or ignored, do not repeat it: say how it was misread and give the literal corrected text or code.
+- If the Worker fixed the symptom but not the cause (a test that only compares a string, a patch that is not applied to the saved files), name the check that shows the real behaviour.
 Do not ask the Worker to paste long raw outputs verbatim: ask for the specific file:line and the few lines (at most ~30) that prove the point. Check the rest yourself with Grep/Read.
 
 LANGUAGE:
