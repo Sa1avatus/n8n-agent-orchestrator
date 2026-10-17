@@ -3,7 +3,19 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.5.0** (claude-runner `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.5.100** (claude-runner `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-17 (0.5.100)
+
+Bug-fix step (dashboard).
+
+- Fixed: the runs page could not be scrolled to the end of a run. 0.5.0 put the run view into a new `#runview` block inside `#main`; neither was a flex column with `min-height: 0`,
+  so the event ledger grew to its full height (3 900 px and more), and the page (`overflow: hidden`) cut it at the window edge. A run looked frozen at its first minutes while it went on
+  (seen on `TASK T017`: the last visible row was step 5 of 43). `#main` and `#runview` are flex columns with `min-height: 0` again; the ledger scrolls inside the window.
+- Fixed: the polling of one run stopped for good after a drawing error or a request that never answered (the timer was set only after a successful draw). A drawing error is now shown in the
+  header and logged, the polling goes on; every `GET` of the page gives up after 25 s.
+- Fixed: a `#board` link was read as a run filter (`/api/runs?board=` answered 400) and the board tab was left collapsed to a strip when the page was opened on it; the board tab owns its hash now.
+- Added the approved design of the board views as a reference for the next board missions: `claude-runner/docs/board-views-mockup.html`.
 
 ## 2026-10-17 (0.5.0)
 

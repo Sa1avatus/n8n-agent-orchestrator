@@ -104,7 +104,8 @@ mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: va
 @keyframes pulse { 50% { opacity: .25; } }
 
 /* main --------------------------------------------------------------- */
-#main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#runview { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #empty { margin: auto; color: var(--muted); }
 #head { padding: 12px 18px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
 #head h2 { margin: 0; font-size: 15.5px; font-weight: 620; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -383,10 +384,20 @@ function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._h
 const oneLine = (s, n = 400) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 const isActive = (r) => r && (r.status === "running" || r.status === "queued");
 async function getJSON(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || res.status);
-  return body;
+  // a request that never answers must not stop the polling loop for good: give up after 25 s
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || res.status);
+    return body;
+  } catch (e) {
+    if (e && e.name === "AbortError") throw new Error("no answer in 25 s");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------------------------------------------------------------- run list
@@ -654,10 +665,17 @@ async function poll() {
   try { data = await getJSON(`api/runs/${encodeURIComponent(id)}/events?after=${S.next}`); }
   catch (e) { if (id === S.sel) { $("#head").innerHTML = `<div class="errline">${esc(e.message)}</div>`; S.timer = setTimeout(poll, 4000); } return; }
   if (id !== S.sel) return;
-  const grew = data.events.length > 0 || JSON.stringify(data.live) !== JSON.stringify(S.live) || JSON.stringify(data.run) !== JSON.stringify(S.run);
-  S.run = data.run; S.entries = S.entries.concat(data.events); S.next = data.next; S.live = data.live;
-  applyGoto(); // scroll to the matched event once its entry arrived
-  if (grew || isActive(S.run)) render();
+  try {
+    const grew = data.events.length > 0 || JSON.stringify(data.live) !== JSON.stringify(S.live) || JSON.stringify(data.run) !== JSON.stringify(S.run);
+    S.run = data.run; S.entries = S.entries.concat(data.events); S.next = data.next; S.live = data.live;
+    applyGoto(); // scroll to the matched event once its entry arrived
+    if (grew || isActive(S.run)) render();
+  } catch (e) {
+    // a drawing error must not end the polling: the page used to freeze at the last good frame while the run went on
+    console.error("dashboard render failed", e);
+    const h = $("#head");
+    if (h) h.insertAdjacentHTML("afterbegin", `<div class="errline">render failed: ${esc(e.message)}</div>`);
+  }
   S.timer = setTimeout(poll, isActive(S.run) ? 1000 : 8000);
 }
 

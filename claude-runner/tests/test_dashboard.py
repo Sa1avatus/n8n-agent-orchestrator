@@ -1010,3 +1010,27 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
         i_content_rule = style.index("#content {")
         i_media_close = style.rindex("}", 0, i_content_rule)
         assert i_media_close < i_content_rule, "#content rule must follow the last @media close"
+
+
+def test_run_view_layout_chain_lets_the_ledger_scroll() -> None:
+    """0.5.0 wrapped the run view in #runview inside #main: without flex and min-height 0 on both, the ledger grew to its
+    content, body has overflow hidden and the lower part of every run could not be reached."""
+    import re
+    from importlib import resources
+
+    html = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
+    main = re.search(r"^#main \{([^}]*)\}", html, re.M).group(1)
+    runview = re.search(r"^#runview \{([^}]*)\}", html, re.M).group(1)
+    for rule in (main, runview):
+        assert "min-height: 0" in rule and "flex-direction: column" in rule
+    assert "flex: 1" in runview and "display: flex" in runview
+
+
+def test_poll_keeps_running_after_a_drawing_error_and_has_a_request_timeout() -> None:
+    """A render error or a request that never answers used to end the polling for good (the page froze at the last frame)."""
+    from importlib import resources
+
+    html = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
+    poll = html[html.index("async function poll()"):html.index("// ---------------------------------------------------------------- RAG")]
+    assert "catch (e)" in poll and poll.index("catch (e)", poll.index("grew")) < poll.index("S.timer = setTimeout(poll, isActive")
+    assert "AbortController" in html and "25000" in html
