@@ -945,3 +945,68 @@ def test_markdown_covers_every_entry_kind() -> None:
     assert (
         filename({"title": "", "run_id": "hermes:abc"}, "md") == "ahawr-run-untitled-hermes-abc.md"
     )
+
+
+def test_board_static_whitelist_pattern(client: TestClient) -> None:
+    """/static serves board[a-z_]*.{js,css,html} only; anything else is 404."""
+    import re
+
+    pat = re.compile(r"^board[a-z_]*[.](js|css|html)$")
+    # the names the pattern admits (and their media types)
+    assert pat.fullmatch("board.html").group(1) == "html"
+    assert pat.fullmatch("board.js").group(1) == "js"
+    assert pat.fullmatch("board.css").group(1) == "css"
+    assert pat.fullmatch("board_logic.js").group(1) == "js"
+    assert pat.fullmatch("board_queue.js").group(1) == "js"
+    assert pat.fullmatch("board_dnd.js").group(1) == "js"
+    assert pat.fullmatch("board_actions.js").group(1) == "js"
+    assert pat.fullmatch("board_mission.js").group(1) == "js"
+    assert pat.fullmatch("board_mission_save.js").group(1) == "js"
+    assert pat.fullmatch("board_claude_md.js").group(1) == "js"
+    # the names the pattern must refuse
+    for bad in ("dashboard.html", "board.7js", "board.js.map", "boardx", "index.html", "board.html.bak"):
+        assert pat.fullmatch(bad) is None
+    # and the route honours it
+    with dashboard(client) as dash:
+        assert dash.get("/static/board.js").status_code in (200, 404)
+        assert dash.get("/static/board.css").status_code == 200
+        assert dash.get("/static/board.html").status_code == 200
+        assert dash.get("/static/dashboard.html").status_code == 404
+        assert dash.get("/static/board.7js").status_code == 404
+        assert dash.get("/static/index.html").status_code == 404
+        # the tab bar is wired in the main script block of the page
+        page = dash.get("/").text
+        main = page[page.rfind("<script>"):]
+        assert "tabboard" in main and "addEventListener" in main
+        m = page.split("function fromHash")
+        assert len(m) == 2 and "run=" in m[1]
+        # select() writes into #runview (inside #main), so #viewtabs / #boardpane
+        # must live outside #main — proved by the markup positions and by
+        # getElementById("viewtabs") never appearing in any script block.
+        # The three siblings now sit in one flex column, #content.
+        i_content = page.index('id="content"')
+        i_viewtabs = page.index('id="viewtabs"')
+        i_boardpane = page.index('id="boardpane"')
+        i_main = page.index("<main id=\"main\">")
+        i_endmain = page.index("</main>")
+        i_endcontent = page.rindex("</div>")
+        assert i_content < i_viewtabs, "content must be before viewtabs"
+        assert i_content < i_boardpane, "content must be before boardpane"
+        assert i_content < i_main, "content must be before main"
+        assert i_viewtabs < i_boardpane < i_main
+        assert i_main < i_endmain
+        assert i_endmain < i_endcontent, "main must be closed before content"
+        assert "getElementById(\"viewtabs\")" not in page
+        # the run content now goes into #runview, not #main
+        assert '$("#runview").innerHTML' in main
+        i_runview = page.index('id="runview"')
+        assert i_main < i_runview < i_endmain, "runview must be inside #main"
+        assert page.count('id="boardframe"') == 1
+        # the <style> block is syntactically balanced (no rule lost its
+        # closing brace) and the new #content rules sit after the last
+        # @media block's closing brace, not inside it
+        style = page[page.index("<style>"):page.index("</style>")]
+        assert style.count("{") == style.count("}"), "style braces unbalanced"
+        i_content_rule = style.index("#content {")
+        i_media_close = style.rindex("}", 0, i_content_rule)
+        assert i_media_close < i_content_rule, "#content rule must follow the last @media close"

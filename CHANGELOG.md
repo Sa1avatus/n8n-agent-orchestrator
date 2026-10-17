@@ -3,7 +3,37 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.4.200** (claude-runner `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.5.0** (claude-runner `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-17 (0.5.0)
+
+New functions: the mission board in the dashboard, board statistics over HTTP, a retrieval request that never waits for the index sync.
+
+- **Mission board** ("Миссии" tab of the dashboard, `/static/board.html`; mission `ahawr-dashboard-mission-board`, 30 tasks). Missions of the n8n tables as cards in five groups
+  (running, queued, finished, not finished, disabled) with task n of N, attempts, time, tokens, cache share, cost, speed and thinking share; the figures are loaded after the
+  first draw, three cards at a time. Queue cards move with drag-and-drop or "выше/ниже" buttons (a running card is not draggable; the server refuses a stale version with 409).
+  A mission opens as a form "Конфигурация запуска" (name, objective, rules, acceptance criteria, folder, enabled, attempts 3/5/10, models and providers per role, max tasks,
+  Worker thinking policy and `from_task`, retrieval corpora, hints, required files): "Сохранить" shows the diff of the changed fields only, asks to confirm and sends only those
+  fields with the expected version; "Сбросить"; "Скопировать из другой миссии". A CLAUDE.md editor with four templates (large file, where the data is, what not to do, GGUF) shows
+  whether the text goes to the folder or stays in the config. "Новая миссия" takes another mission or a stored template as the pattern. All values are escaped (`esc()`, `textContent`).
+- Board backend `/api/board` (`board_api.py`, `board.py`, `board_pg.py`, `board_plan.py`, `board_ready.py`, `board_stats.py`, `board_think.py`): store interface with an in-memory and a
+  Postgres implementation (schema `board`, role `board_operator`; `claude-runner/docs/board-schema.sql`, `board-role.sql`), server-side guards (a task that ran cannot be edited),
+  optimistic locking, `board.changelog` with rollback, readiness checks, thinking-policy validation and per-variant statistics, mission statistics linked to runs. The dashboard gets
+  the DSN from `DASHBOARD_BOARD_PG_DSN` (docker-compose passes it, `.env` holds it). Documents: `claude-runner/docs/board-*.md`.
+- `remote_manager.py`: the dashboard has no runner database, so the board statistics read runs, events and sessions over the runner HTTP API (finished runs are cached;
+  a finished mission's figures are kept for 10 minutes).
+- Retrieval: `RETRIEVAL_SYNC_WAIT_SECONDS` defaults to 0 (was 15): a request answers at once from the current index and the sync runs in the background (-1 keeps the
+  synchronous mode). The usage metric accepts task ids with a letter suffix (`T013A`).
+- Mission reports (`docs/*mission-report*`) are no longer in the repository; `docs/mission-reports/` is ignored.
+- Checked with Playwright (35 checks on the live dashboard: tabs, groups, statistics, drag-and-drop and buttons, the form, diff and save, 409, CLAUDE.md, templates of a new
+  mission, XSS values, 503, mobile width, dark theme). The check found and fixed before the release: the queue read failed for a version method of the Postgres store (400); table
+  names with capital letters were not quoted (every Postgres call failed); an empty plan of a mission being planned failed the whole list; the board statistics needed a local
+  run manager the dashboard does not have; the cards loaded one by one (about 30 s) and the queue render was replaced by the mission render because the board scripts shared one
+  global scope (each file is wrapped now); text fields were number inputs; the diff listed every list and number field as changed and saved lists as text; the CLAUDE.md editor was
+  never called and failed on a missing file; the new-mission form crashed and was removed by the redraw; the dashboard rewrote a `#board` link into a run filter and left the
+  board pane collapsed to a strip.
+- Known gaps (not in the 30 tasks of the mission): the task cards view of a mission (per-task figures and editing), the thinking-policy statistics and layout preview, the
+  preflight / backup / rollback screens and the queue-to-`real_queue.sh` apply step are in the API but not in the page yet; the board queue table starts empty.
 
 ## 2026-10-15 (0.4.200)
 

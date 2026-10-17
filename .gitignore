@@ -32,6 +32,7 @@ Thumbs.db
 data/ARCHITECTURE_CONTRACT.md
 
 .coverage
+.coverage.*
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -47,3 +48,7 @@ litellm/trace/
 docs/cold-prefill/partB-runner-events/
 docs/cold-prefill/partB-runner.sqlite
 docs/cold-prefill/partB-cache-trace-snapshot.jsonl
+
+# mission reports (local only)
+docs/mission-reports/
+pydeps/

@@ -19,6 +19,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -30,7 +31,8 @@ from fastapi import FastAPI, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from . import export
+from . import board_api, export
+from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
 
@@ -91,12 +93,55 @@ def create_dashboard_app(
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.hosts))
     page = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
 
+    # Board mutation routes (POST/PUT/DELETE under /api/board) require the same
+    # X-AHAWR-Dashboard header as cancel_run; read-only board routes are open.
+    async def board_header_guard(request: Request, call_next):
+        path = request.url.path
+        if (
+            path.startswith("/api/board/")
+            and request.method in ("POST", "PUT", "DELETE")
+            and request.headers.get("x-ahawr-dashboard") != "1"
+        ):
+            return JSONResponse({"error": "missing X-AHAWR-Dashboard header"}, status_code=403)
+        return await call_next(request)
+
+    app.middleware("http")(board_header_guard)
+    board_api.add_board_routes(app, settings)
+    if getattr(app.state, "manager", None) is None:
+        # the board statistics read runs through a RunManager-like object; the dashboard has no
+        # runner database, so it reads the runner over HTTP
+        app.state.manager = RemoteRunManager(settings.runner_url, settings.runner_api_key)
+
     def sources(request: Request) -> list[Any]:
         return [s for s in (request.app.state.runner, request.app.state.hermes) if s]
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
         return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+    # Board static assets: board*.js, board*.css and board*.html (created by
+    # T017-T020). Anything else is 404; a file that does not exist yet is 404
+    # with a short message, so the app still starts.
+    _board_static = re.compile(r"^board[a-z_]*[.](js|css|html)$")
+    _board_media = {
+        "js": "application/javascript",
+        "css": "text/css; charset=utf-8",
+        "html": "text/html; charset=utf-8",
+    }
+
+    @app.get("/static/{name}", response_class=Response)
+    async def board_static(name: str) -> Response:
+        m = _board_static.fullmatch(name)
+        if m is None:
+            return Response("unknown static file", status_code=404)
+        filename = m.group(0)
+        try:
+            body = resources.files("claude_runner").joinpath(filename).read_bytes()
+        except (FileNotFoundError, LookupError):
+            return Response("board static file not found", status_code=404)
+        return Response(
+            body, media_type=_board_media[m.group(1)], headers={"Cache-Control": "no-store"}
+        )
 
     @app.get("/healthz")
     async def healthz(request: Request) -> dict[str, Any]:

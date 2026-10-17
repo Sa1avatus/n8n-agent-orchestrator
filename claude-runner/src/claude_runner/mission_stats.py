@@ -42,6 +42,24 @@ def _run_ids_with_compactions(manager: RunManager, run_ids: list[str]) -> list[d
     return list(runs.values())
 
 
+def token_totals(manager: RunManager, run_ids: list[str]) -> dict[str, int]:
+    """The raw token sums of the runs' steps (``input``, ``output``,
+    ``cache_read`` and ``cache_write``), the figures the mission card shows
+    alongside the derived speed and cache ratio."""
+    totals = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+    runs = _run_ids_with_compactions(manager, run_ids)
+    for run in runs:
+        entries, _ = manager.events.read(run["run_id"], 0)
+        for entry in entries:
+            if entry.get("kind") != "step":
+                continue
+            totals["input"] += int(entry.get("input_tokens") or 0)
+            totals["output"] += int(entry.get("output_tokens") or 0)
+            totals["cache_read"] += int(entry.get("cache_read_tokens") or 0)
+            totals["cache_write"] += int(entry.get("cache_write_tokens") or 0)
+    return totals
+
+
 def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
     minutes = dict.fromkeys(ROLES, 0.0)
     cost = cost_real = 0.0

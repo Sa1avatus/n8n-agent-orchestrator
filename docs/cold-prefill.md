@@ -1334,7 +1334,7 @@ Modified (tracked):
 - `scripts/{patch_main_control_flags.py, patch_status_bot_control.py}` — patch
   scripts
 - `docker-compose.yml`, `.env.example`, `.gitignore`,
-  `docs/mission-report-T013-ru.md` — infra/docs updates
+  `docs/mission-reports/mission-report-T013-ru.md` — infra/docs updates
 
 Untracked new files:
 - `docs/cold-prefill.md` and `docs/cold-prefill/` (Part A/B/C, snapshot)

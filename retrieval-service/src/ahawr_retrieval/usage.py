@@ -58,7 +58,7 @@ _VALUE_FLAGS = frozenset(
 # started before the run (a Worker run of task T004 only from a request of T004).
 WORKER_RUN_GAP_S = 6 * 3600
 REVIEWER_RUN_GAP_S = 600
-_TITLE_TASK = re.compile(r"\bTASK (T\d+)\b")
+_TITLE_TASK = re.compile(r"\bTASK (T\d+[A-Z]*)\b")
 
 
 def enrich_runs(runs: list[dict[str, Any]], requests: list[dict[str, Any]]) -> list[dict[str, Any]]:

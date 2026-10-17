@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from .board_api import add_board_routes
 from .claude_cli import child_env
 from .config import Settings
 from .handoff import session_digest
@@ -85,6 +86,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         manager = RunManager(settings)
         app.state.manager = manager
+        # the board's stats routes read the run data through the manager, so
+        # the board routes must be attached only once the manager exists
+        add_board_routes(app, settings)
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
         switch_task = None
@@ -131,7 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 guard_task.cancel()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.4.200", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.5.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

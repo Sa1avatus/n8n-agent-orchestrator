@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "claude-runner"
-version = "0.4.200"
+version = "0.5.0"
 description = "Hermes-compatible run API (/v1/runs) that executes AHAWR roles with the Claude Code CLI"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,6 +12,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.30,<1",
   "httpx>=0.27,<1",
+  "psycopg[binary]>=3.2,<4",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Header"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --cov=claude_runner --cov-report=term-missing --cov-fail-under=80"
+anyio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.11"

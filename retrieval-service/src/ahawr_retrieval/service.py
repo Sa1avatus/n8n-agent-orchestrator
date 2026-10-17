@@ -322,7 +322,7 @@ class RetrievalService:
             for cid, job in jobs.items():
                 if job in done:
                     degraded.extend(job.result())
-                else:
+                elif self.settings.sync_wait_seconds > 0:
                     notes.append(
                         f"index_syncing:{cid}: the sync is still running, answered from the current index"
                     )

@@ -213,6 +213,12 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   .steprow .info { gap: 8px; }
   #toolbar input[type=search] { width: 120px; }
 }
+/* views: the runs tab and the board tab share #content; select() only
+   writes into #runview inside #main, so the tab bar and the board pane
+   survive */
+#content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#boardpane { flex: 1; min-height: 0; display: flex; }
+#boardframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
 </style>
 </head>
 <body>
@@ -230,7 +236,17 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   </header>
   <nav id="list"></nav>
 </aside>
-<main id="main"><div id="empty">Select a run.</div></main>
+<div id="content">
+<nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Прогоны</button><button id="tabboard" type="button">Миссии</button></nav>
+<div id="boardpane" hidden>
+  <iframe id="boardframe" title="Миссии" hidden></iframe>
+</div>
+<main id="main">
+<div id="runview">
+<div id="empty">Select a run.</div>
+</div>
+</main>
+</div>
 <script>
 (function () {
   const KEY = "ahawr-dashboard-theme";
@@ -245,7 +261,17 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
     try { v === "auto" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch (e) { /* ignore */ }
   }
   let cur = read() === "light" || read() === "dark" ? read() : "auto";
-  const apply = (v) => { if (v === "auto") el.removeAttribute("data-theme"); else el.setAttribute("data-theme", v); };
+  const apply = (v) => {
+    if (v === "auto") el.removeAttribute("data-theme"); else el.setAttribute("data-theme", v);
+    // the board iframe is same-origin: mirror the theme onto its document too
+    try {
+      const doc = document.getElementById("boardframe") && document.getElementById("boardframe").contentDocument;
+      if (doc && doc.documentElement) {
+        if (v === "auto") doc.documentElement.removeAttribute("data-theme");
+        else doc.documentElement.setAttribute("data-theme", v);
+      }
+    } catch (_) { /* iframe not loaded yet */ }
+  };
   b.textContent = "Theme: " + cur[0].toUpperCase() + cur.slice(1);
   b.setAttribute("data-theme", cur);
   b.setAttribute("aria-label", "Theme: " + cur[0].toUpperCase() + cur.slice(1));
@@ -381,12 +407,14 @@ function onValueClick(e) {
 function urlFilter() {
   try {
     const h = location.hash || "";
+    if (h.startsWith("#board")) return {};  // the board tab owns this hash, it is not a run filter
     const i = h.indexOf("#run=");
     const body = i >= 0 ? h.slice(0, i) : h.slice(1);
     return parseFilter(body);
   } catch (e) { return {}; }
 }
 function writeUrl(filter) {
+  if (typeof TAB !== "undefined" && TAB === "board") return;  // the board tab owns the hash
   try {
     const runHash = S.sel ? "#run=" + encodeURIComponent(S.sel) : "";
     history.replaceState(null, "", "#" + filterToQuery(filter) + runHash);
@@ -577,8 +605,9 @@ function applyGoto() {
 function select(id) {
   if (S.sel === id) { applyGoto(); return; }
   Object.assign(S, { sel: id, run: null, entries: [], next: 0, live: null, pick: null, model: null });
+  setTab("runs"); // a run deep link always opens the Прогоны tab
   writeUrl(S.filter);
-  $("#main").innerHTML = `<section id="head"></section>
+  $("#runview").innerHTML = `<section id="head"></section>
     <div id="toolbar"><label><input type="checkbox" id="o-think" ${S.show.thinking ? "checked" : ""}> thinking</label>
       <label><input type="checkbox" id="o-sys" ${S.show.system ? "checked" : ""}> system rows</label>
       <input type="search" id="o-q" placeholder="Search" value="${esc(S.q)}"></div>
@@ -993,11 +1022,52 @@ function toolPayload(e) {
 }
 
 // ---------------------------------------------------------------- start
+// #content holds the tab bar, the board pane and #main in one flex column
+// (layout unchanged from the original flex row); select() only writes into
+// #runview inside #main, so the tab bar and the board pane survive. The hash
+// picks which view is visible: #board... shows the board, anything else the
+// runs list.
+const boardframe = document.getElementById("boardframe");
+function boardFrameUrl() { return "/static/board.html" + (location.hash || "#board"); }
+let TAB = "runs";
+function setTab(name) {
+  const runs = name === "runs";
+  TAB = name;
+  const mainEl = document.getElementById("main");
+  if (mainEl) mainEl.hidden = !runs;  // the runs column would otherwise squeeze the board pane to a strip
+  const tabruns = document.getElementById("tabruns");
+  const tabboard = document.getElementById("tabboard");
+  const pane = document.getElementById("boardpane");
+  if (tabruns) tabruns.classList.toggle("on", runs);
+  if (tabboard) tabboard.classList.toggle("on", !runs);
+  if (pane) pane.hidden = runs;
+  if (boardframe) {
+    if (!runs && !boardframe.src) boardframe.src = boardFrameUrl();
+    boardframe.hidden = runs;
+  }
+}
+function syncTab() { setTab((location.hash || "").startsWith("#board") ? "board" : "runs"); }
+document.getElementById("tabruns").addEventListener("click", () => {
+  if ((location.hash || "").startsWith("#board")) history.replaceState(null, "", location.pathname);
+  setTab("runs");
+});
+document.getElementById("tabboard").addEventListener("click", () => {
+  location.hash = "#board";
+  syncTab();
+});
+window.addEventListener("hashchange", syncTab);
+// later hash changes are forwarded into the iframe; the board script re-routes
+// from its own location.hash when the document reloads
+window.addEventListener("hashchange", () => {
+  const doc = boardframe && boardframe.contentDocument;
+  if (doc && doc.defaultView) doc.defaultView.location.hash = location.hash;
+});
 function fromHash() { const m = location.hash.match(/run=([^&]+)/); if (m) select(decodeURIComponent(m[1])); }
 window.addEventListener("hashchange", fromHash);
 (async () => {
   const f = urlFilter();
   if (Object.keys(f).length) S.filter = f;
+  syncTab();  // before loadRuns/select rewrite the hash: a #board link opens the board
   renderTags();
   await loadRuns();
   fromHash();

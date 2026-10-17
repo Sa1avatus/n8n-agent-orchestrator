@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AHAWR Миссии</title>
+<script>
+(function () {
+  try {
+    const t = localStorage.getItem("ahawr-dashboard-theme");
+    const el = document.documentElement;
+    if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
+    else el.removeAttribute("data-theme"); // Auto
+  } catch (e) { /* keep Auto */ }
+  window.addEventListener("storage", (e) => {
+    if (e.key !== "ahawr-dashboard-theme" || !e.newValue) return;
+    try {
+      const t = e.newValue;
+      const el = document.documentElement;
+      if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
+      else el.removeAttribute("data-theme");
+    } catch (_) { /* ignore */ }
+  });
+})();
+</script>
+<link rel="stylesheet" href="/static/board.css">
+</head>
+<body>
+<div id="board">
+  <div id="boardbar"><a href="/">Прогоны</a></div>
+  <div id="boardstate">Loading the board…</div>
+</div>
+<script src="/static/board_logic.js"></script>
+<script src="/static/board_queue.js"></script>
+<script src="/static/board_dnd.js"></script>
+<script src="/static/board_actions.js"></script>
+<script src="/static/board_mission.js"></script>
+<script src="/static/board_mission_save.js"></script>
+<script src="/static/board_claude_md.js"></script>
+<script src="/static/board.js"></script>
+</body>
+</html>

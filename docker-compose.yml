@@ -85,7 +85,7 @@ services:
       - RETRIEVAL_ALLOWED_ROOTS=/workspace,/d
       # sync corpora in the background; a request waits for it at most this long, then answers from the current index
       # (2026-10-13: a request used to wait for the whole sync, 5+ minutes, and the n8n node timed out five times in a row)
-      - RETRIEVAL_SYNC_WAIT_SECONDS=${RETRIEVAL_SYNC_WAIT_SECONDS:-15}
+      - RETRIEVAL_SYNC_WAIT_SECONDS=${RETRIEVAL_SYNC_WAIT_SECONDS:-0}
       # index store: empty = the SQLite file in /data (default); a postgresql:// DSN = PostgreSQL (database retrieval in ahawr-postgres)
       - RETRIEVAL_DATABASE_URL=${RETRIEVAL_DATABASE_URL:-}
       - RETRIEVAL_DATABASE_SCHEMA=${RETRIEVAL_DATABASE_SCHEMA:-retrieval}
@@ -222,6 +222,7 @@ services:
     # Only what the dashboard needs (not the whole .env).
     environment:
       - DASHBOARD_RUNNER_URL=http://claude-runner:8700
+      - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
       - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
       # Empty HERMES_API_URL= turns the Hermes source off.
       - DASHBOARD_HERMES_URL=${HERMES_API_URL-http://host.docker.internal:8642}

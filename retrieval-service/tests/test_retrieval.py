@@ -1475,3 +1475,30 @@ def test_background_sync_does_not_block_the_request(
     )
     assert any(c.symbol == "apply_discount" for c in after.chunks)
     assert not any(n.startswith("index_syncing") for n in after.notes)
+
+
+def test_zero_sync_wait_never_waits_and_starts_the_sync_in_background(
+    indexed: RetrievalService, workspace: Path
+) -> None:
+    """sync_wait_seconds == 0: the request answers at once from the current index, the sync still runs, no note."""
+    import threading
+    import time as _time
+
+    release = threading.Event()
+    real_sync = indexed.indexer.sync
+
+    def slow_sync(corpus_id, paths=None):
+        release.wait(timeout=30)
+        return real_sync(corpus_id, paths)
+
+    indexed.indexer.sync = slow_sync  # type: ignore[method-assign]
+    indexed.settings.sync_wait_seconds = 0
+    started = _time.perf_counter()
+    response = retrieve(indexed, freshness_mode="sync", cache="bypass")
+    assert _time.perf_counter() - started < 5, "the request waited for the sync"
+    assert response.chunks
+    assert not any(n.startswith("index_syncing") for n in response.notes)
+    job, created = indexed._sync_job("ws")
+    assert not created, "the first request must have started the background sync"
+    release.set()
+    job.result(timeout=30)
