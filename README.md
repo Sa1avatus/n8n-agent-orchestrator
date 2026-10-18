@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.5.500** | **7** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.5.510** | **7** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -758,7 +758,7 @@ The Hermes workflows are unchanged, and both variants can be imported side by si
 
 The stack is versioned as a whole by the `claude-runner` package version (`claude-runner/pyproject.toml`, also reported by the runner API); the workflow files keep their own names (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial claude-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md). **0.4.0** (2026-10-14): the Telegram control bot actually works (webhook fed by `tg_relay.py`, command menu with descriptions), the retrieval index is in PostgreSQL with a memory limit, the slot cache is kept by a container (`slot_keeper.py` in `llama-cpp-dashboard`), the Reviewer can read the llama.cpp tree, the local run cost is computed as a Haiku/Sonnet equivalent, and the cold-prefill profile and mission report are in `docs/`. See `CHANGELOG.md`.
 
-**Version numbers (rule since 2026-10-15).** The number is `X.Y.Z`. A step with new functions raises the middle number by 1 (`0.4.0` → `0.5.0`, the last number goes back to 0). A release that only fixes bugs raises the last number by 100 (`0.5.0` → `0.5.100` → `0.5.200`). Every push adds an entry to `CHANGELOG.md` with the version and the changes; for a bug-fix step the entry lists the fixed bugs. The number is changed in `claude-runner/pyproject.toml` and in `claude-runner/src/claude_runner/api.py` (`FastAPI(version=...)`), together with the changelog.
+**Version numbers (rule since 2026-10-15).** The number is `X.Y.Z`. A step with new functions raises the middle number by 1 (`0.4.0` → `0.5.0`, the last number goes back to 0). A release that only fixes bugs raises the last number by 100 (`0.5.0` → `0.5.100` → `0.5.200`). A small change (documentation, wording, a small fix) raises the last number by 10 (`0.5.100` → `0.5.110`), a tiny one (a typo, a link, one line) by 1 (`0.5.110` → `0.5.111`). Every push adds an entry to `CHANGELOG.md` with the version and the changes; for a bug-fix step the entry lists the fixed bugs. The number is changed in `claude-runner/pyproject.toml` and in `claude-runner/src/claude_runner/api.py` (`FastAPI(version=...)`), together with the changelog.
 
 ### Why it works this way: constraints and workarounds
 

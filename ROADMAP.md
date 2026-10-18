@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.5.500 · October 18, 2026** — Queue, task cards and plan editing on the dashboard — next release 0.6.0
+**0.5.510 · October 18, 2026** — Queue, task cards and plan editing on the dashboard — next release 0.6.0
 
-Current version: **0.5.500** · Missions completed: **7** · Missions in the queue: **14** · Next milestone: **0.6.0 · 1.0.0**
+Current version: **0.5.510** · Missions completed: **7** · Missions in the queue: **14** · Next milestone: **0.6.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost, moves missions in the queue and edits the plan through guarded routes. Board views, i18n and the guards that watch the runner are being built now.
 
