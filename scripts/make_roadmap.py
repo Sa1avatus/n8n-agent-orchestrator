@@ -83,7 +83,9 @@ def render_readme(d):
 
 
 def counts_from_queue():
-    """(completed, in_queue) from data-tables/ops/real_queue.sh and the Live State table; None when the ops folder is not there."""
+    """(completed, still in the queue) of the missions of THIS repository: the queue in data-tables/ops/real_queue.sh, filtered by the working
+    directory of the mission (other projects such as JSA or the llama.cpp fork are not counted), and the Live State table.
+    None when the ops folder is not there."""
     ops = os.path.join(ROOT, "data-tables", "ops")
     if not os.path.exists(os.path.join(ops, "pgdb.py")):
         print("--from-queue needs data-tables/ops (operator machine): the numbers stay as they are in docs/roadmap.json")
@@ -93,8 +95,13 @@ def counts_from_queue():
     from pgdb import q
     text = open(os.path.join(ops, "real_queue.sh"), encoding="utf-8").read().replace(CRLF, NL)
     queue = re.search(r'^QUEUE="([^"]*)"', text, re.M).group(1).split()
+    here = os.path.normcase(os.path.normpath(ROOT))
+    mine = {r["mission_id"] for r in q('select mission_id, working_directory from "data_table_user_hYAqO52ZGHXxhhHX"')
+            if os.path.normcase(os.path.normpath(str(r["working_directory"]).replace("/", os.sep))) == here}
     done = {r["state_key"] for r in q('select state_key from "data_table_user_Yn9lOhVhQ9gFymNs" where status = %s', ["completed"])}
-    return sum(1 for m in queue if m in done), len(queue)
+    own = [m for m in queue if m in mine]
+    left = [m for m in own if m not in done]
+    return len(own) - len(left), len(left)   # completed, still in the queue (running one included)
 
 
 def main():
