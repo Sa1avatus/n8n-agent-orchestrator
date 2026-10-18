@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 330" role="img" aria-label="How a mission runs">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a3a9b8"/></marker>
+    <marker id="g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5cc98b"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6aa8ff"/></marker>
+  </defs>
+  <rect width="1100" height="330" rx="18" fill="#17191f"/>
+  <rect x="1" y="1" width="1098" height="328" rx="17" fill="none" stroke="#33384a"/>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <g font-size="17" font-weight="700">
+      <rect x="30" y="40" width="170" height="64" rx="14" fill="#20232b" stroke="#6aa8ff"/><text x="115" y="68" fill="#6aa8ff">Mission</text><text x="115" y="90" fill="#a3a9b8" font-size="13" font-weight="400">queue · rules · criteria</text>
+      <rect x="260" y="40" width="170" height="64" rx="14" fill="#20232b" stroke="#ffb454"/><text x="345" y="68" fill="#ffb454">Architect</text><text x="345" y="90" fill="#a3a9b8" font-size="13" font-weight="400">plan of tasks</text>
+      <rect x="490" y="40" width="170" height="64" rx="14" fill="#20232b" stroke="#ff8a3d"/><text x="575" y="68" fill="#ff8a3d">Worker</text><text x="575" y="90" fill="#a3a9b8" font-size="13" font-weight="400">one task, edits code</text>
+      <rect x="720" y="40" width="170" height="64" rx="14" fill="#20232b" stroke="#5cc98b"/><text x="805" y="68" fill="#5cc98b">Reviewer</text><text x="805" y="90" fill="#a3a9b8" font-size="13" font-weight="400">score and verdict</text>
+      <rect x="930" y="40" width="140" height="64" rx="14" fill="#20232b" stroke="#a3a9b8"/><text x="1000" y="68" fill="#eceef3">Result</text><text x="1000" y="90" fill="#a3a9b8" font-size="13" font-weight="400">report · Telegram</text>
+    </g>
+    <g stroke="#a3a9b8" stroke-width="2.5" fill="none">
+      <path d="M200 72H258" marker-end="url(#a)"/><path d="M430 72H488" marker-end="url(#a)"/><path d="M660 72H718" marker-end="url(#a)"/>
+      <path d="M890 72H928" stroke="#5cc98b" marker-end="url(#g)"/>
+      <path d="M805 104V150H575V106" stroke="#6aa8ff" stroke-dasharray="6 5" marker-end="url(#b)"/>
+    </g>
+    <text x="690" y="142" fill="#6aa8ff" font-size="13" font-weight="600">retry with the review</text>
+    <text x="910" y="30" fill="#5cc98b" font-size="12" font-weight="600">all tasks done</text>
+    <g font-size="15" font-weight="700">
+      <rect x="30" y="200" width="200" height="90" rx="14" fill="#20232b" stroke="#33384a"/><text x="130" y="228" fill="#eceef3">n8n</text><text x="130" y="252" fill="#a3a9b8" font-size="13" font-weight="400">workflows · Data Tables</text><text x="130" y="272" fill="#a3a9b8" font-size="13" font-weight="400">Postgres state</text>
+      <rect x="260" y="200" width="230" height="90" rx="14" fill="#20232b" stroke="#33384a"/><text x="375" y="228" fill="#eceef3">claude-runner</text><text x="375" y="252" fill="#a3a9b8" font-size="13" font-weight="400">/v1/runs · Claude Code CLI</text><text x="375" y="272" fill="#a3a9b8" font-size="13" font-weight="400">sessions · compaction</text>
+      <rect x="520" y="200" width="230" height="90" rx="14" fill="#20232b" stroke="#33384a"/><text x="635" y="228" fill="#eceef3">Models</text><text x="635" y="252" fill="#a3a9b8" font-size="13" font-weight="400">local Qwen via LiteLLM + llama.cpp</text><text x="635" y="272" fill="#a3a9b8" font-size="13" font-weight="400">Haiku · Sonnet · Opus (Anthropic)</text>
+      <rect x="780" y="200" width="290" height="90" rx="14" fill="#20232b" stroke="#33384a"/><text x="925" y="228" fill="#eceef3">Dashboard · Retrieval · Bot</text><text x="925" y="252" fill="#a3a9b8" font-size="13" font-weight="400">runs, mission board, statistics</text><text x="925" y="272" fill="#a3a9b8" font-size="13" font-weight="400">hybrid search · Telegram control</text>
+    </g>
+    <g stroke="#33384a" stroke-width="2" stroke-dasharray="3 4"><path d="M130 200V160H575"/><path d="M375 200V160"/><path d="M635 200V160"/><path d="M925 200V160H805"/></g>
+    <text x="550" y="318" fill="#a3a9b8" font-size="13">the loop runs in n8n; every role runs through claude-runner</text>
+  </g>
+</svg>

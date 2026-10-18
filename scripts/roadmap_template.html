@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root{--bg:#17191f;--card:#20232b;--text:#eceef3;--muted:#a3a9b8;--line:#33384a;--brand:#ffb454;--done:#5cc98b;--cur:#ff8a3d;--next:#6aa8ff;--later:#7c8499;--chip:#2a2e39;--shadow:0 8px 26px rgba(0,0,0,.5);--hero1:#2b2113;--hero2:#59350f;--gold:#ffc766;--bar1:#2a2e39;--bar2:#3a3f4f;--herotext:#fff7ea}
+@media (prefers-color-scheme:light){:root{--bg:#f6f3ee;--card:#fffdf9;--text:#22252d;--muted:#6a6f7d;--line:#e2dccf;--brand:#b8650a;--done:#2e9d57;--cur:#e2701f;--next:#3b82f6;--later:#8b92a6;--chip:#f0ebe0;--shadow:0 6px 22px rgba(80,60,20,.12);--hero1:#3a2a14;--hero2:#7a4a12;--gold:#ffc766;--bar1:#2a2e39;--bar2:#3a3f4f;--herotext:#fff7ea}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header.bar{background:linear-gradient(90deg,var(--bar1),var(--bar2));color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;font-weight:600}
+header.bar button{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:8px;padding:6px 12px;cursor:pointer}
+main{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+h1{margin:10px 0 4px;text-align:center;color:var(--brand);font-size:clamp(28px,5vw,42px)}
+.sub{text-align:center;color:var(--muted);font-size:19px;margin:0 0 18px}
+.lead{max-width:760px;margin:0 auto 18px;text-align:center;color:var(--muted)}
+.note{max-width:760px;margin:0 auto 26px;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:12px 16px;color:var(--muted);font-size:15px}
+.note b{color:var(--brand)}
+.hero{background:linear-gradient(135deg,var(--hero1),var(--hero2));border:2px solid var(--gold);border-radius:20px;padding:30px 22px;color:var(--herotext);text-align:center;box-shadow:var(--shadow)}
+.hero h2{margin:0;font-size:clamp(24px,4.4vw,36px)}
+.hero .date{color:var(--gold);font-size:clamp(18px,3vw,26px);font-weight:700;margin:6px 0}
+.hero .tag{font-weight:600;margin:6px 0 20px;opacity:.95}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.stat{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:12px}
+.stat small{display:block;color:var(--gold);font-weight:700;font-size:13px}
+.stat b{font-size:22px}
+.hero p{margin:18px auto 0;max-width:760px;font-size:14.5px;font-style:italic;opacity:.92}
+h2.sec{text-align:center;color:var(--brand);font-size:clamp(26px,4vw,36px);margin:46px 0 26px}
+.tl{position:relative;padding:6px 0}
+.tl:before{content:"";position:absolute;left:50%;top:0;bottom:0;width:3px;background:var(--line);transform:translateX(-50%)}
+.row{display:grid;grid-template-columns:1fr 54px 1fr;align-items:center;margin:0 0 26px}
+.row .when{color:var(--muted);font-size:14px}
+.row.l .when{grid-column:3;grid-row:1;text-align:left;padding-left:14px}
+.row.l .card{grid-column:1;grid-row:1}
+.row.r .when{grid-column:1;grid-row:1;text-align:right;padding-right:14px}
+.row.r .card{grid-column:3;grid-row:1}
+.node{grid-column:2;grid-row:1;justify-self:center;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;color:#10131a;font-size:18px;z-index:1;box-shadow:0 0 0 5px var(--bg)}
+.done .node{background:var(--done)}.cur .node{background:var(--cur);animation:pulse 2s infinite}.next .node{background:var(--next)}.later .node{background:var(--later)}
+@keyframes pulse{0%{box-shadow:0 0 0 5px var(--bg),0 0 0 5px rgba(245,158,11,.5)}70%{box-shadow:0 0 0 5px var(--bg),0 0 0 16px rgba(245,158,11,0)}100%{box-shadow:0 0 0 5px var(--bg),0 0 0 5px rgba(245,158,11,0)}}
+.card{background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;cursor:pointer;border:1px solid var(--line);position:relative}
+.cur .card{border:2px solid var(--cur)}
+.card h3{margin:0;font-size:18px;display:flex;justify-content:space-between;gap:10px}
+.card .ver{color:var(--muted);font-size:14px;margin:2px 0 8px}
+.badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;border-radius:6px;padding:2px 8px;color:#fff;margin-right:6px;vertical-align:middle}
+.b-cur{background:var(--cur)}.b-next{background:var(--next)}.b-later{background:var(--later)}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:1px 10px;font-size:12.5px;color:var(--muted)}
+.prog{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+.bar{height:8px;border-radius:99px;background:var(--chip);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--done)}
+.cur .bar i{background:var(--cur)}.next .bar i{background:var(--next)}.later .bar i{background:var(--later)}
+.nextup{margin-top:8px;font-size:13px;font-weight:700;color:var(--cur)}
+.chev{transition:transform .2s;color:var(--muted)}.open .chev{transform:rotate(180deg)}
+.detail{display:none;margin-top:12px;border-top:1px dashed var(--line);padding-top:10px;font-size:14.5px}
+.open .detail{display:block}
+.detail ul{list-style:none;margin:6px 0 0;padding:0}.detail li{padding:3px 0}
+.detail li.ok:before{content:"✅ "}.detail li.go:before{content:"🔄 "}.detail li.todo:before{content:"⬜ "}
+.legend{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;color:var(--muted);font-size:13px;margin:-6px 0 22px}
+.legend span:before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;background:var(--c)}
+.open-q{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:16px 20px;max-width:900px;margin:0 auto}
+.open-q li{margin:6px 0}
+footer{text-align:center;color:var(--muted);font-size:13px;margin-top:40px}
+@media (max-width:760px){
+  .tl:before{left:21px}
+  .row{grid-template-columns:42px 1fr;gap:0 12px}
+  .row .node{grid-column:1;grid-row:1 / span 2;align-self:start}
+  .row.l .card,.row.r .card{grid-column:2;grid-row:2}
+  .row.l .when,.row.r .when{grid-column:2;grid-row:1;text-align:left;padding:0 0 4px}
+}
+</style>
+</head>
+<body>
+<header class="bar"><span>AHAWR</span><span style="font-weight:400;opacity:.85">roadmap</span></header>
+<main>
+  <h1>{{TITLE}}</h1>
+  <p class="sub">{{SUBTITLE}}</p>
+  <p class="lead">{{LEAD}}</p>
+  <div class="note"><b>Note:</b> {{NOTE}}</div>
+
+  <section class="hero">
+    <h2>{{HERO_TITLE}}</h2>
+    <div class="date">{{HERO_DATE}}</div>
+    <div class="tag">{{HERO_TAG}}</div>
+    <div class="stats">{{HERO_STATS}}</div>
+    <p>{{HERO_TEXT}}</p>
+  </section>
+
+  <h2 class="sec">Development Timeline</h2>
+  <div class="legend"><span style="--c:var(--done)">Done</span><span style="--c:var(--cur)">In progress</span><span style="--c:var(--next)">Next</span><span style="--c:var(--later)">Later</span></div>
+  <div class="tl" id="tl"></div>
+
+  <h2 class="sec">Open Decisions</h2>
+  <div class="open-q"><ul>{{OPEN}}</ul></div>
+  <footer>{{FOOTER}}</footer>
+</main>
+<script>
+var D=__DATA__;
+var PHASES=D.phases;
+var ICON={done:"✓",cur:"⟳",next:"➜",later:"…"};
+var tl=document.getElementById("tl");
+PHASES.forEach(function(p,i){
+  var pct=p.m[1]?Math.round(p.m[0]*100/p.m[1]):0;
+  var side=i%2?"r":"l";
+  var row=document.createElement("div");row.className="row "+side+" "+p.s;
+  var badge=p.s==="cur"?'<span class="badge b-cur">CURRENT</span>':p.s==="next"?'<span class="badge b-next">NEXT</span>':p.s==="later"?'<span class="badge b-later">LATER</span>':"";
+  row.innerHTML='<div class="when">'+p.when+'</div><div class="node">'+ICON[p.s]+'</div>'+
+   '<div class="card"><h3><span>'+badge+p.t+'</span><span class="chev">⌄</span></h3>'+
+   '<div class="ver">'+p.v+' &middot; '+p.d+'</div>'+
+   '<span class="chip">'+p.m[0]+'/'+p.m[1]+' milestones</span> <span class="chip">click to view details</span>'+
+   '<div class="prog"><span>Progress</span><span>'+pct+'%</span></div><div class="bar"><i style="width:'+pct+'%"></i></div>'+
+   (p.next?'<div class="nextup">'+p.next+'</div>':'')+
+   '<div class="detail"><ul>'+p.items.map(function(x){return '<li class="'+x[0]+'">'+x[1]+'</li>'}).join("")+'</ul></div></div>';
+  row.querySelector(".card").addEventListener("click",function(){this.classList.toggle("open")});
+  tl.appendChild(row);
+});
+</script>
+</body>
+</html>

@@ -1,6 +1,75 @@
-# n8n Agent Orchestrator (AHAWR)
+<p align="center"><img src="docs/img/banner.svg" alt="AHAWR: Agentic Hub for Automation Workflow Routing" width="100%"></p>
 
-**English** | [Русская версия](#русская-версия)
+<p align="center">
+Long coding missions on local and cloud models: planned, built, reviewed and watched.<br>
+An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a dashboard shows everything.
+</p>
+
+<p align="center">
+<a href="CHANGELOG.md">Changelog</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="#installation">Installation</a> · <a href="#documentation">Documentation</a> · <a href="#русская-версия">Русская версия</a>
+</p>
+
+<!-- stats:start -->
+| Version | Missions completed | Executors | Models in use |
+|:---:|:---:|:---:|:---:|
+| **0.5.200** | **9** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+<!-- stats:end -->
+
+## How a mission runs
+
+<p align="center"><img src="docs/img/flow.svg" alt="Mission, Architect, Worker, Reviewer, Result; n8n, claude-runner, models, dashboard" width="100%"></p>
+
+1. A **mission** (objective, rules, acceptance criteria, working folder) is taken from the queue.
+2. The **Architect** splits it into small tasks.
+3. The **Worker** does one task at a time, in its own session, with context from the retrieval service.
+4. An independent **Reviewer** scores the result: pass, or retry with the review as feedback.
+5. After the last task the result is reported (dashboard, Telegram). State is kept in Postgres, so an interruption resumes where it stopped.
+
+## What is inside
+
+| Part | What it does |
+|---|---|
+| **n8n workflows** | the orchestration loop, retries, persistence, Telegram notices and a status bot |
+| **`claude-runner`** | runs the Claude Code CLI headless behind a `/v1/runs` API; sessions, compaction, thinking policy |
+| **LiteLLM + llama.cpp** | the local model (Qwen3.8-27B) with prompt cache and speculative decoding |
+| **Retrieval service** | hybrid search over the workspace for the Worker and the Reviewer |
+| **Dashboard** | live runs, cost, cache and speed, click filters, full-text search, **mission board** |
+| **Mission board** | queue cards with drag and drop, task cards, plan editing, per-task statistics |
+
+## Where we are
+
+<!-- status:start -->
+| | |
+|---|---|
+| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) |
+| 🔄 **Now** | board views, task cards, operations control → **0.6.0** |
+| ➡️ **Next** | guards inside the dashboard · adaptive split · Worker attempt chains · **1.0.0: Codex as the second executor** |
+<!-- status:end -->
+
+Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [docs/roadmap.html](docs/roadmap.html).
+
+## Quick start
+
+```powershell
+git clone https://github.com/Sa1avatus/n8n-agent-orchestrator.git
+cd n8n-agent-orchestrator
+Copy-Item .env.example .env   # fill in the keys; never commit .env
+docker compose up -d
+```
+
+Then import the workflows, create the Data Tables and run the first mission: [step by step](#installation).
+
+## Documentation
+
+| | |
+|---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | every release, newest first |
+| [`ROADMAP.md`](ROADMAP.md) | milestones and the mission queue |
+| [`claude-runner/README.md`](claude-runner/README.md) | the runner, its API and settings |
+| [`claude-runner/docs/`](claude-runner/docs) | mission board design, data model, operations |
+| [`docs/`](docs) | thinking control, cold prefill, compaction, Telegram, retrieval |
+
+## About
 
 An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **0.3.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
 

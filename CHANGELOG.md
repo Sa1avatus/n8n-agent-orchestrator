@@ -3,7 +3,17 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.5.100** (claude-runner `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.5.200** (claude-runner `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-18 (0.5.200)
+
+Documentation step (no runtime code changed; the version number moves by 100 as for a fix release because the middle number is kept for the 0.6.0 board views release).
+
+- `README.md` has a new front page: banner, quick links, the figures table, the mission flow diagram, what is inside, where we are, quick start and the documentation index. The old introduction is kept under "About"; the rest of the README is unchanged. The figures table and the "where we are" block are generated.
+- New `ROADMAP.md` and `docs/roadmap.html` (a self-contained page: Graphite-and-Amber, light variant for light systems, timeline with expandable milestones). Both are built from `docs/roadmap.json` by `scripts/make_roadmap.py` (`--check` tells when they are stale, `--from-queue` fills the mission counts from the queue on the operator machine); the page template is `scripts/roadmap_template.html`.
+- Images `docs/img/banner.svg` and `docs/img/flow.svg` (no external fonts).
+- Rule: every project keeps a `ROADMAP.md`, updated in the same commit as the changelog entry.
+- Telegram task notice: "(out of N)" instead of "(from N)" in `AHAWR_v13.json`, `AHAWR_v13_ClaudeCode.json` and the patch scripts that re-apply the wording at every mission start.
 
 ## 2026-10-17 (0.5.100)
 

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-label="AHAWR">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#17191f"/><stop offset="1" stop-color="#2b2113"/></linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffc766"/><stop offset="1" stop-color="#ff8a3d"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#ffffff" stroke-opacity=".05"/></pattern>
+  </defs>
+  <rect width="1200" height="300" rx="22" fill="url(#bg)"/>
+  <rect width="1200" height="300" rx="22" fill="url(#grid)"/>
+  <rect x="1.5" y="1.5" width="1197" height="297" rx="21" fill="none" stroke="#ffc766" stroke-opacity=".55" stroke-width="3"/>
+  <text x="70" y="140" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="108" font-weight="800" fill="url(#amber)" letter-spacing="4">AHAWR</text>
+  <text x="74" y="188" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="26" fill="#eceef3">Agentic Hub for Automation Workflow Routing</text>
+  <text x="74" y="228" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="19" fill="#a3a9b8">Architect plans · Worker builds · Reviewer scores · n8n drives the loop</text>
+  <g transform="translate(790 70)" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" font-weight="700">
+    <rect x="0" y="0" width="150" height="46" rx="12" fill="#20232b" stroke="#ffb454"/><text x="75" y="29" text-anchor="middle" fill="#ffb454">Architect</text>
+    <rect x="200" y="0" width="150" height="46" rx="12" fill="#20232b" stroke="#ff8a3d"/><text x="275" y="29" text-anchor="middle" fill="#ff8a3d">Worker</text>
+    <rect x="100" y="120" width="150" height="46" rx="12" fill="#20232b" stroke="#5cc98b"/><text x="175" y="149" text-anchor="middle" fill="#5cc98b">Reviewer</text>
+    <path d="M150 23H198" stroke="#a3a9b8" stroke-width="2.5" marker-end="url(#a)"/>
+    <path d="M275 46C275 90 240 100 215 118" fill="none" stroke="#a3a9b8" stroke-width="2.5" marker-end="url(#a)"/>
+    <path d="M100 143C40 143 20 100 60 56" fill="none" stroke="#6aa8ff" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#b)"/>
+    <text x="8" y="112" fill="#6aa8ff" font-size="13" font-weight="600">retry</text>
+    <text x="262" y="112" fill="#5cc98b" font-size="13" font-weight="600">next task</text>
+  </g>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a3a9b8"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#6aa8ff"/></marker>
+  </defs>
+</svg>
