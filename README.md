@@ -6,13 +6,13 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 </p>
 
 <p align="center">
-<a href="CHANGELOG.md">Changelog</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="#installation">Installation</a> · <a href="#documentation">Documentation</a> · <a href="#русская-версия">Русская версия</a>
+<a href="CHANGELOG.md">Changelog</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html"><b>Roadmap page</b></a> · <a href="#installation">Installation</a> · <a href="#documentation">Documentation</a> · <a href="#русская-версия">Русская версия</a>
 </p>
 
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.5.300** | **9** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.5.400** | **9** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
