@@ -43,7 +43,8 @@ def render_html(d):
 
 
 def render_md(d):
-    out = ["# " + d["title"], "", "_" + d["subtitle"] + "_", "", d["lead"], "", "> **Note:** " + d["note"], "",
+    page = ["**Page version:** " + d["page_url"], ""] if d.get("page_url") else []
+    out = ["# " + d["title"], "", "_" + d["subtitle"] + "_", ""] + page + [ d["lead"], "", "> **Note:** " + d["note"], "",
            "## " + d["hero"]["title"], "", "**%s** — %s" % (d["hero"]["date"], d["hero"]["tag"]), "",
            " · ".join("%s: **%s**" % (k, v) for k, v in d["hero"]["stats"]), "", d["hero"]["text"], "", "## Timeline", ""]
     for p in d["phases"]:

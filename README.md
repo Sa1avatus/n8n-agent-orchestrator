@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.5.200** | **9** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.5.300** | **9** | Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -46,7 +46,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 | ➡️ **Next** | guards inside the dashboard · adaptive split · Worker attempt chains · **1.0.0: Codex as the second executor** |
 <!-- status:end -->
 
-Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [docs/roadmap.html](docs/roadmap.html).
+Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [sa1avatus.github.io/n8n-agent-orchestrator](https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html).
 
 ## Quick start
 

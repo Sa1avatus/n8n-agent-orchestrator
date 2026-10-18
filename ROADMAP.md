@@ -2,15 +2,17 @@
 
 _Agentic Hub for Automation Workflow Routing · 2026 – 2027_
 
+**Page version:** https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html
+
 AHAWR runs long coding missions on local and cloud models: an Architect plans, a Worker implements, a Reviewer scores, and n8n drives the loop. This roadmap lists the milestones from the first workflows to version 1.0.
 
 > **Note:** The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.
 
 ## Mission Board Is Live
 
-**0.5.200 · October 18, 2026** — Queue, task cards and plan editing on the dashboard — next release 0.6.0
+**0.5.300 · October 18, 2026** — Queue, task cards and plan editing on the dashboard — next release 0.6.0
 
-Current version: **0.5.200** · Missions completed: **9** · Missions in the queue: **34** · Next milestone: **0.6.0 · 1.0.0**
+Current version: **0.5.300** · Missions completed: **9** · Missions in the queue: **34** · Next milestone: **0.6.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost, moves missions in the queue and edits the plan through guarded routes. Board views, i18n and the guards that watch the runner are being built now.
 
@@ -77,7 +79,7 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Task cards, plan editing, thinking panel, readiness and history (board-ui2)
 - [~] Board views part 1: summary route, project rules, i18n tables (Haiku 5.5)
 - [ ] Board views part 2: smart task ordering, Lanes and Sprint views
-- [x] Roadmap page, ROADMAP.md and the new README (0.5.200)
+- [x] Roadmap page (GitHub Pages), ROADMAP.md and the new README (0.5.200 – 0.5.300)
 - [ ] Release 0.6.0: tests and Playwright checks
 
 ### Reliability and control — Next (Q4 2026)
@@ -118,7 +120,6 @@ after 1.0 · Several missions at once, Hermes parity, JSA projects · 0/6 milest
 - llamacpp-prefill-kernels failed on the faster-prefill task (score 25 after 3 attempts): retry, split or drop.
 - Speed sweep: a GPU power limit of 170 W gives +16% prefill and +22% reasoning speed at 25K context; ngram variant V4 helps copy-heavy work. Nothing is applied yet.
 - Haiku 5.5 vs local Qwen: first attempt on Haiku, retries on the local model is running on the board missions; a full A/B is on hold.
-- Keys to rotate: the Telegram bot token and the retrieval database password.
 - RAG precision stays at 8.6%: the quality mission is queued.
 
 ---
