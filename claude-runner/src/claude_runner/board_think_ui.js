@@ -72,13 +72,12 @@ function thinkEsc(v) {
     .replace(/'/g, "&#39;");
 }
 
-// One same-origin POST helper for this panel (its own name; the thinking
-// routes are pure — no board mutation header).
+// One same-origin POST helper for this panel (every POST under /api/board carries the dashboard header).
 async function thinkPost(url, body) {
   const res = await fetch(url, {
     method: "POST",
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-AHAWR-Dashboard": "1" },
     body: JSON.stringify(body),
   });
   const payload = await res.json().catch(() => ({}));

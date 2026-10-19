@@ -188,6 +188,7 @@ const BUNDLED_EN = {
   "rdst.ok": "ok",
   "rdst.warning": "warning",
   "rdst.error": "error",
+  "h.num": "#",
   "h.id": "ID",
   "h.started": "Started",
   "h.last": "Last activity",

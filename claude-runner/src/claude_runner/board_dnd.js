@@ -84,7 +84,7 @@ async function postMoveQueue(mission_id, to_position) {
   const res = await fetch("/api/board/queue/move", {
     method: "POST",
     cache: "no-store",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-AHAWR-Dashboard": "1" },
     body: JSON.stringify({ mission_id, to_position, expected_version: version }),
   });
   let body = null;
@@ -259,10 +259,13 @@ async function applyMove(missionId, targetId, side) {
 // and writes #boardqueue; then adopt the fresh data and re-attach.
 async function refreshBoard() {
   try {
-    if (typeof BoardQueue === "function") {
-      await BoardQueue();
-    }
     DndState.data = await loadBoardData();
+    // the old queue list is hidden in the Kanban/Lanes/... views: redrawing it only costs requests
+    const inView = typeof location !== "undefined" && /^#board\/view\//.test(location.hash || "");
+    if (typeof BoardQueue === "function" && !inView) {
+      await BoardQueue();
+      DndState.data = await loadBoardData();
+    }
   } catch (e) {
     showState(e.message || t("board.reload_failed"));
     return;

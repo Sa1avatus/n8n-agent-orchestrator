@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.7.300 · October 19, 2026",
+    "date": "0.7.400 · October 19, 2026",
     "tag": "Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0",
     "stats": [
       [
         "Current version",
-        "0.7.300"
+        "0.7.400"
       ],
       [
         "Missions completed",
@@ -268,6 +268,10 @@
         [
           "todo",
           "ahawr-worker-attempt-chain: provider and model per attempt as a setting"
+        ],
+        [
+          "todo",
+          "ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task"
         ],
         [
           "todo",

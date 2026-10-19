@@ -176,6 +176,8 @@ function requeue(controls, ctx) {
   const ordered = queue
     .map((entry) => byId[entry.mission_id])
     .filter((m) => m);
+  // a waiting mission that is not in the queue table yet goes to the end
+  for (const id of Object.keys(byId)) if (!queue.some((e) => e.mission_id === id)) ordered.push(byId[id]);
   const head = col.querySelector("h3");
   col.replaceChildren(
     head,
@@ -203,11 +205,17 @@ function render(body, ctx) {
   const { dnd, actions } = queueModules();
   const controls = { dnd, actions };
   lastCtx = ctx;
+  const known = dnd && dnd.DndState.data && dnd.DndState.data.queue ? dnd.DndState.data.queue : [];
+  const rank = (mission) => {
+    const at = known.findIndex((e) => e.mission_id === mission.mission_id);
+    return at < 0 ? known.length : at;
+  };
+  const byQueue = (list) => (known.length ? list.slice().sort((a, b) => rank(a) - rank(b)) : list);
   queueFailed = false;
   body.append(el("div", { class: "kb" }, COLUMNS.map((key) => column(
     ctx,
     key,
-    missions.filter((mission) => stateOf(mission) === key),
+    key === "q" ? byQueue(missions.filter((mission) => stateOf(mission) === key)) : missions.filter((mission) => stateOf(mission) === key),
     key === "q" ? queued : null,
     controls,
   ))));
@@ -222,6 +230,17 @@ function render(body, ctx) {
   }
 }
 
+// Put the already drawn queued cards in the queue order (the nodes are kept).
+function sortCards(queue, cards) {
+  const rank = (card) => {
+    const at = queue.findIndex((e) => e.mission_id === card.dataset.missionId);
+    return at < 0 ? queue.length : at;
+  };
+  const parent = cards.length ? cards[0].parentNode : null;
+  if (!parent || !queue.length) return;
+  for (const card of cards.slice().sort((a, b) => rank(a) - rank(b))) parent.appendChild(card);
+}
+
 function loadQueueData(controls, cards, ctx) {
   const dnd = controls.dnd;
   if (loadingQueue) return;
@@ -229,6 +248,7 @@ function loadQueueData(controls, cards, ctx) {
   dnd.loadBoardData()
     .then((data) => {
       dnd.DndState.data = data;
+      sortCards(data.queue || [], cards);
       attachQueuedCards(controls, cards);
     })
     .catch(() => {

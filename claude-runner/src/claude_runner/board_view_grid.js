@@ -60,6 +60,7 @@ function projectName(mission) {
 }
 
 const COLUMNS = [
+  { key: "num", label: "h.num", numeric: true, value: (m) => numberOf(m.number) },
   { key: "name", label: "h.mission", value: (m) => String(m.name || m.mission_id).toLowerCase() },
   { key: "id", label: "h.id", value: (m) => String(m.mission_id || "").toLowerCase() },
   { key: "proj", label: "h.project", value: (m) => projectName(m).toLowerCase() },
@@ -126,6 +127,7 @@ function missionRow(ctx, mission) {
     "data-project": (mission.project && mission.project.key) || "",
     "data-search": (name + " " + id).toLowerCase(),
   }, [
+    el("td", { class: "num mono", text: mission.number == null ? "—" : String(mission.number) }),
     el("td", {}, [el("b", { text: name }), el("div", { class: "mono", text: id })]),
     el("td", { class: "mono", text: id }),
     el("td", { text: projectName(mission) }),

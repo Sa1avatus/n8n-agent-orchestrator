@@ -32,7 +32,7 @@ const state = {
 async function postTaskReorder(missionId, body) {
   const res = await fetch("/api/board/missions/" + encodeURIComponent(missionId) + "/tasks/reorder", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json", "X-AHAWR-Dashboard": "1" },
     credentials: "same-origin",
     body: JSON.stringify(body),
   });

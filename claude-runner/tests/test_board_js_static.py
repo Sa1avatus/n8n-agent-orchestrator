@@ -177,3 +177,14 @@ def test_english_and_russian_tables_have_the_same_keys():
     en, ru = en.get("strings", en), ru.get("strings", ru)
     assert sorted(set(en) - set(ru)) == []
     assert sorted(set(ru) - set(en)) == []
+
+
+def test_every_board_mutation_fetch_carries_the_dashboard_header():
+    """dashboard.py rejects POST/PUT/DELETE under /api/board without X-AHAWR-Dashboard (403)."""
+    import re
+    src = Path(__file__).resolve().parent.parent / "src" / "claude_runner"
+    for js in sorted(src.glob("board*.js")):
+        text = js.read_text(encoding="utf-8")
+        for match in re.finditer(r"method:\s*(?:\"(?:POST|PUT|DELETE)\"|method)", text):
+            window = text[match.start(): match.start() + 400]
+            assert "X-AHAWR-Dashboard" in window, f"{js.name}: a mutation fetch without the header"

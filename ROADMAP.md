@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.7.300 · October 19, 2026** — Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0
+**0.7.400 · October 19, 2026** — Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0
 
-Current version: **0.7.300** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.8.0 · 1.0.0**
+Current version: **0.7.400** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.8.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next.
 
@@ -90,6 +90,7 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [ ] ahawr-guards-in-dashboard: all watchers inside the dashboard container
 - [ ] ahawr-cloud-thinking-control: thinking policy for cloud Workers
 - [ ] ahawr-worker-attempt-chain: provider and model per attempt as a setting
+- [ ] ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [ ] ahawr-adaptive-split: plan size gate and automatic split
 - [ ] ahawr-rag-quality: offline evaluation and lexical precision

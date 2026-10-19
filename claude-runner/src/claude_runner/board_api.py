@@ -1201,6 +1201,7 @@ def _build_router() -> APIRouter:
                 group_of[mission_id] = group
         queue_of = {e.mission_id: e.position for e in store.queue()}
         times = store.mission_times()
+        numbers = store.mission_numbers()
         missions: list[dict[str, Any]] = []
         for mission in store.list_missions():
             state_key = mission.state_namespace
@@ -1210,6 +1211,7 @@ def _build_router() -> APIRouter:
             missions.append(
                 {
                     "mission_id": mission.mission_id,
+                    "number": numbers.get(mission.mission_id),
                     "name": mission.name,
                     "state_group": group_of.get(mission.mission_id),
                     "position": queue_of.get(mission.mission_id),

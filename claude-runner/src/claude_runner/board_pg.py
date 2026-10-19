@@ -503,6 +503,10 @@ class PgBoardStore(BoardStore):
         ).fetchall()
         return {r["state_key"]: {"first": _iso(r["first"]), "last": _iso(r["last"])} for r in rows}
 
+    def mission_numbers(self) -> dict[str, int]:
+        rows = self._conn.execute(f"SELECT mission_id, id FROM {_MISSIONS_TABLE}").fetchall()
+        return {r["mission_id"]: int(r["id"]) for r in rows}
+
     def hermes_config(self) -> dict[str, Any]:
         row = self._conn.execute(
             f"SELECT * FROM {_HERMES_TABLE} WHERE profile_id = %s ORDER BY id LIMIT 1",
@@ -837,7 +841,7 @@ class PgBoardStore(BoardStore):
         with self._lock:
             with self._conn.transaction():
                 self._lock_queue()
-                stored = self._READ_VERSION
+                stored = self._queue_version()
                 if expected_version is not None and expected_version != stored:
                     self._conflict("queue", "queue", expected_version, stored)
                 ids = [e.mission_id for e in entries]
@@ -862,6 +866,18 @@ class PgBoardStore(BoardStore):
                 self._READ_VERSION = now()
                 return self._queue_audit("queue set", before)
 
+    def _shift_positions(self, where: str, params: tuple, delta: int) -> None:
+        """Move queue positions by ``delta`` for the rows matching ``where`` without a transient
+        duplicate key: park them as negative numbers first (the primary key is checked per row)."""
+        self._conn.execute(
+            f"UPDATE {_QUEUE_TABLE} SET position = -(position + %s) - 1 WHERE {where}",
+            (delta, *params),
+        )
+        self._conn.execute(
+            f"UPDATE {_QUEUE_TABLE} SET position = -position - 1 "
+            "WHERE position < 0 AND position > -1000000"
+        )
+
     def add_queue(
         self,
         mission_id: str,
@@ -875,7 +891,7 @@ class PgBoardStore(BoardStore):
         with self._lock:
             with self._conn.transaction():
                 self._lock_queue()
-                stored = self._READ_VERSION
+                stored = self._queue_version()
                 if expected_version is not None and expected_version != stored:
                     self._conflict("queue", "queue", expected_version, stored)
                 row = self._conn.execute(
@@ -890,11 +906,7 @@ class PgBoardStore(BoardStore):
                 ).fetchone()["count"]
                 insert_at = n if position is None else max(0, min(position, n))
                 # Shift positions down by one for the affected tail.
-                self._conn.execute(
-                    f"UPDATE {_QUEUE_TABLE} SET position = position + 1 "
-                    "WHERE position >= %s",
-                    (insert_at,),
-                )
+                self._shift_positions("position >= %s", (insert_at,), 1)
                 self._conn.execute(
                     f"INSERT INTO {_QUEUE_TABLE} "
                     "(position, mission_id, enabled, attempts_per_task, "
@@ -911,7 +923,7 @@ class PgBoardStore(BoardStore):
         with self._lock:
             with self._conn.transaction():
                 self._lock_queue()
-                stored = self._READ_VERSION
+                stored = self._queue_version()
                 if expected_version is not None and expected_version != stored:
                     self._conflict("queue", "queue", expected_version, stored)
                 row = self._conn.execute(
@@ -925,12 +937,13 @@ class PgBoardStore(BoardStore):
                     f"DELETE FROM {_QUEUE_TABLE} WHERE mission_id = %s",
                     (mission_id,),
                 )
-                # Renumber positions contiguously.
+                # Renumber positions contiguously (park them as negatives first: per-row key check).
+                self._conn.execute(f"UPDATE {_QUEUE_TABLE} SET position = -position - 1")
                 self._conn.execute(
                     f"WITH ordered AS (SELECT position, mission_id "
                     f"FROM {_QUEUE_TABLE} ORDER BY position) "
                     f"UPDATE {_QUEUE_TABLE} q SET position = o.new_position "
-                    f"FROM (SELECT row_number() OVER (ORDER BY position) - 1 AS new_position, "
+                    f"FROM (SELECT row_number() OVER (ORDER BY -position) - 1 AS new_position, "
                     f"mission_id FROM {_QUEUE_TABLE} ORDER BY position) o "
                     f"WHERE q.mission_id = o.mission_id"
                 )
@@ -943,7 +956,7 @@ class PgBoardStore(BoardStore):
         with self._lock:
             with self._conn.transaction():
                 self._lock_queue()
-                stored = self._READ_VERSION
+                stored = self._queue_version()
                 if expected_version is not None and expected_version != stored:
                     self._conflict("queue", "queue", expected_version, stored)
                 row = self._conn.execute(
@@ -960,16 +973,14 @@ class PgBoardStore(BoardStore):
                 old_position = int(row["position"])
                 if old_position < target:
                     self._conn.execute(
-                        f"UPDATE {_QUEUE_TABLE} SET position = position - 1 "
-                        f"WHERE position > %s AND position <= %s",
-                        (old_position, target),
+                        f"UPDATE {_QUEUE_TABLE} SET position = -1000000 WHERE mission_id = %s", (mission_id,)
                     )
+                    self._shift_positions("position > %s AND position <= %s", (old_position, target), -1)
                 elif old_position > target:
                     self._conn.execute(
-                        f"UPDATE {_QUEUE_TABLE} SET position = position + 1 "
-                        f"WHERE position >= %s AND position < %s",
-                        (target, old_position),
+                        f"UPDATE {_QUEUE_TABLE} SET position = -1000000 WHERE mission_id = %s", (mission_id,)
                     )
+                    self._shift_positions("position >= %s AND position < %s", (target, old_position), 1)
                 self._conn.execute(
                     f"UPDATE {_QUEUE_TABLE} SET position = %s WHERE mission_id = %s",
                     (target, mission_id),
@@ -1040,11 +1051,7 @@ class PgBoardStore(BoardStore):
                     f"SELECT count(*) FROM {_QUEUE_TABLE}"
                 ).fetchone()["count"]
                 insert_at = n if position is None else max(0, min(position, n))
-                self._conn.execute(
-                    f"UPDATE {_QUEUE_TABLE} SET position = position + 1 "
-                    "WHERE position >= %s",
-                    (insert_at,),
-                )
+                self._shift_positions("position >= %s", (insert_at,), 1)
                 self._conn.execute(
                     f"INSERT INTO {_QUEUE_TABLE} "
                     "(position, mission_id, enabled, attempts_per_task, "

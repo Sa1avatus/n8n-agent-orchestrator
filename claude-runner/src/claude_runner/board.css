@@ -520,3 +520,12 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 
 /* a field left empty shows the profile default as a grey placeholder */
 #board.bd-mission input::placeholder, #board.bd-mission textarea::placeholder { color: var(--faint); opacity: .85; font-style: italic; }
+
+/* project card: the mission rows line up in columns (state | name | tasks | hours) */
+#boardviewbody .kc { grid-template-columns: 112px minmax(0, 1fr) 86px 64px; gap: 14px; padding: 8px 10px; }
+#boardviewbody .kc .pill { justify-self: start; text-align: center; min-width: 96px; }
+#boardviewbody .kc .mono { text-align: right; white-space: nowrap; font-size: 12px; }
+#boardviewbody .kc + .kc { border-top: 1px solid var(--line); border-radius: 0; }
+#boardviewbody .prh { grid-template-columns: minmax(150px, 1.3fr) minmax(220px, 2.4fr) repeat(4, minmax(64px, .6fr)) 40px; padding: 14px 16px; }
+#boardviewbody .prh .mono { white-space: normal; line-height: 1.35; margin-top: 4px; }
+#boardviewbody .prb { padding: 6px 10px 8px; }

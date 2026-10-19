@@ -140,9 +140,10 @@ const MISSIONS = [
 test("render draws a header row and one body row per mission", () => {
   const views = freshGrid();
   const { body } = renderWith(views, { data: {}, missions: MISSIONS });
-  assert.equal(headers(body).length, 12);
+  assert.equal(headers(body).length, 13);
   assert.equal(bodyRows(body).length, 5);
-  const first = headers(body)[0];
+  assert.equal(headers(body)[0].dataset.sort, "num");
+  const first = headers(body)[1];
   assert.equal(first.textContent, "h.mission ↑");
   assert.equal(first.dataset.sort, "name");
 });
@@ -271,7 +272,7 @@ test("labels come from the translator passed in the context", () => {
   const views = freshGrid();
   const tr = (key) => "X:" + key;
   const { body } = renderWith(views, { data: {}, missions: MISSIONS, tr });
-  assert.equal(headers(body)[2].textContent.startsWith("X:h.project"), true);
+  assert.equal(headers(body)[3].textContent.startsWith("X:h.project"), true);
   assert.equal(byClass(body, "pill")[0].textContent, "X:st.q");
 });
 
@@ -287,4 +288,18 @@ test("the grid sorts by mission id and by start date", () => {
   assert.deepEqual(ids("id", -1), ["c-three", "b-two", "a-one"]);
   assert.deepEqual(ids("started", 1), ["b-two", "a-one", "c-three"], "no date goes last");
   assert.deepEqual(ids("started", -1), ["a-one", "b-two", "c-three"], "no date goes last");
+});
+
+test("the grid shows the table row number and sorts by it", () => {
+  const views = freshGrid();
+  const missions = [
+    { mission_id: "x", name: "A", number: 12, tasks: [] },
+    { mission_id: "y", name: "B", number: 3, tasks: [] },
+    { mission_id: "z", name: "C", tasks: [] },
+  ];
+  const ids = (dir) => views.sortMissions(missions, "num", dir).map((m) => m.mission_id);
+  assert.deepEqual(ids(1), ["y", "x", "z"]);
+  assert.deepEqual(ids(-1), ["x", "y", "z"]);
+  const { body } = renderWith(views, { data: {}, missions });
+  assert.equal(bodyRows(body)[2].children[0].textContent, "—");
 });

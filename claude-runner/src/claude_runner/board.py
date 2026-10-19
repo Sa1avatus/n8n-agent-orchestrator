@@ -189,6 +189,10 @@ class BoardStore(ABC):
         (one query for the whole board; a store without an event log answers ``{}``)."""
         return {}
 
+    def mission_numbers(self) -> dict[str, int]:
+        """Row number of each mission in the missions table: ``{mission_id: number}``."""
+        return {m.mission_id: i for i, m in enumerate(self.list_missions(), 1)}
+
     @abstractmethod
     def hermes_config(self) -> dict[str, Any]:
         """The hermes_config row (the ``claude-code`` profile) as a dict."""
