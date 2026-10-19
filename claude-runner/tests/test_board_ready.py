@@ -693,3 +693,14 @@ class TestCollectReadiness:
         assert start_guard(summary)["allowed"] is True
         # a confirmed start is allowed even with warnings
         assert start_guard(summary, confirmed=True)["allowed"] is True
+
+
+def test_settings_without_providers_do_not_break_the_service_urls(monkeypatch):
+    """The dashboard's settings object has no ``providers``; the readiness route answered 500."""
+    from claude_runner import board_ready
+    from claude_runner.dashboard import DashboardSettings
+
+    monkeypatch.setenv("LITELLM_URL", "http://litellm:4000")
+    runner_url, litellm_url, *_ = board_ready._service_urls(DashboardSettings())
+    assert litellm_url == "http://litellm:4000"
+    assert runner_url == "" or runner_url.startswith("http")

@@ -324,15 +324,15 @@ test("each card carries its project chip and mission data attributes", () => {
   assert.equal(byClass(noProject, "kchip").length, 0);
 });
 
-test("counts and state pills come from the translator", () => {
+test("the figure chips come from the translator", () => {
   resetDom();
   stubFetch(queueHandler);
   const views = freshKanban();
   const tr = (key, params) => (params ? key + ":" + JSON.stringify(params) : key);
   const { body } = renderWith(views, { data: {}, missions: MISSIONS, tr });
   const running = byClass(body, "kcard").find((c) => c.dataset.id === "r1");
-  assert.deepEqual(byClass(running, "pill").map((n) => n.textContent), ["st.run"]);
-  assert.equal(byClass(running, "mono")[0].textContent, 'of:{"a":1,"b":2}');
+  assert.equal(byClass(running, "ch")[0].textContent, 'of:{"a":1,"b":2}');
+  assert.equal(byClass(running, "mono")[0].textContent, "r1");
   const heads = byClass(body, "kcol").map((c) => byClass(c, "mono")[0].textContent);
   assert.deepEqual(heads, ["1", "2", "1", "1"]);
 });

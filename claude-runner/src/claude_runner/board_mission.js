@@ -499,7 +499,7 @@ function renderTaskTable(state) {
   const notice = state.notice
     ? `<div class="${esc(state.notice.bad ? "lane-notice bad" : "lane-notice")}">${esc(state.notice.text)}</div>`
     : "";
-  return `<div class="tbar"><a class="runs-btn" href="${esc(runsHref)}">${esc(t("m.runs"))}</a></div>` +
+  return `<div class="tbar"><a class="runs-btn" target="_top" href="${esc(runsHref)}">${esc(t("m.runs"))}</a></div>` +
     notice + (state.warning ? warningHtml(state.warning) : "") +
     `<table class="ttable"><thead><tr>` + heads + `</tr></thead><tbody>` + rows + `</tbody></table>`;
 }

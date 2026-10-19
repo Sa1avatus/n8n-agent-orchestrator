@@ -41,11 +41,11 @@ button { font: inherit; color: inherit; }
 
 /* view header (board_views.js) ------------------------------------- */
 #boardviews { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
-#boardviews button, #boardviews select, #boardviews input { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+#boardviews button, #boardviews select, #boardviews input { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line2, var(--line)); border-radius: 8px; padding: 6px 12px; }
 #boardviews button:hover { background: var(--hover); cursor: pointer; }
 #boardviews .bv-title { font-size: 15px; font-weight: 650; }
 #boardviews .bv-tabs, #boardviews .bv-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-#boardviews .bv-tab.on, #boardviews .bv-chip.on { background: var(--sel); border-color: var(--accent); color: var(--accent); }
+#boardviews .bv-tab.on, #boardviews .bv-chip.on { background: var(--accbg, var(--sel)); border-color: var(--accent); color: var(--accent); }
 #boardviews .bv-search { min-width: 180px; flex: 1 1 180px; }
 #boardviews .bv-lang, #boardviews .bv-theme, #boardviews .bv-tr { margin-left: auto; }
 #boardviewbody { flex: 1; overflow: auto; padding: 14px; }
@@ -263,3 +263,169 @@ button { font: inherit; color: inherit; }
 .qitem .qbarfill { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
 .qitem .qstats { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
 @media (max-width: 800px) { .qitem .qmeta { flex-wrap: wrap; } .qitem .qstats { white-space: normal; } }
+
+/* mission and task screens: the page scrolls as a whole, panels keep their natural height */
+#board.bd-mission { overflow-y: auto; }
+#board.bd-mission > * { flex: none !important; overflow: visible !important; }
+#board.bd-mission textarea { min-height: 90px; }
+
+/* the palette of docs/board-views-mockup.html (the style agreed with the operator) ----------- */
+:root { --panel2: #f0f2f5; --line2: #c9ced8; --mut: #5b6577; --acc: #2563eb; --accbg: #e3ecfd; --okbg: #dff3e8; --warn: #8a5a00; --warnbg: #fdf0d0; --bad: #b3261e; --badbg: #fbe3e1; --run: #2563eb; --runbg: #e3ecfd; }
+:root[data-theme="dark"] { --panel2: #1e232d; --line2: #3a4252; --mut: #a3acbc; --acc: #6ea0ff; --accbg: #1c2c4d; --okbg: #14301f; --warn: #f0c15a; --warnbg: #3a2c0e; --bad: #ff8a80; --badbg: #401a18; --run: #6ea0ff; --runbg: #1c2c4d; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --panel2: #1e232d; --line2: #3a4252; --mut: #a3acbc; --acc: #6ea0ff; --accbg: #1c2c4d; --okbg: #14301f; --warn: #f0c15a; --warnbg: #3a2c0e; --bad: #ff8a80; --badbg: #401a18; --run: #6ea0ff; --runbg: #1c2c4d; } }
+
+#boardviews .bv-chip { border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+#boardviewbody .bv-note, #boardviewbody .sub { color: var(--mut); font-size: 12.5px; margin: 0 0 10px; }
+#boardviewbody .pill { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; font-weight: 500; }
+#boardviewbody .p-run { background: var(--runbg); color: var(--run); }
+#boardviewbody .p-q { background: var(--panel2); color: var(--mut); }
+#boardviewbody .p-ok { background: var(--okbg); color: var(--ok); }
+#boardviewbody .p-bad { background: var(--badbg); color: var(--bad); }
+#boardviewbody .p-off { background: var(--panel2); color: var(--faint); }
+#boardviewbody .mono { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+#boardviewbody button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+#boardviewbody button:hover { background: var(--panel2); }
+#boardviewbody .pr { background: var(--panel); }
+#boardviewbody .prb { background: var(--panel2); }
+#boardviewbody .pr.sel { background: var(--accbg); }
+#boardviewbody .stack .s-run { background: var(--run); }
+#boardviewbody .stack .s-q { background: var(--line2); }
+#boardviewbody .stack .s-bad { background: var(--bad); }
+#boardviewbody .kc { background: transparent; }
+#boardviewbody .kc:hover { background: var(--panel); }
+
+/* Kanban */
+#boardviewbody .kb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; }
+#boardviewbody .kcol { background: var(--panel2); border-radius: 12px; padding: 10px; min-height: 120px; min-width: 0; }
+#boardviewbody .kcol h3 { font-size: 12.5px; margin: 0 0 8px; color: var(--mut); display: flex; justify-content: space-between; font-weight: 600; }
+#boardviewbody .kcard { display: block; width: auto; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line2); border-radius: 8px; padding: 9px 10px; margin: 0 0 8px; cursor: pointer; user-select: none; text-align: left; }
+#boardviewbody .kcard[data-group="running"] { border-left-color: var(--run); }
+#boardviewbody .kcard[data-group="completed"] { border-left-color: var(--ok); }
+#boardviewbody .kcard[data-group="not_completed"] { border-left-color: var(--bad); }
+#boardviewbody .kcard.sel { outline: 2px solid var(--acc); outline-offset: -1px; background: var(--accbg); }
+#boardviewbody .kcard b { display: block; font-weight: 600; font-size: 13px; margin: 4px 0; }
+#boardviewbody .kchip { font-size: 11px; color: var(--acc); background: var(--accbg); padding: 0 6px; border-radius: 5px; margin-right: 6px; }
+#boardviewbody .kcard.drop, #boardviewbody .kcol-cards .drop { outline: 2px dashed var(--acc); }
+
+/* Lanes */
+#boardviewbody .lane { display: grid; grid-template-columns: 150px repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0 0 8px; }
+#boardviewbody .lane > div { background: var(--panel2); border-radius: 8px; padding: 6px; min-height: 70px; min-width: 0; }
+#boardviewbody .lane .lh { background: transparent; padding: 4px 2px; }
+#boardviewbody .lane .lh b { display: block; font-size: 13px; }
+#boardviewbody .lane.hd > div { background: transparent; min-height: 0; text-align: center; font-size: 12px; color: var(--mut); font-weight: 600; }
+#boardviewbody .ln-note { display: block; border-radius: 5px; padding: 4px 7px; margin: 0 0 5px; font-size: 11.8px; line-height: 1.3; overflow: hidden; background: var(--panel); border: 1px solid var(--line); color: var(--ink); }
+#boardviewbody .ln-note .ln-title { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#boardviewbody .ln-note small, #boardviewbody .ln-note .ln-stats { display: block; font-size: 11px; opacity: .8; font-family: var(--mono); }
+#boardviewbody .ln-note.ln-wait { background: var(--warnbg); color: var(--warn); border-color: transparent; }
+#boardviewbody .ln-note.ln-run { background: var(--accbg); color: var(--acc); border-color: transparent; }
+#boardviewbody .ln-note.ln-rev { background: var(--warnbg); color: var(--warn); border-color: transparent; }
+#boardviewbody .ln-note.ln-ok { background: var(--okbg); color: var(--ok); border-color: transparent; }
+#boardviewbody .ln-note.ln-bad { background: var(--badbg); color: var(--bad); border-color: transparent; }
+#boardviewbody .ln-note[draggable="true"] { cursor: grab; }
+#boardviewbody .ln-note.sel { outline: 2px solid var(--acc); }
+#boardviewbody .warnbox { background: var(--warnbg); color: var(--warn); border: 1px solid var(--warn); border-radius: 8px; padding: 8px 10px; margin: 0 0 8px; font-size: 12.5px; }
+#boardviewbody .warnbox button { margin: 6px 6px 0 0; padding: 3px 10px; font-size: 12.5px; }
+
+/* Sprint */
+#boardviewbody .spr { display: grid; grid-template-columns: 210px minmax(0, 1fr) 250px; gap: 12px; align-items: start; }
+#boardviewbody .spr .col { background: var(--panel2); border-radius: 12px; padding: 10px; min-width: 0; }
+#boardviewbody .spr h3 { font-size: 12.5px; margin: 0 0 8px; color: var(--mut); font-weight: 600; }
+#boardviewbody .bl { display: block; width: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; margin: 0 0 6px; font-size: 12.5px; cursor: pointer; text-align: left; }
+#boardviewbody .bl.sel { outline: 2px solid var(--acc); outline-offset: -1px; background: var(--accbg); }
+#boardviewbody .sb { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+#boardviewbody .spr-task { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; margin: 0 0 5px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+#boardviewbody .kp { background: var(--panel2); border-radius: 10px; padding: 9px 11px; margin: 0 0 8px; }
+#boardviewbody .kp span { display: block; color: var(--mut); font-size: 11.5px; }
+#boardviewbody .kp b { font-size: 20px; font-weight: 600; }
+#boardviewbody .imp-item { background: var(--badbg); color: var(--bad); border-radius: 10px; padding: 9px 11px; margin: 0 0 6px; font-size: 12.5px; }
+#boardviewbody .spr-obst, #boardviewbody .spr-chart-body { margin-top: 8px; }
+
+/* Grid */
+#boardviewbody .gridwrap { overflow-x: auto; }
+#boardviewbody table.g { width: 100%; border-collapse: collapse; font-size: 13px; }
+#boardviewbody table.g th { font-size: 11.5px; color: var(--mut); text-align: left; font-weight: 600; padding: 7px 8px; border-bottom: 1px solid var(--line2); cursor: pointer; white-space: nowrap; user-select: none; }
+#boardviewbody table.g td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+#boardviewbody table.g tr.row { cursor: pointer; }
+#boardviewbody table.g tr.row:hover td { background: var(--panel2); }
+#boardviewbody table.g tr.sel td { background: var(--accbg); }
+#boardviewbody .num { text-align: right; white-space: nowrap; }
+#boardviewbody .segbar { display: inline-flex; gap: 2px; width: 90px; margin-right: 8px; vertical-align: middle; }
+#boardviewbody .seg { flex: 1; height: 10px; border-radius: 2px; background: var(--line); min-width: 3px; display: block; }
+#boardviewbody .seg-done { background: var(--ok); }
+#boardviewbody .seg-run { background: var(--run); }
+
+@media (max-width: 900px) {
+  #boardviewbody .kb { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #boardviewbody .spr { grid-template-columns: 1fr; }
+  #boardviewbody .lane { grid-template-columns: 110px repeat(5, minmax(110px, 1fr)); overflow-x: auto; }
+}
+@media (max-width: 520px) { #boardviewbody .kb { grid-template-columns: 1fr; } }
+
+/* pages of the mission screen: tab bar, one block per page, pager (board_tabs.js) ------------- */
+#board.bd-mission { background: var(--bg); }
+#boardtabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px; position: sticky; top: 0; z-index: 4; background: var(--bg); border-bottom: 1px solid var(--line); }
+#boardtabs .bt-tab { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+#boardtabs .bt-tab:hover { background: var(--panel2); }
+#boardtabs .bt-tab.on { background: var(--accbg); border-color: var(--acc); color: var(--acc); font-weight: 600; }
+#board.bd-mission > #boardmission, #board.bd-mission > #boardtasks, #board.bd-mission > #boardplanedit, #board.bd-mission > #boardthink,
+#board.bd-mission > #boardready, #board.bd-mission > #boardhistory, #board.bd-mission > #boardclaudem {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; margin: 14px; padding: 16px 18px;
+}
+#board.bd-mission h2 { font-size: 17px; }
+#board.bd-mission h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; margin: 0 0 12px; }
+#boardpager { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 14px 24px; }
+#boardpager button { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 16px; cursor: pointer; }
+#boardpager button:hover:not(:disabled) { background: var(--panel2); }
+#boardpager button:disabled { opacity: .4; cursor: default; }
+#boardpager .pg-pos { color: var(--mut); font-size: 12.5px; }
+
+/* launch configuration as a form: label on the left, field on the right */
+#board.bd-mission .confbox { border: 0; background: transparent; padding: 0; }
+#board.bd-mission .frow-wrap { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 4px 16px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--line); }
+#board.bd-mission .frow-label { min-width: 0; font-size: 12.5px; color: var(--mut); padding-top: 6px; }
+#board.bd-mission .confbox .frow-wrap input[type="text"], #board.bd-mission .confbox .frow-wrap input[type="number"],
+#board.bd-mission .confbox .frow-wrap textarea { width: 100%; min-width: 0; background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 10px; }
+#board.bd-mission .confbox .frow-wrap textarea { min-height: 84px; line-height: 1.45; }
+#board.bd-mission .confbox .frow-wrap input:focus, #board.bd-mission .confbox .frow-wrap textarea:focus { outline: 2px solid var(--acc); outline-offset: -1px; border-color: var(--acc); }
+#board.bd-mission .frow-wrap .frow-note { grid-column: 2; }
+#board.bd-mission .confbox .frow-presets { grid-column: 2; }
+#board.bd-mission .confbox .frow-preset { border-radius: 6px; padding: 3px 10px; }
+#board.bd-mission button { font: inherit; }
+#board.bd-mission .tbar { margin: 0 0 10px; }
+#board.bd-mission .tbar .runs-btn { display: inline-block; text-decoration: none; color: var(--acc); background: var(--accbg); border-radius: 8px; padding: 5px 12px; font-size: 13px; }
+@media (max-width: 700px) {
+  #board.bd-mission .frow-wrap { grid-template-columns: 1fr; }
+  #board.bd-mission .frow-wrap .frow-note, #board.bd-mission .confbox .frow-presets { grid-column: 1; }
+}
+
+/* the grid rows are table rows (.bv-card made them blocks: the columns did not line up with the header) */
+#boardviewbody tr.bv-card { display: table-row; width: auto; margin: 0; border: 0; background: transparent; }
+#boardviewbody .gridwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+#boardviewbody table.g td .mono { display: block; }
+
+/* Kanban card as in the mockup: name, project chip and id, progress bar, figure chips */
+#boardviewbody .kcard .bar { height: 5px; background: var(--line); border-radius: 3px; margin: 7px 0 5px; overflow: hidden; }
+#boardviewbody .kcard .bar i { display: block; height: 100%; background: var(--run); }
+#boardviewbody .kcard[data-group="completed"] .bar i { background: var(--ok); }
+#boardviewbody .kcard[data-group="not_completed"] .bar i { background: var(--bad); }
+#boardviewbody .kchips { display: flex; flex-wrap: wrap; gap: 3px; }
+#boardviewbody .ch { display: inline-block; font-size: 11px; color: var(--mut); background: var(--panel2); border-radius: 5px; padding: 0 6px; }
+#boardviewbody .kcard .mono { font-size: 11px; word-break: break-all; }
+#boardviewbody .kcard > button { float: right; font-size: 11px; padding: 0 7px; margin: 0 0 4px 3px; border-radius: 5px; }
+#boardviewbody .kcard b { margin: 0 0 4px; }
+
+/* Sprint notes: colour by column as in the mockup (waiting / in progress / done) */
+#boardviewbody .spr-task.n { border-radius: 5px; padding: 4px 7px; margin: 0 0 5px; font-size: 11.8px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 1px solid transparent; }
+#boardviewbody .spr-task.n.gr { background: var(--panel); color: var(--ink); border-color: var(--line); }
+#boardviewbody .spr-task.n.y { background: var(--warnbg); color: var(--warn); }
+#boardviewbody .spr-task.n.g { background: var(--okbg); color: var(--ok); }
+#boardviewbody .spr > .col:first-child .bl { white-space: normal; }
+
+/* save bar of the launch form */
+#boardmission .savebar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+#boardmission .savebtn { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+#boardmission .savebtn:hover:not(:disabled) { background: var(--panel2); }
+#boardmission .savebtn:first-child { background: var(--accbg); color: var(--acc); border-color: var(--acc); font-weight: 600; }
+#boardmission .savebtn:disabled { opacity: .45; cursor: default; }
+#boardmission .crumbs { font-size: 12.5px; color: var(--mut); margin: 0 0 8px; }
+#boardmission .crumbs a { color: var(--acc); }

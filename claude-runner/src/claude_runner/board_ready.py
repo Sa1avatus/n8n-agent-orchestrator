@@ -260,12 +260,11 @@ def check_preflight_fresh(
 
 def _local_provider(settings: Any) -> Any | None:
     """The local provider profile (the one behind LiteLLM), by env or by name."""
-    local = getattr(settings.providers, "LOCAL", None)
+    # the dashboard's own settings have no providers (only the runner's settings do)
+    providers = getattr(settings, "providers", None) or {}
+    local = getattr(providers, "LOCAL", None)
     if local is None:
-        local = next(
-            (p for name, p in settings.providers.items() if name.lower() == "local"),
-            None,
-        )
+        local = next((p for name, p in providers.items() if name.lower() == "local"), None)
     return local
 
 

@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.6.0 · October 19, 2026** — Board views, task cards, operations control and translations on the dashboard — next 0.7.0
+**0.6.100 · October 19, 2026** — Board views, task cards, operations control and translations on the dashboard — next 0.7.0
 
-Current version: **0.6.0** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.7.0 · 1.0.0**
+Current version: **0.6.100** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.7.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next.
 

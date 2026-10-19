@@ -258,6 +258,10 @@ async function refreshOnce(deps) {
   return "unchanged";
 }
 
+// containers the mission and task screens create inside #board
+const MISSION_PANELS = ["boardmission", "boardtasks", "boardplanedit", "boardthink", "boardready",
+  "boardhistory", "boardclaudem", "boardtask", "boardtabs", "boardpager"];
+
 function setBodyMode(inView) {
   const body = document.getElementById("boardviewbody");
   const shell = document.getElementById("boardstate");
@@ -265,6 +269,13 @@ function setBodyMode(inView) {
   if (shell) shell.hidden = inView;
   const queue = document.getElementById("boardqueue");
   if (queue) queue.hidden = inView;
+  // the mission and task screens (they are drawn into #board) give way to the views
+  const root = document.getElementById("board");
+  if (root) root.classList.toggle("bd-mission", false);
+  for (const id of MISSION_PANELS) {
+    const panel = document.getElementById(id);
+    if (panel) panel.hidden = inView;
+  }
 }
 
 function redraw(host) {

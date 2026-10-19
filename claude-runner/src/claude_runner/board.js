@@ -60,12 +60,27 @@ function needLogic() {
   return true;
 }
 
+// A mission or task screen replaces the queue list and the view body; the whole page scrolls then
+// (every panel would otherwise take its own slice of the height).
+const PANELS = ["boardmission", "boardtasks", "boardplanedit", "boardthink", "boardready", "boardhistory", "boardclaudem", "boardtask"];
+function showScreen(hash) {
+  const deep = /^#board[/][^/]+/.test(hash || "");
+  const set = (id, hidden) => { const el = document.getElementById(id); if (el) el.hidden = hidden; };
+  set("boardqueue", deep);
+  set("boardviewbody", deep);
+  for (const id of PANELS) set(id, !deep);
+  const root = document.getElementById("board");
+  if (root) root.classList.toggle("bd-mission", deep);
+  if (typeof BoardTabs !== "undefined") BoardTabs.clear();
+}
+
 // Resolve the current fragment and call the matching render function;
 // missing functions (the other board_*.js files are not present yet) are
 // reported instead of throwing.
 async function route() {
   if (needLogic()) return;
   if (/^#board[/]view[/]/.test(location.hash)) return;   // the views draw themselves
+  showScreen(location.hash);
   let parsed;
   try { parsed = BoardLogic.parseHash(location.hash || "#board"); }
   catch (e) { state(t("board.bad_link", { error: e.message }), "bad"); return; }
@@ -83,6 +98,7 @@ async function route() {
           try { await BoardClaudeMd(parsed.mission_id); }
           catch (e) { state(t("board.claudemd_failed", { error: e.message || e }), "bad"); }
         }
+        if (typeof BoardTabs !== "undefined") BoardTabs.apply();
         return;
       }
       catch (e) { state(t("board.mission_failed", { error: e.message }), "bad"); return; }

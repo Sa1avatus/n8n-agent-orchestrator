@@ -157,10 +157,11 @@ function backlogCard(ctx, mission, index, current) {
 }
 
 function sprintColumn(ctx, title, tasks) {
+  const tone = title === "spr.wait" ? "gr" : title === "spr.prog" ? "y" : "g";
   const { el, tr } = ctx;
   return el("div", {}, [
     el("div", { class: "sub", text: tr(title) + " · " + tasks.length }),
-    ...tasks.slice(0, SHOWN_TASKS).map((task) => el("div", { class: "spr-task" }, [
+    ...tasks.slice(0, SHOWN_TASKS).map((task) => el("div", { class: "spr-task n " + tone }, [
       el("b", { text: task.id || "" }),
       el("span", { text: " " + (task.title || "") }),
     ])),

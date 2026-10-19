@@ -111,11 +111,33 @@ function missionCard(ctx, mission, position) {
     "data-position": String(position),
     "data-search": (name + " " + id).toLowerCase(),
   }, [
-    el("span", { class: "pill p-" + state, text: tr("st." + state) }),
     el("b", { text: name }),
-    projectKey ? el("span", { class: "kchip", text: project.name || projectKey }) : null,
-    el("span", { class: "mono", text: tr("of", { a: done, b: total }) }),
+    el("div", {}, [
+      projectKey ? el("span", { class: "kchip", text: project.name || projectKey }) : null,
+      el("span", { class: "mono", text: id }),
+    ]),
+    el("div", { class: "bar" }, [el("i", { style: "width:" + (total ? Math.round(100 * done / total) : 0) + "%" })]),
+    el("div", { class: "kchips" }, figureChips(ctx, mission, done, total)),
   ]);
+}
+
+function figureChips(ctx, mission, done, total) {
+  const { el, tr } = ctx;
+  const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  const attempts = num(mission.attempts);
+  const hours = num(mission.hours);
+  const cost = num(mission.cost);
+  const tps = num(mission.tok_s);
+  const cache = num(mission.cache_ratio);
+  const think = num(mission.thinking_share);
+  const chips = [tr("of", { a: done, b: total })];
+  if (attempts) chips.push(tr("att", { n: attempts }));
+  if (hours) chips.push(tr("hours", { n: hours.toFixed(1) }));
+  if (cost) chips.push("$" + cost.toFixed(2));
+  if (tps) chips.push(tr("s.tps", { n: Math.round(tps) }));
+  if (cache) chips.push(tr("cache", { n: Math.round(cache * 100) }));
+  if (think !== null) chips.push(tr("think", { n: Math.round(think * 100) }));
+  return chips.map((text) => el("span", { class: "ch", text }));
 }
 
 function column(ctx, key, missions, cards, controls) {
@@ -227,7 +249,7 @@ function select(card) {
 
 function open(id) {
   const back = location.hash.replace(/^#/, "") || "board";
-  location.href = "/#mission=" + encodeURIComponent(id) + "&from=" + encodeURIComponent(back);
+  (typeof window !== "undefined" && window.top ? window.top : globalThis).location.href = "/#mission=" + encodeURIComponent(id) + "&from=" + encodeURIComponent(back);
 }
 
 if (typeof module !== "undefined" && module.exports) {
