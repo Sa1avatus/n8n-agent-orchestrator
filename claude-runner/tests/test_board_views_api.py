@@ -105,7 +105,7 @@ def _pg_store(monkeypatch) -> tuple[PgBoardStore, ScriptedConnection]:
     conn.on("SELECT max(at)", [{"max": None}])
     conn.on('SELECT "updatedAt"', [])
     _install_driver(monkeypatch)
-    monkeypatch.setattr(psycopg, "connect", lambda dsn, row_factory=None: conn)
+    monkeypatch.setattr(psycopg, "connect", lambda dsn, row_factory=None, **kw: conn)
     return PgBoardStore("postgresql://u:p@h/db"), conn
 
 

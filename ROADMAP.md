@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.6.100 · October 19, 2026** — Board views, task cards, operations control and translations on the dashboard — next 0.7.0
+**0.7.0 · October 19, 2026** — Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0
 
-Current version: **0.6.100** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.7.0 · 1.0.0**
+Current version: **0.7.0** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.8.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next.
 
@@ -69,22 +69,24 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Board statistics over HTTP, no wait for the retrieval sync
 - [x] Run page scroll and polling fixes
 
-### Board 0.6.0: views, tasks, operations — Done (October 18 – 19)
+### Board 0.6 – 0.7: views, tasks, operations, settings window — Done (October 18 – 19)
 
-0.6.0 · Everything the first board mission left open · 6/6 milestones, 100%
+0.7.0 · Board views in the agreed style, task cards, operations control, mission settings in a step-by-step window · 8/8 milestones, 100%
 
 - [x] Operations control: process control, loop protection (ops-control)
 - [x] Task cards, plan editing, thinking panel, readiness and history (board-ui2)
 - [x] Board views part 1: summary route, project rules, i18n tables (Haiku 5.5)
 - [x] Board views part 2: smart task ordering, Lanes and Sprint views (Haiku 5.5, report of the last task written by hand)
 - [x] Roadmap page (GitHub Pages), ROADMAP.md and the new README (0.5.200 – 0.5.300)
-- [x] Release 0.6.0: tests and browser checks
+- [x] Releases 0.6.0, 0.6.100 and 0.7.0: tests and browser checks
+- [x] Launch settings window with steps, Review table and expand (0.7.0); data tables no longer bloat
+- [x] Documentation cleaned: mission run notes and reports removed from docs/
 
 ### Reliability and control — Next (Q4 2026)
 
-0.7.0 and up · Guards, adaptive split and the executor settings · 0/8 milestones, 0%
+0.8.0 and up · Guards, adaptive split and the executor settings · 0/8 milestones, 0%
 
-- [ ] 0.7.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), after the 0.6.0 release at a queue pause
+- [ ] 0.8.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), after the 0.7.0 release at a queue pause
 - [ ] ahawr-guards-in-dashboard: all watchers inside the dashboard container
 - [ ] ahawr-cloud-thinking-control: thinking policy for cloud Workers
 - [ ] ahawr-worker-attempt-chain: provider and model per attempt as a setting

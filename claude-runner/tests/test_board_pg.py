@@ -89,7 +89,7 @@ def _make_store(monkeypatch) -> tuple[PgBoardStore, FakeConnection]:
     conn.set_response("updatedAt", [{"updatedAt": None}])
     conn.set_response("SET search_path", [])
 
-    def fake_connect(dsn, row_factory=None):
+    def fake_connect(dsn, row_factory=None, **kw):
         return conn
 
     _install_driver(monkeypatch)
@@ -157,7 +157,7 @@ class TestDsnRedaction:
     def test_get_board_store_failing_connect_does_not_leak_dsn(self, monkeypatch):
         dsn = "postgresql://u:p@h/db"
 
-        def fake_connect(_dsn, row_factory=None):
+        def fake_connect(_dsn, row_factory=None, **kw):
             raise psycopg.OperationalError("connection failed: " + _dsn)
 
         _install_driver(monkeypatch)

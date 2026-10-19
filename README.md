@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.6.100** | **9** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.7.0** | **9** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -41,9 +41,9 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- status:start -->
 | | |
 |---|---|
-| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) |
-| 🔄 **Now** | board views, task cards, operations control → **0.6.0** |
-| ➡️ **Next** | guards inside the dashboard · adaptive split · Worker attempt chains · **1.0.0: Codex as the third executor** |
+| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) |
+| 🔄 **Now** | guards inside the dashboard (mission `ahawr-guards-in-dashboard`) → **0.8.0** (runner renamed to `ahawr-runner`) |
+| ➡️ **Next** | cloud thinking control · Worker attempt chains · adaptive split · **1.0.0: Codex as the third executor** |
 <!-- status:end -->
 
 Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [sa1avatus.github.io/n8n-agent-orchestrator](https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html).
@@ -392,7 +392,7 @@ The repository contains:
 ├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
-├── docs/                            # retrieval, Telegram bot, thinking control, cold-prefill analysis, mission reports
+├── docs/                            # retrieval, Telegram bot, thinking control, the roadmap page (GitHub Pages)
 ├── scripts/                         # helper scripts
 ├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
 ├── .env.example                     # every setting, with comments (copy to .env)
@@ -752,7 +752,7 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
 **Thinking of the local model.** `litellm/runtime/local_thinking` (`on`/`off`) switches thinking per request without a restart; the runner turns it off by itself for a task that has run longer than `AHAWR_THINK_OFF_AFTER_SECONDS` (default 3600) and back on for the next task; the chat template `llama/templates/qwen38-same-prefix.jinja` keeps the prompt prefix identical in both modes, so a switch does not drop the llama.cpp prompt cache. Details and setup: [`docs/thinking-control.md`](docs/thinking-control.md).
 
-The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) and [`CHANGELOG.md`](CHANGELOG.md).
+The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Versioning
 
@@ -788,7 +788,7 @@ Several parts of this stack look odd until you know what they work around. The W
 **5. The Reviewer can read, but not write.**
 - *What.* The Reviewer profile runs in `dontAsk` mode with a read-only Bash allow-list (`ahawr-search`, `grep`, `ls`, `wc`, `head`, `tail`, `cat`, `diff`, `bash -n`, read-only `git`), and denies redirections to files and `git … --output`. `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS` replaces the list.
 - *Why.* In `dontAsk` a command runs only if a rule allows it; one local mission logged 105 denied Bash calls from its Reviewers, which then judged reports they could not check.
-- *Result placement.* The Reviewer cannot see `/tmp` of the Worker. The optional result placement rule asks agents to put files the Reviewer must verify into the mission working directory and to cite the exact path in the report (`docs/ahawr-cheaper-retries.md` §5.3).
+- *Result placement.* The Reviewer cannot see `/tmp` of the Worker. The optional result placement rule asks agents to put files the Reviewer must verify into the mission working directory and to cite the exact path in the report.
 
 **6. What the Reviewer cannot verify is accepted by the operator.**
 The Reviewer judges the Worker's report and the files it can read. The Worker cannot run Docker, build a GPU image or run a live service, so a mission that needs those can pass review and still not work (a patch series once passed all reviews while it did not apply; a rebuilt image then crashed on the first request). For such missions the acceptance criteria say what the operator runs (for example `docker build` and a benchmark), and the mission is not considered done until that has passed. A change made by hand in a working tree must also end up in the artifact (the patch, the file under version control), not only in the tree; reviews cannot see the difference.
@@ -1570,7 +1570,7 @@ Architect контекст из RAG не получает, только Worker �
 
 **Размышление локальной модели.** Файл `litellm/runtime/local_thinking` (`on`/`off`) переключает размышление на каждом запросе без перезапуска; runner сам выключает его для задачи, которая идёт дольше `AHAWR_THINK_OFF_AFTER_SECONDS` (по умолчанию 3600), и включает для следующей; шаблон чата `llama/templates/qwen38-same-prefix.jinja` делает начало промпта одинаковым в обоих режимах, поэтому переключение не сбрасывает кэш llama.cpp. Подробности: [`docs/thinking-control.md`](docs/thinking-control.md).
 
-Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`docs/compaction-analysis.md`](docs/compaction-analysis.md) и [`CHANGELOG.md`](CHANGELOG.md).
+Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
 ### Версии
 
 Стек версионируется по версии пакета `claude-runner` (`claude-runner/pyproject.toml`, её же отдаёт API runner'а); файлы воркфлоу сохраняют свои имена (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый claude-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
@@ -1603,7 +1603,7 @@ Architect контекст из RAG не получает, только Worker �
 **5. Reviewer может читать, но не писать.**
 - *Что.* Профиль Reviewer'а работает в режиме `dontAsk` с белым списком Bash только для чтения (`ahawr-search`, `grep`, `ls`, `wc`, `head`, `tail`, `cat`, `diff`, `bash -n`, `git` только для чтения) и запрещает перенаправление в файлы и `git … --output`. Список заменяется через `CLAUDE_RUNNER_REVIEWER_ALLOWED_TOOLS`.
 - *Зачем.* В `dontAsk` команда выполняется, только если её разрешает правило; одна локальная миссия записала 105 отказанных вызовов Bash у Reviewer'ов, и они судили отчёты, которые не могли проверить.
-- *Размещение результатов.* Reviewer не видит `/tmp` Worker'а. Необязательное правило размещения результатов просит класть файлы, которые Reviewer должен проверить, в рабочую папку миссии и указывать в отчёте точный путь (`docs/ahawr-cheaper-retries.md` §5.3).
+- *Размещение результатов.* Reviewer не видит `/tmp` Worker'а. Необязательное правило размещения результатов просит класть файлы, которые Reviewer должен проверить, в рабочую папку миссии и указывать в отчёте точный путь.
 
 **6. То, что Reviewer не может проверить, принимает оператор.**
 Reviewer судит отчёт Worker'а и файлы, которые может прочитать. Worker не может запустить Docker, собрать образ с GPU или поднять живой сервис, поэтому миссия, которой это нужно, может пройти ревью и не заработать (серия патчей однажды прошла все ревью, хотя не применялась, а пересобранный образ упал на первом запросе). Для таких миссий в критериях приёмки указано, что запускает оператор (например `docker build` и бенчмарк), и миссия не считается завершённой, пока это не пройдёт. Ручная правка рабочего дерева должна попадать и в артефакт (патч, файл под версионным контролем), а не только в дерево: ревью этой разницы не видит.

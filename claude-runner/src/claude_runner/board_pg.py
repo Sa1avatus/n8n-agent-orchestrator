@@ -300,7 +300,9 @@ def _plan_dict(value: Any) -> dict[str, Any] | None:
 class PgBoardStore(BoardStore):
     """PostgreSQL-backed board store.
 
-    One connection, no autocommit: every write runs in a transaction and
+    One connection in autocommit mode (a read never leaves a transaction open: an open one pinned
+    the vacuum horizon and bloated the n8n data tables to 150 MB); every write runs in an explicit
+    ``transaction()`` block and
     follows the audit order — lock the row (``SELECT ... FOR UPDATE``),
     compare the version, write the changelog row first, then apply the
     change.  Reads run outside a transaction.  Fixed identifiers (schema,
@@ -318,7 +320,7 @@ class PgBoardStore(BoardStore):
 
         self._lock = threading.RLock()
         self._dsn = dsn
-        self._conn = psycopg.connect(dsn, row_factory=dict_row)
+        self._conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=True)
         # Reads: board schema + public schema both on the search path.
         self._conn.execute("SET search_path TO board, public")
         # Version stamps for tables without a per-row version column.

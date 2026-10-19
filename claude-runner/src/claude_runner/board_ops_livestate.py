@@ -211,7 +211,7 @@ class PgLiveStateStore(LiveStateStore):
 
         self._lock = threading.RLock()
         self._dsn = dsn
-        self._conn = psycopg.connect(dsn, row_factory=dict_row)
+        self._conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=True)
         # Reads: board schema + public schema both on the search path.
         self._conn.execute("SET search_path TO board, public")
 

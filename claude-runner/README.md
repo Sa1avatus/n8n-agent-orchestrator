@@ -103,7 +103,7 @@ Two ways to let the Reviewer reach those files:
 | `CLAUDE_RUNNER_ARCHITECT_APPEND_SYSTEM_PROMPT` | Extra prompt text for the Architect (default: none). Used to enable the RESULT PLACEMENT RULE. |
 | `CLAUDE_RUNNER_WORKER_APPEND_SYSTEM_PROMPT` | Extra prompt text for the Worker (default: none). Used to enable the RESULT PLACEMENT RULE. |
 
-The rule is **off by default**: the shipped `agent_prompts.example.csv` rows do not carry it, so the Reviewer still reads only the mission working directory. To enable it, an operator appends the exact paragraph to the `system_prompt` column of the `architect` and `worker` rows in the mission's `agent_prompts` data table, or sets the corresponding `CLAUDE_RUNNER_<ROLE>_APPEND_SYSTEM_PROMPT` env var. No workflow node, per-run flag, or runner restart is needed — the rule lives entirely in the prompt text. See `docs/ahawr-cheaper-retries.md` §5.3 for the exact opt-in paragraphs and the enable step.
+The rule is **off by default**: the shipped `agent_prompts.example.csv` rows do not carry it, so the Reviewer still reads only the mission working directory. To enable it, an operator appends the exact paragraph to the `system_prompt` column of the `architect` and `worker` rows in the mission's `agent_prompts` data table, or sets the corresponding `CLAUDE_RUNNER_<ROLE>_APPEND_SYSTEM_PROMPT` env var. No workflow node, per-run flag, or runner restart is needed — the rule lives entirely in the prompt text. The exact opt-in paragraphs are in the `agent_prompts` rows of the Architect and the Worker.
 
 ### Compaction
 

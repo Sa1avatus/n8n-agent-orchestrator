@@ -153,3 +153,16 @@ def test_every_script_of_board_html_matches_the_dashboard_static_route():
     assert names
     bad = [n for n in names if not pattern.fullmatch(n)]
     assert bad == []
+
+
+def test_edit_window_keys_exist_in_both_translation_tables():
+    """Every t("ew.*") of board_edit_win.js has an English and a Russian text."""
+    import json
+
+    js = (PKG_DIR / "board_edit_win.js").read_text(encoding="utf-8")
+    keys = set(re.findall(r'"(ew\.[a-z0-9_.]+)"', js))
+    assert keys
+    for lang in ("en", "ru"):
+        table = json.loads((PKG_DIR / f"board_i18n_{lang}.json").read_text(encoding="utf-8"))
+        table = table.get("strings", table)
+        assert sorted(k for k in keys if k not in table) == [], lang

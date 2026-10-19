@@ -405,6 +405,7 @@ function tick() {
   // re-render in that state would break the drop or lose the edits.
   if (typeof BoardDnd !== "undefined" && BoardDnd.DndState && BoardDnd.DndState.dragId) return;
   if (dirtyForm()) return;
+  if (document.body && document.body.dataset.editing === "1") return;   // the launch settings window is open
   if (document.hidden) return;
   refreshBoard();
 }

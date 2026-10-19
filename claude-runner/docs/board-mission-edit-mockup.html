@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AHAWR — mission editor (mockup)</title>
+<style>
+:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f0f2f5;--line:#e1e4ea;--line2:#c9ced8;--text:#1c2330;--mut:#5b6577;--faint:#8a93a3;
+--acc:#2563eb;--accbg:#e3ecfd;--ok:#16794a;--okbg:#dff3e8;--warn:#8a5a00;--warnbg:#fdf0d0;--bad:#b3261e;--badbg:#fbe3e1;--shadow:rgba(20,30,50,.28)}
+:root[data-theme=dark]{--bg:#0f1218;--panel:#171b23;--panel2:#1e232d;--line:#2a303c;--line2:#3a4252;--text:#e6e9ef;--mut:#a3acbc;--faint:#7a8497;
+--acc:#6ea0ff;--accbg:#1c2c4d;--ok:#5fd29a;--okbg:#14301f;--warn:#f0c15a;--warnbg:#3a2c0e;--bad:#ff8a80;--badbg:#401a18;--shadow:rgba(0,0,0,.6)}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0f1218;--panel:#171b23;--panel2:#1e232d;--line:#2a303c;--line2:#3a4252;--text:#e6e9ef;--mut:#a3acbc;--faint:#7a8497;
+--acc:#6ea0ff;--accbg:#1c2c4d;--ok:#5fd29a;--okbg:#14301f;--warn:#f0c15a;--warnbg:#3a2c0e;--bad:#ff8a80;--badbg:#401a18;--shadow:rgba(0,0,0,.6)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--line2);border-radius:8px;padding:6px 14px;cursor:pointer}
+button:hover:not(:disabled){background:var(--panel2)}button:disabled{opacity:.45;cursor:default}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+:root[data-theme=dark] button.pri,:root:not([data-theme=light]) button.pri{color:#0b1020}
+button.pri:hover:not(:disabled){filter:brightness(1.08);background:var(--acc)}
+.top{display:flex;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.top h1{font-size:16px;margin:0 auto 0 0}
+.wrap{padding:16px;max-width:1100px;margin:0 auto}
+.crumbs{font-size:13px;color:var(--mut);margin:0 0 8px}.crumbs a{color:var(--acc);cursor:pointer}
+.pill{display:inline-block;font-size:11.5px;padding:1px 9px;border-radius:999px;font-weight:500}
+.p-run{background:var(--accbg);color:var(--acc)}.p-ok{background:var(--okbg);color:var(--ok)}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--faint)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 14px}
+.card h2{margin:0 0 4px;font-size:18px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.ch{font-size:11.5px;color:var(--mut);background:var(--panel2);border-radius:6px;padding:1px 8px}
+.sumgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:12px}
+.sum{background:var(--panel2);border-radius:10px;padding:9px 12px}.sum span{display:block;font-size:11.5px;color:var(--mut)}.sum b{font-weight:600}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+
+/* the editor window ------------------------------------------------------------------ */
+.scrim{position:fixed;inset:0;background:var(--shadow);display:none;align-items:center;justify-content:center;z-index:20;padding:20px}
+.scrim.open{display:flex}
+.win{background:var(--panel);border:1px solid var(--line2);border-radius:16px;width:min(760px,100%);max-height:calc(100vh - 40px);display:flex;flex-direction:column;box-shadow:0 24px 70px var(--shadow);
+ transition:width .18s,max-height .18s,border-radius .18s}
+.win.max{width:100%;max-width:1240px;height:calc(100vh - 40px);max-height:none}
+.wh{display:flex;align-items:center;gap:10px;padding:14px 18px 10px}
+.wh h3{margin:0;font-size:16px}.wh .sp{flex:1}
+.ib{border:0;background:transparent;font-size:18px;line-height:1;padding:6px 9px;border-radius:8px;color:var(--mut)}
+.dirty{font-size:11.5px;background:var(--warnbg);color:var(--warn);border-radius:999px;padding:1px 9px;display:none}.dirty.on{display:inline-block}
+.prog{height:4px;background:var(--line);margin:0 18px;border-radius:2px;overflow:hidden}.prog i{display:block;height:100%;background:var(--acc);transition:width .2s}
+.steps{display:flex;gap:6px;padding:12px 18px 4px;flex-wrap:wrap}
+.st{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mut);cursor:pointer;padding:3px 10px 3px 4px;border-radius:999px;border:1px solid transparent;background:none}
+.st i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:600;background:var(--panel2);color:var(--mut);border:1px solid var(--line2)}
+.st.on{color:var(--acc);background:var(--accbg);border-color:var(--acc)}.st.on i{background:var(--acc);color:#fff;border-color:var(--acc)}
+.st.done i{background:var(--okbg);color:var(--ok);border-color:var(--ok)}
+.body{padding:10px 18px 6px;overflow:auto;flex:1;min-height:340px}
+.sec{margin:6px 0 18px}.sec>h4{margin:0 0 3px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);font-weight:600}
+.sec>p{margin:0 0 10px;font-size:12.5px;color:var(--faint)}
+.f{margin:0 0 12px}.f>label,.lbl{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;margin:0 0 4px}
+.f .cnt{font-weight:400;color:var(--faint);font-size:11.5px}
+input[type=text],input[type=number],textarea,select{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:8px 10px}
+textarea{resize:vertical;min-height:84px;line-height:1.45}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--acc);outline-offset:-1px;border-color:var(--acc)}
+.f.bad input,.f.bad textarea{border-color:var(--bad)}.err{color:var(--bad);font-size:12px;margin:4px 0 0;display:none}.f.bad .err{display:block}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lock{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px dashed var(--line2);border-radius:8px;padding:8px 10px;color:var(--mut)}
+.lock small{margin-left:auto;color:var(--faint)}
+.seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 16px;background:var(--panel)}.seg button+button{border-left:1px solid var(--line2)}
+.seg button.on{background:var(--accbg);color:var(--acc);font-weight:600}
+.att{display:flex;gap:10px;align-items:center}.att input{width:90px}
+.sw{display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.sw i{width:38px;height:22px;border-radius:999px;background:var(--line2);position:relative;transition:background .15s;flex:none}
+.sw i:after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.sw.on i{background:var(--ok)}.sw.on i:after{left:19px}
+.roles{display:grid;gap:8px}
+.role{display:grid;grid-template-columns:130px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;background:var(--panel2);border-radius:10px;padding:9px 12px}
+.role b{display:flex;align-items:center;gap:7px}.dot{width:9px;height:9px;border-radius:50%}
+.role small{display:block;font-size:11px;color:var(--faint);margin:0 0 2px}
+.role .cell{min-width:0}
+.warnbox{background:var(--warnbg);color:var(--warn);border:1px solid var(--warn);border-radius:8px;padding:8px 11px;margin:0 0 12px;font-size:12.5px}
+.okbox{background:var(--okbg);color:var(--ok);border-radius:8px;padding:6px 10px;font-size:12.5px;margin-top:6px;display:none}.okbox.on{display:block}
+.json{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}.tag{display:inline-flex;gap:6px;align-items:center;font-size:12px;background:var(--accbg);color:var(--acc);border-radius:6px;padding:2px 4px 2px 9px}
+.tag button{border:0;background:none;padding:0 5px;color:var(--acc);border-radius:4px}
+.diff{width:100%;border-collapse:collapse;font-size:13px}.diff td,.diff th{padding:8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+.diff th{font-size:11.5px;color:var(--mut)}.old{color:var(--bad);text-decoration:line-through;opacity:.85}.new{color:var(--ok)}
+.wf{display:flex;align-items:center;gap:10px;padding:12px 18px;border-top:1px solid var(--line)}
+.wf .sp{flex:1}.wf .hint{font-size:12px;color:var(--faint)}
+@media (max-width:640px){.role{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.win{border-radius:0}.scrim{padding:0}.win,.win.max{height:100vh;max-height:100vh;width:100%}}
+</style>
+</head>
+<body>
+<div class="top"><h1>Missions</h1><button id="theme">Theme: auto</button></div>
+<div class="wrap">
+  <div class="crumbs"><a>← Kanban</a> / n8n / <b>AHAWR: all guards (watchers) run inside the dashboard container</b></div>
+  <div class="card">
+    <h2>AHAWR: all guards (watchers) run inside the dashboard container</h2>
+    <span class="mono">ahawr-guards-in-dashboard</span> <span class="pill p-run">Running</span>
+    <div class="chips"><span class="ch">task 2 of 20</span><span class="ch">attempts 3</span><span class="ch">0.7 h</span><span class="ch">17 tok/s</span><span class="ch">cache 94%</span></div>
+    <div class="sumgrid" id="summary"></div>
+    <div class="actions"><button class="pri" id="open">✎ Edit launch settings</button><button>Runs of this mission</button></div>
+  </div>
+  <p class="mono">Mockup: the “Edit launch settings” button opens the window. ⤢ expands it, the steps on top are clickable, the last step shows what changes before Save.</p>
+</div>
+
+<div class="scrim" id="scrim" role="dialog" aria-modal="true" aria-labelledby="wt">
+ <div class="win" id="win">
+  <div class="wh"><h3 id="wt">Launch settings</h3><span class="dirty" id="dirty">unsaved changes</span><span class="sp"></span>
+    <button class="ib" id="max" title="Expand">⤢</button><button class="ib" id="close" title="Close (Esc)">✕</button></div>
+  <div class="prog"><i id="bar"></i></div>
+  <div class="steps" id="steps"></div>
+  <div class="body" id="body"></div>
+  <div class="wf"><button id="back">‹ Back</button><span class="hint" id="hint"></span><span class="sp"></span><button id="cancel">Cancel</button><button class="pri" id="next">Next ›</button></div>
+ </div>
+</div>
+
+<script>
+var running=true;
+var ORIG={name:"AHAWR: all guards (watchers) run inside the dashboard container",
+ objective:"Repository D:\\n8n is the mission's WORKING DIRECTORY. Today the watchers of the stack are host scripts started by hand or by queue_watch.py. They die with a reboot, with the terminal window or with the session.",
+ rules:"Change only: claude-runner/src/claude_runner, tests, docs.\nDo not restart containers.\nDo not print secrets.",
+ acceptance:"docs/guards.md lists every watcher with check, interval and action\nThe runner terminates the process tree of a run when the run is closed",
+ folder:"D:\\n8n",enabled:true,attempts:5,
+ wm:"qwen3.8-27b-gsq-rco-iq2-s-mtp",wp:"local",rm:"claude-sonnet-5-5",rp:"anthropic",am:"claude-opus-5-5",ap:"anthropic",
+ maxtasks:20,policy:'{\n  "mode": "off_first",\n  "plan": 2,\n  "control": 1\n}',from:1,
+ corpora:"rag-platform",hints:["use pytest -q","small commits"],files:["claude-runner/docs/guards.md"]};
+var S=JSON.parse(JSON.stringify(ORIG)),step=0,max=false;
+var STEPS=[["Mission","What the mission is"],["Execution","Attempts, roles, thinking"],["Context","Hints and files"],["Review","What changes"]];
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function dirtyKeys(){return Object.keys(ORIG).filter(function(k){return JSON.stringify(ORIG[k])!==JSON.stringify(S[k])})}
+var LABEL={name:"Name",objective:"Objective",rules:"Rules",acceptance:"Acceptance criteria",enabled:"Enabled",attempts:"Attempts per task",wm:"Worker model",wp:"Worker provider",rm:"Reviewer model",rp:"Reviewer provider",am:"Architect model",ap:"Architect provider",maxtasks:"Max tasks",policy:"Thinking policy",from:"Policy from task",corpora:"Retrieval corpora",hints:"Hints",files:"Required files",folder:"Working folder"};
+function summary(){$("summary").innerHTML=[["Attempts per task",S.attempts],["Worker",S.wm+" · "+S.wp],["Reviewer",S.rm+" · "+S.rp],["Architect",S.am+" · "+S.ap],["Working folder",S.folder],["Enabled",S.enabled?"yes":"no"]].map(function(x){return '<div class="sum"><span>'+x[0]+'</span><b>'+esc(x[1])+'</b></div>'}).join("")}
+function field(k,label,kind,extra){extra=extra||{};var v=S[k];
+ if(kind==="text")return '<div class="f" data-k="'+k+'"><label>'+label+(extra.max?'<span class="cnt"><span data-c>'+String(v).length+'</span> / '+extra.max+'</span>':'')+'</label><input type="text" data-in="'+k+'" value="'+esc(v)+'"><div class="err">'+(extra.err||"Required")+'</div></div>';
+ if(kind==="area")return '<div class="f" data-k="'+k+'"><label>'+label+'<span class="cnt">'+(extra.lines?'one item per line':'')+'</span></label><textarea data-in="'+k+'" rows="'+(extra.rows||4)+'">'+esc(v)+'</textarea><div class="err">'+(extra.err||"Required")+'</div></div>'}
+function role(name,color,km,kp,note){return '<div class="role"><b><span class="dot" style="background:'+color+'"></span>'+name+'</b><div class="cell"><small>Model</small><input type="text" data-in="'+km+'" value="'+esc(S[km])+'"></div><div class="cell"><small>Provider</small><select data-in="'+kp+'">'+["local","anthropic","openai"].map(function(p){return '<option'+(S[kp]===p?" selected":"")+'>'+p+'</option>'}).join("")+'</select></div></div>'}
+function tags(k){return '<div class="tags">'+S[k].map(function(x,i){return '<span class="tag">'+esc(x)+'<button data-rm="'+k+':'+i+'" title="Remove">✕</button></span>'}).join("")+'</div><input type="text" data-add="'+k+'" placeholder="Type and press Enter">'}
+var PAGES=[
+function(){return (running?'<div class="warnbox">The mission is running: changes apply from the next task. Locked fields cannot change.</div>':'')+
+ '<div class="sec"><h4>Mission</h4><p>What the Architect plans from.</p>'+field("name","Name","text",{max:160})+field("objective","Objective","area",{rows:6,max:6000})+'</div>'+
+ '<div class="sec"><h4>Rules and acceptance</h4><p>One item per line; the Reviewer scores against these.</p><div class="row2">'+field("rules","Rules","area",{rows:5,lines:1})+field("acceptance","Acceptance criteria","area",{rows:5,lines:1})+'</div></div>'+
+ '<div class="sec"><h4>Where it runs</h4><div class="lock">🔒 <span class="mono" style="color:inherit">'+esc(S.folder)+'</span><small>working folder is fixed after the first start</small></div></div>'},
+function(){return '<div class="sec"><h4>Attempts per task</h4><p>How many times a task may be retried after a failed review.</p><div class="att"><div class="seg" id="seg">'+[3,5,10].map(function(n){return '<button data-att="'+n+'" class="'+(S.attempts===n?"on":"")+'">'+n+'</button>'}).join("")+'</div><span class="mono">or</span><input type="number" min="1" max="20" id="attn" value="'+S.attempts+'"></div></div>'+
+ '<div class="sec"><h4>Roles</h4><p>Model and provider on one line.</p><div class="roles">'+role("Worker","#ff8a3d","wm","wp")+role("Reviewer","#b39bff","rm","rp")+role("Architect","#ffb454","am","ap")+'</div></div>'+
+ '<div class="sec"><h4>Limits</h4><div class="row2"><div class="f"><label>Max tasks</label><input type="number" data-in="maxtasks" value="'+S.maxtasks+'"></div><div class="f"><label>Thinking policy from task</label><input type="number" data-in="from" value="'+S.from+'"></div></div>'+
+ '<div class="sw '+(S.enabled?"on":"")+'" id="en"><i></i><span>Enabled — the queue may start this mission</span></div></div>'+
+ '<div class="sec"><h4>Thinking policy</h4><p>JSON; checked as you type.</p><div class="f" id="pf"><textarea class="json" data-in="policy" rows="5">'+esc(S.policy)+'</textarea><div class="err" id="perr">Not valid JSON</div><div class="okbox" id="pok">✓ valid</div></div></div>'},
+function(){return '<div class="sec"><h4>Hints for the Worker</h4><p>Short rules added to every task prompt.</p>'+tags("hints")+'</div>'+
+ '<div class="sec"><h4>Required files</h4><p>The Worker must read these before it starts.</p>'+tags("files")+'</div>'+
+ '<div class="sec"><h4>Retrieval corpora</h4><div class="lock">🔒 <span class="mono" style="color:inherit">'+esc(S.corpora)+'</span><small>set when the mission is created</small></div></div>'},
+function(){var d=dirtyKeys();return '<div class="sec"><h4>Review</h4><p>'+(d.length?d.length+' field'+(d.length>1?'s':'')+' will change.':'Nothing changed yet.')+'</p>'+
+ (d.length?'<table class="diff"><tr><th>Field</th><th>Before</th><th>After</th></tr>'+d.map(function(k){var a=ORIG[k],b=S[k];if(Array.isArray(a)){a=a.join(", ");b=b.join(", ")}return '<tr><td><b>'+LABEL[k]+'</b></td><td class="old">'+esc(String(a).slice(0,120))+'</td><td class="new">'+esc(String(b).slice(0,120))+'</td></tr>'}).join("")+'</table>':'')+'</div>'+(running&&d.length?'<div class="warnbox">The mission is running: these apply from the next task.</div>':'')}];
+function draw(){
+ $("steps").innerHTML=STEPS.map(function(s,i){var c=i===step?"on":(i<step?"done":"");return '<button class="st '+c+'" data-s="'+i+'"><i>'+(i<step?"✓":i+1)+'</i>'+s[0]+'</button>'}).join("");
+ $("bar").style.width=((step+1)/STEPS.length*100)+"%";
+ $("body").innerHTML=PAGES[step]();$("body").scrollTop=0;
+ $("back").disabled=step===0;var last=step===STEPS.length-1;$("next").textContent=last?"Save changes":"Next ›";$("next").disabled=last&&!dirtyKeys().length;
+ $("hint").textContent=STEPS[step][1]+" · step "+(step+1)+" of "+STEPS.length;
+ $("dirty").classList.toggle("on",dirtyKeys().length>0);
+ if(step===1)checkPolicy()}
+function checkPolicy(){var ok=true;try{JSON.parse(S.policy)}catch(e){ok=false}var pf=$("pf");if(!pf)return;pf.classList.toggle("bad",!ok);$("pok").classList.toggle("on",ok);return ok}
+function valid(){if(!S.name.trim()||!S.objective.trim()){step=0;draw();document.querySelectorAll(".f").forEach(function(f){var i=f.querySelector("[data-in]");if(i&&["name","objective"].indexOf(i.dataset.in)>=0&&!i.value.trim())f.classList.add("bad")});return false}
+ try{JSON.parse(S.policy)}catch(e){step=1;draw();return false}return true}
+document.addEventListener("input",function(e){var k=e.target.dataset&&e.target.dataset.in;if(!k)return;var v=e.target.value;
+ if(e.target.type==="number")v=Number(v);if(k==="rules"||k==="acceptance"||k==="objective"||k==="name"||k==="policy"||k==="folder"||typeof S[k]==="string"||typeof S[k]==="number")S[k]=v;
+ var f=e.target.closest(".f");if(f){f.classList.toggle("bad",!String(v).trim()&&(k==="name"||k==="objective"));var c=f.querySelector("[data-c]");if(c)c.textContent=String(v).length}
+ if(k==="policy")checkPolicy();if(e.target.id==="attn"){S.attempts=Number(v);document.querySelectorAll("#seg button").forEach(function(b){b.classList.toggle("on",Number(b.dataset.att)===S.attempts)})}
+ $("dirty").classList.toggle("on",dirtyKeys().length>0)});
+document.addEventListener("click",function(e){var t=e.target;
+ if(t.dataset.s!==undefined){step=Number(t.dataset.s);draw()}
+ if(t.dataset.att){S.attempts=Number(t.dataset.att);draw()}
+ if(t.closest&&t.closest("#en")){S.enabled=!S.enabled;draw()}
+ if(t.dataset.rm){var p=t.dataset.rm.split(":");S[p[0]].splice(Number(p[1]),1);draw()}});
+document.addEventListener("keydown",function(e){if(e.key==="Escape")close();
+ if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.add){var v=e.target.value.trim();if(v){S[e.target.dataset.add].push(v);draw()}}});
+function open(){S=JSON.parse(JSON.stringify(ORIG));step=0;$("scrim").classList.add("open");draw()}
+function close(){if(dirtyKeys().length&&!confirm("Discard the unsaved changes?"))return;$("scrim").classList.remove("open")}
+$("open").onclick=open;$("close").onclick=close;$("cancel").onclick=close;
+$("scrim").addEventListener("mousedown",function(e){if(e.target===$("scrim"))close()});
+$("max").onclick=function(){max=!max;$("win").classList.toggle("max",max);$("max").textContent=max?"⤡":"⤢"};
+$("back").onclick=function(){step=Math.max(0,step-1);draw()};
+$("next").onclick=function(){if(step<STEPS.length-1){step++;draw();return}if(!valid())return;ORIG=JSON.parse(JSON.stringify(S));summary();$("scrim").classList.remove("open")};
+var themes=["auto","light","dark"],ti=0;$("theme").onclick=function(){ti=(ti+1)%3;var m=themes[ti];if(m==="auto")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",m);$("theme").textContent="Theme: "+m};
+summary();
+</script>
+</body>
+</html>
