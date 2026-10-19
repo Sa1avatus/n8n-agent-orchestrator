@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.7.100 · October 19, 2026",
+    "date": "0.7.200 · October 19, 2026",
     "tag": "Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0",
     "stats": [
       [
         "Current version",
-        "0.7.100"
+        "0.7.200"
       ],
       [
         "Missions completed",

@@ -493,17 +493,18 @@ def _derive_status(
     task_events = [event for event in events if event.get("task_id") == task_id]
     latest = task_events[-1] if task_events else None
     latest_type = latest.get("event_type") if latest is not None else None
-    score, reason = _latest_review(events, task_id)
+    # the verdict is the review_status ("pass" / "needs_changes"); review_reason is the Reviewer's free text
+    verdict = _latest_review_status(events, task_id)
     if index > current_index:  # ahead of the current task
         return "waiting"
     if live.status == "completed":  # all tasks done
-        return "accepted" if reason == "pass" else "completed"
+        return "accepted" if verdict == "pass" else "completed"
     if live.status == "failed" and index == current_index:  # failure on the current task
         return "failed"
     if index < current_index:  # the workflow already advanced past it
-        return "accepted" if reason == "pass" else "not_accepted"
+        return "accepted" if verdict == "pass" else "not_accepted"
     # the current task, Live State status 'active'
-    if reason == "needs_changes":  # the review rejected the report
+    if verdict == "needs_changes":  # the review rejected the report
         return "not_accepted"
     if latest_type == "worker_terminal":  # the worker run ended in error
         return "running"

@@ -105,6 +105,7 @@ const BUNDLED_EN = {
   "ew.midrun": "The mission is running: these apply from the next task.",
   "form.default": "Empty: the default of the profile is used (shown in grey)",
   "ew.hint.default": "A field left empty uses the default of the profile (grey text).",
+  "spr.noplan": "The Architect has not planned this mission yet: the tasks appear when it starts.",
   "proj.nofolder": "(no working folder)",
   "proj.expand": "Expand the missions of this project",
   "kpi.m": "missions",

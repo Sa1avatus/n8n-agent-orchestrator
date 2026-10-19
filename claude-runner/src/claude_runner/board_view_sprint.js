@@ -48,8 +48,7 @@ function figures(mission) {
     firstTry: firstTry.length,
     tps: numberOf(mission.tok_s),
     cache: cache === null ? null : Math.round(cache * 100),
-    // The mission summary carries no thinking share yet.
-    thinking: null,
+    thinking: numberOf(mission.thinking_share) === null ? null : Math.round(numberOf(mission.thinking_share) * 100),
   };
 }
 
@@ -156,7 +155,7 @@ function backlogCard(ctx, mission, index, current) {
   ]);
 }
 
-function sprintColumn(ctx, title, tasks) {
+function sprintColumn(ctx, title, tasks, planned) {
   const tone = title === "spr.wait" ? "gr" : title === "spr.prog" ? "y" : "g";
   const { el, tr } = ctx;
   return el("div", {}, [
@@ -165,6 +164,7 @@ function sprintColumn(ctx, title, tasks) {
       el("b", { text: task.id || "" }),
       el("span", { text: " " + (task.title || "") }),
     ])),
+    planned === false && title === "spr.wait" ? el("div", { class: "mono", text: tr("spr.noplan") }) : null,
     tasks.length > SHOWN_TASKS
       ? el("div", { class: "mono", text: tr("more", { n: tasks.length - SHOWN_TASKS }) })
       : null,
@@ -185,7 +185,10 @@ function render(body, ctx) {
     return Promise.resolve();
   }
   body.append(el("p", { class: "bv-note", text: tr("spr.hint") }));
-  const backlog = ctx.missions.filter((m) => STATE_OF_GROUP[m.state_group] !== undefined);
+  // running first, then the queue in its order (the summary lists the missions alphabetically)
+  const rank = (m) => (m.state_group === "running" ? -1 : (numberOf(m.position) ?? 1e9));
+  const backlog = ctx.missions.filter((m) => STATE_OF_GROUP[m.state_group] !== undefined)
+    .sort((a, b) => rank(a) - rank(b));
   if (backlog.length === 0) {
     body.append(note(ctx, "grid.empty"));
     return Promise.resolve();
@@ -203,9 +206,9 @@ function render(body, ctx) {
   const sprintCol = el("div", { class: "col" }, [
     el("h3", { text: (current.name || current.mission_id) + " · " + tr("of", { a: figs.done, b: figs.total }) }),
     el("div", { class: "sb" }, [
-      sprintColumn(ctx, "spr.wait", cols.wait),
-      sprintColumn(ctx, "spr.prog", cols.prog),
-      sprintColumn(ctx, "spr.done", cols.done),
+      sprintColumn(ctx, "spr.wait", cols.wait, figs.total > 0),
+      sprintColumn(ctx, "spr.prog", cols.prog, true),
+      sprintColumn(ctx, "spr.done", cols.done, true),
     ]),
   ]);
   const side = el("div", {}, [

@@ -1202,18 +1202,18 @@ class TestSummary:
             status="active", task_index=1,
         )
         # T1 is behind the current task (task_index=1 -> T2 is current): its
-        # last review reason is "pass", so it derives to "accepted"; it has
+        # last review_status is "pass", so it derives to "accepted"; it has
         # two attempts, hence "accepted_retry" in the summary.
         store.append_event("sk1", {
             "task_id": "T1", "task_attempt": 1,
             "event_type": "review_parsed",
-            "review_reason": "pass", "review_score": 5,
+            "review_reason": "all good", "review_status": "pass", "review_score": 5,
             "worker_run_id": "run_a",
         })
         store.append_event("sk1", {
             "task_id": "T1", "task_attempt": 2,
             "event_type": "review_parsed",
-            "review_reason": "pass", "review_score": 5,
+            "review_reason": "all good", "review_status": "pass", "review_score": 5,
             "worker_run_id": "run_b",
         })
         # T2 is the current task (task_index=1) with no events yet: "running"
