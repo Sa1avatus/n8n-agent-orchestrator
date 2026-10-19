@@ -131,6 +131,12 @@ function figureChips(ctx, mission, done, total) {
   const cache = num(mission.cache_ratio);
   const think = num(mission.thinking_share);
   const chips = [tr("of", { a: done, b: total })];
+  const since = mission.started_at || mission.created_at;
+  if (since && Number.isFinite(Date.parse(since))) {
+    const d = new Date(Date.parse(since));
+    const p = (n) => String(n).padStart(2, "0");
+    chips.push(tr("kan.since", { d: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) }));
+  }
   if (attempts) chips.push(tr("att", { n: attempts }));
   if (hours) chips.push(tr("hours", { n: hours.toFixed(1) }));
   if (cost) chips.push("$" + cost.toFixed(2));

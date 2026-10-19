@@ -496,6 +496,13 @@ class PgBoardStore(BoardStore):
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def mission_times(self) -> dict[str, dict[str, str]]:
+        rows = self._conn.execute(
+            f'SELECT state_key, min("createdAt") AS first, max("createdAt") AS last '
+            f"FROM {_EVENT_LOG_TABLE} GROUP BY state_key"
+        ).fetchall()
+        return {r["state_key"]: {"first": _iso(r["first"]), "last": _iso(r["last"])} for r in rows}
+
     def hermes_config(self) -> dict[str, Any]:
         row = self._conn.execute(
             f"SELECT * FROM {_HERMES_TABLE} WHERE profile_id = %s ORDER BY id LIMIT 1",
@@ -1495,7 +1502,7 @@ def get_board_store(
         dsn = os.environ.get(DSN_ENV, "")
     if not dsn:
         return _unavailable(
-            "база недоступна: DASHBOARD_BOARD_PG_DSN не задан "
+            "the database is unavailable: DASHBOARD_BOARD_PG_DSN is not set "
             "(PostgreSQL DSN for the board is not set)"
         )
     try:
@@ -1503,7 +1510,7 @@ def get_board_store(
     except Exception as exc:  # driver missing (ImportError) or connection failed
         # psycopg's error text may embed the DSN — redact it before reporting.
         message = _redact_dsn(str(exc), dsn)
-        return _unavailable(f"база недоступна: {message}")
+        return _unavailable(f"the database is unavailable: {message}")
 
 
 def _redact_dsn(message: str, dsn: str) -> str:

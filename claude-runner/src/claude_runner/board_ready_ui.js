@@ -27,6 +27,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // esc() from board_logic.js, with the same local fallback the other views use.
 function readyEsc(v) {
   if (typeof BoardLogic !== "undefined" && typeof BoardLogic.esc === "function") {
@@ -72,7 +83,7 @@ function readinessRow(item) {
   const reason = item && item.reason != null ? item.reason : "";
   return `<tr class="rdrow rd-${readyEsc(status)}">` +
     `<td class="rdcheck">${readyEsc(check)}</td>` +
-    `<td class="rdstatus">${readyEsc(status)}</td>` +
+    `<td class="rdstatus">${readyEsc(L("rdst." + status, status))}</td>` +
     `<td>${readyEsc(reason)}</td></tr>`;
 }
 
@@ -87,14 +98,14 @@ function renderReadyHtml(readiness, mission) {
   const status = readiness && readiness.status != null ? readiness.status : "warning";
   const rows = items.map(readinessRow).join("");
   return (
-    `<h3>Readiness</h3>` +
-    `<div class="rdstatusline rd-${readyEsc(status)}">` + readyEsc(status) + `</div>` +
+    `<h3>` + readyEsc(L("rd.title", "Readiness")) + `</h3>` +
+    `<div class="rdstatusline rd-${readyEsc(status)}">` + readyEsc(L("rdst." + status, status)) + `</div>` +
     `<table class="rdtable">` +
-      `<tr><th>check</th><th>status</th><th>reason</th></tr>` + rows + `</table>` +
+      `<tr><th>` + readyEsc(L("rd.check", "check")) + `</th><th>` + readyEsc(L("rd.status", "status")) + `</th><th>` + readyEsc(L("rd.reason", "reason")) + `</th></tr>` + rows + `</table>` +
     `<div class="rdoptions">` +
       `<label class="rdopt"><input type="checkbox" name="preflight" value="1">` +
-      `preflight requested</label>` +
-      `<button type="button" class="rd-start" data-mission="${readyEsc(missionId)}">Start</button>` +
+      readyEsc(L("rd.preflight", "preflight requested")) + `</label>` +
+      `<button type="button" class="rd-start" data-mission="${readyEsc(missionId)}">` + readyEsc(L("rd.start", "Start")) + `</button>` +
     `</div>` +
     `<div class="rdresult"></div>`
   );
@@ -172,7 +183,7 @@ function attachReadyControls(el, missionId, s) {
           render(el, missionId, s.mission || {}, readiness, next);
         })
         .catch((e) => {
-          const next = { preflight, message: e.message || "start failed", readiness };
+          const next = { preflight, message: e.message || L("rd.startfail", "start failed"), readiness };
           render(el, missionId, s.mission || {}, readiness, next);
         });
     });
@@ -190,7 +201,7 @@ async function renderReadyUI(container, missionId, mission) {
     readiness = await fetchJson(
       "/api/board/missions/" + encodeURIComponent(missionId) + "/readiness");
   } catch (e) {
-    el.innerHTML = `<div class="rdresult">` + readyEsc(e.message || "readiness unavailable") + `</div>`;
+    el.innerHTML = `<div class="rdresult">` + readyEsc(e.message || L("rd.unavail", "readiness unavailable")) + `</div>`;
     return;
   }
   render(el, missionId, mission, readiness, {});

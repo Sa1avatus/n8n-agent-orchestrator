@@ -214,7 +214,7 @@ def test_variant_stats_says_how_many_attempts_are_missing() -> None:
     stats = variant_stats(arm[:80] + ctrl, control="control")
     by = {s["variant"]: s for s in stats}
     assert by["arm"]["uplift"] == {
-        "text": "мало данных, нужно ещё 20 попыток на ветку"
+        "text": "not enough data, 20 more attempts per variant needed"
     }
 
 

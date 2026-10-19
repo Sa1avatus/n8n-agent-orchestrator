@@ -111,9 +111,13 @@ def _i18n_view(store: BoardStore) -> dict[str, Any]:
     data = store.list_i18n()
     if not any(lang["code"] == "en" for lang in data["languages"]):
         data["languages"].insert(0, {"code": "en", "name": "English", "enabled": True})
-    english = data["strings"].setdefault("en", {})
-    for key, text in _i18n_file("en").items():
-        english.setdefault(key, text)
+    # the shipped texts fill the keys the database does not have yet (a key added in a later release);
+    # a text edited in the translation editor is in the database and wins
+    shipped = [lang["code"] for lang in data["languages"] if (Path(__file__).with_name(f"board_i18n_{lang['code']}.json")).exists()]
+    for code in ["en", *[c for c in shipped if c != "en"]]:
+        table = data["strings"].setdefault(code, {})
+        for key, text in _i18n_file(code).items():
+            table.setdefault(key, text)
     return data
 
 
@@ -1092,7 +1096,7 @@ def _build_router() -> APIRouter:
                     return {"source": "db", "text": config["claudemd"]}
                 # no file here (the folder is not mounted into the dashboard, or it has none yet) and no copy
                 # in the config: the editor starts empty and the text is stored in the config
-                return {"source": "db", "text": "", "note": "CLAUDE.md не найден в рабочей папке"}
+                return {"source": "db", "text": "", "note": "CLAUDE.md not found in the working folder"}
             return {"source": "file", "text": text}
         return {"source": "db", "text": config.get("claudemd", "")}
 
@@ -1132,7 +1136,7 @@ def _build_router() -> APIRouter:
         return {
             "source": "db",
             "config_version": _config_version(store, mission_id),
-            "note": "применяет оператор",
+            "note": "applied by the operator",
         }
 
     # ------------------------------------------------------------------ changelog
@@ -1196,6 +1200,7 @@ def _build_router() -> APIRouter:
             for mission_id in ids:
                 group_of[mission_id] = group
         queue_of = {e.mission_id: e.position for e in store.queue()}
+        times = store.mission_times()
         missions: list[dict[str, Any]] = []
         for mission in store.list_missions():
             state_key = mission.state_namespace
@@ -1208,6 +1213,9 @@ def _build_router() -> APIRouter:
                     "name": mission.name,
                     "state_group": group_of.get(mission.mission_id),
                     "position": queue_of.get(mission.mission_id),
+                    "created_at": mission.created_at,
+                    "started_at": (times.get(state_key) or {}).get("first"),
+                    "last_at": (times.get(state_key) or {}).get("last"),
                     "project": _mission_project(mission.working_directory, rules),
                     "tasks": _cached_task_list(store, state_key),
                     "attempts": figures["attempts"],

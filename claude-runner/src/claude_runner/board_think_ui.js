@@ -26,6 +26,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // The server's MIN_ARM (board_think.py: the uplift is computed only from
 // this many attempts per variant); shown in the not-enough-data line when
 // no attempt rows are available yet.
@@ -109,8 +120,12 @@ function policyFromText(text) {
 // otherwise the MIN_ARM fallback (the board has no read route that serves
 // per-variant attempt rows yet, so the panel always shows the fallback).
 function notEnoughText(uplift) {
-  if (uplift && uplift.text) return uplift.text;
-  return "мало данных, нужно ещё " + MIN_ARM + " попыток на ветку";
+  if (uplift && uplift.text) {
+    // the server's text carries the number; show it in the board language
+    const n = /(\d+)/.exec(String(uplift.text));
+    return n ? L("th.few", "not enough data, {n} more attempts per variant needed", { n: n[1] }) : uplift.text;
+  }
+  return L("th.few", "not enough data, {n} more attempts per variant needed", { n: MIN_ARM });
 }
 
 // Pure render: the policy block, the layout block, the statistics block and
@@ -130,9 +145,9 @@ function renderThinkHtml(policyTextValue, layout, problems, stats, weights) {
   const statRows = variants.map((v) => {
     const uplift = v.uplift;
     const upliftText = v.variant === controlVariant
-      ? "control"
+      ? L("th.control", "control")
       : (uplift && uplift.pass_diff_pct != null
-        ? "+" + Number(uplift.pass_diff_pct).toFixed(1) + " пп" +
+        ? "+" + Number(uplift.pass_diff_pct).toFixed(1) + " " + L("th.pp", "pp") +
           (uplift.pass_interval ? " (90%: " +
           uplift.pass_interval.map((x) => Number(x).toFixed(1)).join("…") + ")" : "")
         : notEnoughText(uplift));
@@ -143,34 +158,34 @@ function renderThinkHtml(policyTextValue, layout, problems, stats, weights) {
       thinkEsc(upliftText) + `</td></tr>`;
   }).join("");
   const weightLine = Array.isArray(weights) && weights.length
-    ? "recommended weights (Thompson, seed 7): " +
+    ? L("th.weights", "recommended weights (Thompson, seed 7): ") +
         weights.map((w) => thinkEsc(w.variant) + " " + w.suggested_weight).join(", ")
     : "";
   return (
-    `<h3>Thinking policy</h3>` +
+    `<h3>` + thinkEsc(L("th.policy", "Thinking policy")) + `</h3>` +
     `<div class="tkpolicy">` +
     `<textarea name="think_policy" spellcheck="false">` + thinkEsc(policyTextValue) + `</textarea>` +
-    `<button type="button" class="tk-validate">Validate</button>` +
+    `<button type="button" class="tk-validate">` + thinkEsc(L("th.validate", "Validate")) + `</button>` +
     `</div>` +
     `<div class="tkprobs">` +
-      (probRows || `<div class="tkok">Policy is valid.</div>`) +
+      (probRows || `<div class="tkok">` + thinkEsc(L("th.valid", "Policy is valid.")) + `</div>`) +
     `</div>` +
-    `<h3>Layout (tasks 1–12)</h3>` +
-    `<button type="button" class="tk-layout">Preview layout</button>` +
+    `<h3>` + thinkEsc(L("th.layout", "Layout (tasks 1–12)")) + `</h3>` +
+    `<button type="button" class="tk-layout">` + thinkEsc(L("th.preview", "Preview layout")) + `</button>` +
     (rows.length
       ? `<table class="tklayout">` + layoutRows + `</table>`
-      : `<div class="tkempty">No layout yet.</div>`) +
-    `<h3>Statistics</h3>` +
-    `<button type="button" class="tk-stats">Statistics</button>` +
+      : `<div class="tkempty">` + thinkEsc(L("th.nolayout", "No layout yet.")) + `</div>`) +
+    `<h3>` + thinkEsc(L("th.stats", "Statistics")) + `</h3>` +
+    `<button type="button" class="tk-stats">` + thinkEsc(L("th.stats", "Statistics")) + `</button>` +
     (statRows
       ? `<table class="tkstats">` +
-        `<tr><th>variant</th><th>attempts</th><th>passes</th><th>accept share</th>` +
-        `<th>min/attempt</th><th>think tokens</th><th>uplift vs control</th></tr>` +
+        `<tr><th>` + thinkEsc(L("th.h.variant", "variant")) + `</th><th>` + thinkEsc(L("th.h.attempts", "attempts")) + `</th><th>` + thinkEsc(L("th.h.passes", "passes")) + `</th><th>` + thinkEsc(L("th.h.share", "accept share")) + `</th>` +
+        `<th>` + thinkEsc(L("th.h.min", "min/attempt")) + `</th><th>` + thinkEsc(L("th.h.tokens", "think tokens")) + `</th><th>` + thinkEsc(L("th.h.uplift", "uplift vs control")) + `</th></tr>` +
         statRows + `</table>`
       : variants.length
         ? ""
         : `<div class="tkempty">` +
-          thinkEsc("No attempts recorded yet: " + notEnoughText(null)) +
+          thinkEsc(L("th.noattempts", "No attempts recorded yet: ") + notEnoughText(null)) +
           `</div>`) +
     `<div class="tkweights">` + thinkEsc(weightLine) + `</div>`
   );
@@ -233,7 +248,7 @@ function attachThinkControls(el, missionId) {
           render(el, missionId, text, s.layout, problems, s.stats, s.weights);
         })
         .catch((e) => {
-          if (msg) msg.textContent = "validation failed: " + (e.message || "error");
+          if (msg) msg.textContent = L("th.valfail", "validation failed: ") + (e.message || "error");
         });
     });
   }
@@ -319,7 +334,7 @@ async function renderThinkUI(container, missionId) {
     detail = await detail.json().catch(() => ({}));
     const mission = detail && detail.mission ? detail.mission : detail;
     if (!mission || (mission.mission_id == null && (detail && detail.mission_id == null))) {
-      throw new Error("mission not found");
+      throw new Error(L("th.nomission", "mission not found"));
     }
   } catch (e) {
     renderError(container, e.message || e);

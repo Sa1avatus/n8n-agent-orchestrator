@@ -66,7 +66,7 @@ const readOnlyRows = PE.renderEditForm(
     verification: [], scope: [], hint: "h1" },
   false);
 check("a non-waiting task shows the read-only note",
-  has(readOnlyRows, 'class="pedit-readonly">Задача уже выполнена (accepted)'));
+  has(readOnlyRows, 'class="pedit-readonly">The task is already done (accepted): editing is not available.'));
 check("the read-only note disables every control",
   (readOnlyRows.match(/data-key="[^"]*"/g) || []).length === 6 &&
   (readOnlyRows.match(/data-key="[^"]*" data-control="[^"]*" disabled/g) || []).length === 6);
@@ -76,7 +76,7 @@ const activeRows = PE.renderEditForm(
     verification: [], scope: [], hint: "h1" },
   true);
 check("an active mission shows the running warning",
-  has(activeRows, 'class="pedit-warning">правка плана идущей миссии может быть перезаписана воркфлоу: делайте её в паузе'));
+  has(activeRows, 'class="pedit-warning">Editing the plan of a running mission can be overwritten by the workflow: do it on a pause.'));
 
 // --- readForm: CRLF normalisation and listarea parsing ---
 function makeBox(keys) {
@@ -286,8 +286,8 @@ function editData(taskId, overrides, viewStatus) {
     requests[0].url === "/api/board/missions/m%20running/plan" &&
     requests[1].url === "/api/board/missions/m%20running");
   check("renderEdit renders the form with the running warning",
-    has(container.innerHTML, "Редактирование задачи") &&
-    has(container.innerHTML, "правка плана идущей миссии может быть перезаписана воркфлоу"));
+    has(container.innerHTML, "Edit task") &&
+    has(container.innerHTML, "Editing the plan of a running mission can be overwritten by the workflow"));
   check("renderEdit sets the editable dataset flag", container.dataset.editable === "1");
   requests.length = 0;
 
@@ -350,7 +350,7 @@ function editData(taskId, overrides, viewStatus) {
   post = { status: 409, body: { error: { message: "план изменился, обновите" } } };
   await PE.onSave(lastBox, data);
   check("a 409 shows the reload message",
-    noteStub.textContent === "план изменился, обновите");
+    noteStub.textContent === "the plan changed, reload");
   check("a 409 reloads the plan (GET plan then detail after the post)",
     requests.length === 3 &&
     requests[1].url === "/api/board/missions/m%20running/plan" &&
@@ -363,7 +363,7 @@ function editData(taskId, overrides, viewStatus) {
   attach(lastBox, data);
   await PE.onSave(lastBox, data);
   check("an unchanged form shows the empty note and posts nothing",
-    noteStub.textContent === "Изменений нет — сохранять нечего." && requests.length === 0);
+    noteStub.textContent === "No changes — nothing to save." && requests.length === 0);
   requests.length = 0;
 
   // --- the error state: a failed plan load renders the error ---
@@ -465,7 +465,7 @@ function editData(taskId, overrides, viewStatus) {
   attach(lastBox, data);
   await PE.onRetryTask(lastBox, data);
   check("retry is refused for a waiting task and posts nothing",
-    noteStub.textContent === "повтор доступен только для задачи со статусом not_accepted" &&
+    noteStub.textContent === "a retry is only available for a task with the status not_accepted" &&
     requests.length === 0);
   const naData = editData("T002", detail.task_overrides, "not_accepted");
   lastBox = makeEditBox(true, naData.initial);
@@ -503,7 +503,7 @@ function editData(taskId, overrides, viewStatus) {
   post = { status: 409, body: { error: { message: "план изменился, обновите" } } };
   await PE.onSetHint(lastBox, naData);
   check("a 409 on an operation reloads and shows the message",
-    noteStub.textContent === "план изменился, обновите" &&
+    noteStub.textContent === "the plan changed, reload" &&
     requests.filter((r) => !r.method || r.method === "GET").length === 2);
   requests.length = 0;
 

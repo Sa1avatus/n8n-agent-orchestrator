@@ -71,7 +71,7 @@ class TestWorkingFolder:
     def test_host_path_is_a_warning(self):
         item = check_working_folder("/host/only/path", host_visible=False)
         assert item["status"] == "warning"
-        assert item["reason"] == "проверяется на хосте"
+        assert item["reason"] == "checked on the host"
 
 
 class TestRequiredFiles:
@@ -90,7 +90,7 @@ class TestRequiredFiles:
     def test_host_files_are_a_warning(self):
         item = check_required_files(["/host/file.md"], host_visible=False)
         assert item["status"] == "warning"
-        assert item["reason"] == "проверяется на хосте"
+        assert item["reason"] == "checked on the host"
 
 
 class TestRunnerHealth:

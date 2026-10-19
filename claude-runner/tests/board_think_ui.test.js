@@ -189,7 +189,7 @@ globalThis.document = {
   sb.click();
   await new Promise((r) => setTimeout(r, 100));
   check("without attempt data the not-enough-data fallback shows N = 100",
-    has(c1.innerHTML, "мало данных, нужно ещё 100 попыток на ветку"));
+    has(c1.innerHTML, "not enough data, 100 more attempts per variant needed"));
 
   // a stubbed /thinking/stats answer: one variant with the server's text,
   // one with the numeric uplift, one the control.
@@ -217,9 +217,9 @@ globalThis.document = {
   sb.click();
   await new Promise((r) => setTimeout(r, 100));
   check("the numeric uplift renders with its 90% interval",
-    has(c1.innerHTML, "+12.5 пп (90%: 6.9…18.7)"));
+    has(c1.innerHTML, "+12.5 pp (90%: 6.9…18.7)"));
   check("the server's not-enough-data text renders with its N",
-    has(c1.innerHTML, "мало данных, нужно ещё 88 попыток на ветку"));
+    has(c1.innerHTML, "not enough data, 88 more attempts per variant needed"));
   check("the control row shows 'control' in the uplift column",
     has(c1.innerHTML, "<td class=\"tkuplift\">control</td>"));
   check("the suggested weights render as plain text",
@@ -250,7 +250,7 @@ globalThis.document = {
   // --- 5. after a Validate re-render the controls still work and the
   //        layout and stats are kept ---
   const beforeLayout = (c1.innerHTML.match(/class="tktask"/g) || []).length;
-  const beforeStats = has(c1.innerHTML, "мало данных, нужно ещё 99 попыток на ветку");
+  const beforeStats = has(c1.innerHTML, "not enough data, 99 more attempts per variant needed");
   check("before the second validate the layout (12 rows) and stats are present",
     beforeLayout === 12 && beforeStats);
   policyProblems = ["broken JSON"];
@@ -263,7 +263,7 @@ globalThis.document = {
   check("the layout rows are kept after the re-render",
     (c1.innerHTML.match(/class="tktask"/g) || []).length === 12);
   check("the statistics are kept after the re-render",
-    has(c1.innerHTML, "мало данных, нужно ещё 99 попыток на ветку"));
+    has(c1.innerHTML, "not enough data, 99 more attempts per variant needed"));
   check("the Preview and Statistics buttons still exist after the re-render",
     !!c1.querySelector(".tk-layout") && !!c1.querySelector(".tk-stats"));
 

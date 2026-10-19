@@ -417,7 +417,7 @@ def variant_stats(
     (mode "think") and without (mode "nothink"), and — against the control
     variant — the pass-rate uplift in percentage points with a 90%
     bootstrap interval; below ``min_arm`` attempts it reports how many more
-    are missing instead ("мало данных, нужно ещё N попыток на ветку")."""
+    are missing instead ("not enough data, N more attempts per variant needed")."""
     by_variant: dict[str, list[Attempt]] = {}
     for attempt in attempts:
         by_variant.setdefault(str(attempt.get("variant") or ""), []).append(attempt)
@@ -441,7 +441,7 @@ def variant_stats(
         if name != control:
             if len(items) < min_arm:
                 stats["uplift"] = {
-                    "text": f"мало данных, нужно ещё {min_arm - len(items)} попыток на ветку"
+                    "text": f"not enough data, {min_arm - len(items)} more attempts per variant needed"
                 }
             else:
                 uplift = _uplift(items, control_attempts, control)

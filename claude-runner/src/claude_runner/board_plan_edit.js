@@ -24,6 +24,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // esc() from board_logic.js, with the same local fallback the other views use.
 function esc(v) {
   if (typeof BoardLogic !== "undefined" && typeof BoardLogic.esc === "function") {
@@ -41,12 +52,12 @@ function esc(v) {
 // (EDITABLE_TASK_FIELDS does not include it); it is read here and sent with
 // the changed fields, and the server's 403 names it as not editable.
 const FIELD_ROWS = [
-  ["title", "заголовок", "text"],
-  ["objective", "цель", "textarea"],
-  ["acceptance_criteria", "критерии приёмки", "listarea"],
-  ["verification", "проверка", "listarea"],
-  ["scope", "объём", "listarea"],
-  ["hint", "подсказка Worker", "textarea"],
+  ["title", "pe.f.title", "text"],
+  ["objective", "pe.f.objective", "textarea"],
+  ["acceptance_criteria", "pe.f.acceptance", "listarea"],
+  ["verification", "pe.f.verification", "listarea"],
+  ["scope", "pe.f.scope", "listarea"],
+  ["hint", "pe.f.hint", "textarea"],
 ];
 
 // One row of the form: the label and the value input.  Every input carries
@@ -82,13 +93,13 @@ function renderEditForm(view, task, running) {
   const status = view && view.status ? view.status : "waiting";
   const editable = status === "waiting";
   const rows = FIELD_ROWS.map(([key, label, control]) =>
-    fieldHtml(key, label, control, t[key], !editable));
+    fieldHtml(key, L(label, label.replace(/^pe[.]f[.]/, "")), control, t[key], !editable));
   const readOnly = editable ? "" :
-    `<div class="pedit-readonly">Задача уже выполнена (${esc(status)}) — правки недоступны.</div>`;
+    `<div class="pedit-readonly">${esc(L("pe.readonly", "The task is already done ({status}): editing is not available.", { status }))}</div>`;
   const warning = running ?
-    `<div class="pedit-warning">правка плана идущей миссии может быть перезаписана воркфлоу: делайте её в паузе</div>` : "";
+    `<div class="pedit-warning">${esc(L("pe.warn", "Editing the plan of a running mission can be overwritten by the workflow: do it on a pause."))}</div>` : "";
   return (
-    `<h3>Редактирование задачи</h3>` + rows.join("") + readOnly + warning
+    `<h3>${esc(L("pe.title", "Edit task"))}</h3>` + rows.join("") + readOnly + warning
   );
 }
 
@@ -141,7 +152,7 @@ function parseLines(text) {
 
 // Render the diff of the changed fields as escaped HTML.
 function diffHtml(diff, labels) {
-  if (!diff || diff.length === 0) return `<div class="pedit-diff none">Изменений нет.</div>`;
+  if (!diff || diff.length === 0) return `<div class="pedit-diff none">${esc(L("pe.nodiff", "No changes."))}</div>`;
   const fmt = (v) => (v == null ? "—" :
     Array.isArray(v) ? v.map((x) => String(x)).join(", ") : String(v));
   const rows = diff.map((d) => {
@@ -257,11 +268,11 @@ function attachFormControls(box, data) {
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "pedit-save";
-  saveBtn.textContent = "Сохранить";
+  saveBtn.textContent = L("pe.save", "Save");
   const resetBtn = document.createElement("button");
   resetBtn.type = "button";
   resetBtn.className = "pedit-reset";
-  resetBtn.textContent = "Сбросить";
+  resetBtn.textContent = L("pe.reset", "Reset");
   saveBtn.addEventListener("click", () => onSave(box, data));
   resetBtn.addEventListener("click", () => onReset(box, data));
   bar.appendChild(saveBtn);
@@ -293,10 +304,10 @@ async function onSave(box, data) {
   box.appendChild(diffBox);
   diffBox.innerHTML = diffHtml(diff, labels);
   if (diff.length === 0) {
-    showNote(box, "Изменений нет — сохранять нечего.");
+    showNote(box, L("pe.nothing", "No changes — nothing to save."));
     return;
   }
-  if (!window.confirm("Сохранить изменения?")) {
+  if (!window.confirm(L("pe.confirm", "Save the changes?"))) {
     showNote(box, "");
     diffBox.remove();
     return;
@@ -314,16 +325,16 @@ async function onSave(box, data) {
     if (e.status === 403) {
       // The task is read-only: show the server's message and keep the form
       // disabled.
-      showNote(box, e.message || "правка недоступна");
+      showNote(box, e.message || L("pe.unavailable", "editing is not available"));
       box.dataset.editable = "";
       for (const el of box.querySelectorAll("[data-key]")) el.disabled = true;
     } else if (e.status === 409) {
       // renderEdit rewrites box.innerHTML, so the note must come after it
       // (a note shown before would be erased by the reload).
       await renderEdit(box, data.missionId, data.taskId);
-      showNote(box, "план изменился, обновите");
+      showNote(box, L("conflict.plan_changed", "the plan changed, reload"));
     } else {
-      showNote(box, e.message || "сохранение не удалось");
+      showNote(box, e.message || L("pe.savefail", "saving failed"));
     }
     diffBox.remove();
   }
@@ -362,9 +373,9 @@ function showNote(box, text) {
 async function handleOpError(e, box, data) {
   if (e.status === 409) {
     await renderEdit(box, data.missionId, data.taskId);
-    showNote(box, "план изменился, обновите");
+    showNote(box, L("conflict.plan_changed", "the plan changed, reload"));
   } else {
-    showNote(box, e.message || "операция не выполнена");
+    showNote(box, e.message || L("pe.opfail", "the operation failed"));
   }
 }
 
@@ -394,7 +405,7 @@ async function onAddTask(box, data, fields) {
 // route takes no expected_version (it never answers 409); confirm=true is
 // sent so the server's running-mission guard is satisfied.
 async function onDeleteTask(box, data) {
-  if (!window.confirm("Удалить задачу " + data.taskId + "?")) return;
+  if (!window.confirm(L("pe.delete", "Delete task {id}?", { id: data.taskId }))) return;
   const url = "/api/board/missions/" + encodeURIComponent(data.missionId) +
     "/tasks/" + encodeURIComponent(data.taskId) + "?confirm=true";
   try {
@@ -452,7 +463,7 @@ async function onMoveTask(box, data, direction) {
 async function onRetryTask(box, data) {
   const status = data.view && data.view.status;
   if (status !== "not_accepted") {
-    showNote(box, "повтор доступен только для задачи со статусом not_accepted");
+    showNote(box, L("pe.retryonly", "a retry is only available for a task with the status not_accepted"));
     return;
   }
   const body = { expected_version: data.version, who: "" };

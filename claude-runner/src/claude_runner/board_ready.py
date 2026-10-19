@@ -34,7 +34,7 @@ from .board import (
 from .context_probe import ctx_from_models
 from .sources import RunnerSource, _check
 
-HOST_CHECK_NOTE = "проверяется на хосте"
+HOST_CHECK_NOTE = "checked on the host"
 
 # A mission id is a slug: lower-case letters, digits and separator characters
 # (hyphen, underscore, dot); it must not start with a separator.

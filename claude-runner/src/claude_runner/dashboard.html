@@ -239,9 +239,9 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   <nav id="list"></nav>
 </aside>
 <div id="content">
-<nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Прогоны</button><button id="tabboard" type="button">Миссии</button></nav>
+<nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Runs</button><button id="tabboard" type="button">Missions</button></nav>
 <div id="boardpane" hidden>
-  <iframe id="boardframe" title="Миссии" hidden></iframe>
+  <iframe id="boardframe" title="Missions" hidden></iframe>
 </div>
 <main id="main">
 <div id="runview">
@@ -1054,6 +1054,33 @@ function toolPayload(e) {
 // runs list.
 const boardframe = document.getElementById("boardframe");
 function boardFrameUrl() { return "/static/board.html" + (location.hash || "#board"); }
+// the tab names follow the language chosen on the board (localStorage "board.lang", shared with the board frame)
+const SHELL_TEXT = { en: { runs: "Runs", missions: "Missions" }, ru: { runs: "Прогоны", missions: "Миссии" } };
+let shellStrings = null;
+function shellLang() { try { return localStorage.getItem("board.lang") || "en"; } catch (e) { return "en"; } }
+function applyShellLang() {
+  const lang = shellLang();
+  const base = SHELL_TEXT[lang] || SHELL_TEXT.en;
+  const got = (shellStrings && shellStrings[lang]) || {};
+  const s = { runs: got.runs || base.runs, missions: got.missions || base.missions };
+  const set = (id, text) => { const el = document.getElementById(id); if (el && text) el.textContent = text; };
+  set("tabruns", s.runs);
+  set("tabboard", s.missions);
+  const frame = document.getElementById("boardframe");
+  if (frame && s.missions) frame.title = s.missions;
+  document.documentElement.lang = lang;
+}
+fetch("/api/board/i18n", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => {
+  if (!d || !d.strings) return;
+  shellStrings = {};
+  for (const lang of Object.keys(d.strings)) {
+    const t = d.strings[lang] || {};
+    shellStrings[lang] = { runs: t["nav.runs"], missions: t["nav.missions"] };
+  }
+  applyShellLang();
+}).catch(() => {});
+window.addEventListener("storage", (e) => { if (e.key === "board.lang") applyShellLang(); });
+applyShellLang();
 let TAB = "runs";
 function setTab(name) {
   const runs = name === "runs";

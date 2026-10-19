@@ -643,7 +643,7 @@ def get_ops_store(dsn: str | None = None) -> OpsStore:
         dsn = os.environ.get(DSN_ENV, "")
     if not dsn:
         return _unavailable_ops(
-            "база недоступна: DASHBOARD_BOARD_PG_DSN не задан "
+            "the database is unavailable: DASHBOARD_BOARD_PG_DSN is not set "
             "(PostgreSQL DSN for the board is not set)"
         )
     try:
@@ -651,4 +651,4 @@ def get_ops_store(dsn: str | None = None) -> OpsStore:
     except Exception as exc:  # driver missing (ImportError) or connection failed
         # psycopg's error text may embed the DSN — redact it before reporting.
         message = _redact_dsn(str(exc), dsn)
-        return _unavailable_ops(f"база недоступна: {message}")
+        return _unavailable_ops(f"the database is unavailable: {message}")

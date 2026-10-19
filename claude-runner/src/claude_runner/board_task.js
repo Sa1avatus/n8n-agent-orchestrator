@@ -19,6 +19,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // esc() from board_logic.js; a local fallback keeps the view safe when that
 // script has not loaded.
 function esc(v) {
@@ -47,10 +58,10 @@ function attemptHtml(detail) {
   const runs = detail && Array.isArray(detail.runs) ? detail.runs : [];
   const number = detail ? (Number(detail.attempt) || "?") : "?";
   const time = detail && detail.seconds != null
-    ? ((Math.round(Number(detail.seconds)) / 60).toFixed(1)) + " min" : "—";
+    ? L("s.min", "{n} min", { n: (Math.round(Number(detail.seconds)) / 60).toFixed(1) }) : "—";
   return (
     `<div class="tattempt">` +
-    `<span class="tatt">attempt ` + esc(number) + `</span> ` +
+    `<span class="tatt">` + esc(L("tk.attempt", "attempt")) + ` ` + esc(number) + `</span> ` +
     `<span class="tatt-time">` + esc(time) + `</span> · ` +
     `<span class="tatt-runs">` + (runs.length ? runs.map(runId).join(", ") : esc("—")) +
     `</span></div>`
@@ -59,7 +70,7 @@ function attemptHtml(detail) {
 
 // The loading line, shown until the plan fetch has returned.
 function loadingHtml() {
-  return `<div class="tloading">Loading…</div>`;
+  return `<div class="tloading">` + esc(L("tk.loading", "Loading…")) + `</div>`;
 }
 
 // Pure render: the task header (id, title, objective, status), then the
@@ -74,7 +85,7 @@ function renderTask(missionId, taskId, view, stats) {
   const objective = t.objective == null ? "" : t.objective;
   const status = t.status || "waiting";
   if (view == null || t.task_id == null) {
-    return `<div class="tempty">Task ` + esc(taskId) + ` is not in the plan.</div>`;
+    return `<div class="tempty">` + esc(L("tk.missing", "Task {id} is not in the plan.", { id: taskId })) + `</div>`;
   }
   const attempts = stats ? (Array.isArray(stats.attempts_detail) ? stats.attempts_detail : []) : [];
   const used = stats ? (Number(stats.attempts) || 0) : null;
@@ -84,20 +95,20 @@ function renderTask(missionId, taskId, view, stats) {
   const reason = view && view.review_reason != null ? esc(view.review_reason) : esc("—");
 
   return (
-    `<div class="crumbs"><a class="back" href="#board/` + esc(missionId) + `">← back to mission</a></div>` +
+    `<div class="crumbs"><a class="back" href="#board/` + esc(missionId) + `">` + esc(L("tk.back", "← back to mission")) + `</a></div>` +
     `<h2>` + esc(title) + `</h2>` +
     `<div class="meta">` +
     `<span class="tid">id: ` + esc(t.task_id) + `</span>` +
-    `<span>status: ` + esc(status) + `</span>` +
-    `<span>attempts: ` + attemptsUsed + `</span>` +
-    `<span>reviewer score: ` + score + `</span>` +
-    `<span>reviewer reason: ` + reason + `</span>` +
+    `<span>` + esc(L("tk.status", "status")) + `: ` + esc(L("tstat." + status, status)) + `</span>` +
+    `<span>` + esc(L("tk.attempts", "attempts")) + `: ` + attemptsUsed + `</span>` +
+    `<span>` + esc(L("tk.score", "reviewer score")) + `: ` + score + `</span>` +
+    `<span>` + esc(L("tk.reason", "reviewer reason")) + `: ` + reason + `</span>` +
     `</div>` +
     (objective ? `<div class="tobj">` + esc(objective) + `</div>` : "") +
-    `<h3>Attempts</h3>` +
+    `<h3>` + esc(L("tk.attempts.h", "Attempts")) + `</h3>` +
     (attempts.length
       ? attempts.map((d) => attemptHtml(d)).join("")
-      : `<div class="tempty">No attempts yet.</div>`)
+      : `<div class="tempty">` + esc(L("tk.none", "No attempts yet.")) + `</div>`)
   );
 }
 

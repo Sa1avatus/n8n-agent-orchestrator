@@ -184,6 +184,11 @@ class BoardStore(ABC):
     def events(self, state_key: str) -> list[dict[str, Any]]:
         """Event log rows of one mission (the state key), oldest first."""
 
+    def mission_times(self) -> dict[str, dict[str, str]]:
+        """First and last event time per state key: ``{state_key: {"first": iso, "last": iso}}``
+        (one query for the whole board; a store without an event log answers ``{}``)."""
+        return {}
+
     @abstractmethod
     def hermes_config(self) -> dict[str, Any]:
         """The hermes_config row (the ``claude-code`` profile) as a dict."""
@@ -651,6 +656,15 @@ class InMemoryBoardStore(BoardStore):
     def events(self, state_key: str) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(e) for e in self._events.get(state_key, [])]
+
+    def mission_times(self) -> dict[str, dict[str, str]]:
+        with self._lock:
+            out: dict[str, dict[str, str]] = {}
+            for key, events in self._events.items():
+                stamps = sorted(str(e["created_at"]) for e in events if e.get("created_at"))
+                if stamps:
+                    out[key] = {"first": stamps[0], "last": stamps[-1]}
+            return out
 
     def hermes_config(self) -> dict[str, Any]:
         with self._lock:

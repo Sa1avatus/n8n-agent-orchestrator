@@ -38,6 +38,22 @@ function numberOf(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// an ISO time as a sortable number (null when there is none)
+function timeOf(iso) {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// "2026-10-19 09:15" in the viewer's time zone ("—" when there is no date)
+function fmtDate(iso) {
+  const ms = timeOf(iso);
+  if (ms === null) return "—";
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+
 function projectName(mission) {
   const project = mission.project || {};
   return project.name || project.key || "";
@@ -45,9 +61,12 @@ function projectName(mission) {
 
 const COLUMNS = [
   { key: "name", label: "h.mission", value: (m) => String(m.name || m.mission_id).toLowerCase() },
+  { key: "id", label: "h.id", value: (m) => String(m.mission_id || "").toLowerCase() },
   { key: "proj", label: "h.project", value: (m) => projectName(m).toLowerCase() },
   { key: "state", label: "h.state", value: (m) => STATE_ORDER[stateOf(m)] },
   { key: "tasks", label: "h.tasks", value: (m) => taskCounts(m).done },
+  { key: "started", label: "h.started", value: (m) => timeOf(m.started_at || m.created_at) },
+  { key: "last", label: "h.last", value: (m) => timeOf(m.last_at) },
   { key: "att", label: "h.att", numeric: true, value: (m) => numberOf(m.attempts) },
   { key: "time", label: "h.time", numeric: true, value: (m) => numberOf(m.hours) },
   { key: "cache", label: "h.cache", numeric: true, value: (m) => numberOf(m.cache_ratio) },
@@ -108,9 +127,12 @@ function missionRow(ctx, mission) {
     "data-search": (name + " " + id).toLowerCase(),
   }, [
     el("td", {}, [el("b", { text: name }), el("div", { class: "mono", text: id })]),
+    el("td", { class: "mono", text: id }),
     el("td", { text: projectName(mission) }),
     el("td", {}, [el("span", { class: "pill p-" + state, text: tr("st." + state) })]),
     el("td", {}, [segmentBar(ctx, mission), el("span", { class: "mono", text: tr("of", { a: done, b: total }) })]),
+    el("td", { class: "mono", text: fmtDate(mission.started_at || mission.created_at) }),
+    el("td", { class: "mono", text: fmtDate(mission.last_at) }),
     el("td", { class: "num", text: formatNumber(attempts, 0) }),
     el("td", { class: "num", text: formatNumber(hours, 1) }),
     el("td", { class: "num", text: cache === null ? "—" : String(Math.round(cache * 100)) }),

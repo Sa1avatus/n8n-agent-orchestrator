@@ -20,6 +20,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // esc() from board_logic.js; a local fallback keeps the view safe when that
 // script has not loaded.
 function esc(v) {
@@ -45,8 +56,8 @@ function fmtTokens(v) {
 // Total run time (worker hours + reviewer minutes) as "1.3 h" / "25 min".
 function fmtTime(workerHours, reviewerMinutes) {
   const minutes = (Number(workerHours) || 0) * 60 + (Number(reviewerMinutes) || 0);
-  if (minutes >= 60) return (minutes / 60).toFixed(1) + " h";
-  return String(Math.round(minutes)) + " min";
+  if (minutes >= 60) return L("hours", "{n} h", { n: (minutes / 60).toFixed(1) });
+  return L("s.min", "{n} min", { n: Math.round(minutes) });
 }
 
 // A ratio (0..1) as a percent; "—" when there is nothing to count.
@@ -72,7 +83,7 @@ function taskCardHtml(missionId, task, stats) {
   const tokens = stats ? fmtTokens((Number(stats.input_tokens) || 0) + (Number(stats.output_tokens) || 0)) : "—";
   const cache = stats ? fmtPercent(stats.cache_ratio, (Number(stats.cache_read_tokens) || 0) + (Number(stats.cache_write_tokens) || 0)) : "—";
   const cost = stats && stats.cost_usd != null ? "$" + Number(stats.cost_usd).toFixed(2) : "—";
-  const speed = stats && stats.tok_per_s != null ? Math.round(Number(stats.tok_per_s)) + " tok/s" : "—";
+  const speed = stats && stats.tok_per_s != null ? L("s.tps", "{n} tok/s", { n: Math.round(Number(stats.tok_per_s)) }) : "—";
   const thinking = stats ? fmtPercent(
     stats.thinking_steps ? stats.thinking_runs / stats.thinking_steps : 0,
     stats.thinking_steps,
@@ -83,12 +94,12 @@ function taskCardHtml(missionId, task, stats) {
     `data-mission-id="${esc(missionId)}" data-task-id="${esc(id)}">` +
     `<span class="tid">${esc(id)}</span>` +
     `<span class="tname">${esc(task.title == null ? "" : task.title)}</span>` +
-    `<span class="tstatus">${esc(status)}</span>` +
+    `<span class="tstatus">${esc(L("tstat." + status, status))}</span>` +
     `<div class="tmeta">` +
-    `<span class="tstats" title="attempts · time · tokens · cache · cost · speed · thinking">` +
-    attempts + " attempts · " + esc(time) + " · " + esc(tokens) + " tokens · " +
-    esc(cache) + " cache · " + esc(cost) + " · " + esc(speed) + " · " + esc(thinking) +
-    ` thinking</span>` +
+    `<span class="tstats" title="${esc(L("tc.title", "attempts · time · tokens · cache · cost · speed · thinking"))}">` +
+    attempts + " " + L("tc.attempts", "attempts") + " · " + esc(time) + " · " + esc(tokens) + " " + L("tc.tokens", "tokens") + " · " +
+    esc(cache) + " " + L("tc.cache", "cache") + " · " + esc(cost) + " · " + esc(speed) + " · " + esc(thinking) +
+    " " + L("tc.thinking", "thinking") + `</span>` +
     `</div></a>`
   );
 }

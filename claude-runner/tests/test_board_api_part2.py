@@ -123,3 +123,28 @@ def test_config_defaults_whitelist_only_safe_profile_keys():
 
     got = board_api._config_defaults(Store())
     assert got == {"worker_model": "qwen", "max_attempts_per_task": 5}
+
+
+def test_i18n_view_fills_new_shipped_keys_of_every_shipped_language_and_keeps_edits():
+    """A key added to board_i18n_ru.json after the database was seeded still reaches the board;
+    a text edited in the database wins over the shipped one."""
+    from claude_runner import board_api
+
+    class Store:
+        def list_i18n(self):
+            return {"languages": [{"code": "en", "name": "English"}, {"code": "ru", "name": "Русский"}],
+                    "strings": {"en": {}, "ru": {"nav.runs": "Мои прогоны"}}}
+
+    view = board_api._i18n_view(Store())
+    assert view["strings"]["ru"]["nav.runs"] == "Мои прогоны"
+    assert view["strings"]["ru"]["th.policy"].startswith("Политика")
+    assert view["strings"]["en"]["th.policy"] == "Thinking policy"
+
+
+def test_in_memory_store_reports_first_and_last_event_time_per_mission():
+    from claude_runner.board import InMemoryBoardStore
+
+    store = InMemoryBoardStore()
+    store.append_event("m1", {"task_id": "T001", "event_type": "x", "created_at": "2026-10-12T10:00:00Z"})
+    store.append_event("m1", {"task_id": "T001", "event_type": "y", "created_at": "2026-10-13T11:00:00Z"})
+    assert store.mission_times() == {"m1": {"first": "2026-10-12T10:00:00Z", "last": "2026-10-13T11:00:00Z"}}

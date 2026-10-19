@@ -166,3 +166,14 @@ def test_edit_window_keys_exist_in_both_translation_tables():
         table = json.loads((PKG_DIR / f"board_i18n_{lang}.json").read_text(encoding="utf-8"))
         table = table.get("strings", table)
         assert sorted(k for k in keys if k not in table) == [], lang
+
+
+def test_english_and_russian_tables_have_the_same_keys():
+    """A key in one table and not in the other shows the other language mixed in (found on the board)."""
+    import json
+
+    en = json.loads((PKG_DIR / "board_i18n_en.json").read_text(encoding="utf-8"))
+    ru = json.loads((PKG_DIR / "board_i18n_ru.json").read_text(encoding="utf-8"))
+    en, ru = en.get("strings", en), ru.get("strings", ru)
+    assert sorted(set(en) - set(ru)) == []
+    assert sorted(set(ru) - set(en)) == []

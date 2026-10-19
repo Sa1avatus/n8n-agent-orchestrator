@@ -25,6 +25,17 @@
  */
 "use strict";
 
+// translated text; the English text is the fallback (node tests, a table without the key)
+function L(key, en, params) {
+  let v = en;
+  try {
+    if (typeof t === "function") { const r = t(key); if (r && r !== key) v = r; }
+  } catch (e) { /* keep the English text */ }
+  if (params) for (const k of Object.keys(params)) v = v.split("{" + k + "}").join(String(params[k]));
+  return v;
+}
+
+
 // esc() from board_logic.js, with the same local fallback the other views use.
 function historyEsc(v) {
   if (typeof BoardLogic !== "undefined" && typeof BoardLogic.esc === "function") {
@@ -100,9 +111,9 @@ function diffHtml(entry) {
           `<td>${historyEsc(JSON.stringify(av))}</td></tr>`;
       })
       .join("");
-    if (!rows) return `<div class="chdiff">no field changes recorded</div>`;
+    if (!rows) return `<div class="chdiff">${historyEsc(L("hi.nofields", "no field changes recorded"))}</div>`;
     return `<table class="chdiff">` +
-      `<tr><th>field</th><th>before</th><th>after</th></tr>` + rows +
+      `<tr><th>${historyEsc(L("ew.field", "field"))}</th><th>${historyEsc(L("ew.before", "before"))}</th><th>${historyEsc(L("ew.after", "after"))}</th></tr>` + rows +
     `</table>`;
   }
   return `<pre class="chdiff">${historyEsc(JSON.stringify(b))} -> ` +
@@ -123,7 +134,7 @@ function entryHtml(entry) {
     `<span class="chaction">${historyEsc(action)}</span> ` +
     `<button type="button" class="ch-rollback" ` +
       `data-id="${historyEsc(id)}"${historyEsc(canRoll ? "" : " disabled")}>` +
-    `Rollback</button>` +
+    historyEsc(L("hi.rollback", "Rollback")) + `</button>` +
     `<div class="chdiffbox"></div>` +
   `</div>`;
 }
@@ -132,7 +143,7 @@ function entryHtml(entry) {
 function renderHistoryHtml(entries) {
   const rows = (Array.isArray(entries) ? entries : []).map(entryHtml).join("");
   return (
-    `<h3>Change history</h3>` +
+    `<h3>` + historyEsc(L("hi.title", "Change history")) + `</h3>` +
     `<div class="chentries">` + rows + `</div>` +
     `<div class="chresult"></div>`
   );
@@ -171,16 +182,16 @@ function attachHistoryControls(el, missionId, entries) {
       const row = btn.closest(".chentry");
       const box = row && row.querySelector(".chdiffbox");
       if (box) box.innerHTML = diffHtml(entry);
-      const confirmed = window.confirm("Rollback this change?");
+      const confirmed = window.confirm(L("hi.confirm", "Rollback this change?"));
       if (!confirmed) return; // show the diff, send nothing without confirmation
       rollbackRequest(entry.id)
         .then(() => {
           const result = el.querySelector(".chresult");
-          if (result) result.textContent = "rolled back";
+          if (result) result.textContent = L("hi.done", "rolled back");
         })
         .catch((e) => {
           const result = el.querySelector(".chresult");
-          if (result) result.textContent = e.message || "rollback failed";
+          if (result) result.textContent = e.message || L("hi.failed", "rollback failed");
         });
     });
   }
@@ -201,7 +212,7 @@ async function renderHistoryUI(container, missionId) {
       : all.filter((e) => e && e.mission_id === missionId);
   } catch (e) {
     el.innerHTML = `<div class="chresult">` +
-      historyEsc(e.message || "changelog unavailable") + `</div>`;
+      historyEsc(e.message || L("hi.unavail", "changelog unavailable")) + `</div>`;
     return;
   }
   el.innerHTML = renderHistoryHtml(entries);
