@@ -111,3 +111,15 @@ class TestEditVerificationScope:
         })
         assert r.status_code == 409
         assert r.json()["code"] == "conflict"
+
+
+def test_config_defaults_whitelist_only_safe_profile_keys():
+    """GET /missions/{id} carries the profile defaults the form shows as placeholders (no chat ids, no URLs)."""
+    from claude_runner import board_api
+
+    class Store:
+        def hermes_config(self):
+            return {"worker_model": "qwen", "max_attempts_per_task": 5, "telegram_chat_id": "1", "runner_url": "http://x", "worker_think_policy": ""}
+
+    got = board_api._config_defaults(Store())
+    assert got == {"worker_model": "qwen", "max_attempts_per_task": 5}

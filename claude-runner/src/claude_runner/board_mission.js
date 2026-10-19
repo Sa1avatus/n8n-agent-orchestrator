@@ -138,14 +138,16 @@ function greyNote(key) {
 // not applicable from the next task) the greyed note.  Returns the escaped
 // HTML string of the row; the input's dataset carries kind/key so T030 can
 // read the fields back without re-parsing the markup.
-function fieldRow(kind, key, label, control, shown, running, reason) {
+function fieldRow(kind, key, label, control, shown, running, reason, fallback) {
   const disabledAttr = running && reason ? " disabled" : "";
+  const phAttr = fallback == null || fallback === "" ? ""
+    : ` placeholder="${esc(fallback)}" title="${esc(t("form.default"))}"`;
   const greyed = running && reason ? " greyed" : "";
   const rowCls = "frow-wrap" + (greyed ? " disabled" : "");
   let inputHtml;
   if (control === "textarea" || control === "listarea" || control === "json") {
     inputHtml = `<textarea class="frow" name="${esc(key)}" rows="3" ` +
-      `data-kind="${esc(kind)}" data-key="${esc(key)}" data-control="${esc(control)}"` + esc(disabledAttr) + `>` +
+      `data-kind="${esc(kind)}" data-key="${esc(key)}" data-control="${esc(control)}"` + phAttr + esc(disabledAttr) + `>` +
       esc(shown) + `</textarea>`;
   } else if (control === "bool") {
     const checkedAttr = shown === true ? " checked" : "";
@@ -155,7 +157,7 @@ function fieldRow(kind, key, label, control, shown, running, reason) {
   } else {
     const inputType = control === "number" ? "number" : "text";
     inputHtml = `<input type="${esc(inputType)}" class="frow" name="${esc(key)}" ` +
-      `data-kind="${esc(kind)}" data-key="${esc(key)}" data-control="${esc(control)}" value="${esc(shown)}"` +
+      `data-kind="${esc(kind)}" data-key="${esc(key)}" data-control="${esc(control)}" value="${esc(shown)}"` + phAttr +
       (control === "number" ? ' step="1"' : "") + esc(disabledAttr) + `>`;
   }
   const note = running && reason
@@ -177,7 +179,7 @@ function presetButtons(disabled) {
 // The "Конфигурация запуска" form: every listed field from the API, with
 // greyed fields and explanations for a running mission.  Returns the escaped
 // HTML string of the form.
-function formHtml(mission, queueEntry, config, running) {
+function formHtml(mission, queueEntry, config, running, defaults) {
   const rows = [];
   for (const [kind, key, labelKey, control] of FORM_ROWS) {
     let value;
@@ -192,7 +194,10 @@ function formHtml(mission, queueEntry, config, running) {
       : control === "bool" ? (value === true || String(value).toLowerCase() === "true")
       : (value == null ? "" : String(value));
     const reason = running ? greyNote(key) : null;
-    rows.push(fieldRow(kind, key, t(labelKey), control, shown, running, reason));
+    const fallbackKey = key === "attempts_per_task" ? "max_attempts_per_task" : key;
+    const fallback = kind !== "mission" && defaults && defaults[fallbackKey] != null
+      ? (typeof defaults[fallbackKey] === "string" ? defaults[fallbackKey] : JSON.stringify(defaults[fallbackKey])) : null;
+    rows.push(fieldRow(kind, key, t(labelKey), control, shown, running, reason, fallback));
   }
   const attemptsRow = rows[6]; // the "attempts_per_task" row (index 6)
   // The attempts row gets the preset buttons after its input.
@@ -233,7 +238,7 @@ function renderMission(data) {
     `</div>` +
     (runningNote ? `<div class="meta running-note">${esc(runningNote)}</div>` : "") +
     `<h3>${esc(t("form.title"))}</h3>` +
-    formHtml(mission, queueEntry, config, running)
+    formHtml(mission, queueEntry, config, running, data.defaults)
   );
 }
 
@@ -282,6 +287,7 @@ async function BoardMission(missionId) {
     mission: detail.mission,
     live_state: detail.live_state,
     config: detail.config || {},
+    defaults: detail.defaults || {},
     queue: queueData.queue,
   };
   render(data);

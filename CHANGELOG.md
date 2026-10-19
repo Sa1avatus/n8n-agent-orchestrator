@@ -3,7 +3,14 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.7.0** (claude-runner `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.7.100** (claude-runner `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-19 (0.7.100)
+
+Bug-fix release: the launch settings window showed empty fields, and the board read and wrote the wrong hermes_config profile.
+
+- **Fixed: the launch settings fields were empty.** The form showed only the mission's own config, which is empty for most missions; models, providers, attempts per task, max tasks and the thinking policy come from the hermes_config profile. `GET /api/board/missions/{id}` has a `defaults` object now (a whitelist of the profile keys, no chat ids or URLs); an empty field shows the default as grey placeholder text, the summary card shows the effective values.
+- **Fixed: `PgBoardStore.hermes_config()` read an arbitrary row.** The table has several profiles (`default`, `test`, `openrouter`, `opencode`, `claude-code`); the read took the first row and `update_hermes_config` ran an `UPDATE` without `WHERE`, which would have changed every profile. Both use the `claude-code` profile now.
 
 ## 2026-10-19 (0.7.0)
 

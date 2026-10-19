@@ -517,3 +517,6 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 #board.bd-mission .ew-head h3 { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0; }
 #board.bd-mission .ew-summary h3 { margin: 0 0 10px; }
 #board.bd-mission .ew-win .ew-row2 .frow-wrap { margin: 0; }
+
+/* a field left empty shows the profile default as a grey placeholder */
+#board.bd-mission input::placeholder, #board.bd-mission textarea::placeholder { color: var(--faint); opacity: .85; font-style: italic; }

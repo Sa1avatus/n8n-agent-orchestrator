@@ -75,11 +75,18 @@ function show(v) {
 function summaryCard(box) {
   const card = mk("div", "ew-summary");
   const cur = save() ? save().readForm(box) : {};
+  // an empty field uses the default of the hermes_config profile: it is the placeholder of the control
+  const eff = (key) => {
+    const v = cur[key];
+    if (v !== null && v !== undefined && v !== "" && !(Array.isArray(v) && !v.length)) return show(v);
+    const c = control(box, key);
+    return c && c.placeholder ? c.placeholder : "—";
+  };
   const items = [
-    [tr("ew.sec.attempts"), show(cur.attempts_per_task)],
-    [tr("ew.worker"), show(cur.worker_model) + " · " + show(cur.worker_provider)],
-    [tr("ew.reviewer"), show(cur.reviewer_model) + " · " + show(cur.reviewer_provider)],
-    [tr("ew.architect"), show(cur.architect_model) + " · " + show(cur.architect_provider)],
+    [tr("ew.sec.attempts"), eff("attempts_per_task")],
+    [tr("ew.worker"), eff("worker_model") + " · " + eff("worker_provider")],
+    [tr("ew.reviewer"), eff("reviewer_model") + " · " + eff("reviewer_provider")],
+    [tr("ew.architect"), eff("architect_model") + " · " + eff("architect_provider")],
     [labelOf(box, "working_directory"), show(cur.working_directory)],
     [labelOf(box, "enabled"), cur.enabled ? tr("form.yes") : tr("form.no")],
   ];
@@ -149,7 +156,7 @@ function fillPages(box, win) {
   const p2 = pageNode("exec");
   const a = sec(tr("ew.sec.attempts"), tr("ew.hint.attempts"));
   move(a, "attempts_per_task");
-  const r = sec(tr("ew.sec.roles"), tr("ew.hint.roles"));
+  const r = sec(tr("ew.sec.roles"), tr("ew.hint.roles") + " " + tr("ew.hint.default"));
   const roles = mk("div", "ew-roles");
   for (const [labelKey, color, km, kp] of ROLES) {
     const line = mk("div", "ew-role");

@@ -306,6 +306,32 @@ def _task_attempts(store: BoardStore, state_key: str) -> dict[str, int]:
     return attempts
 
 
+# The hermes_config row (profile claude-code) holds the values a mission uses when its own config is empty;
+# only these keys are shown on the board (the row also carries chat ids and URLs).
+_DEFAULT_KEYS = (
+    "architect_provider", "architect_model", "worker_provider", "worker_model", "reviewer_provider",
+    "reviewer_model", "max_tasks", "max_attempts_per_task", "worker_think_policy", "worker_think_policy_from_task",
+)
+
+
+def _config_defaults(store: BoardStore) -> dict[str, Any]:
+    try:
+        row = store.hermes_config() or {}
+    except Exception:
+        return {}
+    out: dict[str, Any] = {}
+    for key in _DEFAULT_KEYS:
+        value = row.get(key)
+        if value in (None, ""):
+            continue
+        if isinstance(value, float) and value == int(value):
+            value = int(value)
+        elif isinstance(value, str) and value.endswith(".0") and value[:-2].lstrip("-").isdigit():
+            value = value[:-2]
+        out[key] = value
+    return out
+
+
 def _mission_task_list(
     store: BoardStore, state_key: str
 ) -> list[dict[str, Any]]:
@@ -417,6 +443,7 @@ def _build_router() -> APIRouter:
             "live_state": live.model_dump() if live is not None else None,
             "task_views": [v.model_dump() for v in store.task_views(mission.state_namespace)],
             "config": store.mission_config(mission_id),
+            "defaults": _config_defaults(store),
             "task_overrides": store.task_overrides(mission_id),
         }
 

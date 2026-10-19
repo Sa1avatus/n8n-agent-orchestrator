@@ -438,6 +438,7 @@ async function fetchServerData(missionId) {
   return {
     mission: detail.mission,
     config: detail.config || {},
+    defaults: detail.defaults || {},
     queue: queueData.queue,
     version: queueData.version,
   };

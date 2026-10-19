@@ -45,6 +45,7 @@ _MISSIONS_TABLE = '"data_table_user_hYAqO52ZGHXxhhHX"'  # quoted: the physical n
 _LIVE_STATE_TABLE = '"data_table_user_Yn9lOhVhQ9gFymNs"'  # quoted: the physical names are mixed case
 _EVENT_LOG_TABLE = '"data_table_user_ceJ7PFzVJvPN0LsV"'  # quoted: the physical names are mixed case
 _HERMES_TABLE = '"data_table_user_1S21PsMqT0FpR7eD"'  # quoted: the physical names are mixed case
+_HERMES_PROFILE = "claude-code"  # the profile row the workflow of the board uses (the table holds several)
 
 # Fixed schema/table identifiers used verbatim in SQL (not user values).
 _QUEUE_TABLE = "queue"
@@ -497,8 +498,11 @@ class PgBoardStore(BoardStore):
 
     def hermes_config(self) -> dict[str, Any]:
         row = self._conn.execute(
-            f"SELECT * FROM {_HERMES_TABLE} LIMIT 1"
+            f"SELECT * FROM {_HERMES_TABLE} WHERE profile_id = %s ORDER BY id LIMIT 1",
+            (_HERMES_PROFILE,),
         ).fetchone()
+        if row is None:
+            row = self._conn.execute(f"SELECT * FROM {_HERMES_TABLE} ORDER BY id LIMIT 1").fetchone()
         if row is None:
             return {}
         return dict(row)
@@ -767,7 +771,8 @@ class PgBoardStore(BoardStore):
             with self._conn.transaction():
                 row = self._conn.execute(
                     f"SELECT \"updatedAt\" FROM {_HERMES_TABLE} "
-                    "LIMIT 1 FOR UPDATE"
+                    "WHERE profile_id = %s ORDER BY id LIMIT 1 FOR UPDATE",
+                    (_HERMES_PROFILE,),
                 ).fetchone()
                 if row is None:
                     raise KeyError("hermes_config row not found")
@@ -799,9 +804,9 @@ class PgBoardStore(BoardStore):
                     if name != "profile_id" and name in known_hermes_cols
                 )
                 self._conn.execute(
-                    f"UPDATE {_HERMES_TABLE} SET {sets}, \"updatedAt\" = %s",
+                    f"UPDATE {_HERMES_TABLE} SET {sets}, \"updatedAt\" = %s WHERE profile_id = %s",
                     [v for n, v in fields.items()
-                     if n != "profile_id" and n in known_hermes_cols] + [now()],
+                     if n != "profile_id" and n in known_hermes_cols] + [now(), _HERMES_PROFILE],
                 )
             return self.hermes_config()
 
