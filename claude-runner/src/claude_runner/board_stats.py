@@ -14,6 +14,9 @@ rewritten: it is only reused.
 
 from __future__ import annotations
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
@@ -256,6 +259,107 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
     }
 
 
+_SUMMARY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+SUMMARY_TTL_FINISHED = 600.0
+SUMMARY_TTL_LIVE = 15.0
+
+
+def _mission_figures(manager: RunManager, board: BoardStore, state_key: str) -> dict[str, Any]:
+    """The mission's figures (attempts, hours, tokens, cache_ratio, cost, tok_s,
+    thinking_share), or nulls when the manager is unreachable or raises."""
+    try:
+        card = mission_card_stats(manager, board, state_key)
+        tasks = card["tasks"]
+        thinking_steps = card["thinking_steps"]
+        return {
+            "attempts": sum(t["attempts"] for t in tasks.values()),
+            "hours": card["worker_hours"],
+            "tokens": card["input_tokens"] + card["output_tokens"],
+            "cache_ratio": card["cache_ratio"],
+            "cost": card["cost_usd"],
+            "tok_s": card["tok_per_s"],
+            "thinking_share": (
+                card["thinking_runs"] / thinking_steps if thinking_steps else None
+            ),
+        }
+    except Exception:
+        return {
+            "attempts": None,
+            "hours": None,
+            "tokens": None,
+            "cache_ratio": None,
+            "cost": None,
+            "tok_s": None,
+            "thinking_share": None,
+        }
+
+
+def mission_figures(
+    manager: RunManager, board: BoardStore, state_key: str, force: bool = False
+) -> dict[str, Any]:
+    """The mission's figures, cached per mission: a finished mission's figures are
+    kept for 600 s, a running one for 15 s (so a board with many cards does not
+    re-read the runner for each refresh). When the manager is unreachable or
+    raises, the figures are nulls (never an error)."""
+    mission = next(
+        (m for m in board.list_missions() if m.state_namespace == state_key), None
+    )
+    mission_id = mission.mission_id if mission is not None else state_key
+    live = board.get_live_state(state_key)
+    status = live.status if live is not None else None
+    ttl = SUMMARY_TTL_FINISHED if status in ("completed", "failed") else SUMMARY_TTL_LIVE
+    hit = _SUMMARY_CACHE.get(mission_id)
+    if hit is not None and not force:
+        age = time.monotonic() - hit[0]
+        if age < ttl:
+            return hit[1]
+    figures = _mission_figures(manager, board, state_key)
+    _SUMMARY_CACHE[mission_id] = (time.monotonic(), figures)
+    return figures
+
+
+_NULL_FIGURES: dict[str, Any] = {
+    "attempts": None, "hours": None, "tokens": None, "cache_ratio": None,
+    "cost": None, "tok_s": None, "thinking_share": None,
+}
+_REFRESHING: set[str] = set()
+_REFRESH_LOCK = threading.Lock()
+_REFRESH_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="figures")
+
+
+def _refresh_figures(manager: RunManager, board: BoardStore, state_key: str) -> None:
+    try:
+        mission_figures(manager, board, state_key, force=True)
+    finally:
+        with _REFRESH_LOCK:
+            _REFRESHING.discard(state_key)
+
+
+def cached_mission_figures(
+    manager: RunManager, board: BoardStore, state_key: str, mission_id: str | None = None
+) -> dict[str, Any]:
+    """The figures for a board summary without waiting: a fresh or stale cached value
+    at once, nulls when there is none; a stale or missing one is recomputed in the
+    background (one at a time), so the first summary of a cold dashboard answers in
+    a moment instead of reading the runs of every mission over HTTP."""
+    if mission_id is None:
+        mission = next(
+            (m for m in board.list_missions() if m.state_namespace == state_key), None
+        )
+        mission_id = mission.mission_id if mission is not None else state_key
+    live = board.get_live_state(state_key)
+    status = live.status if live is not None else None
+    ttl = SUMMARY_TTL_FINISHED if status in ("completed", "failed") else SUMMARY_TTL_LIVE
+    hit = _SUMMARY_CACHE.get(mission_id)
+    if hit is not None and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    with _REFRESH_LOCK:
+        if state_key not in _REFRESHING:
+            _REFRESHING.add(state_key)
+            _REFRESH_POOL.submit(_refresh_figures, manager, board, state_key)
+    return hit[1] if hit is not None else dict(_NULL_FIGURES)
+
+
 def task_stats(manager: RunManager, board: BoardStore, state_key: str, task_id: str) -> dict[str, Any]:
     """One task: its runs aggregated, its attempts (against the mission's
     ``max_attempts_per_task``) and the time of each attempt, plus the last Reviewer
@@ -332,3 +436,63 @@ def task_stats(manager: RunManager, board: BoardStore, state_key: str, task_id: 
         "last_review_score": view.review_score if view is not None else None,
         "last_review_reason": view.review_reason if view is not None else None,
     }
+
+
+def _iso(value: Any) -> Any:
+    return value.isoformat() if isinstance(value, datetime) else value
+
+
+def mission_timeline(
+    manager: RunManager | None, board: BoardStore, state_key: str
+) -> dict[str, list[dict[str, Any]]]:
+    """The mission's accepted reviews (``review_parsed`` rows with ``pass``) and its
+    obstacles: a task rejected three times or more, a run that timed out or was
+    interrupted (read through the manager).  Empty lists when data or manager is missing."""
+    try:
+        events = board.events(state_key)
+        accepted: list[dict[str, Any]] = []
+        rejections: dict[str, list[dict[str, Any]]] = {}
+        run_task: dict[str, str | None] = {}
+        for e in events:
+            task = e.get("task_id")
+            if e.get("event_type") == "review_parsed":
+                # some rows carry only review_reason; either column carries the verdict
+                verdict = e.get("review_status") or e.get("review_reason")
+                if verdict == "pass":
+                    accepted.append({"task": task, "ts": _iso(e.get("created_at"))})
+                elif verdict == "needs_changes":
+                    rejections.setdefault(task, []).append(e)
+            for key in ("worker_run_id", "reviewer_run_id"):
+                run_id = e.get(key)
+                if isinstance(run_id, str) and run_id.startswith("run_"):
+                    run_task.setdefault(run_id, task)
+        obstacles: list[dict[str, Any]] = []
+        for task, rows in rejections.items():
+            if len(rows) >= 3:
+                last = rows[-1]
+                obstacles.append({
+                    "kind": "rejected_3x",
+                    "task": task,
+                    "ts": _iso(last.get("created_at")),
+                    "detail": f"rejected {len(rows)} times, last reason: {last.get('review_reason') or ''}",
+                })
+        for run_id, task in run_task.items():
+            run = manager.store.get_run(run_id)
+            if not run:
+                continue
+            if run.get("status") == "interrupted":
+                kind = "interrupted"
+            elif run.get("error_code") == "timeout":
+                kind = "timeout"
+            else:
+                continue
+            obstacles.append({
+                "kind": kind,
+                "task": task,
+                "run_id": run_id,
+                "ts": run.get("finished_at") or run.get("started_at"),
+                "detail": run.get("error_message") or "",
+            })
+        return {"accepted": accepted, "obstacles": obstacles}
+    except Exception:
+        return {"accepted": [], "obstacles": []}

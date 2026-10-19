@@ -91,7 +91,7 @@ async function postMoveQueue(mission_id, to_position) {
   try { body = await res.json(); } catch (e) { /* keep the status */ }
   if (res.status === 409) {
     const err = new Error(body && body.error && body.error.message
-      ? body.error.message : "план изменился, обновите");
+      ? body.error.message : t("conflict.plan_changed"));
     err.status = 409;
     throw err;
   }
@@ -110,7 +110,7 @@ async function postMoveQueue(mission_id, to_position) {
 // running-first order is preserved by construction.
 function moveInData(queue, mission_id, target_id, side, groups) {
   if (typeof BoardLogic === "undefined") {
-    throw new Error("Board logic not loaded — cannot reorder");
+    throw new Error(t("move.logic_missing"));
   }
   const at = BoardLogic.dropPosition(queue, mission_id, target_id, side, groups);
   return BoardLogic.reorder(queue, mission_id, at);
@@ -135,13 +135,13 @@ function attachCard(el, data) {
   const up = document.createElement("button");
   up.type = "button";
   up.className = "qmove-up";
-  up.textContent = "выше";
-  up.title = "выше (выше по очереди)";
+  up.textContent = t("btn.up");
+  up.title = t("queue.up.title");
   const down = document.createElement("button");
   down.type = "button";
   down.className = "qmove-down";
-  down.textContent = "ниже";
-  down.title = "ниже (ниже по очереди)";
+  down.textContent = t("btn.down");
+  down.title = t("queue.down.title");
   buttons.appendChild(up);
   buttons.appendChild(down);
   el.appendChild(buttons);
@@ -230,7 +230,7 @@ async function applyMove(missionId, targetId, side) {
   try {
     newQueue = moveInData(queue, missionId, targetId, side, DndState.data.groups);
   } catch (e) {
-    showState(e.message || "Move refused.");
+    showState(e.message || t("move.refused"));
     return;
   }
   // Skip the no-op (drop onto itself): reorder() returns a fresh array, so
@@ -243,12 +243,16 @@ async function applyMove(missionId, targetId, side) {
     await postMoveQueue(missionId, pos);
   } catch (e) {
     if (e.status === 409) {
-      showState("план изменился, обновите");
+      showState(t("conflict.plan_changed"));
     } else {
-      showState(e.message || "Move failed.");
+      showState(e.message || t("move.failed"));
     }
   }
   await refreshBoard();
+  // Notify other views (the Kanban queued column) that the queue changed.
+  if (typeof document !== "undefined" && document.dispatchEvent) {
+    document.dispatchEvent(new CustomEvent("board:refresh"));
+  }
 }
 
 // Re-render the DOM from the server: BoardQueue() (board_queue.js) refetches
@@ -260,7 +264,7 @@ async function refreshBoard() {
     }
     DndState.data = await loadBoardData();
   } catch (e) {
-    showState(e.message || "The board could not be reloaded.");
+    showState(e.message || t("board.reload_failed"));
     return;
   }
   attachDnd();
@@ -289,7 +293,7 @@ async function attachDnd() {
       try {
         DndState.data = await loadBoardData();
       } catch (e) {
-        showState(e.message || "The board could not be loaded.");
+        showState(e.message || t("board.load_failed"));
         return;
       }
     }
@@ -356,6 +360,7 @@ const BoardDnd = {
   moveInData,
   postMoveQueue,
   refreshBoard,
+  loadBoardData,
   DndState,
   esc,
 };

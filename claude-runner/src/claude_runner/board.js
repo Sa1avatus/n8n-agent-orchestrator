@@ -44,12 +44,19 @@ function state(html, cls) {
   stateEl.textContent = String(html);  // textContent: nothing to escape
 }
 
+function applyStaticTexts() {
+  document.title = "AHAWR " + t("app.title");
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    el.textContent = t(el.getAttribute("data-i18n"));
+  }
+}
+
 // A deep link (#board/m1/T003) needs the hash parser from board_logic.js;
 // without that script (it loads last) report the missing piece instead of
 // crashing.
 function needLogic() {
   if (typeof BoardLogic !== "undefined") return false;
-  state(("Board logic script not loaded — the deep link cannot be resolved."), "bad");
+  state(t("board.script_missing"), "bad");
   return true;
 }
 
@@ -58,40 +65,41 @@ function needLogic() {
 // reported instead of throwing.
 async function route() {
   if (needLogic()) return;
+  if (/^#board[/]view[/]/.test(location.hash)) return;   // the views draw themselves
   let parsed;
   try { parsed = BoardLogic.parseHash(location.hash || "#board"); }
-  catch (e) { state(("Unrecognized board link: " + e.message), "bad"); return; }
+  catch (e) { state(t("board.bad_link", { error: e.message }), "bad"); return; }
   if (parsed.task_id) {
     if (typeof BoardTask === "function") {
       try { await BoardTask(parsed.mission_id, parsed.task_id); return; }
-      catch (e) { state(("Task view failed: " + e.message), "bad"); return; }
+      catch (e) { state(t("board.task_failed", { error: e.message }), "bad"); return; }
     }
-    state(("Task view not loaded yet."), "bad");
+    state(t("board.not_loaded"), "bad");
   } else if (parsed.mission_id) {
     if (typeof BoardMission === "function") {
       try {
         await BoardMission(parsed.mission_id);
         if (typeof BoardClaudeMd === "function") {
           try { await BoardClaudeMd(parsed.mission_id); }
-          catch (e) { state(("CLAUDE.md editor failed: " + (e.message || e)), "bad"); }
+          catch (e) { state(t("board.claudemd_failed", { error: e.message || e }), "bad"); }
         }
         return;
       }
-      catch (e) { state(("Mission view failed: " + e.message), "bad"); return; }
+      catch (e) { state(t("board.mission_failed", { error: e.message }), "bad"); return; }
     }
-    state(("Mission view not loaded yet."), "bad");
+    state(t("board.not_loaded"), "bad");
   } else {
     if (typeof BoardQueue === "function") {
       try { await BoardQueue(); return; }
       catch (e) {
         // A 503 means the board store is not available (e.g. no DSN).
         const offline = e.status === 503 || /503/.test(String(e.message || ""));
-        const detail = offline && e.body && e.body.reason ? " — " + String(e.body.reason) : "";
-        state(("The board service is offline (503 — board store unavailable)" + detail) + ".", "bad");
+        const reason = offline && e.body && e.body.reason ? String(e.body.reason) : "";
+        state(reason ? t("board.offline_reason", { reason }) : t("board.offline"), "bad");
       }
       return;
     }
-    state(("Queue view not loaded yet."), "bad");
+    state(t("board.not_loaded"), "bad");
   }
 }
 
@@ -100,5 +108,7 @@ globalThis.getJSON = getJSON;
 
 // Initial load and fragment changes.
 window.addEventListener("hashchange", route);
-window.addEventListener("load", route);
+applyStaticTexts();
+BoardI18n.onChange(applyStaticTexts);
+window.addEventListener("load", () => BoardI18n.load().then(route));
 })();

@@ -39,6 +39,20 @@ button { font: inherit; color: inherit; }
 #boardbar a { color: var(--accent); text-decoration: none; font-size: 12px; }
 #boardbar a:hover { text-decoration: underline; }
 
+/* view header (board_views.js) ------------------------------------- */
+#boardviews { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#boardviews button, #boardviews select, #boardviews input { font: inherit; font-size: 12.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+#boardviews button:hover { background: var(--hover); cursor: pointer; }
+#boardviews .bv-title { font-size: 15px; font-weight: 650; }
+#boardviews .bv-tabs, #boardviews .bv-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+#boardviews .bv-tab.on, #boardviews .bv-chip.on { background: var(--sel); border-color: var(--accent); color: var(--accent); }
+#boardviews .bv-search { min-width: 180px; flex: 1 1 180px; }
+#boardviews .bv-lang, #boardviews .bv-theme, #boardviews .bv-tr { margin-left: auto; }
+#boardviewbody { flex: 1; overflow: auto; padding: 14px; }
+#boardviewbody .bv-note { color: var(--muted); margin: 8px 0; }
+#boardviewbody .bv-card { display: block; width: 100%; margin: 4px 0; text-align: left; background: var(--panel); }
+#boardviewbody .bv-card.sel { border-color: var(--accent); background: var(--sel); }
+
 /* board states ----------------------------------------------------- */
 #boardstate { margin: auto; padding: 20px; color: var(--muted); }
 #boardstate.bad { color: var(--err); }
@@ -85,6 +99,118 @@ button { font: inherit; color: inherit; }
 .confbox .frow-preset:disabled { opacity: .5; cursor: default; }
 .confbox .frow-presets { display: inline-flex; gap: 4px; }
 
+/* task cards (#boardtasks) -------------------------------------------- */
+#boardtasks { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 14px; }
+#boardtasks .tcard { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-decoration: none; color: var(--ink); margin-bottom: 6px; }
+#boardtasks .tcard:hover { background: var(--hover); }
+#boardtasks .tid { font: 600 11px var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+#boardtasks .tname { font-weight: 520; overflow-wrap: anywhere; }
+#boardtasks .tstatus { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; overflow-wrap: anywhere; }
+#boardtasks .tmeta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 8px; min-width: 0; font-size: 11.5px; color: var(--muted); }
+#boardtasks .tmeta .tstats { min-width: 0; overflow-wrap: anywhere; }
+
+/* task view (#boardtask) ----------------------------------------------- */
+#boardtask { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 12px 14px; }
+#boardtask h2 { margin: 0 0 10px; font-size: 15.5px; font-weight: 620; overflow-wrap: anywhere; }
+#boardtask h3 { margin: 14px 0 8px; font-size: 13px; font-weight: 600; }
+#boardtask .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); min-width: 0; }
+#boardtask .meta span { min-width: 0; overflow-wrap: anywhere; }
+#boardtask .tid { font: 11px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+#boardtask .tobj { font-size: 12.5px; color: var(--ink); overflow-wrap: anywhere; }
+#boardtask .tattempt { padding: 6px 0; font-size: 12.5px; overflow-wrap: anywhere; }
+#boardtask .tatt { font-weight: 520; }
+#boardtask .tatt-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+#boardtask .tatt-runs { color: var(--muted); overflow-wrap: anywhere; }
+#boardtask .tmono { font: 11px var(--mono); overflow-wrap: anywhere; }
+#boardtask .tloading, #boardtask .tempty { color: var(--muted); font-size: 12px; }
+#boardtask .terror { color: var(--err); font-size: 12.5px; overflow-wrap: anywhere; }
+
+/* plan edit form (#boardtaskedit, part B) ------------------------------ */
+#boardtaskedit .pedit-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; min-width: 0; }
+#boardtaskedit .pedit-label { min-width: 0; flex: 0 0 auto; font-size: 12.5px; }
+#boardtaskedit .pedit { flex: 1; min-width: 0; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+#boardtaskedit textarea.pedit { resize: vertical; min-height: 54px; overflow-wrap: anywhere; }
+#boardtaskedit .pedit-readonly { font-size: 12px; color: var(--muted); padding: 6px 0; overflow-wrap: anywhere; }
+/* the running-mission warning banner (part B) */
+#boardtaskedit .pedit-warning { border: 1px solid var(--retry); background: color-mix(in srgb, var(--retry) 10%, var(--panel)); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; color: var(--retry); overflow-wrap: anywhere; }
+#boardtaskedit .pedit-bar { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 8px; }
+#boardtaskedit .pedit-save, #boardtaskedit .pedit-reset { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 4px 10px; font-size: 12px; }
+#boardtaskedit .pedit-save { background: var(--sel); }
+#boardtaskedit .pedit-save:hover:not(:disabled) { background: var(--hover); }
+#boardtaskedit .pedit-note { font-size: 12px; color: var(--muted); padding-top: 6px; overflow-wrap: anywhere; }
+#boardtaskedit .pedit-diff { border: 1px solid var(--line); border-radius: 6px; background: var(--code); padding: 8px 12px; margin-top: 8px; }
+#boardtaskedit .pedit-diff.none { color: var(--muted); }
+#boardtaskedit .pedit-diff-row { padding: 2px 0; font-size: 12px; overflow-wrap: anywhere; }
+#boardtaskedit .pedit-diff-row .old { color: var(--err); }
+#boardtaskedit .pedit-diff-row .new { color: var(--ok); }
+
+/* plan save diff (shared with the mission save panel, part B) ---------- */
+.savediff { border: 1px solid var(--line); border-radius: 6px; background: var(--code); padding: 8px 12px; }
+.savediff.none { color: var(--muted); }
+.savediff-row { padding: 2px 0; font-size: 12px; overflow-wrap: anywhere; }
+.savediff-row .old { color: var(--err); }
+.savediff-row .new { color: var(--ok); }
+
+/* thinking policy panel (#boardthink, part C) --------------------------- */
+#boardthink { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 12px 14px; }
+#boardthink h3 { margin: 14px 0 8px; font-size: 13px; font-weight: 600; }
+#boardthink .tkpolicy { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#boardthink .tkpolicy textarea { flex: 1; min-width: 0; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 6px; resize: vertical; }
+#boardthink .tk-validate, #boardthink .tk-layout, #boardthink .tk-stats { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 4px 10px; font-size: 12px; }
+#boardthink .tk-validate:hover, #boardthink .tk-layout:hover, #boardthink .tk-stats:hover { background: var(--hover); }
+#boardthink .tkprobs { margin: 4px 0 10px; min-width: 0; }
+#boardthink .tkprob { font-size: 12px; color: var(--err); padding: 2px 0; overflow-wrap: anywhere; }
+#boardthink .tkok { font-size: 12px; color: var(--ok); }
+#boardthink .tkempty { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+#boardthink table.tklayout, #boardthink table.tkstats { width: 100%; border-collapse: collapse; font-size: 12px; overflow-x: auto; }
+#boardthink table.tklayout td, #boardthink table.tkstats td, #boardthink table.tkstats th { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+#boardthink table.tkstats th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+#boardthink .tkval { color: var(--ink); }
+#boardthink .tkuplift { overflow-wrap: anywhere; }
+#boardthink .tkweights { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+#boardthink .tkmsg { font-size: 12px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+#boardthink .tkerror { color: var(--err); font-size: 12.5px; overflow-wrap: anywhere; }
+
+/* readiness panel (#boardready, part D) ---------------------------------- */
+#boardready { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 12px 14px; }
+#boardready h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+#boardready .rdstatusline { font-size: 12px; font-weight: 520; margin-bottom: 8px; }
+#boardready .rdstatusline.rd-ok { color: var(--ok); }
+#boardready .rdstatusline.rd-warning { color: var(--retry); }
+#boardready .rdstatusline.rd-error { color: var(--err); }
+#boardready .rdtable { width: 100%; border-collapse: collapse; font-size: 12px; overflow-x: auto; }
+#boardready .rdtable th, #boardready .rdtable td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+#boardready .rdtable th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+#boardready .rdcheck { color: var(--ink); }
+#boardready .rdstatus { color: var(--muted); }
+#boardready .rdrow.rd-ok .rdstatus { color: var(--ok); }
+#boardready .rdrow.rd-warning .rdstatus { color: var(--retry); }
+#boardready .rdrow.rd-error .rdstatus { color: var(--err); }
+#boardready .rdoptions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+#boardready .rdopt { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; cursor: pointer; }
+#boardready .rdopt input[type="checkbox"] { accent-color: var(--accent); }
+#boardready .rd-start { border: 1px solid var(--line); border-radius: 5px; background: var(--sel); padding: 4px 12px; font-size: 12px; }
+#boardready .rd-start:hover:not(:disabled) { background: var(--hover); }
+#boardready .rdresult { font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+
+/* change history (#boardhistory, part D) --------------------------------- */
+#boardhistory { flex: 1; overflow-y: auto; overflow-x: hidden; min-width: 0; padding: 12px 14px; }
+#boardhistory h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+#boardhistory .chentry { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 6px; }
+#boardhistory .chtime { font: 11px var(--mono); color: var(--faint); overflow-wrap: anywhere; }
+#boardhistory .chwho { color: var(--muted); overflow-wrap: anywhere; }
+#boardhistory .chaction { color: var(--ink); overflow-wrap: anywhere; }
+#boardhistory .ch-rollback { border: 1px solid var(--line); border-radius: 5px; background: var(--panel); padding: 3px 10px; font-size: 12px; margin-left: auto; }
+#boardhistory .ch-rollback:hover:not(:disabled) { background: var(--hover); }
+#boardhistory .ch-rollback:disabled { opacity: .5; cursor: default; }
+#boardhistory .chdiffbox { margin-top: 8px; }
+#boardhistory .chdiff { border: 1px solid var(--line); border-radius: 6px; background: var(--code); padding: 8px 12px; overflow-x: auto; }
+#boardhistory .chdiff table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#boardhistory .chdiff th, #boardhistory .chdiff td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+#boardhistory .chdiff th { color: var(--muted); font-weight: 600; }
+#boardhistory .chdiff pre { margin: 0; font: 11.5px var(--mono); overflow-wrap: anywhere; }
+#boardhistory .chresult { font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+
 /* mobile ------------------------------------------------------------ */
 @media (max-width: 1100px) {
   #boardqueue, #boardmission { padding: 10px; }
@@ -94,3 +220,46 @@ button { font: inherit; color: inherit; }
   .qitem { flex-wrap: wrap; }
   .qitem .pos { min-width: 0; }
 }
+
+/* projects view ---------------------------------------------------- */
+#boardviewbody .pr { border: 1px solid var(--line); border-radius: 12px; margin: 0 0 10px; overflow: hidden; }
+#boardviewbody .pr.sel { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--sel); }
+#boardviewbody .prh { display: grid; grid-template-columns: minmax(150px, 1.4fr) minmax(160px, 2fr) repeat(4, minmax(70px, .7fr)) 40px; gap: 10px; align-items: center; padding: 12px 14px; cursor: pointer; user-select: none; }
+#boardviewbody .prh b { font-size: 14px; display: block; }
+#boardviewbody .prh .mono { display: block; color: var(--muted); font-size: 12px; }
+#boardviewbody .stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line); }
+#boardviewbody .stack i { display: block; height: 100%; }
+#boardviewbody .stack .s-run { background: var(--run, var(--accent)); }
+#boardviewbody .stack .s-q { background: var(--muted); }
+#boardviewbody .stack .s-ok { background: var(--ok); }
+#boardviewbody .stack .s-bad { background: var(--err); }
+#boardviewbody .stack .s-off { background: var(--line); }
+#boardviewbody .kpi span { display: block; color: var(--muted); font-size: 11px; }
+#boardviewbody .kpi b { font-weight: 600; }
+#boardviewbody .arr { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 8px; transition: transform .15s; }
+#boardviewbody .pr.open .arr { transform: rotate(90deg); }
+#boardviewbody .prb { display: none; border-top: 1px solid var(--line); padding: 10px 14px; background: var(--panel); }
+#boardviewbody .pr.open .prb { display: block; }
+#boardviewbody .kc { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; user-select: none; }
+#boardviewbody .kc:hover { background: var(--hover); }
+#boardviewbody .kc.sel { outline: 2px solid var(--accent); outline-offset: -1px; background: var(--sel); }
+#boardviewbody .kc b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#boardviewbody .kc .mono { color: var(--muted); font-size: 12px; }
+#boardviewbody .pill { display: inline-block; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; font-weight: 500; }
+#boardviewbody .p-run { color: var(--accent); }
+#boardviewbody .p-q { color: var(--muted); }
+#boardviewbody .p-ok { color: var(--ok); }
+#boardviewbody .p-bad { color: var(--err); }
+#boardviewbody .p-off { color: var(--muted); }
+@media (max-width: 900px) {
+  #boardviewbody .prh { grid-template-columns: 1fr 1fr; }
+  #boardviewbody .prh > div:nth-child(2) { grid-column: 1 / -1; }
+}
+
+/* mission cards of the queue: the progress bar and the figures line (they had no style: the bar was invisible and "10 of 15" ran into "13 attempts") */
+.qitem .qmeta { display: flex; align-items: center; gap: 10px; flex: none; min-width: 0; }
+.qitem .qtask { font: 600 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.qitem .qbar { display: inline-block; width: 84px; height: 6px; border-radius: 99px; background: var(--line); overflow: hidden; flex: none; }
+.qitem .qbarfill { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.qitem .qstats { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+@media (max-width: 800px) { .qitem .qmeta { flex-wrap: wrap; } .qitem .qstats { white-space: normal; } }

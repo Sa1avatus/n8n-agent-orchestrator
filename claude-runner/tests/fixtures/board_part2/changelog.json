@@ -1,0 +1,66 @@
+{
+  "changelog": [
+    {
+      "id": 7,
+      "at": "2026-10-10T12:31:00+00:00",
+      "who": "operator",
+      "action": "mission update",
+      "mission_id": "m_running",
+      "task_key": null,
+      "before_json": {
+        "mission_id": "m_running",
+        "state_namespace": "sk_running",
+        "name": "Fixture mission",
+        "objective": "old objective text",
+        "working_directory": "/d/example/mission/running",
+        "version": 3.0,
+        "enabled": true,
+        "rules": ["run tasks in plan order"],
+        "acceptance_criteria": ["every task accepted by the reviewer"],
+        "retrieval_corpora": ["example-corpus"],
+        "created_at": "2026-10-01T09:00:00+00:00",
+        "updated_at": "2026-10-09T08:00:00+00:00"
+      },
+      "after_json": {
+        "mission_id": "m_running",
+        "state_namespace": "sk_running",
+        "name": "Fixture mission",
+        "objective": "updated objective text",
+        "working_directory": "/d/example/mission/running",
+        "version": 3.0,
+        "enabled": true,
+        "rules": ["run tasks in plan order"],
+        "acceptance_criteria": ["every task accepted by the reviewer"],
+        "retrieval_corpora": ["example-corpus"],
+        "created_at": "2026-10-01T09:00:00+00:00",
+        "updated_at": "2026-10-10T12:31:00+00:00"
+      }
+    },
+    {
+      "id": 6,
+      "at": "2026-10-10T12:30:00+00:00",
+      "who": "operator",
+      "action": "queue change",
+      "mission_id": null,
+      "task_key": null,
+      "before_json": [
+        {"position": 0, "mission_id": "m_running", "enabled": true, "attempts_per_task": 5, "retry_failed": false, "note": null},
+        {"position": 1, "mission_id": "m_queued", "enabled": true, "attempts_per_task": null, "retry_failed": false, "note": null}
+      ],
+      "after_json": [
+        {"position": 0, "mission_id": "m_queued", "enabled": true, "attempts_per_task": null, "retry_failed": false, "note": null},
+        {"position": 1, "mission_id": "m_running", "enabled": true, "attempts_per_task": 5, "retry_failed": false, "note": null}
+      ]
+    },
+    {
+      "id": 5,
+      "at": "2026-10-10T12:28:00+00:00",
+      "who": "operator",
+      "action": "flag set",
+      "mission_id": null,
+      "task_key": null,
+      "before_json": null,
+      "after_json": null
+    }
+  ]
+}

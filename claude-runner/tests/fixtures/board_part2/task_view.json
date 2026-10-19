@@ -1,0 +1,10 @@
+{
+  "task_id": "T002",
+  "task_index": 1,
+  "title": "Extract the source tables",
+  "objective": "Load the source corpora and extract the required tables.",
+  "status": "not_accepted",
+  "attempt": null,
+  "review_score": 4.0,
+  "review_reason": "table counts do not match the source; fix and resubmit"
+}

@@ -84,7 +84,7 @@ async function postJson(url, body) {
   });
   const payload = await res.json().catch(() => ({}));
   if (res.status === 409) {
-    const err = new Error((payload.error && payload.error.message) || "план изменился, обновите");
+    const err = new Error((payload.error && payload.error.message) || t("conflict.plan_changed"));
     err.status = 409;
     throw err;
   }
@@ -126,7 +126,7 @@ async function refreshBoard() {
       };
     }
   } catch (e) {
-    showState(e.message || "The board could not be reloaded.");
+    showState(e.message || t("board.reload_failed"));
     return;
   }
   boardData = data;
@@ -155,19 +155,19 @@ function attachCardActions(el, data) {
     ? (data.queue.find((e) => e.mission_id === missionId) || {}).enabled
     : null;
   if (enabled === false) {
-    const btn = mkButton(group, "включить", "enable", missionId, false);
+    const btn = mkButton(group, t("action.enable"), "enable", missionId, false);
   } else {
-    const btn = mkButton(group, "выключить", "disable", missionId, true);
+    const btn = mkButton(group, t("action.disable"), "disable", missionId, true);
   }
 
   if (groupKey === "queued") {
-    mkButton(group, "в начало", "first", missionId, false);
-    mkButton(group, "в конец", "last", missionId, false);
+    mkButton(group, t("action.first"), "first", missionId, false);
+    mkButton(group, t("action.last"), "last", missionId, false);
   } else if (groupKey === "running") {
-    mkButton(group, "пауза", "pause", missionId, true);
-    mkButton(group, "остановить", "stop", missionId, true);
+    mkButton(group, t("action.pause"), "pause", missionId, true);
+    mkButton(group, t("action.stop"), "stop", missionId, true);
   } else if (groupKey === "not_completed" || groupKey === "queued") {
-    mkButton(group, "повторить", "retry", missionId, true);
+    mkButton(group, t("action.retry"), "retry", missionId, true);
   }
 
   el.appendChild(group);
@@ -195,12 +195,13 @@ function mkButton(group, label, action, missionId, needsConfirm) {
 // window.confirm returns true (the server still checks and refuses without
 // confirm=true when the mission is running).
 function confirmActions(missionId, action) {
-  const label = {
-    disable: "Выключить миссию",
-    stop: "Остановить миссию",
-    retry: "Повторить незавершённую миссию",
-    pause: "Пауза очереди после текущей миссии",
-  }[action] || action;
+  const labelKey = {
+    disable: "action.disable.title",
+    stop: "action.stop.title",
+    retry: "action.retry.title",
+    pause: "action.pause.title",
+  }[action];
+  const label = labelKey ? t(labelKey) : action;
   if (!window.confirm(label + " (" + esc(missionId) + ")?")) return;
   doAction(action, missionId);
 }
@@ -241,9 +242,9 @@ async function doAction(action, missionId) {
     await postJson(url, body);
   } catch (e) {
     if (e.status === 409) {
-      showState("план изменился, обновите");
+      showState(t("conflict.plan_changed"));
     } else {
-      showState(e.message || (action + " failed"));
+      showState(e.message || t("action.failed", { action }));
     }
     // The server state may have changed (e.g. a refusal); reload it.
     await refreshBoard();
@@ -257,6 +258,12 @@ async function doAction(action, missionId) {
 // The button lives once, at the top of the queue view.
 // eslint-disable-next-line no-let, prefer-const
 let newMissionButton = null;
+
+// The current button element (null before hookUp).  The Kanban view reuses
+// this so its header button is the same instance the queue view toggles.
+function getNewMissionButton() {
+  return newMissionButton;
+}
 
 // True while the form is open and any of its fields differ from the
 // initial values; the auto-refresh must not re-render in that state.
@@ -307,16 +314,16 @@ function toggleNewMission() {
     return input;
   };
   const idIn = mk("mission_id", "mission_id");
-  const nameIn = mk("name", "название");
-  const objIn = mk("objective", "цель", "textarea");
+  const nameIn = mk("name", t("new.name"));
+  const objIn = mk("objective", t("new.objective"), "textarea");
   // template: "empty", a stored template or another mission (the server copies its settings); filled from the API
   const tplLabel = document.createElement("label");
-  tplLabel.textContent = "шаблон: ";
+  tplLabel.textContent = t("new.template") + " ";
   const tplSel = document.createElement("select");
   tplSel.name = "template";
   const optEmpty = document.createElement("option");
   optEmpty.value = "";
-  optEmpty.textContent = "— пустая миссия —";
+  optEmpty.textContent = t("new.empty");
   tplSel.appendChild(optEmpty);
   tplLabel.appendChild(tplSel);
   el.appendChild(tplLabel);
@@ -324,10 +331,10 @@ function toggleNewMission() {
   (async () => {
     try {
       const templates = (await fetchJson("/api/board/templates")).templates || [];
-      for (const t of templates) {
+      for (const tpl of templates) {
         const o = document.createElement("option");
-        o.value = "template:" + t.name;
-        o.textContent = "шаблон: " + t.name;
+        o.value = "template:" + tpl.name;
+        o.textContent = t("new.option_template", { name: tpl.name });
         tplSel.appendChild(o);
       }
     } catch (e) { /* no stored templates: the missions below still work */ }
@@ -336,18 +343,18 @@ function toggleNewMission() {
       for (const m of missions) {
         const o = document.createElement("option");
         o.value = "mission:" + m.mission_id;
-        o.textContent = "как у: " + m.mission_id;
+        o.textContent = t("new.option_copy", { id: m.mission_id });
         tplSel.appendChild(o);
       }
     } catch (e) { /* the list stays short */ }
   })();
-  const posIn = mk("position", "позиция в очереди");
+  const posIn = mk("position", t("new.position"));
   posIn.type = "number";
   posIn.min = "0";
 
   const submit = document.createElement("button");
   submit.type = "button";
-  submit.textContent = "создать";
+  submit.textContent = t("new.submit");
   submit.addEventListener("click", createMissionForm);
   el.appendChild(submit);
 }
@@ -371,7 +378,7 @@ async function createMissionForm() {
   try {
     await postJson("/api/board/missions/create", body);
   } catch (e) {
-    showState(e.message || "mission create failed");
+    showState(e.message || t("mission.create_failed"));
     return;
   }
   toggleNewMission();
@@ -413,8 +420,8 @@ function hookUp() {
     newMissionButton = document.createElement("button");
     newMissionButton.type = "button";
     newMissionButton.className = "qnew";
-    newMissionButton.textContent = "Новая миссия";
-    newMissionButton.title = "Новая миссия";
+    newMissionButton.textContent = t("new.title");
+    newMissionButton.title = t("new.title");
     newMissionButton.dataset.formOpen = "0";
     newMissionButton.addEventListener("click", toggleNewMission);
   }
@@ -436,6 +443,7 @@ const BoardActions = {
   startAutoRefresh,
   stopAutoRefresh,
   hookUp,
+  getNewMissionButton,
 };
 function attachCardActionsTo(data) {
   boardData = data;

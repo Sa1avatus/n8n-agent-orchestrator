@@ -1,0 +1,75 @@
+{
+  "plan": {
+    "tasks": [
+      {
+        "id": "T001",
+        "title": "Prepare the working folder",
+        "objective": "Create the mission's working folder and verify it is mounted.",
+        "acceptance_criteria": ["folder exists and is readable"],
+        "verification": [],
+        "scope": [],
+        "dependencies": []
+      },
+      {
+        "id": "T002",
+        "title": "Extract the source tables",
+        "objective": "Load the source corpora and extract the required tables.",
+        "acceptance_criteria": ["tables present, counts checked"],
+        "verification": ["row counts reported"],
+        "scope": [],
+        "dependencies": ["T001"]
+      },
+      {
+        "id": "T003",
+        "title": "Write the report",
+        "objective": "Produce the report over the extracted tables.",
+        "acceptance_criteria": ["report covers all sources", "reviewer acceptance"],
+        "verification": ["reviewer review passed"],
+        "scope": [],
+        "dependencies": ["T002"]
+      },
+      {
+        "id": "T013A",
+        "title": "Append the appendix",
+        "objective": "Add the appendix with the leftover figures.",
+        "acceptance_criteria": ["appendix present"],
+        "verification": [],
+        "scope": [],
+        "dependencies": ["T003"]
+      }
+    ]
+  },
+  "version": "2026-10-10T12:30:00+00:00",
+  "tasks": [
+    {
+      "task_id": "T001",
+      "task_index": 0,
+      "title": "Prepare the working folder",
+      "objective": "Create the mission's working folder and verify it is mounted.",
+      "status": "accepted",
+      "attempt": null,
+      "review_score": 9.0,
+      "review_reason": "folder verified, all checks passed"
+    },
+    {
+      "task_id": "T002",
+      "task_index": 1,
+      "title": "Extract the source tables",
+      "objective": "Load the source corpora and extract the required tables.",
+      "status": "not_accepted",
+      "attempt": null,
+      "review_score": 4.0,
+      "review_reason": "table counts do not match the source; fix and resubmit"
+    },
+    {
+      "task_id": "T003",
+      "task_index": 2,
+      "title": "Write the report",
+      "objective": "Produce the report over the extracted tables.",
+      "status": "waiting",
+      "attempt": null,
+      "review_score": null,
+      "review_reason": null
+    }
+  ]
+}

@@ -413,6 +413,36 @@ class BoardStore(ABC):
     def record_preflight(self, mission_id: str, items: list[dict[str, Any]]) -> None:
         """Record a preflight result for a mission (newest first)."""
 
+    @abstractmethod
+    def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
+        """Project rules ordered by position, and their version ('' when empty)."""
+
+    @abstractmethod
+    def put_project_rules(
+        self, rules: list[dict[str, Any]], expected_version: str | None, actor: str = "",
+    ) -> None:
+        """Replace the whole project rule list."""
+
+    @abstractmethod
+    def list_i18n(self) -> dict[str, Any]:
+        """``{"languages": [...], "strings": {lang: {key: text}}}``."""
+
+    @abstractmethod
+    def put_i18n_string(self, lang: str, key: str, text: str, actor: str = "") -> None:
+        """Set a UI string; an empty text deletes it."""
+
+    @abstractmethod
+    def add_i18n_language(self, code: str, name: str) -> None:
+        """Add an enabled UI language."""
+
+    @abstractmethod
+    def i18n_is_empty(self) -> bool:
+        """True when no UI language and no UI string is stored."""
+
+    @abstractmethod
+    def seed_i18n(self, sets: dict[str, Any]) -> None:
+        """Insert the seed (same shape as list_i18n) only when the i18n tables are empty."""
+
     # ---- audit ---------------------------------------------------------------
     def audit_rollback(
         self,
@@ -554,6 +584,10 @@ class InMemoryBoardStore(BoardStore):
         self._template_version: dict[str, str] = {}
         self._flags: dict[str, str] = {}
         self._flag_version: dict[str, str] = {}
+        self._project_rules: list[dict[str, Any]] = []
+        self._project_rules_version = ""
+        self._i18n_languages: dict[str, dict[str, Any]] = {}
+        self._i18n_strings: dict[tuple[str, str], dict[str, Any]] = {}
         self._preflight: dict[str, list[dict[str, Any]]] = {}
         self._changelog: list[ChangelogEntry] = []
         self._changelog_seq = 0
@@ -1090,6 +1124,99 @@ class InMemoryBoardStore(BoardStore):
             }
             self._audit("preflight record", before=None, after=dict(row), mission_id=mission_id)
             self._preflight.setdefault(mission_id, []).insert(0, dict(row))
+
+    def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
+        with self._lock:
+            return [dict(r) for r in self._project_rules], self._project_rules_version
+
+    def put_project_rules(
+        self, rules: list[dict[str, Any]], expected_version: str | None, actor: str = "",
+    ) -> None:
+        with self._lock:
+            self._check_version(
+                "project_rules", "rules", expected_version, self._project_rules_version
+            )
+            ordered = sorted(
+                (
+                    {"name": r["name"], "pattern": r["pattern"], "position": int(r["position"])}
+                    for r in rules
+                ),
+                key=lambda r: r["position"],
+            )
+            self._audit(
+                "project rules set",
+                before=[dict(r) for r in self._project_rules],
+                after=[dict(r) for r in ordered],
+                who=actor,
+            )
+            self._project_rules = ordered
+            self._project_rules_version = now() if ordered else ""
+
+    def list_i18n(self) -> dict[str, Any]:
+        with self._lock:
+            strings: dict[str, dict[str, str]] = {}
+            for (lang, key), row in sorted(self._i18n_strings.items()):
+                strings.setdefault(lang, {})[key] = row["text"]
+            languages = [dict(v) for _, v in sorted(self._i18n_languages.items())]
+            return {"languages": languages, "strings": strings}
+
+    def put_i18n_string(self, lang: str, key: str, text: str, actor: str = "") -> None:
+        with self._lock:
+            previous = self._i18n_strings.get((lang, key))
+            if not text:
+                if previous is not None:
+                    self._audit(
+                        "i18n string remove",
+                        before={"lang": lang, "key": key, "text": previous["text"]},
+                        after=None,
+                        who=actor,
+                    )
+                    del self._i18n_strings[(lang, key)]
+                return
+            row = {
+                "lang": lang,
+                "key": key,
+                "text": text,
+                "updated_at": now(),
+                "updated_by": actor or None,
+            }
+            self._audit(
+                "i18n string set",
+                before=None if previous is None else {
+                    "lang": lang, "key": key, "text": previous["text"],
+                },
+                after={"lang": lang, "key": key, "text": text},
+                who=actor,
+            )
+            self._i18n_strings[(lang, key)] = row
+
+    def add_i18n_language(self, code: str, name: str) -> None:
+        with self._lock:
+            if code in self._i18n_languages:
+                raise ConflictError(f"i18n language {code!r} already exists")
+            after = {"code": code, "name": name, "enabled": True}
+            self._audit("i18n language add", before=None, after=after)
+            self._i18n_languages[code] = dict(after)
+
+    def i18n_is_empty(self) -> bool:
+        with self._lock:
+            return not self._i18n_languages and not self._i18n_strings
+
+    def seed_i18n(self, sets: dict[str, Any]) -> None:
+        with self._lock:
+            if not self.i18n_is_empty():
+                return
+            for item in sets.get("languages", []):
+                self._i18n_languages[item["code"]] = {
+                    "code": item["code"], "name": item["name"], "enabled": True,
+                }
+            for lang, texts in sets.get("strings", {}).items():
+                for key, text in texts.items():
+                    if text:
+                        self._i18n_strings[(lang, key)] = {
+                            "lang": lang, "key": key, "text": text,
+                            "updated_at": now(), "updated_by": None,
+                        }
 
 
 # --- factory and Pg store (deferred import: keeps ``board`` importable without psycopg)

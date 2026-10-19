@@ -1,0 +1,60 @@
+{
+  "mission_id": "m_running",
+  "status": "error",
+  "items": [
+    {
+      "check": "working_folder",
+      "status": "error",
+      "reason": "working folder '/d/example/mission/running' does not exist"
+    },
+    {
+      "check": "required_files",
+      "status": "ok",
+      "reason": "/d/example/mission/running/source.csv",
+      "files": ["/d/example/mission/running/source.csv"]
+    },
+    {
+      "check": "runner",
+      "status": "ok",
+      "reason": "runner http://claude-runner:8700 is up"
+    },
+    {
+      "check": "litellm",
+      "status": "ok",
+      "reason": "litellm http://litellm:4000 is up"
+    },
+    {
+      "check": "llama_model",
+      "status": "warning",
+      "reason": "llama probe URL is not set"
+    },
+    {
+      "check": "plan",
+      "status": "ok",
+      "reason": "3 tasks in the plan"
+    },
+    {
+      "check": "live_state",
+      "status": "ok",
+      "reason": "live state present"
+    },
+    {
+      "check": "not_running",
+      "status": "ok",
+      "reason": "the mission is not running"
+    },
+    {
+      "check": "preflight",
+      "status": "warning",
+      "reason": "preflight is stale (11h ago, limit 1h)"
+    }
+  ],
+  "errors": [
+    {
+      "check": "working_folder",
+      "status": "error",
+      "reason": "working folder '/d/example/mission/running' does not exist"
+    }
+  ],
+  "confirmed_needed": true
+}

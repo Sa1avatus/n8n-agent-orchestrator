@@ -43,11 +43,11 @@ function esc(v) {
 
 // The five groups in display order, keyed by the store's group names.
 const GROUPS = [
-  { key: "running", title: "Идёт сейчас" },
-  { key: "queued", title: "В очереди" },
-  { key: "completed", title: "Завершены" },
-  { key: "not_completed", title: "Не завершены/остановлены" },
-  { key: "disabled", title: "Выключены" },
+  { key: "running", titleKey: "queue.group.running" },
+  { key: "queued", titleKey: "queue.group.queued" },
+  { key: "completed", titleKey: "queue.group.completed" },
+  { key: "not_completed", titleKey: "queue.group.not_completed" },
+  { key: "disabled", titleKey: "queue.group.disabled" },
 ];
 
 // Compact token count: 1234567 -> "1.2M".
@@ -61,8 +61,8 @@ function fmtTokens(v) {
 // Total run time (worker hours + reviewer minutes) as "1.3 h" / "25 min".
 function fmtTime(workerHours, reviewerMinutes) {
   const minutes = (Number(workerHours) || 0) * 60 + (Number(reviewerMinutes) || 0);
-  if (minutes >= 60) return (minutes / 60).toFixed(1) + " h";
-  return String(Math.round(minutes)) + " min";
+  if (minutes >= 60) return t("hours", { n: (minutes / 60).toFixed(1) });
+  return t("s.min", { n: String(Math.round(minutes)) });
 }
 
 // A ratio (0..1) as a percent; "—" when there is nothing to count.
@@ -96,7 +96,7 @@ function cardHtml(mission, position, groupKey, card) {
   const tokens = stats ? fmtTokens((Number(stats.input_tokens) || 0) + (Number(stats.output_tokens) || 0)) : "—";
   const cache = stats ? fmtPercent(stats.cache_ratio, (Number(stats.cache_read_tokens) || 0) + (Number(stats.cache_write_tokens) || 0)) : "—";
   const cost = stats && stats.cost_usd != null ? "$" + Number(stats.cost_usd).toFixed(2) : "—";
-  const speed = stats && stats.tok_per_s != null ? Math.round(Number(stats.tok_per_s)) + " tok/s" : "—";
+  const speed = stats && stats.tok_per_s != null ? t("s.tps", { n: Math.round(Number(stats.tok_per_s)) }) : "—";
   const thinking = stats ? fmtPercent(
     stats.thinking_steps ? stats.thinking_runs / stats.thinking_steps : 0,
     stats.thinking_steps,
@@ -110,12 +110,10 @@ function cardHtml(mission, position, groupKey, card) {
     `<span class="id">${esc(id)}</span>` +
     `<span class="status">${esc(status)}</span>` +
     `<div class="qmeta">` +
-    `<span class="qtask">${taskN != null ? esc(taskN) + " of " + esc(total) : esc("—")}</span>` +
+    `<span class="qtask">${taskN != null ? esc(t("queue.task_of", { a: taskN, b: total })) : esc("—")}</span>` +
     `<span class="qbar"><span class="qbarfill" style="width:${esc(pct)}%"></span></span>` +
-    `<span class="qstats" title="attempts · time · tokens · cache · cost · speed · thinking">` +
-    esc(attempts) + " attempts · " + esc(time) + " · " + esc(tokens) + " tokens · " +
-    esc(cache) + " cache · " + esc(cost) + " · " + esc(speed) + " · " + esc(thinking) +
-    ` thinking</span>` +
+    `<span class="qstats" title="${esc(t("queue.stats.title"))}">` +
+    esc(t("queue.stats", { attempts, time, tokens, cache, cost, speed, thinking })) + `</span>` +
     `</div></a>`
   );
 }
@@ -142,7 +140,7 @@ function renderQueue(data) {
       .map((id) => cardHtml(byId[id], positionOf[id] || 0, g.key, cards[id]))
       .join("");
     html.push(
-      `<section class="qgroup"><h2>${esc(g.title)}</h2>` +
+      `<section class="qgroup"><h2>${esc(t(g.titleKey))}</h2>` +
       (items || `<div class="qempty">—</div>`) +
       `</section>`
     );

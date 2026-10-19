@@ -2,7 +2,7 @@
 --
 -- Read-only data model reference: claude-runner/docs/board-data-model.md.
 -- All statements are idempotent (IF NOT EXISTS) so this file can be applied
--- more than once.  It creates the board schema and its seven tables.
+-- more than once.  It creates the board schema and its tables.
 
 CREATE SCHEMA IF NOT EXISTS board;
 
@@ -92,4 +92,31 @@ CREATE TABLE IF NOT EXISTS board.preflight (
     checked_at  timestamptz NOT NULL DEFAULT now(),
     items_json  text NOT NULL,
     PRIMARY KEY (mission_id, checked_at)
+);
+
+-- Project rules: ordered list of file-name patterns (``*`` is a wildcard).
+-- The whole list is replaced on each save; updated_at of the rows is the
+-- version (max over the rows, '' when the list is empty).
+CREATE TABLE IF NOT EXISTS board.project_rules (
+    name        text PRIMARY KEY,
+    pattern     text NOT NULL,
+    position    integer NOT NULL,
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+-- Dashboard UI languages.  enabled=false hides the language from the picker.
+CREATE TABLE IF NOT EXISTS board.i18n_languages (
+    code     text PRIMARY KEY,
+    name     text NOT NULL,
+    enabled  boolean NOT NULL DEFAULT true
+);
+
+-- UI strings per language.  An empty text is never stored: it deletes the row.
+CREATE TABLE IF NOT EXISTS board.i18n_strings (
+    lang        text NOT NULL,
+    key         text NOT NULL,
+    text        text NOT NULL,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (lang, key)
 );

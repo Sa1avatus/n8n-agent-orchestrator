@@ -24,6 +24,7 @@
 
 "use strict";
 const path = require("path");
+require(path.join(__dirname, "i18n_stub.js"));
 const MS = require(path.join(__dirname, "..", "src", "claude_runner", "board_mission_save.js"));
 const BL = require(path.join(__dirname, "..", "src", "claude_runner", "board_logic.js"));
 
@@ -138,7 +139,7 @@ const d = BL.diffConfig({ a: "x<b" }, { a: "y" });
 check("diffHtml escapes <", MS.diffHtml(d, { a: "A" }).indexOf("x&lt;b") !== -1);
 check("diffHtml no raw <", MS.diffHtml(d, { a: "A" }).indexOf("x<b") === -1);
 check("diffHtml none message",
-  MS.diffHtml([], {}).indexOf("Изменений нет.") !== -1);
+  MS.diffHtml([], {}).indexOf("No changes.") !== -1);
 
 // mergeServerIntoForm keeps local edits, takes server version, flags drift
 const form = { version: "qv1", queue: [{ position: 0, mission_id: "m1" }],
@@ -226,13 +227,13 @@ postStatus = 409;
 postErr = { error: { message: "план изменился, обновите" } };
 (async () => {
   await MS.doSave(panelBox());
-  check("409 keeps banner", bannerStub.textContent === "план изменился, обновите");
+  check("409 keeps banner", bannerStub.textContent === "The plan changed, refresh.");
 
   // 409 with a drifted server queue: the note is kept alongside.
   getQueue = [{ position: 0, mission_id: "m2" }];
   await MS.doSave(panelBox());
   check("409 + drifted queue adds note",
-    bannerStub.textContent === "план изменился, обновите — на сервере есть изменения");
+    bannerStub.textContent === "The plan changed, refresh. — there are changes on the server.");
 
   // Successful save: re-fetch + forced clean re-render, form clean after.
   postStatus = 200;

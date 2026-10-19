@@ -3,6 +3,7 @@
 
 "use strict";
 const path = require("path");
+require(path.join(__dirname, "i18n_stub.js"));
 const BQ = require(path.join(__dirname, "..", "src", "claude_runner", "board_queue.js"));
 
 function check(name, cond) {
@@ -69,10 +70,10 @@ const html = BQ.renderQueue(data);
 
 // the five group headers, in order
 check("group order",
-  html.indexOf("Идёт сейчас") < html.indexOf("В очереди") &&
-  html.indexOf("В очереди") < html.indexOf("Завершены") &&
-  html.indexOf("Завершены") < html.indexOf("Не завершены/остановлены") &&
-  html.indexOf("Не завершены/остановлены") < html.indexOf("Выключены"));
+  html.indexOf("Running now") < html.indexOf("Queued") &&
+  html.indexOf("Queued") < html.indexOf("Completed") &&
+  html.indexOf("Completed") < html.indexOf("Not completed / stopped") &&
+  html.indexOf("Not completed / stopped") < html.indexOf("Disabled"));
 check("five sections", (html.match(/class="qgroup"/g) || []).length === 5);
 check("all mission ids", data.missions
   .every((m) => has(html, `data-mission-id="${m.mission_id}"`)));
@@ -123,7 +124,7 @@ check("esc group key", has(evilHtml, 'data-group="queued"'));
 // empty board: the five headers stay, cards are "—"
 const empty = BQ.renderQueue({ groups: {}, missions: [], queue: [], cards: {} });
 check("empty groups kept",
-  empty.indexOf("Идёт сейчас") !== -1 && empty.indexOf("Выключены") !== -1);
+  empty.indexOf("Running now") !== -1 && empty.indexOf("Disabled") !== -1);
 check("empty cards", empty.split("qempty").length === 6); // one per group
 
 // --- render() on a minimal fake document ---
@@ -148,7 +149,7 @@ globalThis.document = {
 BQ.render(data);
 check("boardqueue created", appended.length === 1 && appended[0].id === "boardqueue");
 check("boardqueue content",
-  appended[0].innerHTML.indexOf("Идёт сейчас") !== -1 &&
+  appended[0].innerHTML.indexOf("Running now") !== -1 &&
   appended[0].innerHTML.indexOf("Source mission") !== -1);
 check("boardstate cleared", stateStub.textContent === "" && stateStub.className === "");
 

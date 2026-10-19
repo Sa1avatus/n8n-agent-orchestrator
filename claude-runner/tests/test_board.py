@@ -1260,6 +1260,31 @@ class TestRollbackAndBackupRow:
         assert live.worker_run_id == "run_a"
 
 
+class TestProjectRulesAndI18nStore:
+    RULES = [{"name": "a", "pattern": "*.py", "position": 1}]
+    SEED = {"languages": [{"code": "de", "name": "Deutsch"}], "strings": {"en": {"k": "v"}}}
+
+    def test_put_project_rules_stale_version_conflicts(self, board: InMemoryBoardStore):
+        board.put_project_rules(self.RULES, None)
+        rules, version = board.get_project_rules()
+        assert rules == self.RULES and version
+        with pytest.raises(ConflictError):
+            board.put_project_rules(self.RULES, "stale")
+        board.put_project_rules([], version)
+        assert board.get_project_rules() == ([], "")
+
+    def test_put_i18n_string_empty_text_deletes_the_row(self, board: InMemoryBoardStore):
+        board.put_i18n_string("en", "k", "hello")
+        assert board.list_i18n()["strings"] == {"en": {"k": "hello"}}
+        board.put_i18n_string("en", "k", "")
+        assert board.list_i18n()["strings"] == {}
+
+    def test_seed_i18n_never_overwrites_existing_rows(self, board: InMemoryBoardStore):
+        board.put_i18n_string("en", "k", "mine")
+        board.seed_i18n(self.SEED)
+        assert board.list_i18n() == {"languages": [], "strings": {"en": {"k": "mine"}}}
+
+
 if __name__ == "__main__":
     import sys
 

@@ -54,6 +54,10 @@ _TEMPLATES_TABLE = "templates"
 _MISSION_CONFIG_TABLE = "mission_config"
 _TASK_OVERRIDES_TABLE = "task_overrides"
 _PREFLIGHT_TABLE = "preflight"
+_PROJECT_RULES_TABLE = "project_rules"
+_PROJECT_RULES_LOCK = 7340201
+_I18N_LANGUAGES_TABLE = "i18n_languages"
+_I18N_STRINGS_TABLE = "i18n_strings"
 
 _DDL = [
     "CREATE SCHEMA IF NOT EXISTS board",
@@ -102,6 +106,32 @@ class UnavailableBoardStore(BoardStore):
 
     def _refuse(self) -> None:
         raise RuntimeError(f"board unavailable: {self._reason}")
+
+    def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
+        self._refuse()
+        return [], ""
+
+    def put_project_rules(
+        self, rules: list[dict[str, Any]], expected_version: str | None, actor: str = "",
+    ) -> None:
+        self._refuse()
+
+    def list_i18n(self) -> dict[str, Any]:
+        self._refuse()
+        return {"languages": [], "strings": {}}
+
+    def put_i18n_string(self, lang: str, key: str, text: str, actor: str = "") -> None:
+        self._refuse()
+
+    def add_i18n_language(self, code: str, name: str) -> None:
+        self._refuse()
+
+    def i18n_is_empty(self) -> bool:
+        self._refuse()
+        return True
+
+    def seed_i18n(self, sets: dict[str, Any]) -> None:
+        self._refuse()
 
     # ---- reads ---------------------------------------------------------------
     def list_missions(self) -> list[Mission]:
@@ -662,6 +692,11 @@ class PgBoardStore(BoardStore):
                     "worker_status", "architect_run_id", "architect_status",
                     "architect_session_id",
                 }
+                # The routes pass plan= as the plan object: serialise it to JSON
+                # and store it in the plan_json column.
+                if "plan" in fields:
+                    fields = dict(fields)
+                    fields["plan_json"] = json.dumps(fields.pop("plan"))
                 update_names = [n for n in fields if n in known_live_cols]
                 if row is not None and not update_names:
                     raise ValueError("no updatable fields")
@@ -1276,6 +1311,152 @@ class PgBoardStore(BoardStore):
                     "VALUES (%s, %s, %s)",
                     (mission_id, now(), json.dumps(items)),
                 )
+
+    def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
+        rows = self._conn.execute(
+            f"SELECT name, pattern, position, updated_at FROM {_PROJECT_RULES_TABLE} "
+            "ORDER BY position"
+        ).fetchall()
+        rules = [
+            {"name": r["name"], "pattern": r["pattern"], "position": r["position"]}
+            for r in rows
+        ]
+        stamps = [r["updated_at"] for r in rows if r["updated_at"] is not None]
+        version = _iso(max(stamps)) if stamps else ""
+        return rules, version or ""
+
+    def put_project_rules(
+        self, rules: list[dict[str, Any]], expected_version: str | None, actor: str = "",
+    ) -> None:
+        ordered = sorted(
+            (
+                {"name": r["name"], "pattern": r["pattern"], "position": int(r["position"])}
+                for r in rules
+            ),
+            key=lambda r: r["position"],
+        )
+        with self._lock:
+            with self._conn.transaction():
+                # FOR UPDATE locks no row when the table is empty; the advisory lock serializes writers
+                self._conn.execute("SELECT pg_advisory_xact_lock(%s)", (_PROJECT_RULES_LOCK,))
+                rows = self._conn.execute(
+                    f"SELECT name, pattern, position, updated_at FROM {_PROJECT_RULES_TABLE} "
+                    "FOR UPDATE",
+                ).fetchall()
+                stamps = [r["updated_at"] for r in rows if r["updated_at"] is not None]
+                stored = _iso(max(stamps)) if stamps else ""
+                if expected_version is not None and expected_version != stored:
+                    self._conflict("project_rules", "rules", expected_version, stored or "")
+                before = [
+                    {"name": r["name"], "pattern": r["pattern"], "position": r["position"]}
+                    for r in sorted(rows, key=lambda r: r["position"])
+                ]
+                self._audit("project rules set", before=before, after=ordered, who=actor)
+                self._conn.execute(f"DELETE FROM {_PROJECT_RULES_TABLE}")
+                for rule in ordered:
+                    self._conn.execute(
+                        f"INSERT INTO {_PROJECT_RULES_TABLE} "
+                        "(name, pattern, position, updated_at) VALUES (%s, %s, %s, now())",
+                        (rule["name"], rule["pattern"], rule["position"]),
+                    )
+
+    def list_i18n(self) -> dict[str, Any]:
+        languages = self._conn.execute(
+            f"SELECT code, name, enabled FROM {_I18N_LANGUAGES_TABLE} ORDER BY code"
+        ).fetchall()
+        strings: dict[str, dict[str, str]] = {}
+        for r in self._conn.execute(
+            f"SELECT lang, key, text FROM {_I18N_STRINGS_TABLE} ORDER BY lang, key"
+        ).fetchall():
+            strings.setdefault(r["lang"], {})[r["key"]] = r["text"]
+        return {
+            "languages": [
+                {"code": r["code"], "name": r["name"], "enabled": r["enabled"]}
+                for r in languages
+            ],
+            "strings": strings,
+        }
+
+    def put_i18n_string(self, lang: str, key: str, text: str, actor: str = "") -> None:
+        with self._lock:
+            with self._conn.transaction():
+                row = self._conn.execute(
+                    f"SELECT text FROM {_I18N_STRINGS_TABLE} "
+                    "WHERE lang = %s AND key = %s FOR UPDATE",
+                    (lang, key),
+                ).fetchone()
+                previous = None if row is None else {
+                    "lang": lang, "key": key, "text": row["text"],
+                }
+                if not text:
+                    if previous is not None:
+                        self._audit("i18n string remove", before=previous, after=None, who=actor)
+                        self._conn.execute(
+                            f"DELETE FROM {_I18N_STRINGS_TABLE} WHERE lang = %s AND key = %s",
+                            (lang, key),
+                        )
+                    return
+                self._audit(
+                    "i18n string set",
+                    before=previous,
+                    after={"lang": lang, "key": key, "text": text},
+                    who=actor,
+                )
+                self._conn.execute(
+                    f"INSERT INTO {_I18N_STRINGS_TABLE} (lang, key, text, updated_at, updated_by) "
+                    "VALUES (%s, %s, %s, now(), %s) "
+                    "ON CONFLICT (lang, key) DO UPDATE SET text = EXCLUDED.text, "
+                    "updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by",
+                    (lang, key, text, actor or None),
+                )
+
+    def add_i18n_language(self, code: str, name: str) -> None:
+        with self._lock:
+            with self._conn.transaction():
+                exists = self._conn.execute(
+                    f"SELECT 1 FROM {_I18N_LANGUAGES_TABLE} WHERE code = %s FOR UPDATE",
+                    (code,),
+                ).fetchone()
+                if exists is not None:
+                    raise ConflictError(f"i18n language {code!r} already exists")
+                after = {"code": code, "name": name, "enabled": True}
+                self._audit("i18n language add", before=None, after=after)
+                self._conn.execute(
+                    f"INSERT INTO {_I18N_LANGUAGES_TABLE} (code, name, enabled) "
+                    "VALUES (%s, %s, true)",
+                    (code, name),
+                )
+
+    def i18n_is_empty(self) -> bool:
+        return not self._i18n_has_rows()
+
+    def _i18n_has_rows(self) -> bool:
+        row = self._conn.execute(
+            f"SELECT EXISTS (SELECT 1 FROM {_I18N_LANGUAGES_TABLE}) "
+            f"OR EXISTS (SELECT 1 FROM {_I18N_STRINGS_TABLE}) AS has_rows"
+        ).fetchone()
+        return bool(row["has_rows"])
+
+    def seed_i18n(self, sets: dict[str, Any]) -> None:
+        with self._lock:
+            with self._conn.transaction():
+                if self._i18n_has_rows():
+                    return
+                for item in sets.get("languages", []):
+                    self._conn.execute(
+                        f"INSERT INTO {_I18N_LANGUAGES_TABLE} (code, name, enabled) "
+                        "VALUES (%s, %s, true) ON CONFLICT (code) DO NOTHING",
+                        (item["code"], item["name"]),
+                    )
+                for lang, texts in sets.get("strings", {}).items():
+                    for key, text in texts.items():
+                        if not text:
+                            continue
+                        self._conn.execute(
+                            f"INSERT INTO {_I18N_STRINGS_TABLE} (lang, key, text, updated_at) "
+                            "VALUES (%s, %s, %s, now()) ON CONFLICT (lang, key) DO NOTHING",
+                            (lang, key, text),
+                        )
 
 
 # ---------------------------------------------------------------------------

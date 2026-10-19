@@ -20,6 +20,7 @@
 
 "use strict";
 const path = require("path");
+require(path.join(__dirname, "i18n_stub.js"));
 const BM = require(path.join(__dirname, "..", "src", "claude_runner", "board_mission.js"));
 
 function check(name, cond) {
@@ -94,8 +95,8 @@ check("working_directory is greyed while running",
 check("retrieval_corpora is greyed while running",
   has(html, 'name="retrieval_corpora"') &&
   /frow-wrap disabled[\s\S]*?data-key="retrieval_corpora"/.test(html));
-check("working_directory note", has(html, "привязана к живому сеансу Worker"));
-check("retrieval_corpora note", has(html, "корпуса поиска уходят в живой запрос"));
+check("working_directory note", has(html, "bound to the live Worker session"));
+check("retrieval_corpora note", has(html, "the retrieval corpora go into the live run query"));
 check("state_namespace has no form row", !has(html, "state_namespace"));
 // per-row: greyed only if the disabled row itself carries that data-key
 const greyedKeys = [...html.matchAll(
@@ -110,7 +111,7 @@ check("no other field greyed",
 check("greyed inputs are disabled",
   /frow-wrap disabled[\s\S]*?data-key="working_directory"[^>]*disabled/.test(html));
 // the running note explains when changes apply
-check("running note", has(html, "изменения применяются со следующей задачи"));
+check("running note", has(html, "changes apply from the next task"));
 
 // preset buttons for attempts
 check("presets present",
@@ -174,12 +175,210 @@ check("policy object renders pretty JSON, not [object Object]",
 check("string policy stays raw in the json textarea", has(html, ">on</textarea>"));
 
 // --- 5. breadcrumb and summary ---
-check("breadcrumb link", has(html, '<a class="back" href="#board">Миссии</a>'));
+check("breadcrumb link", has(html, '<a class="back" href="#board">Missions</a>'));
 check("breadcrumb name", has(html, '<span class="crumb-name">Миссия &quot;A&quot; &amp; B</span>'));
 check("meta line has id", has(html, "id: m1"));
-check("meta line has state", has(html, "состояние: active"));
-check("meta line has task number", has(html, "задача 2"));
-check("meta line has folder", has(html, "папка: /tmp/x"));
+check("meta line has state", has(html, "status: active"));
+check("meta line has task number", has(html, "task 2"));
+check("meta line has folder", has(html, "folder: /tmp/x"));
+
+// --- 8. task table: chips, drag rules, dependency select, runs link ---
+const planT = {
+  plan: { tasks: [
+    { id: "T1", dependencies: [] },
+    { id: "T2", dependencies: ["T1"] },
+    { id: "T3", dependencies: ["T2"] },
+    { id: "T4", dependencies: [] },
+  ] },
+  tasks: [
+    { task_id: "T1", title: "a", status: "waiting" },
+    { task_id: "T2", title: "b", status: "waiting" },
+    { task_id: "T3", title: "c", status: "accepted" },
+    { task_id: "T4", title: "d", status: "waiting" },
+  ],
+};
+const T = BM.taskModel(planT);
+const tById = (id) => T.find((x) => x.id === id);
+const DEPS = BM.depsMap(T);
+check("taskModel marks waiting as g and others locked",
+  tById("T1").st === "g" && tById("T2").st === "g" && tById("T3").st === "accepted");
+check("taskModel reads dependencies from the plan", tById("T2").deps.join() === "T1");
+check("depsMap lists dependencies", DEPS.T3.join() === "T2");
+const tableHtml = BM.renderTaskTable({
+  tasks: T, stats: { T1: { attempts: 2, max_attempts_per_task: 5, input_tokens: 1500, output_tokens: 500, cost_usd: 0.5 } },
+  highlight: null, warning: null, notice: null, missionId: "m1",
+});
+check("columns: depends on, needed by, statistics, add dependency",
+  has(tableHtml, "Depends on") && has(tableHtml, "Needed by") &&
+  has(tableHtml, "Statistics") && has(tableHtml, "+ dependency"));
+check("depends-on chip of T2 is T1", has(tableHtml, 'data-owner="T2" data-chip="T1"'));
+check("needed-by chip of T1 is T2", has(tableHtml, 'data-owner="T1" data-chip="T2"'));
+check("statistics text from stats", has(tableHtml, "attempts 2/5") && has(tableHtml, "2.0K tok") && has(tableHtml, "$0.50"));
+check("statistics dash without stats", BM.statsText(null) === "—");
+check("runs link uses the mission hash", has(tableHtml, 'href="/#mission=m1"'));
+check("waiting rows draggable", has(tableHtml, 'data-task-id="T1" draggable="true"'));
+check("locked row not draggable", !has(tableHtml, 'data-task-id="T3" draggable'));
+check("select on waiting rows only", has(tableHtml, 'class="dep-select" data-task-id="T1"') &&
+  !has(tableHtml, 'class="dep-select" data-task-id="T3"'));
+const t2Select = tableHtml.match(/<select class="dep-select" data-task-id="T2">[\s\S]*?<\/select>/)[0];
+check("select lists other tasks and skips the task itself and its dependencies",
+  has(tableHtml, '<option value="T3">T3 c</option>') &&
+  !has(t2Select, '<option value="T1">') && !has(t2Select, '<option value="T2">'));
+const hl = BM.highlightSet(T, "T2");
+check("chip highlight covers the task and both neighbours",
+  hl.T1 && hl.T2 && hl.T3 && !BM.highlightSet(T, "T3").T1);
+check("dependency refusal closes a cycle",
+  /Cycle/.test(BM.dependencyRefusal(T, "T1", "T2") || ""));
+check("dependency allowed when no cycle", BM.dependencyRefusal(T, "T3", "T1") === null);
+const BO = require(path.join(__dirname, "..", "src", "claude_runner", "board_order.js"));
+const moveDown = BO.tryMove(T, "T1", 1);
+check("moving a dependency below its dependent is refused", moveDown.ok === false && moveDown.reason === "dependency");
+const wDown = BM.warningFor(T, "T1", moveDown);
+check("warning offers move together with the dependents",
+  wDown.group && wDown.group.ids.join() === "T1,T2" && /T2/.test(wDown.text));
+const moveUp = BO.tryMove(T, "T2", 0);
+check("moving a dependent above its dependency is refused", moveUp.ok === false);
+const warnHtml = BM.renderTaskTable({
+  tasks: T, stats: {}, highlight: null, warning: wDown, notice: { text: "The mission is running", bad: false }, missionId: "m1",
+});
+check("warning box has move together and cancel",
+  has(warnHtml, 'data-act="group"') && has(warnHtml, 'data-act="cancel"') && has(warnHtml, 'role="alert"'));
+check("running notice is shown", has(warnHtml, "The mission is running"));
+check("task title is escaped", !has(BM.taskRowHtml(
+  { id: "T9", title: "<img src=x>", status: "waiting", st: "g", deps: [] }, [], null, null), "<img"));
+// --- 8b. chip click toggles the highlight in place (no redraw) ---
+// Drive the real bindTasksView handlers through BoardMission with a fetch stub,
+// so the module's tasksView.container is our stub. The stub records listener
+// registrations and every classList.toggle call; the click handler must not
+// reassign container.innerHTML and must toggle "hl" on the rows it covers.
+let chipHtml = tableHtml;
+let chipWrites = 0;
+const chipStub = {
+  get innerHTML() { return chipHtml; },
+  set innerHTML(v) { chipWrites += 1; chipHtml = v; },
+  _listeners: {},
+  _toggles: [],
+  addEventListener(type, fn) { chipStub._listeners[type] = fn; },
+  querySelectorAll() {
+    const rows = chipStub.innerHTML.match(/<tr[^>]*data-task-id="[^"]*"[^>]*>/g) || [];
+    return rows.map((r) => {
+      const m = r.match(/data-task-id="([^"]+)"/);
+      return {
+        dataset: { taskId: m ? m[1] : "" },
+        classList: {
+          toggle(cls, on) { chipStub._toggles.push([m ? m[1] : "", cls, on]); },
+        },
+      };
+    });
+  },
+};
+const boardmissionEl = { innerHTML: "", querySelectorAll: () => [] };
+const chipDoc = {
+  getElementById(id) {
+    if (id === "boardmission") return boardmissionEl;
+    if (id === "boardtasks") return chipStub;
+    if (id === "board") return { appendChild() {} };
+    if (id === "boardstate") return { textContent: "", className: "" };
+    return null;
+  },
+  createElement: () => ({ addEventListener() {} }),
+};
+const postBodies = [];
+const missionFetch = (plan) => async (url, opts) => {
+  const u = String(url);
+  if (opts && opts.method === "POST") postBodies.push(opts.body);
+  if (u === "/api/board/missions/m1")
+    return { ok: true, json: async () => ({ mission, live_state: { status: "queued" }, config }) };
+  if (u === "/api/board/queue")
+    return { ok: true, json: async () => ({ queue, version: "v1" }) };
+  if (u === "/api/board/missions/m1/plan")
+    return { ok: true, json: async () => plan };
+  return { ok: true, json: async () => ({}) };
+};
+async function withStubs(doc, fetchFn, fn) {
+  const prev = { document: globalThis.document, fetch: globalThis.fetch };
+  globalThis.document = doc;
+  globalThis.fetch = fetchFn;
+  try {
+    return await fn();
+  } finally {
+    globalThis.document = prev.document;
+    globalThis.fetch = prev.fetch;
+  }
+}
+const countTr = (html) => (html.match(/<tr[^>]*>/g) || []).length;
+async function s8b() {
+  await withStubs(chipDoc, missionFetch(planT), () => BM.BoardMission("m1"));
+  const chipClick = chipStub._listeners.click;
+  const clickOwner = (owner) =>
+    chipClick({ target: { closest: (sel) => (sel === ".chip" ? { dataset: { owner } } : null) } });
+  const writesBefore = chipWrites;
+  chipStub._toggles.length = 0;
+  clickOwner("T2");
+  check("chip click does not reassign container.innerHTML (no table redraw)",
+    chipWrites === writesBefore && countTr(chipStub.innerHTML) === countTr(tableHtml));
+  check("chip click toggles hl on T1, T2, T3 and not T4",
+    chipStub._toggles.length === 4 &&
+    [["T1", true], ["T2", true], ["T3", true], ["T4", false]]
+      .every((p, i) => chipStub._toggles[i][0] === p[0] && chipStub._toggles[i][1] === "hl" && chipStub._toggles[i][2] === p[1]));
+  const hl2 = BM.renderTaskTable({ tasks: T, stats: {}, highlight: "T2", warning: null, notice: null, missionId: "m1" });
+  check("redraw with highlight T2 has three hl rows",
+    (hl2.match(/<tr class="[^"]*hl[^"]*"/g) || []).length === 3);
+  chipStub._toggles.length = 0;
+  clickOwner("T3");
+  check("chip click T3 toggles hl on T2, T3 and not T1, T4",
+    chipStub._toggles.length === 4 &&
+    [["T1", false], ["T2", true], ["T3", true], ["T4", false]]
+      .every((p, i) => chipStub._toggles[i][0] === p[0] && chipStub._toggles[i][1] === "hl" && chipStub._toggles[i][2] === p[1]));
+  chipStub._toggles.length = 0;
+  clickOwner("T3");
+  check("second click on the same chip clears the highlight (all toggles off)",
+    chipStub._toggles.length === 4 && chipStub._toggles.every((c) => c[1] === "hl" && c[2] === false));
+}
+async function s8c() {
+  const C = [{ id: "T1", st: "g", deps: [] }, { id: "T2", st: "g", deps: ["T1"] }, { id: "T3", st: "g", deps: ["T2"] }];
+  const r3 = BO.tryMove(C, "T3", 0);
+  check("chain T3->0 is refused (dependency)", r3.ok === false && r3.reason === "dependency");
+  check("chain group order equals the current order (no-op)",
+    r3.group.order.join(",") === C.map((x) => x.id).join(","));
+  const w3 = BM.warningFor(C, "T3", r3);
+  check("no-op warning offers no group and no button",
+    !w3.group && !/Move together/.test(w3.text));
+
+  const D = [{ id: "T4", st: "g", deps: [] }, { id: "T1", st: "g", deps: [] }, { id: "T2", st: "g", deps: ["T1"] }, { id: "T3", st: "g", deps: ["T2"] }];
+  const r4 = BO.tryMove(D, "T3", 0);
+  check("4-task T3->0 is refused with a real group", r4.ok === false && r4.reason === "dependency" && !!r4.group);
+  check("4-task group order differs from the current order",
+    r4.group.order.join(",") !== D.map((x) => x.id).join(","));
+  const w4 = BM.warningFor(D, "T3", r4);
+  check("4-task warning offers the group move", !!w4.group && w4.group.ids.join() === "T3,T2,T1");
+  check("the POSTed group order has no dependency violations",
+    BO.violations(w4.group.order, { T1: [], T2: ["T1"], T3: ["T2"], T4: [] }).length === 0);
+
+  const byId = (id) => planT.tasks.find((x) => x.task_id === id);
+  const allWaiting = {
+    plan: { tasks: D.map((x) => planT.plan.tasks.find((p) => p.id === x.id)) },
+    tasks: ["T4", "T1", "T2", "T3"].map((id) => Object.assign({}, byId(id), { status: "waiting" })),
+  };
+  await withStubs(chipDoc, missionFetch(allWaiting), async () => {
+    await BM.BoardMission("m1");
+    const dragStart = chipStub._listeners.dragstart;
+    const drop = chipStub._listeners.drop;
+    const groupClick = chipStub._listeners.click;
+    dragStart({ target: { closest: (sel) => (sel === "tr.waiting" ? { dataset: { taskId: "T3" } } : null) }, dataTransfer: { setData() {} } });
+    await drop({ preventDefault() {}, target: { closest: (sel) => (sel === "tr[data-task-id]" ? { dataset: { taskId: "T4" } } : null) } });
+    check("the refused drag opens the warning box",
+      has(chipStub.innerHTML, 'data-act="group"') && has(chipStub.innerHTML, 'data-act="cancel"') && has(chipStub.innerHTML, 'role="alert"'));
+    postBodies.length = 0;
+    groupClick({ target: { closest: (sel) => (sel === "[data-act]" ? { dataset: { act: "group" } } : null) } });
+    await new Promise((r) => setTimeout(r, 0));
+    const posted = postBodies.map((b) => JSON.parse(b));
+    check("the group click POSTs T1,T2,T3,T4 (differs from the current order, no violations)",
+      posted.length === 1 && posted[0].order.join(",") === "T1,T2,T3,T4" &&
+      posted[0].order.join(",") !== D.map((x) => x.id).join(",") &&
+      BO.violations(posted[0].order, { T1: [], T2: ["T1"], T3: ["T2"], T4: [] }).length === 0);
+  });
+}
 
 // --- 6. render() writes #boardmission and clears #boardstate ---
 const appended = [];
@@ -193,7 +392,7 @@ globalThis.document = {
     return null;
   },
   createElement(tag) {
-    const el = { tagName: tag, id: "", innerHTML: "", children: [] };
+    const el = { tagName: tag, id: "", innerHTML: "", children: [], addEventListener() {} };
     el.appendChild = (c) => { el.children.push(c); };
     return el;
   },
@@ -203,7 +402,7 @@ check("boardmission created",
   appended.length === 1 && appended[0].id === "boardmission");
 check("boardmission content",
   appended[0].innerHTML.indexOf('href="#board"') !== -1 &&
-  appended[0].innerHTML.indexOf("Конфигурация запуска") !== -1);
+  appended[0].innerHTML.indexOf("Launch configuration") !== -1);
 check("boardstate cleared", stateStub.textContent === "" && stateStub.className === "");
 
 // a second render reuses the existing #boardmission (no second append)
@@ -225,7 +424,17 @@ const detail = {
   task_views: [],
   task_overrides: {},
 };
-globalThis.fetch = async (url) => {
+const boardmissionStub = { innerHTML: "", querySelectorAll: () => [] };
+const s7doc = {
+  getElementById(id) {
+    if (id === "boardmission") return boardmissionStub;
+    if (id === "board") return { appendChild() {} };
+    if (id === "boardstate") return { textContent: "", className: "" };
+    return null;
+  },
+  createElement: () => ({ addEventListener() {} }),
+};
+const s7fetch = async (url) => {
   fetchCalls.push(String(url));
   if (String(url) === "/api/board/missions/m1") {
     return { ok: true, json: async () => detail };
@@ -235,40 +444,31 @@ globalThis.fetch = async (url) => {
   }
   return { ok: true, json: async () => ({}) };
 };
-const boardmissionStub = { innerHTML: "", querySelectorAll: () => [] };
-globalThis.document = {
-  getElementById(id) {
-    if (id === "boardmission") return boardmissionStub;
-    if (id === "board") return { appendChild() {} };
-    if (id === "boardstate") return { textContent: "", className: "" };
-    return null;
-  },
-  createElement: () => ({}),
-};
 
-(async () => {
-  await BM.BoardMission("m1");
+async function s7() {
+  await withStubs(s7doc, s7fetch, () => BM.BoardMission("m1"));
   check("BoardMission fetched the mission detail",
     fetchCalls.indexOf("/api/board/missions/m1") !== -1);
   check("BoardMission fetched the queue",
     fetchCalls.indexOf("/api/board/queue") !== -1);
   check("BoardMission rendered the form",
     boardmissionStub.innerHTML.indexOf('href="#board"') !== -1 &&
-    boardmissionStub.innerHTML.indexOf("Конфигурация запуска") !== -1);
+    boardmissionStub.innerHTML.indexOf("Launch configuration") !== -1);
   check("BoardMission rendered the greyed fields (running)",
     boardmissionStub.innerHTML.indexOf("frow-wrap disabled") !== -1);
   check("BoardMission rendered the breadcrumb name",
     boardmissionStub.innerHTML.indexOf('<span class="crumb-name">Миссия &quot;A&quot; &amp; B</span>') !== -1);
-  delete globalThis.document;
-  // 7. a text field is a text input (not a number input), a number field keeps its step attribute
-  {
-    const M = require("../src/claude_runner/board_mission.js");
-    const textRow = M.fieldRow("mission", "name", "название", "text", "AHAWR: x", false, "");
-    const numRow = M.fieldRow("queue", "attempts_per_task", "попыток", "number", 5, false, "");
-    if (!/<input type="text" class="frow" name="name"/.test(textRow)) throw new Error("text field is not type=text: " + textRow);
-    if (!/<input type="number" class="frow" name="attempts_per_task"[^>]* step="1"/.test(numRow)) throw new Error("number field lost type or step: " + numRow);
-  }
-  delete globalThis.fetch;
+  const M = require("../src/claude_runner/board_mission.js");
+  const textRow = M.fieldRow("mission", "name", "название", "text", "AHAWR: x", false, "");
+  const numRow = M.fieldRow("queue", "attempts_per_task", "попыток", "number", 5, false, "");
+  if (!/<input type="text" class="frow" name="name"/.test(textRow)) throw new Error("text field is not type=text: " + textRow);
+  if (!/<input type="number" class="frow" name="attempts_per_task"[^>]* step="1"/.test(numRow)) throw new Error("number field lost type or step: " + numRow);
+}
+
+(async () => {
+  await s8b();
+  await s8c();
+  await s7();
   console.log("all ok");
 })().catch((e) => {
   console.error(e && e.stack || e);

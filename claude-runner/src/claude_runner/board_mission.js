@@ -61,42 +61,39 @@ const MIDRUN_CONFIG_FIELDS = [
 ];
 
 // Config keys a running mission may not change (board_plan.py's
-// NON_EDITABLE_CONFIG_FIELDS); the Russian explanation goes next to the
+// NON_EDITABLE_CONFIG_FIELDS); the explanation (a t() key) goes next to the
 // greyed field.
 const NON_EDITABLE_CONFIG_FIELDS = {
-  working_directory:
-    "миссия идёт: рабочая папка привязана к живому сеансу Worker и не меняется во время прогона",
-  state_namespace:
-    "миссия идёт: ключ состояния указывает на живую строку и не меняется во время прогона",
-  retrieval_corpora:
-    "миссия идёт: корпуса поиска уходят в живой запрос прогона и не меняются во время прогона",
+  working_directory: "form.locked.working_directory",
+  state_namespace: "form.locked.state_namespace",
+  retrieval_corpora: "form.locked.retrieval_corpora",
 };
 
-// "Конфигурация запуска" form layout: one row per [kind, key, label].
+// Config form layout: one row per [kind, key, labelKey, control].
 // kind "mission" — the value comes from the mission row;
 // kind "queue"   — the value comes from the queue entry;
 // kind "config"  — the value comes from the mission config object.
 // The key is the config field name (mission_row fields use their row name).
 const FORM_ROWS = [
-  ["mission", "name", "название", "text"],
-  ["mission", "objective", "цель", "textarea"],
-  ["mission", "rules", "правила", "listarea"],
-  ["mission", "acceptance_criteria", "критерии приёмки", "listarea"],
-  ["mission", "working_directory", "рабочая папка", "text"],
-  ["queue", "enabled", "включена", "bool"],
-  ["queue", "attempts_per_task", "попыток на задачу (3/5/10)", "number"],
-  ["config", "worker_model", "Worker: модель", "text"],
-  ["config", "worker_provider", "Worker: провайдер", "text"],
-  ["config", "reviewer_model", "Reviewer: модель", "text"],
-  ["config", "reviewer_provider", "Reviewer: провайдер", "text"],
-  ["config", "architect_model", "Architect: модель", "text"],
-  ["config", "architect_provider", "Architect: провайдер", "text"],
-  ["config", "max_tasks", "максимум задач", "number"],
-  ["config", "worker_think_policy", "Worker: политика thinking", "json"],
-  ["config", "worker_think_policy_from_task", "Worker: thinking от задачи", "number"],
-  ["config", "retrieval_corpora", "корпуса поиска", "listarea"],
-  ["config", "hints", "подсказки", "listarea"],
-  ["config", "required_files", "required_files", "listarea"],
+  ["mission", "name", "form.field.name", "text"],
+  ["mission", "objective", "form.field.objective", "textarea"],
+  ["mission", "rules", "form.field.rules", "listarea"],
+  ["mission", "acceptance_criteria", "form.field.acceptance_criteria", "listarea"],
+  ["mission", "working_directory", "form.field.working_directory", "text"],
+  ["queue", "enabled", "form.field.enabled", "bool"],
+  ["queue", "attempts_per_task", "form.field.attempts_per_task", "number"],
+  ["config", "worker_model", "form.field.worker_model", "text"],
+  ["config", "worker_provider", "form.field.worker_provider", "text"],
+  ["config", "reviewer_model", "form.field.reviewer_model", "text"],
+  ["config", "reviewer_provider", "form.field.reviewer_provider", "text"],
+  ["config", "architect_model", "form.field.architect_model", "text"],
+  ["config", "architect_provider", "form.field.architect_provider", "text"],
+  ["config", "max_tasks", "form.field.max_tasks", "number"],
+  ["config", "worker_think_policy", "form.field.worker_think_policy", "json"],
+  ["config", "worker_think_policy_from_task", "form.field.worker_think_policy_from_task", "number"],
+  ["config", "retrieval_corpora", "form.field.retrieval_corpora", "listarea"],
+  ["config", "hints", "form.field.hints", "listarea"],
+  ["config", "required_files", "form.field.required_files", "listarea"],
 ];
 
 // Presets for "попыток на задачу".
@@ -134,7 +131,7 @@ function fmtJson(value) {
 // directory, state namespace, retrieval corpora) — every other field takes
 // effect from the next task and stays editable.
 function greyNote(key) {
-  return NON_EDITABLE_CONFIG_FIELDS[key] || null;
+  return NON_EDITABLE_CONFIG_FIELDS[key] ? t(NON_EDITABLE_CONFIG_FIELDS[key]) : null;
 }
 
 // One form row: label, the value input, and (when running and the field is
@@ -182,7 +179,7 @@ function presetButtons(disabled) {
 // HTML string of the form.
 function formHtml(mission, queueEntry, config, running) {
   const rows = [];
-  for (const [kind, key, label, control] of FORM_ROWS) {
+  for (const [kind, key, labelKey, control] of FORM_ROWS) {
     let value;
     if (kind === "mission") value = mission[key];
     else if (kind === "queue") {
@@ -195,7 +192,7 @@ function formHtml(mission, queueEntry, config, running) {
       : control === "bool" ? (value === true || String(value).toLowerCase() === "true")
       : (value == null ? "" : String(value));
     const reason = running ? greyNote(key) : null;
-    rows.push(fieldRow(kind, key, label, control, shown, running, reason));
+    rows.push(fieldRow(kind, key, t(labelKey), control, shown, running, reason));
   }
   const attemptsRow = rows[6]; // the "attempts_per_task" row (index 6)
   // The attempts row gets the preset buttons after its input.
@@ -219,26 +216,23 @@ function renderMission(data) {
   const status = live && live.status ? live.status : groupKey;
   const taskN = live && live.task_index != null ? Number(live.task_index) + 1 : null;
   const metaParts = [
-    "id: " + (mission.mission_id == null ? "" : mission.mission_id),
-    "состояние: " + (status == null ? "—" : status),
-    taskN != null ? "задача " + taskN : "задача —",
-    "включена: " + (mission.enabled === true ? "да" : "нет"),
-    "папка: " + (mission.working_directory == null ? "—" : mission.working_directory),
+    t("form.id", { value: mission.mission_id == null ? "" : mission.mission_id }),
+    t("form.status", { value: status == null ? "—" : status }),
+    t("form.task", { n: taskN != null ? taskN : "—" }),
+    t("form.enabled", { value: mission.enabled === true ? t("form.yes") : t("form.no") }),
+    t("form.folder", { value: mission.working_directory == null ? "—" : mission.working_directory }),
   ];
-  const runningNote = running
-    ? "пока миссия идёт: изменения применяются со следующей задачи; " +
-      "серые поля не применяются"
-    : "";
+  const runningNote = running ? t("form.midrun") : "";
 
   return (
-    `<div class="crumbs"><a class="back" href="#board">Миссии</a> / ` +
+    `<div class="crumbs"><a class="back" href="#board">${esc(t("form.back"))}</a> / ` +
     `<span class="crumb-name">${esc(mission.name == null ? "" : mission.name)}</span></div>` +
     `<h2>${esc(mission.name == null ? "" : mission.name)}</h2>` +
     `<div class="meta">` +
     metaParts.map((p) => `<span>${esc(p)}</span>`).join("") +
     `</div>` +
     (runningNote ? `<div class="meta running-note">${esc(runningNote)}</div>` : "") +
-    `<h3>Конфигурация запуска</h3>` +
+    `<h3>${esc(t("form.title"))}</h3>` +
     formHtml(mission, queueEntry, config, running)
   );
 }
@@ -293,9 +287,390 @@ async function BoardMission(missionId) {
   render(data);
   attachPresetButtons();
   const box = document.getElementById("boardmission");
+  if (box) {
+    // The section containers (#boardtasks, #boardthink, #boardready,
+    // #boardhistory) exist only if board.html defines them; a missing one is
+    // created in #board, as render() does for #boardmission.  document is
+    // probed with typeof: node tests stub it, and the board module itself
+    // never loads without one.
+    const container = (id) => {
+      const el = (typeof document !== "undefined") ? document.getElementById(id) : null;
+      if (el) return el;
+      if (typeof document === "undefined") return { innerHTML: "" };
+      const fresh = document.createElement("div");
+      fresh.id = id;
+      const root = document.getElementById("board");
+      if (root) root.appendChild(fresh);
+      return fresh;
+    };
+    await renderTaskSection(container("boardtasks"), data.mission.mission_id).catch(
+      (e) => {
+        container("boardtasks").innerHTML =
+          `<div class="terror">${esc(e.message || e)}</div>`;
+      });
+    if (typeof BoardPlanEdit !== "undefined") container("boardplanedit");
+    if (typeof BoardThinkUI !== "undefined") {
+      BoardThinkUI.render(container("boardthink"), data.mission.mission_id).catch(
+        (e) => container("boardthink").innerHTML =
+          `<div class="tkerror">${esc(e.message || e)}</div>`);
+    }
+    if (typeof BoardReadyUI !== "undefined") {
+      BoardReadyUI.render(container("boardready"), data.mission.mission_id, data.mission).catch(
+        (e) => container("boardready").innerHTML =
+          `<div class="rdresult">${esc(e.message || e)}</div>`);
+    }
+    if (typeof BoardHistoryUI !== "undefined") {
+      BoardHistoryUI.render(container("boardhistory"), data.mission.mission_id).catch(
+        (e) => container("boardhistory").innerHTML =
+          `<div class="chresult">${esc(e.message || e)}</div>`);
+    }
+  }
   if (box && typeof BoardMissionSave !== "undefined" && BoardMissionSave.attachToBox) {
     BoardMissionSave.attachToBox(box, data);
   }
+}
+
+// === task table: depends-on / needed-by chips, drag order, dependency select ===
+
+let tasksView = null;
+
+function orderRules() {
+  if (typeof BoardOrder !== "undefined") return BoardOrder;
+  return require("./board_order.js");
+}
+
+function tOr(key, fallback) {
+  const s = t(key);
+  return s === key ? fallback : s;
+}
+
+function runningWarnText() {
+  return tOr("running.warn", "The mission is running: the new order applies from the next task.");
+}
+
+function planPath(missionId) {
+  return "/api/board/missions/" + encodeURIComponent(missionId) + "/plan";
+}
+
+function fmtCount(v) {
+  const n = Number(v) || 0;
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
+  return String(Math.round(n));
+}
+
+function statsText(stats) {
+  if (!stats) return "—";
+  const parts = [];
+  if (stats.attempts != null) {
+    const max = stats.max_attempts_per_task != null ? "/" + stats.max_attempts_per_task : "";
+    parts.push(t("att", { n: stats.attempts + max }));
+  }
+  parts.push(fmtCount((Number(stats.input_tokens) || 0) + (Number(stats.output_tokens) || 0)) + " tok");
+  if (stats.cost_usd != null) parts.push("$" + Number(stats.cost_usd).toFixed(2));
+  return parts.join(" · ");
+}
+
+// Plan tasks as [{ id, title, status, st, deps }]: st "g" marks a waiting
+// task (the BoardOrder rules), deps come from the live plan.
+function taskModel(data) {
+  const planTasks = data.plan && Array.isArray(data.plan.tasks) ? data.plan.tasks : [];
+  const planDeps = Object.create(null);
+  planTasks.forEach((p) => {
+    planDeps[p.id] = Array.isArray(p.dependencies) ? p.dependencies.slice() : [];
+  });
+  return (data.tasks || []).map((v) => {
+    const status = v.status || "waiting";
+    return {
+      id: String(v.task_id),
+      title: v.title == null ? "" : String(v.title),
+      status,
+      st: status === "waiting" ? "g" : status,
+      deps: planDeps[v.task_id] || (Array.isArray(v.deps) ? v.deps.slice() : []),
+    };
+  });
+}
+
+function depsMap(tasks) {
+  const known = new Set(tasks.map((x) => x.id));
+  const m = Object.create(null);
+  tasks.forEach((x) => { m[x.id] = x.deps.filter((d) => known.has(d)); });
+  return m;
+}
+
+// The task, its dependencies and its dependents: the set a chip click highlights.
+function highlightSet(tasks, id) {
+  const deps = depsMap(tasks);
+  const out = Object.create(null);
+  out[id] = true;
+  (deps[id] || []).forEach((d) => { out[d] = true; });
+  tasks.forEach((x) => { if ((deps[x.id] || []).indexOf(id) >= 0) out[x.id] = true; });
+  return out;
+}
+
+function cycleText(pair) {
+  return t("w.cycle", { dep: pair[0], id: pair[1] });
+}
+
+// The refusal text when adding "taskId depends on depId" would close a cycle; null when allowed.
+function dependencyRefusal(tasks, taskId, depId) {
+  const pair = orderRules().wouldCycle(depsMap(tasks), taskId, depId);
+  return pair ? cycleText(pair) : null;
+}
+
+// The warning box for a refused drag: the reason, and when the task can move
+// together with its dependencies or dependents, the offer to do so.
+function warningFor(tasks, id, r) {
+  const task = tasks.find((x) => x.id === id) || { id, title: "" };
+  if (r.reason !== "dependency" || !r.group) {
+    return { text: t("w.bad", { pairs: r.broken.map((p) => p[0] + " → " + p[1]).join(", ") }), group: null };
+  }
+  // Offer "move together" only when the group order is actually a new order:
+  // if it equals the current order, moving the group would be a no-op, so
+  // show the refusal text without the button.
+  const current = tasks.map((x) => x.id).join(",");
+  if (r.group.order.join(",") === current) {
+    return { text: t("w.bad", { pairs: r.broken.map((p) => p[0] + " → " + p[1]).join(", ") }), group: null };
+  }
+  const up = r.broken.some((p) => p[1] === id);
+  const list = up
+    ? r.broken.filter((p) => p[1] === id).map((p) => p[0])
+    : r.broken.filter((p) => p[0] === id).map((p) => p[1]);
+  const first = up
+    ? t("w.up", { id, title: task.title, list: list.join(", ") })
+    : t("w.down", { id, title: task.title, list: list.join(", ") });
+  const second = t("w.group", {
+    rel: t(up ? "rel.dependencies" : "rel.dependents"),
+    list: r.group.ids.slice(1).join(", "),
+    n: r.group.ids.length,
+  });
+  return { text: first + " " + second, group: r.group };
+}
+
+function chipsHtml(kind, owner, ids) {
+  return ids.map((id) =>
+    `<button type="button" class="chip chip-${esc(kind)}" data-owner="${esc(owner)}" data-chip="${esc(id)}">${esc(id)}</button>`
+  ).join("");
+}
+
+function depSelectHtml(task, tasks) {
+  const options = tasks
+    .filter((x) => x.id !== task.id && task.deps.indexOf(x.id) < 0)
+    .map((x) => `<option value="${esc(x.id)}">${esc(x.id + " " + x.title)}</option>`)
+    .join("");
+  return `<select class="dep-select" data-task-id="${esc(task.id)}">` +
+    `<option value="">${esc(t("dep.add"))}</option>` + options + `</select>`;
+}
+
+function taskRowHtml(task, tasks, stats, hl) {
+  const waiting = task.st === "g";
+  const needed = tasks.filter((x) => x.deps.indexOf(task.id) >= 0).map((x) => x.id);
+  const known = task.deps.filter((d) => tasks.some((x) => x.id === d));
+  const cls = "trow " + (waiting ? "waiting" : "locked") + (hl && hl[task.id] ? " hl" : "");
+  const draggable = waiting ? ' draggable="true"' : "";
+  return `<tr class="${esc(cls)}" data-task-id="${esc(task.id)}"` + draggable + `>` +
+    `<td class="tgrip">${esc(waiting ? "⠿" : "")}</td>` +
+    `<td><span class="tid">${esc(task.id)}</span> <span class="tname">${esc(task.title)}</span></td>` +
+    `<td class="tstatus">${esc(task.status)}</td>` +
+    `<td class="tstats">${esc(statsText(stats))}</td>` +
+    `<td class="chips">` + chipsHtml("dep", task.id, known) + `</td>` +
+    `<td class="chips">` + chipsHtml("need", task.id, needed) + `</td>` +
+    `<td>` + (waiting ? depSelectHtml(task, tasks) : "") + `</td>` +
+    `</tr>`;
+}
+
+function warningHtml(w) {
+  const group = w.group
+    ? `<button type="button" class="btn-group" data-act="group">${esc(t("btn.group"))}</button>`
+    : "";
+  return `<div class="lane-warn" role="alert"><span>${esc(w.text)}</span>` + group +
+    `<button type="button" class="btn-cancel" data-act="cancel">${esc(t("btn.cancel"))}</button></div>`;
+}
+
+// Pure render of the task table with its notice and warning; state carries
+// tasks, stats (task id -> stats or null), highlight, warning, notice, missionId.
+function renderTaskTable(state) {
+  const tasks = state.tasks;
+  const hl = state.highlight ? highlightSet(tasks, state.highlight) : null;
+  const rows = tasks.map((x) => taskRowHtml(x, tasks, state.stats[x.id] || null, hl)).join("");
+  const heads = ["", t("t.task"), t("t.status"), t("t.stat"), t("t.dep"), t("t.need"), t("dep.add")]
+    .map((h) => `<th>${esc(h)}</th>`).join("");
+  const runsHref = "/#mission=" + encodeURIComponent(state.missionId);
+  const notice = state.notice
+    ? `<div class="${esc(state.notice.bad ? "lane-notice bad" : "lane-notice")}">${esc(state.notice.text)}</div>`
+    : "";
+  return `<div class="tbar"><a class="runs-btn" href="${esc(runsHref)}">${esc(t("m.runs"))}</a></div>` +
+    notice + (state.warning ? warningHtml(state.warning) : "") +
+    `<table class="ttable"><thead><tr>` + heads + `</tr></thead><tbody>` + rows + `</tbody></table>`;
+}
+
+function renderTasksView() {
+  tasksView.container.innerHTML = renderTaskTable(tasksView);
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, data };
+}
+
+function failText(data) {
+  if (data && data.reason) return data.reason;
+  if (data && data.error && data.error.message) return data.error.message;
+  return t("conflict.plan_changed");
+}
+
+async function loadTasks(missionId) {
+  const planResp = await fetchJson(planPath(missionId));
+  const tasks = taskModel({ plan: planResp.plan, tasks: planResp.tasks });
+  const stats = Object.create(null);
+  await Promise.all(tasks.map(async (x) => {
+    try {
+      stats[x.id] = await fetchJson("/api/board/missions/" + encodeURIComponent(missionId) +
+        "/tasks/" + encodeURIComponent(x.id) + "/stats");
+    } catch (e) {
+      stats[x.id] = null;
+    }
+  }));
+  return { tasks, stats };
+}
+
+async function refreshTasksView() {
+  const loaded = await loadTasks(tasksView.missionId);
+  Object.assign(tasksView, loaded);
+  renderTasksView();
+}
+
+async function saveOrder(order) {
+  const v = tasksView;
+  const waiting = new Set(v.tasks.filter((x) => x.st === "g").map((x) => x.id));
+  const fresh = await fetchJson(planPath(v.missionId));
+  const res = await postJson(planPath(v.missionId) + "/tasks/reorder", {
+    order: order.filter((id) => waiting.has(id)),
+    expected_version: fresh.version,
+    who: "",
+  });
+  v.warning = null;
+  if (!res.ok) {
+    v.notice = { text: failText(res.data), bad: true };
+    renderTasksView();
+    return;
+  }
+  v.notice = res.data.running_warning ? { text: runningWarnText(), bad: false } : null;
+  await refreshTasksView();
+}
+
+async function dropTask(dragId, dropId) {
+  const v = tasksView;
+  const waiting = v.tasks.filter((x) => x.st === "g").map((x) => x.id);
+  const to = waiting.indexOf(dropId);
+  if (to < 0 || dragId === dropId) return;
+  const r = orderRules().tryMove(v.tasks, dragId, to);
+  if (r.ok) return saveOrder(r.order);
+  if (r.reason !== "dependency" && r.reason !== "group-invalid") return;
+  v.notice = null;
+  v.warning = warningFor(v.tasks, dragId, r);
+  renderTasksView();
+}
+
+async function addDependency(taskId, depId) {
+  const v = tasksView;
+  const refusal = dependencyRefusal(v.tasks, taskId, depId);
+  v.warning = null;
+  if (refusal) {
+    v.notice = { text: refusal, bad: true };
+    renderTasksView();
+    return;
+  }
+  const fresh = await fetchJson(planPath(v.missionId));
+  const res = await postJson(planPath(v.missionId) + "/tasks/" + encodeURIComponent(taskId) + "/dependencies", {
+    action: "add",
+    dependency: depId,
+    expected_version: fresh.version,
+    who: "",
+  });
+  if (res.status === 422 && Array.isArray(res.data.closing_pair)) {
+    v.notice = { text: cycleText(res.data.closing_pair), bad: true };
+    renderTasksView();
+    return;
+  }
+  if (!res.ok) {
+    v.notice = { text: failText(res.data), bad: true };
+    renderTasksView();
+    return;
+  }
+  v.notice = res.data.running_warning ? { text: runningWarnText(), bad: false } : null;
+  await refreshTasksView();
+}
+
+function bindTasksView(container) {
+  container.addEventListener("dragstart", (e) => {
+    const tr = e.target.closest("tr.waiting");
+    if (!tr) return;
+    tasksView.drag = tr.dataset.taskId;
+    if (e.dataTransfer) e.dataTransfer.setData("text/plain", tr.dataset.taskId);
+  });
+  container.addEventListener("dragover", (e) => {
+    if (tasksView.drag && e.target.closest("tr.waiting")) e.preventDefault();
+  });
+  container.addEventListener("drop", (e) => {
+    const tr = e.target.closest("tr[data-task-id]");
+    if (!tr || !tasksView.drag) return;
+    e.preventDefault();
+    const dragId = tasksView.drag;
+    tasksView.drag = null;
+    dropTask(dragId, tr.dataset.taskId).catch(reportTaskError);
+  });
+  container.addEventListener("dragend", () => { tasksView.drag = null; });
+  container.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (chip) {
+      const owner = chip.dataset.owner;
+      tasksView.highlight = tasksView.highlight === owner ? null : owner;
+      const set = tasksView.highlight ? highlightSet(tasksView.tasks, owner) : {};
+      tasksView.container.querySelectorAll('tr[data-task-id]').forEach((tr) => {
+        tr.classList.toggle("hl", !!set[tr.dataset.taskId]);
+      });
+      return;
+    }
+    const act = e.target.closest("[data-act]");
+    if (!act || !tasksView.warning) return;
+    if (act.dataset.act === "group") {
+      saveOrder(tasksView.warning.group.order).catch(reportTaskError);
+    } else {
+      tasksView.warning = null;
+      renderTasksView();
+    }
+  });
+  container.addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!sel.matches || !sel.matches(".dep-select") || !sel.value) return;
+    addDependency(sel.dataset.taskId, sel.value).catch(reportTaskError);
+  });
+}
+
+function reportTaskError(err) {
+  tasksView.notice = { text: err && err.message ? err.message : String(err), bad: true };
+  renderTasksView();
+}
+
+let boundContainer = null;
+
+async function renderTaskSection(container, missionId) {
+  if (boundContainer !== container) {
+    bindTasksView(container);
+    boundContainer = container;
+  }
+  if (!tasksView || tasksView.missionId !== missionId) {
+    tasksView = { container, missionId, highlight: null, warning: null, notice: null, drag: null, tasks: [], stats: {} };
+  }
+  tasksView.container = container;
+  await refreshTasksView();
 }
 
 // One same-origin GET helper (the board API only).
@@ -317,6 +692,8 @@ const BoardMissionView = {
   renderMission, formHtml, fieldRow, presetButtons, fmtLines, fmtJson, greyNote,
   render, BoardMission, attachPresetButtons,
   MIDRUN_CONFIG_FIELDS, NON_EDITABLE_CONFIG_FIELDS, FORM_ROWS, esc,
+  taskModel, depsMap, highlightSet, dependencyRefusal, warningFor,
+  taskRowHtml, renderTaskTable, statsText, bindTasksView,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardMissionView;

@@ -32,7 +32,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
     board.task_overrides,
     board.changelog,
     board.flags,
-    board.preflight
+    board.preflight,
+    board.project_rules,
+    board.i18n_languages,
+    board.i18n_strings
     TO board_operator;
 
 GRANT USAGE ON SEQUENCE board.changelog_id_seq TO board_operator;

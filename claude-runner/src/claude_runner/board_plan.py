@@ -14,9 +14,9 @@ raises :class:`~claude_runner.board.GuardError` (or
 Rules (``docs/board-data-model.md``):
 
 - a task is editable only while it is ``waiting`` (its index is past the live
-  ``task_index``) and its content fields (title / objective text /
-  acceptance criteria) only; the Worker hint is stored separately in
-  ``task_overrides.hint`` via :func:`set_task_hint`;
+  ``task_index``) and its content fields (title / objective / acceptance
+  criteria / verification / scope) only; the Worker hint is stored separately
+  in ``task_overrides.hint`` via :func:`set_task_hint`;
 - accepted and running tasks (including ``review_pending``) are read-only;
 - ``not_accepted`` (the review rejected the current task, retry pending) may
   receive a hint and a retry request, which resets the attempt counter to 1;
@@ -55,7 +55,13 @@ __all__ = [
 #: Task content fields a ``waiting`` task may be edited in.  The Worker hint
 #: is deliberately NOT a content field: it is stored separately in
 #: ``task_overrides.hint`` (see :func:`set_task_hint`).
-EDITABLE_TASK_FIELDS = ("title", "objective", "acceptance_criteria")
+EDITABLE_TASK_FIELDS = (
+    "title",
+    "objective",
+    "acceptance_criteria",
+    "verification",
+    "scope",
+)
 
 #: Task statuses for which editing the content is forbidden.
 #: ``waiting`` is the only editable status; ``review_pending`` and
@@ -216,7 +222,8 @@ def update_task(
     events: list[dict[str, Any]] | None = None,
     **fields: Any,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Edit title / objective / acceptance criteria of one task.
+    """Edit the content of one task (title / objective / acceptance
+    criteria / verification / scope).
 
     Editable only while the task is ``waiting``; the Worker hint is not a
     content field and is stored separately in ``task_overrides.hint``

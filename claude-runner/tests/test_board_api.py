@@ -9,6 +9,9 @@ unescaped (board.js uses ``esc()`` for every ``innerHTML`` value)."""
 
 from __future__ import annotations
 
+import copy
+from contextlib import asynccontextmanager
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -57,8 +60,8 @@ class TestUnavailableStore:
         async with AsyncClient(transport=transport, base_url="http://test") as c:
             r = await c.get("/api/board/status")
             assert r.status_code == 503
-            # the reason says the DSN is unset but never carries the DSN itself
-            assert "не задан" in r.json()["reason"]
+            # the reason explains why the store is unavailable but never carries the DSN
+            assert r.json()["code"] == "unavailable"
             assert "postgresql://" not in r.json()["reason"]
 
     async def test_missions_is_503_when_unavailable(self, settings):
@@ -1066,6 +1069,469 @@ class TestErrorMapping:
                 r = await c.get(path)
                 assert r.status_code == 503
                 assert r.json()["code"] == "unavailable"
+
+
+class TestSummary:
+    """GET /api/board/summary: every mission in one response (state group,
+    position, project, tasks, cached figures) and the projects (stored rules
+    plus the default).  A failing or absent runner gives null figures and
+    HTTP 200."""
+
+    async def test_summary_shape_with_a_failing_manager(self, settings):
+        """With a manager that raises, the figures are nulls but the route
+        still answers HTTP 200 (a failing or absent runner never errors)."""
+        from claude_runner.api import create_app
+        from claude_runner.board import InMemoryBoardStore, Mission, QueueEntry
+
+        class FailingManager:
+            def __getattr__(self, name):
+                raise RuntimeError("runner unreachable")
+
+        store = InMemoryBoardStore()
+        store._missions["m1"] = Mission(
+            mission_id="m1", state_namespace="sk1", name="Source",
+            working_directory="/tmp/x", rules=["r1"],
+            acceptance_criteria=["c1"], retrieval_corpora=["corpus"],
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+        store._queue["m1"] = QueueEntry(position=0, mission_id="m1", enabled=True)
+        store._queue_order.append("m1")
+        store.upsert_live_state("sk1", None, plan={"tasks": [{"id": "T1", "objective": "one"}]},
+                              status="queued")
+        app = create_app(settings)
+        app.state.board_store = store
+        # set the failing manager after the lifespan (the lifespan wires the real one)
+        await _run_lifespan(app)
+        app.state.manager = FailingManager()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/summary")
+        assert r.status_code == 200
+        body = r.json()
+        assert "missions" in body and "projects" in body
+        m = body["missions"][0]
+        for field in ("mission_id", "name", "state_group", "position",
+                      "project", "tasks", "attempts", "hours", "tokens",
+                      "cache_ratio", "cost", "tok_s", "thinking_share"):
+            assert field in m
+        # the manager raises: every figure is null
+        for field in ("attempts", "hours", "tokens", "cache_ratio", "cost",
+                      "tok_s", "thinking_share"):
+            assert m[field] is None
+        # the single mission is in the default project (its last folder name)
+        assert len(body["projects"]) == 1
+        assert body["projects"][0]["mission_ids"] == ["m1"]
+
+    async def test_summary_project_rule_merges_matching_folders(self, settings):
+        """A stored project rule 'D:/ClaudeProjects/model-bench/*/rag-platform'
+        merges missions whose working directory matches it into one project."""
+        from claude_runner.api import create_app
+        from claude_runner.board import InMemoryBoardStore, Mission, QueueEntry
+
+        store = InMemoryBoardStore()
+        store.put_project_rules(
+            [{"name": "model-bench",
+              "pattern": "D:/ClaudeProjects/model-bench/*/rag-platform",
+              "position": 1}],
+            None,
+        )
+        store._missions["mb1"] = Mission(
+            mission_id="mb1", state_namespace="skb1", name="Bench A",
+            working_directory="D:/ClaudeProjects/model-bench/run1/rag-platform",
+            rules=["r1"], acceptance_criteria=["c1"], retrieval_corpora=["c"],
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+        store._missions["mb2"] = Mission(
+            mission_id="mb2", state_namespace="skb2", name="Bench B",
+            working_directory="D:/ClaudeProjects/model-bench/run2/rag-platform",
+            rules=["r1"], acceptance_criteria=["c1"], retrieval_corpora=["c"],
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+        store._queue["mb1"] = QueueEntry(position=0, mission_id="mb1", enabled=True)
+        store._queue["mb2"] = QueueEntry(position=1, mission_id="mb2", enabled=True)
+        store._queue_order.append("mb1")
+        store._queue_order.append("mb2")
+        store.upsert_live_state("skb1", None, plan={"tasks": []}, status="queued")
+        store.upsert_live_state("skb2", None, plan={"tasks": []}, status="queued")
+        app = create_app(settings)
+        app.state.board_store = store
+        await _run_lifespan(app)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/summary")
+        assert r.status_code == 200
+        body = r.json()
+        # both missions match the stored rule: one project, two mission_ids
+        assert len(body["projects"]) == 1
+        p = body["projects"][0]
+        assert p["key"] == "model-bench"
+        assert p["name"] == "model-bench"
+        assert p["rule"] == "D:/ClaudeProjects/model-bench/*/rag-platform"
+        assert sorted(p["mission_ids"]) == ["mb1", "mb2"]
+        # each mission carries the project
+        for m in body["missions"]:
+            assert m["project"] == {"key": "model-bench", "name": "model-bench",
+                                    "rule": "D:/ClaudeProjects/model-bench/*/rag-platform"}
+        # positions are taken from the queue
+        by_id = {m["mission_id"]: m for m in body["missions"]}
+        assert by_id["mb1"]["position"] == 0
+        assert by_id["mb2"]["position"] == 1
+
+    async def test_summary_task_status_mapping_and_attempts(self, settings):
+        """The summary maps the mission-card status to its vocabulary and flags
+        an accepted task retried to ``accepted_retry``; task ids are parsed as
+        T[0-9]+[A-Z]*."""
+        from claude_runner.api import create_app
+        from claude_runner.board import InMemoryBoardStore, Mission, QueueEntry
+
+        store = InMemoryBoardStore()
+        store._missions["m1"] = Mission(
+            mission_id="m1", state_namespace="sk1", name="Source",
+            working_directory="/tmp/x", rules=["r1"],
+            acceptance_criteria=["c1"], retrieval_corpora=["c"],
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+        store._queue["m1"] = QueueEntry(position=0, mission_id="m1", enabled=True)
+        store._queue_order.append("m1")
+        store.upsert_live_state(
+            "sk1", None,
+            plan={"tasks": [
+                {"id": "T1", "objective": "one", "dependencies": ["T0"]},
+                {"id": "T2", "objective": "two"},
+            ]},
+            status="active", task_index=1,
+        )
+        # T1 is behind the current task (task_index=1 -> T2 is current): its
+        # last review reason is "pass", so it derives to "accepted"; it has
+        # two attempts, hence "accepted_retry" in the summary.
+        store.append_event("sk1", {
+            "task_id": "T1", "task_attempt": 1,
+            "event_type": "review_parsed",
+            "review_reason": "pass", "review_score": 5,
+            "worker_run_id": "run_a",
+        })
+        store.append_event("sk1", {
+            "task_id": "T1", "task_attempt": 2,
+            "event_type": "review_parsed",
+            "review_reason": "pass", "review_score": 5,
+            "worker_run_id": "run_b",
+        })
+        # T2 is the current task (task_index=1) with no events yet: "running"
+        app = create_app(settings)
+        app.state.board_store = store
+        await _run_lifespan(app)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/summary")
+        assert r.status_code == 200
+        tasks = r.json()["missions"][0]["tasks"]
+        by_id = {t["id"]: t for t in tasks}
+        # T1 is accepted and retried twice -> accepted_retry, attempts 2
+        assert by_id["T1"]["status"] == "accepted_retry"
+        assert by_id["T1"]["attempts"] == 2
+        assert by_id["T1"]["deps"] == ["T0"]
+        # T2 is the current task, no events: running
+        assert by_id["T2"]["status"] == "running"
+        assert by_id["T2"]["attempts"] == 0
+
+
+class TestTimeline:
+    """GET /api/board/missions/{id}/timeline: accepted reviews and the
+    obstacles (rejected_3x, timeout, interrupted) from the event log and the
+    manager; empty lists on missing data or a missing/failing manager."""
+
+    def _store_with_events(self, settings, events):
+        from claude_runner.api import create_app
+
+        store = InMemoryBoardStore()
+        store._missions["m1"] = Mission(
+            mission_id="m1", state_namespace="sk1", name="Source",
+            working_directory="/tmp/x", rules=["r1"],
+            acceptance_criteria=["c1"], retrieval_corpora=["corpus"],
+            updated_at="2026-01-01T00:00:00+00:00",
+        )
+        store._queue["m1"] = QueueEntry(position=0, mission_id="m1", enabled=True)
+        store._queue_order.append("m1")
+        store.upsert_live_state("sk1", None, plan={"tasks": []}, status="queued")
+        for e in events:
+            store.append_event("sk1", e)
+        app = create_app(settings)
+        app.state.board_store = store
+        return app
+
+    async def test_timeline_no_events_returns_empty_lists(self, settings):
+        """A mission with no events: 200 with both lists empty."""
+        app = self._store_with_events(settings, [])
+        await _run_lifespan(app)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/missions/m1/timeline")
+        assert r.status_code == 200
+        assert r.json() == {"accepted": [], "obstacles": []}
+
+    async def test_timeline_accepted_and_rejected_3x(self, settings):
+        """A pass review (carrying only review_reason, as the events store it)
+        lands in accepted; three needs_changes reviews give a rejected_3x
+        obstacle.  ts may be None: assert only on task and kind."""
+        app = self._store_with_events(settings, [
+            {"task_id": "T1", "event_type": "review_parsed",
+             "review_reason": "pass"},
+            {"task_id": "T2", "event_type": "review_parsed",
+             "review_reason": "needs_changes"},
+            {"task_id": "T2", "event_type": "review_parsed",
+             "review_reason": "needs_changes"},
+            {"task_id": "T2", "event_type": "review_parsed",
+             "review_reason": "needs_changes"},
+        ])
+        await _run_lifespan(app)
+        app.state.manager = None
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/missions/m1/timeline")
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body["accepted"]) == 1
+        assert body["accepted"][0]["task"] == "T1"
+        assert len(body["obstacles"]) == 1
+        assert body["obstacles"][0]["kind"] == "rejected_3x"
+        assert body["obstacles"][0]["task"] == "T2"
+
+    async def test_timeline_missing_or_failing_manager_gives_empty_lists(self, settings):
+        """manager=None and a manager that raises both answer 200 with both
+        lists empty, even when events are present."""
+        app = self._store_with_events(settings, [
+            {"task_id": "T1", "event_type": "review_parsed",
+             "review_reason": "pass", "worker_run_id": "run_a"},
+        ])
+        await _run_lifespan(app)
+        app.state.manager = None
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/missions/m1/timeline")
+        assert r.status_code == 200
+        assert r.json() == {"accepted": [], "obstacles": []}
+
+        class FailingManager:
+            def __getattr__(self, name):
+                raise RuntimeError("runner unreachable")
+
+        app.state.manager = FailingManager()
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/missions/m1/timeline")
+        assert r.status_code == 200
+        assert r.json() == {"accepted": [], "obstacles": []}
+
+    async def test_timeline_unknown_mission_gives_404(self, settings):
+        app = self._store_with_events(settings, [])
+        await _run_lifespan(app)
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            r = await c.get("/api/board/missions/unknown/timeline")
+        assert r.status_code == 404
+
+
+PLAN_TASKS = [
+    {"id": "T001", "objective": "one"},
+    {"id": "T002", "objective": "two"},
+    {"id": "T003", "objective": "three"},
+    {"id": "T004", "objective": "four"},
+]
+STALE_VERSION = "1999-01-01T00:00:00+00:00"
+
+
+@asynccontextmanager
+async def _plan_client(settings, tasks=PLAN_TASKS, status="queued", task_index=0, events=()):
+    """A client on mission m1 whose live row holds ``tasks``; the live task is ``task_index``."""
+    from claude_runner.api import create_app
+
+    store = InMemoryBoardStore()
+    store._missions["m1"] = Mission(
+        mission_id="m1", state_namespace="sk1", name="Source",
+        working_directory="/tmp/x", rules=["r1"],
+        acceptance_criteria=["c1"], retrieval_corpora=["corpus"],
+        updated_at="2026-01-01T00:00:00+00:00",
+    )
+    store._queue["m1"] = QueueEntry(position=0, mission_id="m1", enabled=True)
+    store._queue_order.append("m1")
+    store.upsert_live_state("sk1", None, plan={"tasks": copy.deepcopy(tasks)},
+                            status=status, task_index=task_index, task_attempt=0)
+    for e in events:
+        store.append_event("sk1", e)
+    app = create_app(settings)
+    app.state.board_store = store
+    await _run_lifespan(app)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c, store
+
+
+async def _live(c) -> dict:
+    return (await c.get("/api/board/live-states/sk1")).json()["live_state"]
+
+
+def _task(plan: dict, objective: str) -> dict:
+    return next(t for t in plan["tasks"] if t["objective"] == objective)
+
+
+def _objectives(plan: dict) -> list[str]:
+    return [t["objective"] for t in plan["tasks"]]
+
+
+class TestPlanWrites:
+    """Reorder, dependency and move writes on the in-memory store: the status
+    codes (200, 403 guard, 409 conflict, 422 cycle) and running_warning."""
+
+    async def test_reorder_independent_waiting_tasks_logs_a_change(self, settings):
+        async with _plan_client(settings) as (c, store):
+            before = len(store.changelog(1000))
+            live = await _live(c)
+            r = await c.post("/api/board/missions/m1/tasks/reorder", json={
+                "expected_version": live["updated_at"], "order": ["T004", "T003", "T002"],
+            })
+            assert r.status_code == 200
+            body = r.json()
+            assert _objectives(body["plan"]) == ["one", "four", "three", "two"]
+            assert body["changelog"]["action"] == "task reorder"
+            assert body["running_warning"] is False
+            assert len(store.changelog(1000)) > before
+            assert any(e.action == "live state upsert" for e in store.changelog(1000))
+
+    async def test_reorder_breaking_a_dependency_gives_403(self, settings):
+        tasks = copy.deepcopy(PLAN_TASKS)
+        tasks[1]["dependencies"] = ["T004"]
+        async with _plan_client(settings, tasks=tasks) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/reorder", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "order": ["T002", "T003", "T004"],
+            })
+            assert r.status_code == 403
+            assert r.json()["code"] == "guard"
+            assert r.json()["broken"] == [["T004", "T002"]]
+            assert _objectives((await _live(c))["plan"]) == ["one", "two", "three", "four"]
+
+    async def test_reorder_moving_the_running_task_gives_403(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/reorder", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "order": ["T001", "T002", "T003", "T004"],
+            })
+            assert r.status_code == 403
+            assert r.json()["code"] == "guard"
+            assert r.json()["locked"] == ["T001"]
+
+    async def test_reorder_stale_version_gives_409(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/reorder", json={
+                "expected_version": STALE_VERSION, "order": ["T004", "T003", "T002"],
+            })
+            assert r.status_code == 409
+            assert r.json()["code"] == "conflict"
+            assert _objectives((await _live(c))["plan"]) == ["one", "two", "three", "four"]
+
+    async def test_add_then_remove_dependency(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T004/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "add", "dependency": "T002",
+            })
+            assert r.status_code == 200
+            body = r.json()
+            assert body["changelog"]["action"] == "task dependency add"
+            assert _task(body["plan"], "four")["dependencies"] == ["T002"]
+            assert body["running_warning"] is False
+
+            r = await c.post("/api/board/missions/m1/tasks/T004/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "remove", "dependency": "T002",
+            })
+            assert r.status_code == 200
+            assert r.json()["changelog"]["action"] == "task dependency remove"
+            assert _task(r.json()["plan"], "four")["dependencies"] == []
+
+    async def test_dependency_closing_a_cycle_gives_422_with_the_pair(self, settings):
+        tasks = copy.deepcopy(PLAN_TASKS)
+        tasks[2]["dependencies"] = ["T002"]
+        async with _plan_client(settings, tasks=tasks) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T002/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "add", "dependency": "T003",
+            })
+            assert r.status_code == 422
+            assert r.json()["code"] == "cycle"
+            assert r.json()["closing_pair"] == ["T003", "T002"]
+            assert _task((await _live(c))["plan"], "two").get("dependencies", []) == []
+
+    async def test_new_dependency_already_violated_repairs_the_order(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T002/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "add", "dependency": "T004",
+            })
+            assert r.status_code == 200
+            plan = r.json()["plan"]
+            assert _objectives(plan) == ["one", "three", "four", "two"]
+            assert _task(plan, "two")["dependencies"] == [
+                next(t["id"] for t in plan["tasks"] if t["objective"] == "four"),
+            ]
+
+    async def test_dependency_stale_version_gives_409(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T002/dependencies", json={
+                "expected_version": STALE_VERSION, "action": "add", "dependency": "T004",
+            })
+            assert r.status_code == 409
+            assert r.json()["code"] == "conflict"
+
+    async def test_dependency_on_the_running_task_gives_403(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T001/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "add", "dependency": "T002",
+            })
+            assert r.status_code == 403
+            assert r.json()["code"] == "guard"
+            assert r.json()["locked"] == ["T001"]
+
+    async def test_running_warning_for_an_active_mission(self, settings):
+        async with _plan_client(settings, status="active") as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/reorder", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "order": ["T004", "T003", "T002"],
+            })
+            assert r.status_code == 200
+            assert r.json()["running_warning"] is True
+
+            r = await c.post("/api/board/missions/m1/tasks/T002/dependencies", json={
+                "expected_version": (await _live(c))["updated_at"],
+                "action": "add", "dependency": "T003",
+            })
+            assert r.status_code == 200
+            assert r.json()["running_warning"] is True
+
+    async def test_move_running_task_gives_403(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T001/move", json={
+                "expected_version": (await _live(c))["updated_at"], "to_position": 2,
+            })
+            assert r.status_code == 403
+            assert r.json()["code"] == "guard"
+
+    async def test_move_accepted_task_gives_403(self, settings):
+        events = [{"task_id": "T001", "event_type": "review_parsed", "review_status": "pass"}]
+        async with _plan_client(settings, task_index=1, events=events) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T001/move", json={
+                "expected_version": (await _live(c))["updated_at"], "to_position": 3,
+            })
+            assert r.status_code == 403
+            assert r.json()["code"] == "guard"
+
+    async def test_move_stale_version_gives_409(self, settings):
+        async with _plan_client(settings) as (c, _):
+            r = await c.post("/api/board/missions/m1/tasks/T003/move", json={
+                "expected_version": STALE_VERSION, "to_position": 1,
+            })
+            assert r.status_code == 409
+            assert r.json()["code"] == "conflict"
 
 
 def test_queue_version_accepts_a_method() -> None:

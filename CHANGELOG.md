@@ -3,7 +3,20 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.5.510** (claude-runner `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.6.0** (claude-runner `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-19 (0.6.0)
+
+The mission board: four missions in one release (board-ui2, ops-control, board-views, board-views-2), new functions, so the middle number rises.
+
+- **Operations control** (`board_ops_*`): process control and loop protection from the board, schema in `docs/board-ops-schema.sql`, notes in `docs/board-ops.md`.
+- **Task cards and plan editing** (board-ui2): task cards with stats and attempts, plan editor, thinking panel, readiness checks and history; notes in `docs/board-part2-notes.md`.
+- **Board views** (`docs/board-views.md`): `GET /api/board/summary`, project rules (`GET`/`PUT /api/board/project-rules`), the Projects, Kanban, Lanes, Sprint and Grid views, task ordering by dependencies (`board_order.js` and `board_order.py`), `POST /api/board/missions/{id}/tasks/reorder`, `POST .../tasks/{task}/dependencies`, `GET /api/board/missions/{id}/timeline`, `GET /api/runs?mission=`.
+- **Translations**: English and Russian tables (`board_i18n_en.json`, `board_i18n_ru.json`), `GET /api/board/i18n`, a translation editor.
+- Run list of the dashboard shows provider, kind, title and tok/s of remote runs (`remote_manager.py`); mission cards of the queue have their own CSS.
+- Fixes found while releasing: the static route did not serve names with digits (`board_i18n.js` gave 404 and broke the whole board, now covered by a test); the i18n scripts load before the scripts that use them and `BoardI18n.load` no longer needs `getJSON` to exist; `BUNDLED_EN` lacked 8 keys (`board_i18n.test.js` was red); the summary route no longer reads the runner for every mission before it answers (figures are filled in the background, task lists are cached; a cold call took 100 s, a warm one now takes about 3 s); the board opens on the Projects view and the old flat queue list is hidden behind the views (it requested ~175 URLs per refresh).
+- Known open points: the Postgres board connection is not rolled back after an SQL error (InFailedSqlTransaction poisons it until a restart); the Windows host fails 63 tests of files outside this release (POSIX fake CLI and `/d/...` paths), they are meant for Linux; the Playwright e2e of the new views was not run to the end.
+- Mission `ahawr-dashboard-board-views-2`: T015 (the Russian report) failed review four times; the operator wrote the report (`data-tables/ops/_reports/board-views-2-report-ru.md`) and closed the mission.
 
 ## 2026-10-18 (0.5.510)
 

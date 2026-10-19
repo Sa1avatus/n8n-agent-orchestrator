@@ -15,7 +15,11 @@ def manager(calls: list) -> RemoteRunManager:
         assert request.headers["authorization"] == "Bearer k"
         path = request.url.path
         if path == "/v1/runs/run_a":
-            return httpx.Response(200, json=RUN)
+            return httpx.Response(200, json={k: v for k, v in RUN.items() if k not in ("provider", "kind")})   # as the real endpoint
+        if path == "/v1/runs/run_old":
+            return httpx.Response(200, json={"run_id": "run_old", "status": "completed", "role": "worker", "model": "qwen3.8-27b"})
+        if path == "/v1/runs/run_old_cloud":
+            return httpx.Response(200, json={"run_id": "run_old_cloud", "status": "completed", "role": "reviewer", "model": "claude-sonnet-5-5"})
         if path == "/v1/runs/run_missing":
             return httpx.Response(404, json={"detail": "not found"})
         if path == "/v1/runs/run_a/events":
@@ -62,3 +66,21 @@ def test_an_unreachable_runner_gives_empty_results():
     assert m.store.get_run("x") is None
     assert m.events.read("x", 0) == ([], 0)
     assert m.store.list_runs(5) == []
+
+
+def test_get_run_has_the_provider_although_the_single_run_endpoint_has_none():
+    """The board speed and the real cost need the provider: it comes from the list row, or is guessed from the model name."""
+    m = manager([])
+    run = m.store.get_run("run_a")
+    assert run["provider"] == "local" and run["kind"] == "run" and run["cost_usd"] == 0.0
+    assert m.store.get_run("run_old")["provider"] == "local"
+    assert m.store.get_run("run_old_cloud")["provider"] == "anthropic"
+
+
+def test_the_list_used_for_the_missing_fields_is_read_once_in_a_while():
+    calls: list = []
+    m = manager(calls)
+    m.store.get_run("run_a")
+    m.store.get_run("run_old")
+    m.store.get_run("run_old_cloud")
+    assert sum(c.endswith("/v1/runs?limit=500") for c in calls) == 1

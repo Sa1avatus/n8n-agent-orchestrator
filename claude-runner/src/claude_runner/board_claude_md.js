@@ -38,41 +38,28 @@ function claudeMdEsc(v) {
     .replace(/'/g, "&#39;");
 }
 
-// The four templates: button id, button label, text the button appends.
-// Each is a fixed UI string (not server data).
+// The four templates: button id, and getters for the label and the text the
+// button appends (looked up at use, so they follow the chosen language).
 const CLAUDEMD_TEMPLATES = [
   {
     id: "bigfile",
-    label: "большой файл: не читать целиком",
-    text:
-      "## большой файл: не читать целиком\n\n" +
-      "Большой файл (включая GGUF и другие бинарные данные) не открывать " +
-      "целиком в памяти: читать по частям (head/tail, построчно, mmap) и " +
-      "не грузить весь файл в RAM.\n",
+    get label() { return t("claudemd.tpl.big_file.label"); },
+    get text() { return t("claudemd.tpl.big_file.body"); },
   },
   {
     id: "data",
-    label: "где лежат данные",
-    text:
-      "## где лежат данные\n\n" +
-      "Данные миссии: рабочая папка — <путь>; состояния и журналы — в " +
-      "хранилище (store); корпуса поиска — в retrieval-сервисе.\n",
+    get label() { return t("claudemd.tpl.where.label"); },
+    get text() { return t("claudemd.tpl.where.body"); },
   },
   {
     id: "nodonts",
-    label: "чего не делать",
-    text:
-      "## чего не делать\n\n" +
-      "Не менять живые сущности прогона (рабочая папка, ключ состояния, " +
-      "корпуса) во время миссии; не читать большие бинарные файлы целиком; " +
-      "не удалять чужие несохранённые изменения.\n",
+    get label() { return t("claudemd.tpl.never.label"); },
+    get text() { return t("claudemd.tpl.never.body"); },
   },
   {
     id: "gguf",
-    label: "GGUF: не разбирать руками",
-    text:
-      "## разбор больших бинарных файлов (GGUF)\n\n" +
-      "разбор больших бинарных файлов (GGUF) руками уводит память: используйте готовые дампы и пакет gguf.\n",
+    get label() { return t("claudemd.tpl.gguf.label"); },
+    get text() { return t("claudemd.tpl.gguf.body"); },
   },
 ];
 
@@ -83,30 +70,30 @@ function claudeMdStorageLine(answer) {
   const src = answer && answer.source ? answer.source : "";
   if (src === "file") {
     return answer.path
-      ? "Запись: файл " + claudeMdEsc(answer.path)
-      : "Текст: файл в рабочей папке";
+      ? t("claudemd.storage.file", { path: claudeMdEsc(answer.path) })
+      : t("claudemd.storage.working_folder");
   }
   if (src === "db") {
-    return "Текст: в базе (config `claudemd`) — " + claudeMdEsc(answer.note || "применяет оператор");
+    return t("claudemd.storage.db", { note: claudeMdEsc(answer.note || t("claudemd.storage.operator")) });
   }
-  return "Текст: " + claudeMdEsc(src);
+  return t("claudemd.storage.text", { source: claudeMdEsc(src) });
 }
 
 // The editor markup.  Fixed UI strings are interpolated directly; every
 // server value (the text, the path, the note) goes through claudeMdEsc().
 function claudeMdEditorHtml(answer) {
   return (
-    `<h3>CLAUDE.md</h3>` +
+    `<h3>${claudeMdEsc(t("claudemd.title"))}</h3>` +
     `<div class="claudemd">` +
       `<textarea name="claudemd_text" spellcheck="false">${claudeMdEsc(answer.text)}</textarea>` +
       `<div class="claudemd-templates">` +
-      CLAUDEMD_TEMPLATES.map((t) =>
-        `<button type="button" class="claudemd-tpl" data-tpl="${claudeMdEsc(t.id)}">${claudeMdEsc(t.label)}</button>`
+      CLAUDEMD_TEMPLATES.map((tpl) =>
+        `<button type="button" class="claudemd-tpl" data-tpl="${claudeMdEsc(tpl.id)}">${claudeMdEsc(tpl.label)}</button>`
       ).join("") +
       `</div>` +
       `<div class="claudemd-storage">` +
         `<span class="claudemd-storage-line"></span>` +
-        `<button type="button" class="claudemd-save">Сохранить</button>` +
+        `<button type="button" class="claudemd-save">${claudeMdEsc(t("claudemd.save"))}</button>` +
       `</div>` +
       `<div class="claudemd-msg"></div>` +
     `</div>`
@@ -143,7 +130,7 @@ function claudeMdAttachTemplates(el) {
     if (btn.dataset.attached === "1") continue;
     btn.dataset.attached = "1";
     btn.addEventListener("click", () => {
-      const tpl = CLAUDEMD_TEMPLATES.find((t) => t.id === btn.dataset.tpl);
+      const tpl = CLAUDEMD_TEMPLATES.find((tpl) => tpl.id === btn.dataset.tpl);
       if (!tpl) return;
       const ta = el.querySelector('[name="claudemd_text"]');
       if (!ta) return;
@@ -169,7 +156,7 @@ function claudeMdAttachSave(el, data) {
         claudeMdShowStorage(el, answer);
       })
       .catch((e) => {
-        if (msg) msg.textContent = "сохранение не удалось: " + (e.message || "ошибка");
+        if (msg) msg.textContent = t("claudemd.save_failed", { error: e.message || t("error.unknown") });
       });
   });
 }

@@ -73,6 +73,7 @@ select, input[type=search] { background: var(--panel); border: 1px solid var(--l
 .tag .x:hover { color: var(--err); }
 .tag.all { background: none; border-color: transparent; padding: 2px 4px; color: var(--muted); font-size: 11.5px; }
 .tag.all:hover { color: var(--err); }
+.tag.back { text-decoration: none; color: var(--accent); }
 .taghint { margin-top: 6px; font-size: 11px; color: var(--faint); line-height: 1.35; }
 #fqrow { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
 #fqrow input[type=search] { flex: 1; min-width: 0; }
@@ -360,6 +361,17 @@ function parseFilter(str) {
   }
   return filter;
 }
+// the runs hash is "#field=value&...&from=board/<...>#run=<id>": "from" is the board
+// view the page was opened from (its back link), not a run filter
+function parseRunsHash(hash) {
+  const h = String(hash ?? "");
+  if (h.startsWith("#board")) return { filter: {}, from: "" };  // the board tab owns this hash
+  const i = h.indexOf("#run=");
+  const filter = parseFilter(i >= 0 ? h.slice(0, i) : h.slice(1));
+  const from = (filter.from || [])[0] || "";
+  delete filter.from;
+  return { filter, from: /^board(\/|$)/.test(from) ? from : "" };
+}
 // === end pure filter functions ===
 
 // ---------------------------------------------------------------- formatting
@@ -415,20 +427,14 @@ function onValueClick(e) {
   return true;
 }
 // the URL holds the filter (as "#field=value&..."); the hash also carries "#run=..." for deep links
-function urlFilter() {
-  try {
-    const h = location.hash || "";
-    if (h.startsWith("#board")) return {};  // the board tab owns this hash, it is not a run filter
-    const i = h.indexOf("#run=");
-    const body = i >= 0 ? h.slice(0, i) : h.slice(1);
-    return parseFilter(body);
-  } catch (e) { return {}; }
-}
+let BACK = "";  // the board hash this page was opened from (the back link)
 function writeUrl(filter) {
   if (typeof TAB !== "undefined" && TAB === "board") return;  // the board tab owns the hash
   try {
+    const parts = [filterToQuery(filter)];
+    if (BACK) parts.push("from=" + encodeURIComponent(BACK));
     const runHash = S.sel ? "#run=" + encodeURIComponent(S.sel) : "";
-    history.replaceState(null, "", "#" + filterToQuery(filter) + runHash);
+    history.replaceState(null, "", "#" + parts.filter(Boolean).join("&") + runHash);
   } catch (e) { /* a failing history API must never throw */ }
 }
 async function loadRuns() {
@@ -568,6 +574,7 @@ function renderTags() {
       chips.push(`<span class="tag"><b>${esc(field)}</b>: ${esc(v)}<button class="x" title="Remove ${esc(field)}: ${esc(v)}" data-field="${esc(field)}" data-value="${esc(v)}">✕</button></span>`);
   }
   if (chips.length) chips.push(`<button class="tag all" title="Clear all filters">clear all</button>`);
+  if (BACK) chips.push(`<a class="tag back" href="#${esc(BACK)}">← back to board</a>`);
   const box = $("#tags");
   setHTML(box, chips.join(""));
   box.hidden = !chips.length;
@@ -1083,8 +1090,9 @@ window.addEventListener("hashchange", () => {
 function fromHash() { const m = location.hash.match(/run=([^&]+)/); if (m) select(decodeURIComponent(m[1])); }
 window.addEventListener("hashchange", fromHash);
 (async () => {
-  const f = urlFilter();
-  if (Object.keys(f).length) S.filter = f;
+  const r = parseRunsHash(location.hash);
+  BACK = r.from;
+  if (Object.keys(r.filter).length) S.filter = r.filter;
   syncTab();  // before loadRuns/select rewrite the hash: a #board link opens the board
   renderTags();
   await loadRuns();

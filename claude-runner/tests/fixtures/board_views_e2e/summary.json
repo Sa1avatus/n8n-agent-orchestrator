@@ -1,0 +1,53 @@
+{
+  "projects": [
+    {"key": "alpha", "name": "Alpha", "rule": "alpha-*", "mission_ids": ["m-alpha-run", "m-alpha-done"]},
+    {"key": "beta", "name": "Beta", "rule": "beta-*", "mission_ids": ["m-beta-queued"]},
+    {"key": "hostile", "name": "<img src=x onerror=\"window.__pwned=1\">", "rule": "\"><b>x</b>", "mission_ids": ["m-hostile"]}
+  ],
+  "missions": [
+    {
+      "mission_id": "m-alpha-run",
+      "name": "Alpha running mission",
+      "enabled": true,
+      "state_group": "running",
+      "project": {"key": "alpha", "name": "Alpha", "rule": "alpha-*"},
+      "tasks": [{"key": "t1", "status": "accepted"}, {"key": "t2", "status": "pending"}],
+      "hours": 1.5,
+      "tokens": 12000,
+      "cost": 0.42
+    },
+    {
+      "mission_id": "m-alpha-done",
+      "name": "Alpha finished mission",
+      "enabled": true,
+      "state_group": "completed",
+      "project": {"key": "alpha", "name": "Alpha", "rule": "alpha-*"},
+      "tasks": [{"key": "t1", "status": "accepted"}],
+      "hours": 0.5,
+      "tokens": 3000,
+      "cost": 0.1
+    },
+    {
+      "mission_id": "m-beta-queued",
+      "name": "Beta queued mission",
+      "enabled": true,
+      "state_group": "queued",
+      "project": {"key": "beta", "name": "Beta", "rule": "beta-*"},
+      "tasks": [{"key": "t1", "status": "pending"}],
+      "hours": 0,
+      "tokens": 0,
+      "cost": 0
+    },
+    {
+      "mission_id": "m-hostile",
+      "name": "\"><svg onload=\"window.__pwned=2\"></svg>",
+      "enabled": false,
+      "state_group": "not_completed",
+      "project": {"key": "hostile", "name": "<img src=x onerror=\"window.__pwned=1\">", "rule": "\"><b>x</b>"},
+      "tasks": [{"key": "t1", "status": "not_accepted"}],
+      "hours": 2,
+      "tokens": 500,
+      "cost": 0.01
+    }
+  ]
+}

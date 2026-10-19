@@ -372,6 +372,10 @@ A Worker runs shell and Python in the container, and a careless script (`bytes()
 2. **System prompt rule** (`MEMORY RULE`, Worker role only): tells the model what `MemoryError` / `Killed` / exit 137 mean and how to read big files (mmap, `seek`/`read(n)`, `head -c`, `gguf`).
 3. **`mem_guard.py`**, the backstop: once a second it kills the biggest non-`claude` process when it holds more than `CLAUDE_RUNNER_MEM_GUARD_PROC_MB` of anonymous memory (default 5000) or when the container's anonymous memory passes `CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT` (85) of its limit; a `mem_guard` event with the command goes to the run's log. Set the container limit in `docker-compose.yml` (`mem_limit`, 6g).
 
+## Mission board: files
+
+The mission board lives in `src/claude_runner/`: `board.py` (the in-memory store and the models), `board_pg.py` (the PostgreSQL store), `board_api.py` (the `/api/board` routes), `board_stats.py` (the figures), `board_plan.py` (the plan), and the browser files `board_views.js`, `board_view_projects.js`, `board_view_kanban.js`, `board_view_grid.js`, `board_queue.js`, `board_dnd.js`, `board_actions.js`, `board_i18n.js`, `board_i18n_ui.js`, `board_task.js`, `board_tasks.js`, `board_plan_edit.js`, `board_ready_ui.js`, `board_think_ui.js`, `board_history_ui.js`, `board_claude_md.js`, `board_mission.js`, `board_mission_save.js`. The schema is `docs/board-schema.sql`, the role is `docs/board-role.sql`, and the summary, project rules, translation routes, the frontend views and the database apply steps are described in `docs/board-views.md`.
+
 ## Development
 
 ```bash

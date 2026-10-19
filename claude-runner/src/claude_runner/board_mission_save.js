@@ -183,7 +183,7 @@ function currentDiff(box) {
 // Render the diff as escaped HTML (one row per changed field).
 function diffHtml(diff, labels) {
   if (!diff || diff.length === 0) {
-    return `<div class="savediff none">Изменений нет.</div>`;
+    return `<div class="savediff none">${esc(t("save.no_changes"))}</div>`;
   }
   const fmt = (v) => (v === null || v === undefined
     ? "—"
@@ -239,15 +239,15 @@ function attachControls(box) {
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "savebtn";
-  saveBtn.textContent = "Сохранить";
+  saveBtn.textContent = t("save.button");
   const resetBtn = document.createElement("button");
   resetBtn.type = "button";
   resetBtn.className = "savebtn";
-  resetBtn.textContent = "Сбросить";
+  resetBtn.textContent = t("save.reset");
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.className = "savebtn";
-  copyBtn.textContent = "Скопировать из другой миссии";
+  copyBtn.textContent = t("save.copy_from");
   saveBtn.addEventListener("click", () => onSave(box));
   resetBtn.addEventListener("click", () => onReset(box));
   copyBtn.addEventListener("click", () => onCopy(box));
@@ -281,10 +281,10 @@ async function onSave(box) {
   }
   diffBox.innerHTML = diffHtml(diff, labels);
   if (diff.length === 0) {
-    showBanner(box, "Изменений нет — сохранять нечего.");
+    showBanner(box, t("save.nothing_to_save"));
     return;
   }
-  if (!window.confirm("Сохранить изменения?")) {
+  if (!window.confirm(t("save.confirm"))) {
     showBanner(box, "");
     return;
   }
@@ -329,10 +329,10 @@ async function doSave(box) {
     }
   } catch (e) {
     if (e.status === 409) {
-      showBanner(box, "план изменился, обновите");
-      await refresh(box, "план изменился, обновите");
+      showBanner(box, t("conflict.plan_changed"));
+      await refresh(box, t("conflict.plan_changed"));
     } else {
-      showBanner(box, e.message || "сохранение не удалось");
+      showBanner(box, e.message || t("save.failed"));
       await refresh(box);
     }
     return;
@@ -381,13 +381,13 @@ function onReset(box) {
 // Ask for the source mission id, load it, and copy its editable fields into
 // this form (the user then confirms saving as usual).
 function onCopy(box) {
-  const id = window.prompt("Миссия для копирования (id):");
+  const id = window.prompt(t("save.copy_prompt"));
   if (!id) return;
   const source = id.trim();
   if (!source) return;
   loadSource(source).then((data) => {
     copyIntoForm(box, data);
-  }).catch((e) => showBanner(box, e.message || "не удалось загрузить миссию"));
+  }).catch((e) => showBanner(box, e.message || t("save.load_failed")));
 }
 
 // Load the source mission and its queue entry (same endpoints as
@@ -426,7 +426,7 @@ function copyIntoForm(box, data) {
       el.value = v == null ? "" : String(v);
     }
   }
-  showBanner(box, "Поля скопированы — подтвердите сохранение.");
+  showBanner(box, t("save.copied"));
 }
 
 // --- refresh: never overwrite a dirty form; show the banner on drift ---
@@ -474,7 +474,7 @@ async function refresh(box, keepMessage) {
   try {
     data = await fetchServerData(missionId);
   } catch (e) {
-    showBanner(box, e.message || "не удалось обновить");
+    showBanner(box, e.message || t("save.update_failed"));
     return;
   }
   const local = SaveState.data;
@@ -521,12 +521,12 @@ async function refresh(box, keepMessage) {
     // Keep the caller's banner; add the server note alongside it when the
     // queue drifted.
     if (merged.server_changed) {
-      showBanner(box, keepMessage + " — на сервере есть изменения");
+      showBanner(box, t("save.server_changed_kept", { message: keepMessage }));
     }
     return;
   }
   if (merged.server_changed) {
-    showBanner(box, "на сервере есть изменения");
+    showBanner(box, t("save.server_changed"));
   } else {
     showBanner(box, "");
   }
@@ -561,7 +561,7 @@ async function postJson(url, body) {
   });
   const payload = await res.json().catch(() => ({}));
   if (res.status === 409) {
-    const err = new Error((payload.error && payload.error.message) || "план изменился, обновите");
+    const err = new Error((payload.error && payload.error.message) || t("conflict.plan_changed"));
     err.status = 409;
     throw err;
   }

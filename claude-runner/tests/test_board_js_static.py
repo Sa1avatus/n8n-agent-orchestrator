@@ -139,3 +139,17 @@ def test_board_html_no_inline_handlers() -> None:
     html = (PKG_DIR / "board.html").read_text(encoding="utf-8")
     m = re.search(r"\son[a-z]+\s*=", html, re.I)
     assert m is None, f"inline event handler found: {m.group(0)!r}"
+
+
+def test_every_script_of_board_html_matches_the_dashboard_static_route():
+    """/static/{name} only serves names matching this pattern; a digit in a
+    name (board_i18n.js) once gave 404 and broke the whole board."""
+    dash = (PKG_DIR / "dashboard.py").read_text(encoding="utf-8")
+    m = re.search(r'_board_static = re\.compile\(r"([^"]+)"\)', dash)
+    assert m, "static route pattern not found"
+    pattern = re.compile(m.group(1))
+    html = (PKG_DIR / "board.html").read_text(encoding="utf-8")
+    names = re.findall(r'(?:src|href)="/static/([^"]+)"', html)
+    assert names
+    bad = [n for n in names if not pattern.fullmatch(n)]
+    assert bad == []

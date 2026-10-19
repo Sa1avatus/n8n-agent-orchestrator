@@ -2,10 +2,37 @@
 
 from __future__ import annotations
 
-import psycopg
+import json
+import sys
+import types
+from datetime import datetime, timezone
+
 import pytest
 
-from claude_runner.board_pg import PgBoardStore, get_board_store
+from claude_runner.board import ConflictError
+from claude_runner.board_pg import (
+    _EVENT_LOG_TABLE,
+    _LIVE_STATE_TABLE,
+    PgBoardStore,
+    get_board_store,
+)
+from claude_runner.board_stats import mission_timeline
+
+try:
+    import psycopg
+    from psycopg import rows as psycopg_rows
+except ImportError:  # driver not installed: stub, every test replaces connect
+    psycopg = types.ModuleType("psycopg")
+    psycopg.connect = None
+    psycopg.OperationalError = type("OperationalError", (Exception,), {})
+    psycopg_rows = types.ModuleType("psycopg.rows")
+    psycopg_rows.dict_row = None
+    psycopg.rows = psycopg_rows
+
+
+def _install_driver(monkeypatch) -> None:
+    monkeypatch.setitem(sys.modules, "psycopg", psycopg)
+    monkeypatch.setitem(sys.modules, "psycopg.rows", psycopg_rows)
 
 
 class FakeCursor:
@@ -65,6 +92,7 @@ def _make_store(monkeypatch) -> tuple[PgBoardStore, FakeConnection]:
     def fake_connect(dsn, row_factory=None):
         return conn
 
+    _install_driver(monkeypatch)
     monkeypatch.setattr(psycopg, "connect", fake_connect)
     store = PgBoardStore("postgresql://u:p@h/db")
     return store, conn
@@ -132,6 +160,7 @@ class TestDsnRedaction:
         def fake_connect(_dsn, row_factory=None):
             raise psycopg.OperationalError("connection failed: " + _dsn)
 
+        _install_driver(monkeypatch)
         monkeypatch.setattr(psycopg, "connect", fake_connect)
         store = get_board_store(dsn=dsn)
         status, reason = store.status()
@@ -150,3 +179,222 @@ def test_empty_plan_column_is_no_plan() -> None:
     assert _plan_dict('{"tasks": []}') == {"tasks": []}
     assert _plan_dict("[1, 2]") is None
     assert _plan_dict("not json") is None
+
+
+RULES = [{"name": "a", "pattern": "*.py", "position": 1}]
+SEED = {"languages": [{"code": "de", "name": "Deutsch"}], "strings": {"en": {"k": "v"}}}
+
+
+class TestProjectRulesAndI18n:
+    def test_put_project_rules_stale_version_conflicts_without_writing(self, monkeypatch):
+        from datetime import datetime, timezone
+
+        store, conn = _make_store(monkeypatch)
+        stamp = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        conn.set_response("SELECT name, pattern", [
+            {"name": "a", "pattern": "*.py", "position": 1, "updated_at": stamp},
+        ])
+        with pytest.raises(ConflictError):
+            store.put_project_rules(RULES, "stale")
+        assert not any("DELETE FROM project_rules" in sql for sql, _ in conn.executed)
+
+    def test_put_i18n_string_empty_text_deletes_the_row(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT text FROM i18n_strings", [{"text": "old"}])
+        store.put_i18n_string("en", "k", "")
+        assert any("DELETE FROM i18n_strings" in sql for sql, _ in conn.executed)
+        assert not any("INSERT INTO i18n_strings" in sql for sql, _ in conn.executed)
+
+    def test_seed_i18n_does_nothing_when_rows_exist(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT EXISTS", [{"has_rows": True}])
+        store.seed_i18n(SEED)
+        assert not any("INSERT INTO i18n_" in sql for sql, _ in conn.executed)
+
+
+STALE_VERSION = "1999-01-01T00:00:00+00:00"
+
+
+class TestPlanWriteContract:
+    """Plan writes, stale-version refusal, events and timeline on the Pg store."""
+
+    STAMP = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+    def test_plan_json_update_writes_the_live_row_and_audits(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": self.STAMP}])
+        plan = {"tasks": [{"id": "T001", "objective": "one"}]}
+        store.upsert_live_state("T001", "2026-01-01T00:00:00+00:00", plan_json=json.dumps(plan))
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert _LIVE_STATE_TABLE in sql
+        assert "plan_json = %s" in sql
+        assert json.dumps(plan) in params
+        audits = [sql for sql, _ in conn.executed if sql.startswith("INSERT INTO changelog")]
+        assert len(audits) == 1
+
+    def test_stale_version_conflicts_without_update_or_audit(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": self.STAMP}])
+        with pytest.raises(ConflictError):
+            store.upsert_live_state("T001", STALE_VERSION, plan_json="{}")
+        assert not any(sql.startswith("UPDATE ") for sql, _ in conn.executed)
+        assert not any(sql.startswith("INSERT INTO changelog") for sql, _ in conn.executed)
+
+    def test_plan_kwarg_is_written_like_plan_json(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": self.STAMP}])
+        store.upsert_live_state("T001", None, plan={"tasks": []})
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert _LIVE_STATE_TABLE in sql
+        assert "plan_json = %s" in sql
+        assert json.dumps({"tasks": []}) in params
+
+    def test_reorder_write_path_updates_and_audits(self, monkeypatch):
+        """The reorder route's write path: board_order.violations on the fake
+        connection, then upsert_live_state(plan=...) like the route does."""
+        from claude_runner.board_order import violations
+
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": self.STAMP}])
+        order = ["T004", "T003", "T002"]
+        assert violations(order, {}) == []
+        plan = {"tasks": [
+            {"id": "T001", "objective": "one"},
+            {"id": "T004", "objective": "four"},
+            {"id": "T003", "objective": "three"},
+            {"id": "T002", "objective": "two"},
+        ]}
+        store.upsert_live_state("T001", self.STAMP.isoformat(), plan=plan)
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert _LIVE_STATE_TABLE in sql
+        assert "plan_json = %s" in sql
+        assert json.dumps(plan) in params
+        audits = [sql for sql, _ in conn.executed if sql.startswith("INSERT INTO changelog")]
+        assert len(audits) == 1
+
+    def test_events_read_the_quoted_event_table_in_id_order(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("FROM " + _EVENT_LOG_TABLE, [{"task_id": "T001", "event_type": "review_parsed"}])
+        rows = store.events("T001")
+        assert rows == [{"task_id": "T001", "event_type": "review_parsed"}]
+        sql, params = conn.executed[-1]
+        assert _EVENT_LOG_TABLE in sql
+        assert sql.rstrip().endswith("ORDER BY id")
+        assert params == ("T001",)
+
+    def test_timeline_reports_accepted_review(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("FROM " + _EVENT_LOG_TABLE, [
+            {"task_id": "T001", "event_type": "review_parsed", "review_status": "pass",
+             "created_at": self.STAMP},
+        ])
+        timeline = mission_timeline(None, store, "T001")
+        assert timeline == {
+            "accepted": [{"task": "T001", "ts": "2026-01-01T00:00:00+00:00"}],
+            "obstacles": [],
+        }
+
+    def test_timeline_reports_a_task_rejected_three_times(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        rejected = {"task_id": "T002", "event_type": "review_parsed",
+                    "review_status": "needs_changes", "created_at": self.STAMP}
+        conn.set_response("FROM " + _EVENT_LOG_TABLE, [rejected, rejected, rejected])
+        timeline = mission_timeline(None, store, "T001")
+        assert timeline["accepted"] == []
+        assert [o["kind"] for o in timeline["obstacles"]] == ["rejected_3x"]
+        assert timeline["obstacles"][0]["task"] == "T002"
+
+    def test_timeline_reports_an_interrupted_run(self, monkeypatch):
+        stamp = self.STAMP
+        events = [
+            {"task_id": "T001", "event_type": "worker_finished",
+             "worker_run_id": "run_a", "worker_status": "ok",
+             "created_at": stamp},
+        ]
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("FROM " + _EVENT_LOG_TABLE, events)
+
+        runs = {
+            "run_a": {
+                "status": "interrupted",
+                "error_code": "run_not_found",
+                "error_message": "runner process gone",
+                "started_at": stamp,
+                "finished_at": stamp,
+            },
+        }
+
+        class Manager:
+            def __init__(self):
+                self.store = {"run_a": runs["run_a"]}
+
+            def _get(self):
+                return self.store
+
+        # mission_timeline calls manager.store.get_run(run_id);
+        # wrap the dict with a get_run shim.
+        class _RunStore:
+            def __init__(self, d):
+                self._d = d
+            def get_run(self, run_id):
+                return self._d.get(run_id)
+
+        mgr = type("M", (), {
+            "store": _RunStore(runs),
+        })()
+        timeline = mission_timeline(mgr, store, "T001")
+        assert timeline["accepted"] == []
+        assert len(timeline["obstacles"]) == 1
+        assert timeline["obstacles"][0]["kind"] == "interrupted"
+        assert timeline["obstacles"][0]["task"] == "T001"
+        assert timeline["obstacles"][0]["run_id"] == "run_a"
+        assert timeline["obstacles"][0]["ts"] == stamp
+        assert timeline["obstacles"][0]["detail"] == "runner process gone"
+
+    def test_timeline_reports_a_timed_out_run(self, monkeypatch):
+        stamp = self.STAMP
+        events = [
+            {"task_id": "T001", "event_type": "worker_finished",
+             "worker_run_id": "run_b", "worker_status": "error",
+             "created_at": stamp},
+        ]
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("FROM " + _EVENT_LOG_TABLE, events)
+
+        runs = {
+            "run_b": {
+                "status": "failed",
+                "error_code": "timeout",
+                "error_message": "timed out",
+                "started_at": stamp,
+                "finished_at": stamp,
+            },
+        }
+
+        class _RunStore:
+            def __init__(self, d):
+                self._d = d
+            def get_run(self, run_id):
+                return self._d.get(run_id)
+
+        mgr = type("M", (), {
+            "store": _RunStore(runs),
+        })()
+        timeline = mission_timeline(mgr, store, "T001")
+        assert timeline["accepted"] == []
+        assert len(timeline["obstacles"]) == 1
+        assert timeline["obstacles"][0]["kind"] == "timeout"
+        assert timeline["obstacles"][0]["task"] == "T001"
+        assert timeline["obstacles"][0]["run_id"] == "run_b"
+        assert timeline["obstacles"][0]["ts"] == stamp
+        assert timeline["obstacles"][0]["detail"] == "timed out"
+
+    def test_timeline_without_events_is_empty(self, monkeypatch):
+        store, _ = _make_store(monkeypatch)
+        assert mission_timeline(None, store, "T001") == {"accepted": [], "obstacles": []}

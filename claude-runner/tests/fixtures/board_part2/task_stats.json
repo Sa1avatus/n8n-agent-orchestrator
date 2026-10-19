@@ -1,0 +1,42 @@
+{
+  "state_key": "sk_running",
+  "mission_id": "m_running",
+  "task_id": "T002",
+  "status": "not_accepted",
+  "runs": 2,
+  "worker_hours": 1.4,
+  "reviewer_minutes": 18.5,
+  "architect_minutes": 0.0,
+  "input_tokens": 210000,
+  "output_tokens": 34000,
+  "cache_read_tokens": 150000,
+  "cache_write_tokens": 40000,
+  "cost_estimate_usd": 3.2,
+  "cost_real_usd": 2.4,
+  "cost_usd": 3.2,
+  "tok_per_s": 62.5,
+  "cache_ratio": 0.417,
+  "compactions": 1,
+  "thinking_runs": 40,
+  "thinking_off_runs": 20,
+  "thinking_tokens": 180000,
+  "thinking_off_tokens": 60000,
+  "thinking_steps": 60,
+  "max_attempts_per_task": 5,
+  "attempts": 2,
+  "attempt_seconds": [2430.0, 1890.5],
+  "attempts_detail": [
+    {
+      "attempt": 1,
+      "seconds": 2430.0,
+      "runs": ["run_aaaa0000", "run_bbbb0000"]
+    },
+    {
+      "attempt": 2,
+      "seconds": 1890.5,
+      "runs": ["run_cccc0000", "run_bbbb0000"]
+    }
+  ],
+  "last_review_score": 4.0,
+  "last_review_reason": "table counts do not match the source; fix and resubmit"
+}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AHAWR Миссии</title>
+<title>AHAWR</title>
 <script>
 (function () {
   try {
@@ -27,16 +27,32 @@
 </head>
 <body>
 <div id="board">
-  <div id="boardbar"><a href="/">Прогоны</a></div>
-  <div id="boardstate">Loading the board…</div>
+  <div id="boardbar"><a href="/" data-i18n="nav.runs"></a></div>
+  <div id="boardviews"></div>
+  <div id="boardstate" data-i18n="board.loading"></div>
 </div>
 <script src="/static/board_logic.js"></script>
+<script src="/static/board_i18n.js"></script>
 <script src="/static/board_queue.js"></script>
 <script src="/static/board_dnd.js"></script>
 <script src="/static/board_actions.js"></script>
 <script src="/static/board_mission.js"></script>
+<script src="/static/board_tasks.js"></script>
+<script src="/static/board_task.js"></script>
+<script src="/static/board_plan_edit.js"></script>
+<script src="/static/board_think_ui.js"></script>
+<script src="/static/board_ready_ui.js"></script>
+<script src="/static/board_history_ui.js"></script>
 <script src="/static/board_mission_save.js"></script>
 <script src="/static/board_claude_md.js"></script>
+<script src="/static/board_i18n_ui.js"></script>
+<script src="/static/board_views.js"></script>
+<script src="/static/board_view_kanban.js"></script>
+<script src="/static/board_view_projects.js"></script>
+<script src="/static/board_order.js"></script>
+<script src="/static/board_view_lanes.js"></script>
+<script src="/static/board_view_sprint.js"></script>
+<script src="/static/board_view_grid.js"></script>
 <script src="/static/board.js"></script>
 </body>
 </html>

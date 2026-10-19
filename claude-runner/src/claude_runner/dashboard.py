@@ -32,6 +32,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from . import board_api, export
+from .board_stats import _mission_run_ids
 from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
@@ -122,7 +123,7 @@ def create_dashboard_app(
     # Board static assets: board*.js, board*.css and board*.html (created by
     # T017-T020). Anything else is 404; a file that does not exist yet is 404
     # with a short message, so the app still starts.
-    _board_static = re.compile(r"^board[a-z_]*[.](js|css|html)$")
+    _board_static = re.compile(r"^board[a-z0-9_]*[.](js|css|html)$")
     _board_media = {
         "js": "application/javascript",
         "css": "text/css; charset=utf-8",
@@ -158,8 +159,17 @@ def create_dashboard_app(
         provider: list[str] = Query([]),  # noqa: B008
         cwd: list[str] = Query([]),  # noqa: B008
         source: list[str] = Query([]),  # noqa: B008
-    ) -> dict[str, Any]:
+        mission: str = "",
+    ) -> Any:
         # repeated values of one field are matched with OR; fields combine with AND
+        mission_runs: set[str] | None = None
+        if mission:
+            store = request.app.state.board_store
+            refuse = board_api._unavailable(store)
+            if refuse is not None:
+                return JSONResponse(refuse, status_code=503)
+            found = store.get_mission(mission)
+            mission_runs = set(_mission_run_ids(store, found.state_namespace)) if found else set()
         values: dict[str, set[str]] = {}
         for field, seen in (
             ("model", model),
@@ -183,7 +193,7 @@ def create_dashboard_app(
             ]
         # role/status/model/provider/cwd are matched after the fetch, so the sources are
         # not narrowed by them (narrowing by role[0] would drop the other role values)
-        fetch = 500 if any(values.values()) else limit
+        fetch = 500 if any(values.values()) or mission else limit
         # each source serves the sessions of its kind (the 'hermes:' prefix is
         # stripped before the call); with no session of its kind it is read unfiltered
         calls: list[tuple[Any, Any]] = []
@@ -205,6 +215,8 @@ def create_dashboard_app(
                 states.setdefault(src.name, "ok")
                 runs += result
         runs = _runs_match(runs, values)
+        if mission_runs is not None:
+            runs = [r for r in runs if r.get("run_id") in mission_runs]
         runs.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
         return {"runs": runs[:limit], "sources": states}
 

@@ -1,0 +1,45 @@
+{
+  "variants": [
+    {
+      "variant": "always-think",
+      "attempts": 120,
+      "passes": 84,
+      "acceptance_share": 0.7,
+      "minutes_per_attempt": 22.5,
+      "thinking_tokens": 9600000,
+      "share_with_thinking": 1.0,
+      "share_without_thinking": 0.0,
+      "uplift": {
+        "pass_diff_pct": 12.5,
+        "pass_interval": [6.9, 18.7],
+        "minutes_per_task": -4.2,
+        "minutes_interval": [-9.8, 1.5],
+        "attempts_per_task": -0.35,
+        "attempts_interval": [-0.72, 0.02]
+      }
+    },
+    {
+      "variant": "control",
+      "attempts": 120,
+      "passes": 66,
+      "acceptance_share": 0.55,
+      "minutes_per_attempt": 26.7,
+      "thinking_tokens": 0,
+      "share_with_thinking": 0.0,
+      "share_without_thinking": 1.0
+    },
+    {
+      "variant": "off_first",
+      "attempts": 12,
+      "passes": 7,
+      "acceptance_share": 0.583,
+      "minutes_per_attempt": 25.1,
+      "thinking_tokens": 42000,
+      "share_with_thinking": 0.25,
+      "share_without_thinking": 0.5,
+      "uplift": {
+        "text": "мало данных, нужно ещё 88 попыток на ветку"
+      }
+    }
+  ]
+}

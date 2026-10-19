@@ -20,6 +20,9 @@ reports ``status()`` and its reason carries no host/port.
 
 from __future__ import annotations
 
+import fnmatch
+import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -27,7 +30,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from . import board_plan, board_ready, board_stats, board_think
+from . import board_order, board_plan, board_ready, board_stats, board_think
 from .board import (
     BoardStore,
     ConflictError,
@@ -82,6 +85,38 @@ def _store_guard(request: Request) -> BoardStore:
     return store
 
 
+_I18N_LANG_RE = re.compile(r"[a-z]{2,8}")
+
+
+def _require_dashboard_header(request: Request) -> None:
+    if request.headers.get("x-ahawr-dashboard") != "1":
+        raise GuardError("missing X-AHAWR-Dashboard header")
+
+
+def _i18n_file(lang: str) -> dict[str, str]:
+    return json.loads(Path(__file__).with_name(f"board_i18n_{lang}.json").read_text("utf-8"))
+
+
+def _ensure_i18n_seed(request: Request, store: BoardStore) -> None:
+    if getattr(request.app.state, "i18n_seeded", False):
+        return
+    store.seed_i18n({
+        "languages": [{"code": "en", "name": "English"}, {"code": "ru", "name": "Русский"}],
+        "strings": {"en": _i18n_file("en"), "ru": _i18n_file("ru")},
+    })
+    request.app.state.i18n_seeded = True
+
+
+def _i18n_view(store: BoardStore) -> dict[str, Any]:
+    data = store.list_i18n()
+    if not any(lang["code"] == "en" for lang in data["languages"]):
+        data["languages"].insert(0, {"code": "en", "name": "English", "enabled": True})
+    english = data["strings"].setdefault("en", {})
+    for key, text in _i18n_file("en").items():
+        english.setdefault(key, text)
+    return data
+
+
 def _queue_version(store: BoardStore) -> str | None:
     """The queue's version: the in-memory store keeps one stamp for the whole
     queue; the Pg store has no queue version of its own, so ``None`` (the
@@ -123,6 +158,47 @@ def _confirm_needed(running: bool, confirmed: bool, action: str) -> None:
     """Refuse a dangerous action on a running mission without confirm=true."""
     if running and not confirmed:
         raise GuardError(f"{action}: the mission is running; pass confirm=true")
+
+
+def _refusal(status: int, code: str, reason: str, **fields: Any) -> JSONResponse:
+    """A refused plan edit: the board error envelope plus the refusal details."""
+    return JSONResponse(
+        status_code=status,
+        content={
+            "status": "failed",
+            "error": {"code": code, "message": reason},
+            "code": code,
+            "status_code": status,
+            "reason": reason,
+            **fields,
+        },
+    )
+
+
+def _waiting_graph(plan: dict[str, Any], statuses: dict[str, str]) -> tuple[list[str], dict[str, list[str]]]:
+    """The waiting task ids in plan order, and every task's dependency list."""
+    waiting = [t["id"] for t in plan["tasks"] if statuses[t["id"]] == "waiting"]
+    deps = {t["id"]: list(t.get("dependencies") or []) for t in plan["tasks"]}
+    return waiting, deps
+
+
+def _reordered_plan(
+    plan: dict[str, Any], statuses: dict[str, str], order: list[str], deps: dict[str, list[str]]
+) -> dict[str, Any]:
+    """The plan with the waiting tasks in ``order`` (locked tasks keep their
+    slots), renumbered like ``board_plan.move_task`` and with dependencies
+    pointing at the new ids."""
+    by_id = {t["id"]: t for t in plan["tasks"]}
+    slots = iter(order)
+    tasks = [by_id[next(slots)] if statuses[t["id"]] == "waiting" else t for t in plan["tasks"]]
+    mapping = {t["id"]: f"T{i + 1:03d}" for i, t in enumerate(tasks)}
+    return {
+        **plan,
+        "tasks": [
+            {**t, "id": mapping[t["id"]], "dependencies": [mapping.get(d, d) for d in deps[t["id"]]]}
+            for t in tasks
+        ],
+    }
 
 
 def _config_version(store: BoardStore, mission_id: str) -> str | None:
@@ -181,6 +257,125 @@ def _on_value(_: Request, exc: ValueError) -> JSONResponse:
 
 def _on_runtime(_: Request, exc: RuntimeError) -> JSONResponse:
     return _error(exc, "unavailable", 503)
+
+
+_TASK_ID_RE = re.compile(r"^T[0-9]+[A-Z]*$")
+
+#: The mission card's task status mapped to the summary's vocabulary.
+_TASK_STATUS_MAP = {
+    "waiting": "waiting",
+    "running": "running",
+    "review_pending": "running",
+    "accepted": "accepted",
+    "completed": "accepted",
+    "not_accepted": "rejected",
+    "failed": "rejected",
+}
+
+
+def _mission_project(
+    working_directory: str | None, rules: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The mission's project: the working directory matched against the stored
+    project rules (glob with ``*``, ordered by position); the first matching
+    rule wins. Otherwise the default rule: the working directory, shown by its
+    last folder name."""
+    normalized = (working_directory or "").replace("\\", "/").rstrip("/")
+    for rule in sorted(rules, key=lambda r: r.get("position", 0)):
+        pattern = str(rule.get("pattern", "")).replace("\\", "/").rstrip("/")
+        if normalized and pattern and fnmatch.fnmatch(normalized, pattern):
+            name = str(rule.get("name", ""))
+            return {"key": name, "name": name, "rule": rule["pattern"]}
+    last = normalized.rsplit("/", 1)[-1] if normalized else ""
+    return {"key": last, "name": last, "rule": None}
+
+
+def _task_attempts(store: BoardStore, state_key: str) -> dict[str, int]:
+    """The per-task attempt counts (the distinct ``task_attempt`` values of each
+    task's event rows)."""
+    attempts: dict[str, int] = {}
+    for view in store.task_views(state_key):
+        attempts[view.task_id] = len(
+            {
+                int(float(e["task_attempt"]))
+                for e in store.events(state_key)
+                if e.get("task_id") == view.task_id
+                and e.get("task_attempt") is not None
+            }
+        )
+    return attempts
+
+
+def _mission_task_list(
+    store: BoardStore, state_key: str
+) -> list[dict[str, Any]]:
+    """The mission's tasks: id (parsed as T[0-9]+[A-Z]*), title, status
+    (the mission card's status mapped to the summary's vocabulary, a retried
+    accepted task is ``accepted_retry``), attempts and dependencies."""
+    views = store.task_views(state_key)
+    live = store.get_live_state(state_key)
+    plan = live.plan if live is not None else None
+    tasks = plan.get("tasks") if isinstance(plan, dict) else []
+    tasks_by_id = {str(t.get("id") or ""): t for t in tasks or []}
+    attempts_by_id = _task_attempts(store, state_key)
+    result: list[dict[str, Any]] = []
+    for view in views:
+        task_id = view.task_id
+        if not _TASK_ID_RE.match(task_id):
+            continue
+        deps = [d for d in tasks_by_id.get(task_id, {}).get("dependencies") or []]
+        attempts = attempts_by_id.get(task_id, 0)
+        status = _TASK_STATUS_MAP.get(view.status, view.status)
+        if status == "accepted" and attempts > 1:
+            status = "accepted_retry"
+        result.append(
+            {"id": task_id, "title": view.title, "status": status,
+             "attempts": attempts, "deps": deps}
+        )
+    return result
+
+
+_TASKLIST_CACHE: dict[str, tuple[float, list[dict[str, Any]], Any]] = {}
+
+
+def _cached_task_list(store: BoardStore, state_key: str) -> list[dict[str, Any]]:
+    """_mission_task_list for the summary, kept 600 s for a finished mission and 5 s
+    for the others: reading the tasks of ~90 missions took 8 s on every refresh."""
+    live = store.get_live_state(state_key)
+    if live is None or live.status in ("completed", "failed"):
+        ttl = 600.0 if live is not None else 30.0
+    else:
+        ttl = 5.0
+    hit = _TASKLIST_CACHE.get(state_key)
+    if hit is not None and hit[2] is store and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    tasks = _mission_task_list(store, state_key)
+    _TASKLIST_CACHE[state_key] = (time.monotonic(), tasks, store)
+    return tasks
+
+
+def _summary_projects(
+    rules: list[dict[str, Any]], missions: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The projects: the stored rules (key, name, rule) plus the default
+    project for missions with no matching rule; each project's ``mission_ids``
+    are the missions whose project is it."""
+    by_key: dict[str, dict[str, Any]] = {}
+    for mission in missions:
+        project = mission["project"]
+        entry = by_key.setdefault(
+            project["key"],
+            {"key": project["key"], "name": project["name"],
+             "rule": project["rule"], "mission_ids": []},
+        )
+        entry["mission_ids"].append(mission["mission_id"])
+    # a stored rule's name is the project key; keep its rule and name
+    for rule in rules:
+        name = str(rule.get("name", ""))
+        if name in by_key:
+            by_key[name]["name"] = name
+            by_key[name]["rule"] = rule.get("pattern")
+    return [by_key[k] for k in sorted(by_key)]
 
 
 def _build_router() -> APIRouter:
@@ -325,14 +520,109 @@ def _build_router() -> APIRouter:
             "tasks": [v.model_dump() for v in store.task_views(data["state_key"])],
         }
 
+    @router.post("/missions/{mission_id}/tasks/reorder")
+    def reorder_tasks(request: Request, mission_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        store = _store_guard(request)
+        data = _plan_guard(store, mission_id)
+        expected = body.pop("expected_version", data["stored_version"])
+        try:
+            board_plan._check_version(expected, data["stored_version"])
+        except ConflictError as exc:
+            return _refusal(409, "conflict", str(exc))
+        plan = board_plan._normalize_plan(_live_plan(store, data["state_key"]))
+        statuses = board_plan._statuses(
+            plan, data["live_status"], data["live_task_index"], data["live_task_attempt"], data["events"]
+        )
+        waiting, deps = _waiting_graph(plan, statuses)
+        order = body.get("order")
+        if not isinstance(order, list) or not all(isinstance(i, str) for i in order):
+            raise ValueError("order must be a list of task ids")
+        unknown = [i for i in order if i not in deps]
+        if unknown:
+            raise ValueError(f"unknown task id(s): {unknown}")
+        locked = [i for i in order if i not in waiting]
+        if locked:
+            return _refusal(403, "guard", "a locked task would move", locked=locked)
+        if sorted(order) != sorted(waiting):
+            raise ValueError("order must list every waiting task exactly once")
+        broken = board_order.violations(order, deps)
+        if broken:
+            return _refusal(403, "guard", "the order breaks a dependency", broken=broken)
+        new_plan = _reordered_plan(plan, statuses, order, deps)
+        try:
+            store.upsert_live_state(data["state_key"], expected, plan=new_plan, who=body.get("who", ""))
+        except ConflictError as exc:
+            return _refusal(409, "conflict", str(exc))
+        return {
+            "plan": new_plan,
+            "changelog": board_plan._changelog("task reorder", new_plan, order=order),
+            "running_warning": data["live_status"] == "active",
+        }
+
+    @router.post("/missions/{mission_id}/tasks/{task_key}/dependencies")
+    def task_dependencies(request: Request, mission_id: str, task_key: str,
+                          body: dict[str, Any]) -> dict[str, Any]:
+        store = _store_guard(request)
+        data = _plan_guard(store, mission_id)
+        expected = body.pop("expected_version", data["stored_version"])
+        try:
+            board_plan._check_version(expected, data["stored_version"])
+        except ConflictError as exc:
+            return _refusal(409, "conflict", str(exc))
+        plan = board_plan._normalize_plan(_live_plan(store, data["state_key"]))
+        statuses = board_plan._statuses(
+            plan, data["live_status"], data["live_task_index"], data["live_task_attempt"], data["events"]
+        )
+        waiting, deps = _waiting_graph(plan, statuses)
+        action = body.get("action")
+        dependency = body.get("dependency")
+        if not isinstance(dependency, str) or task_key not in deps or dependency not in deps:
+            raise ValueError(f"unknown task {task_key!r} or dependency {dependency!r}")
+        if task_key not in waiting:
+            return _refusal(403, "guard", "a locked task cannot change its dependencies", locked=[task_key])
+        if action == "add":
+            closing = board_order.would_cycle(deps, task_key, dependency)
+            if closing:
+                return _refusal(422, "cycle", "the dependency closes a cycle", closing_pair=closing)
+            if dependency not in deps[task_key]:
+                deps[task_key].append(dependency)
+        elif action == "remove":
+            deps[task_key] = [d for d in deps[task_key] if d != dependency]
+        else:
+            raise ValueError("action must be add or remove")
+        order = board_order.repair_order(waiting, deps)
+        new_plan = _reordered_plan(plan, statuses, order, deps)
+        try:
+            store.upsert_live_state(data["state_key"], expected, plan=new_plan, who=body.get("who", ""))
+        except ConflictError as exc:
+            return _refusal(409, "conflict", str(exc))
+        return {
+            "plan": new_plan,
+            "changelog": board_plan._changelog(
+                f"task dependency {action}", new_plan, task_key=task_key, dependency=dependency
+            ),
+            "running_warning": data["live_status"] == "active",
+        }
+
     @router.post("/missions/{mission_id}/tasks/{task_key}")
     def update_task(request: Request, mission_id: str, task_key: str, body: dict[str, Any]) -> dict[str, Any]:
         store = _store_guard(request)
         data = _plan_guard(store, mission_id)
         expected = body.pop("expected_version", data["stored_version"])
         fields = {k: v for k, v in body.items() if k not in ("who",)}
+        # normalize the requested key the same way the renumbering does: a key
+        # like "T1" names the task at that plan position (the stored plan's
+        # ids are the renumbered keys)
+        plan = _live_plan(store, data["state_key"])
+        tasks = plan.get("tasks") or []
+        try:
+            index = int(task_key[1:]) - 1
+        except ValueError:
+            index = None
+        if index is not None and 0 <= index < len(tasks):
+            task_key = tasks[index].get("id") or f"T{index + 1:03d}"
         plan, payload = board_plan.update_task(
-            _live_plan(store, data["state_key"]),
+            plan,
             expected,
             data["stored_version"],
             task_key,
@@ -853,6 +1143,57 @@ def _build_router() -> APIRouter:
             raise KeyError(f"task {task_key!r} not found")
         return board_stats.task_stats(request.app.state.manager, store, mission.state_namespace, task_key)
 
+    @router.get("/missions/{mission_id}/timeline")
+    def mission_timeline(request: Request, mission_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        mission = store.get_mission(mission_id)
+        if mission is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        return board_stats.mission_timeline(
+            getattr(request.app.state, "manager", None), store, mission.state_namespace
+        )
+
+    # ------------------------------------------------------------------ summary
+    @router.get("/summary")
+    def summary(request: Request) -> dict[str, Any]:
+        """One response for the whole board: every mission (state group,
+        position, project, its tasks, and its cached figures) and the projects
+        (the stored rules plus the default project).  A failing or absent
+        runner gives null figures (HTTP 200, never an error)."""
+        store = _store_guard(request)
+        manager = request.app.state.manager
+        rules, _ = store.get_project_rules()
+        groups = store.mission_groups()
+        group_of: dict[str, str] = {}
+        for group, ids in groups.items():
+            for mission_id in ids:
+                group_of[mission_id] = group
+        queue_of = {e.mission_id: e.position for e in store.queue()}
+        missions: list[dict[str, Any]] = []
+        for mission in store.list_missions():
+            state_key = mission.state_namespace
+            figures = board_stats.cached_mission_figures(
+                manager, store, state_key, mission.mission_id
+            )
+            missions.append(
+                {
+                    "mission_id": mission.mission_id,
+                    "name": mission.name,
+                    "state_group": group_of.get(mission.mission_id),
+                    "position": queue_of.get(mission.mission_id),
+                    "project": _mission_project(mission.working_directory, rules),
+                    "tasks": _cached_task_list(store, state_key),
+                    "attempts": figures["attempts"],
+                    "hours": figures["hours"],
+                    "tokens": figures["tokens"],
+                    "cache_ratio": figures["cache_ratio"],
+                    "cost": figures["cost"],
+                    "tok_s": figures["tok_s"],
+                    "thinking_share": figures["thinking_share"],
+                }
+            )
+        return {"missions": missions, "projects": _summary_projects(rules, missions)}
+
     # ------------------------------------------------------------------ thinking policy
     @router.post("/thinking/policy")
     def policy_check(request: Request, body: dict[str, Any]) -> dict[str, Any]:
@@ -880,6 +1221,60 @@ def _build_router() -> APIRouter:
         rows = body.get("attempts") or []
         return {"thompson": board_think.thompson_best(
             rows, int(body.get("seed", 7)), int(body.get("samples", 10000)))}
+
+    @router.get("/project-rules")
+    def get_project_rules(request: Request) -> dict[str, Any]:
+        store = _store_guard(request)
+        rules, version = store.get_project_rules()
+        return {"rules": rules, "version": version}
+
+    @router.put("/project-rules")
+    def put_project_rules(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        rules = body.get("rules")
+        if not isinstance(rules, list) or not all(
+            isinstance(r, dict) and isinstance(r.get("name"), str)
+            and isinstance(r.get("pattern"), str) and isinstance(r.get("position"), int)
+            for r in rules
+        ):
+            raise ValueError("rules must be a list of {name, pattern, position} objects")
+        store.put_project_rules(rules, body.get("expected_version"), actor=body.get("who", ""))
+        rules, version = store.get_project_rules()
+        return {"rules": rules, "version": version}
+
+    @router.get("/i18n")
+    def get_i18n(request: Request) -> dict[str, Any]:
+        store = _store_guard(request)
+        _ensure_i18n_seed(request, store)
+        return _i18n_view(store)
+
+    @router.post("/i18n/languages")
+    def add_i18n_language(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        _ensure_i18n_seed(request, store)
+        code, name = body.get("code"), body.get("name")
+        if not isinstance(code, str) or not _I18N_LANG_RE.fullmatch(code):
+            raise ValueError("code must match ^[a-z]{2,8}$")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("name must be a non-empty string")
+        store.add_i18n_language(code, name.strip())
+        return _i18n_view(store)
+
+    @router.put("/i18n/{lang}/{key}")
+    def put_i18n_string(request: Request, lang: str, key: str, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        _ensure_i18n_seed(request, store)
+        text = body.get("text", "")
+        if not isinstance(text, str):
+            raise ValueError("text must be a string")
+        known = {lang_row["code"] for lang_row in store.list_i18n()["languages"]} | {"en"}
+        if lang not in known:
+            raise KeyError(lang)
+        store.put_i18n_string(lang, key, text, actor=body.get("who", ""))
+        return {"lang": lang, "key": key, "text": text}
 
     return router
 

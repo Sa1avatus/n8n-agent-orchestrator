@@ -1,0 +1,11 @@
+{
+  "mission": {
+    "mission_id": "m-alpha-run",
+    "name": "Alpha running mission",
+    "enabled": true,
+    "working_directory": "/work/alpha"
+  },
+  "live_state": {"status": "active", "task_index": 1},
+  "config": {},
+  "groups": {"running": ["m-alpha-run"]}
+}

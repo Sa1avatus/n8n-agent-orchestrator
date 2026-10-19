@@ -12,6 +12,7 @@ A finished run never changes, so its record and events are cached (bounded); a r
 from __future__ import annotations
 
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,13 @@ import httpx
 
 FINISHED = ("completed", "failed", "cancelled", "interrupted", "timeout")
 CACHE_RUNS = 400
+LIST_TTL = 15.0     # seconds the run list used for the missing fields is kept
+
+
+def guess_provider(model: str) -> str:
+    """The provider of a run that is not in the list any more: cloud models are named after the vendor's families."""
+    name = model.lower()
+    return "anthropic" if name.startswith("claude") or name in ("haiku", "sonnet", "opus") else "local"
 
 
 class _NoPricing:
@@ -61,9 +69,23 @@ class _RemoteStore:
         body = self.owner.get_json(f"/v1/runs/{run_id}")
         if not body:
             return None
+        body = self._with_list_fields(run_id, body)
         if body.get("status") in FINISHED:
             self.owner.runs.put(run_id, body)
         return body
+
+    def _with_list_fields(self, run_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """``GET /v1/runs/{id}`` has no ``provider``, ``kind``, ``title`` or ``cwd`` (the list rows have): the statistics need
+        the provider to tell a local run from a cloud one (speed, real cost). The row comes from the list (read at most every
+        ``LIST_TTL`` seconds); a run older than the list falls back to a guess from the model name."""
+        if body.get("provider"):
+            return body
+        row = self.owner.list_index().get(run_id)
+        if row:
+            return {**row, **{k: v for k, v in body.items() if v is not None}}
+        merged = dict(body)
+        merged["provider"] = guess_provider(str(body.get("model") or ""))
+        return merged
 
     def list_runs(self, limit: int, session_id: str | None = None) -> list[dict[str, Any]]:
         params: dict[str, str] = {"limit": str(min(int(limit), 500))}
@@ -119,6 +141,18 @@ class RemoteRunManager:
         self.store = _RemoteStore(self)
         self.events = _RemoteEvents(self)
         self.local_pricing = _NoPricing()
+        self._index: dict[str, dict[str, Any]] = {}
+        self._index_at = 0.0
+        self._index_lock = threading.Lock()
+
+    def list_index(self) -> dict[str, dict[str, Any]]:
+        """run id -> list row, from one ``GET /v1/runs?limit=500`` kept for ``LIST_TTL`` seconds."""
+        with self._index_lock:
+            if time.monotonic() - self._index_at > LIST_TTL:
+                body = self.get_json("/v1/runs", {"limit": "500"}) or {}
+                self._index = {r["run_id"]: r for r in body.get("runs", []) if r and r.get("run_id")}
+                self._index_at = time.monotonic()
+            return self._index
 
     def get_json(self, path: str, params: dict[str, str] | None = None) -> dict[str, Any] | None:
         try:

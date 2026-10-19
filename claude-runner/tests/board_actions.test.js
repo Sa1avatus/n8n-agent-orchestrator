@@ -92,6 +92,7 @@ globalThis.window = {
 globalThis.BoardDnd = { DndState: { data: null, dragId: null },
   attachDnd: async () => {} };
 
+require(path.join(__dirname, "i18n_stub.js"));
 const BA = require(path.join(__dirname, "..", "src", "claude_runner", "board_actions.js"));
 
 (async () => {
@@ -137,13 +138,13 @@ const BA = require(path.join(__dirname, "..", "src", "claude_runner", "board_act
   BA.attachCardActionsTo(data);
   // the buttons live in the action group appended to the card
   const group = card.children[0];
-  const disableBtn = group.children.find((b) => b.textContent === "выключить");
+  const disableBtn = group.children.find((b) => b.textContent === "disable");
   check("disable button present", !!disableBtn);
   confirmCalls.length = 0;
   calls.length = 0;
   disableBtn.listeners.click({ preventDefault() {}, stopPropagation() {} });
   check("confirm was asked for disable",
-    confirmCalls.length === 1 && confirmCalls[0].indexOf("Выключить миссию") !== -1);
+    confirmCalls.length === 1 && confirmCalls[0].indexOf("Disable mission") !== -1);
   const cDisable = calls.find((c) => c.url.indexOf("/disable") !== -1);
   check("disable after confirm has confirm=true",
     cDisable && cDisable.url === "/api/board/missions/m1/disable?confirm=true");
@@ -164,7 +165,7 @@ const BA = require(path.join(__dirname, "..", "src", "claude_runner", "board_act
   check("tick skips while dragging", calls.length === 0);
   BoardDnd.DndState.dragId = null;
 
-  // the "Новая миссия" button is created by hookUp()
+  // the "New mission" button is created by hookUp()
   BA.hookUp();
 
   // dirty form: open the form and mark a field edited

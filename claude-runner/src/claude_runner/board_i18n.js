@@ -1,0 +1,330 @@
+/* board-scope-wrapped */
+(function () {
+/* Board i18n (T007): the t() lookup used by the board views.
+ *
+ * t(key, params) looks the key up in the current language, then in English
+ * (the strings from the server, then the bundled table), and returns the key
+ * itself when nothing matches. {name} placeholders are filled from params.
+ * The language choice is kept in localStorage. load() fetches the strings
+ * from /api/board/i18n once; when that fails the bundled English table stays
+ * in use. setString() writes a translation into the in-memory table (an empty
+ * text deletes it) and notifies the onChange listeners.
+ */
+"use strict";
+
+const STORAGE_KEY = "board.lang";
+const DEFAULT_LANG = "en";
+
+// Copy of board_i18n_en.json, used when the strings cannot be fetched.
+const BUNDLED_EN = {
+  "app.title": "Missions",
+  "tab.proj": "Projects",
+  "tab.kan": "Kanban",
+  "tab.lane": "Lanes",
+  "tab.spr": "Sprint",
+  "tab.grid": "Grid",
+  "search": "Search missions",
+  "theme": "Theme: {mode}",
+  "theme.auto": "auto",
+  "theme.light": "light",
+  "theme.dark": "dark",
+  "tr.open": "Translations",
+  "filter.all": "All projects",
+  "st.run": "Running",
+  "st.q": "Queued",
+  "st.ok": "Completed",
+  "st.bad": "Not completed",
+  "st.off": "Disabled",
+  "ts.a": "Accepted",
+  "ts.w": "Accepted (retry)",
+  "ts.p": "In progress",
+  "ts.g": "Waiting",
+  "ts.f": "Rejected",
+  "of": "{a} out of {b}",
+  "att": "attempts {n}",
+  "hours": "{n} h",
+  "cache": "cache {n}%",
+  "think": "thinking {n}%",
+  "tps": "tok/s",
+  "not.run": "not started yet",
+  "more": "+{n} more",
+  "back": "← {view}",
+  "proj.hint": "Projects by working folder; the 21 model-bench folders are merged into one project by a rule. A click highlights a project, the arrow expands its missions, a double click filters by the project and opens the kanban. In an open project a click highlights a mission, a double click opens it with its tasks.",
+  "proj.now": "now: {name} · {pct}%",
+  "proj.none": "nothing is running",
+  "proj.nofolder": "(no working folder)",
+  "proj.expand": "Expand the missions of this project",
+  "kpi.m": "missions",
+  "kpi.t": "time",
+  "kpi.k": "tokens",
+  "kpi.c": "cost",
+  "kan.hint": "A click highlights a card, a double click opens the runs dashboard filtered by the mission. In Queued, cards are dragged or moved with the buttons.",
+  "kan.new": "New mission",
+  "btn.up": "up",
+  "btn.down": "down",
+  "lane.hint": "A row is a mission. In Waiting the tasks can be dragged: the order respects dependencies (← T001 means after T001). If a move breaks them you can cancel it or move the task together with its dependents. Accepted and running tasks are locked.",
+  "col.wait": "Waiting (execution order)",
+  "col.prog": "In progress",
+  "col.rev": "Review",
+  "col.acc": "Accepted",
+  "col.rej": "Rejected",
+  "w.down": "«{id} {title}» is needed by {list}: it cannot be placed after them.",
+  "w.up": "«{id} {title}» depends on {list}: it cannot be placed above them.",
+  "w.group": "It can be moved together with {rel}: {list} ({n}).",
+  "rel.dependents": "its dependent tasks",
+  "rel.dependencies": "its dependencies",
+  "w.bad": "Moving together is not possible either (it would break: {pairs}).",
+  "btn.group": "Move together",
+  "btn.cancel": "Cancel",
+  "btn.ok": "Got it",
+  "w.cycle": "Cycle: {dep} already depends on {id} (directly or through other tasks), so {id} cannot depend on {dep}. The dependency was rejected; the order did not change.",
+  "spr.hint": "Backlog on the left, the selected mission as a sprint in the middle, numbers and obstacles on the right. A double click on a mission in the backlog opens it with its tasks.",
+  "spr.back": "Backlog and current",
+  "spr.wait": "Waiting",
+  "spr.prog": "In progress",
+  "spr.done": "Done",
+  "kpi.done": "Tasks done",
+  "kpi.speed": "Speed · cache · thinking",
+  "imp.t": "Obstacles",
+  "imp.bad": "Task T004 was rejected 3 times (score 15)",
+  "imp.cut": "The run of T003 was interrupted and resumed",
+  "grid.empty": "No missions yet.",
+  "grid.hint": "A click highlights a row, a double click opens the mission with its tasks. Sort by clicking a header.",
+  "h.mission": "Mission",
+  "h.project": "Project",
+  "h.state": "State",
+  "h.tasks": "Tasks",
+  "h.att": "Attempts",
+  "h.time": "Time, h",
+  "h.cache": "Cache %",
+  "h.cost": "Cost",
+  "h.tps": "Tok/s",
+  "m.runs": "Runs of this mission",
+  "m.hint": "Drag the unfinished tasks (⠿). A task cannot go after one that depends on it, or above one it depends on: you can cancel or move it together with the dependents. A new dependency that closes a cycle is rejected.",
+  "t.task": "Task",
+  "t.desc": "Description",
+  "t.status": "Status",
+  "t.att": "Att.",
+  "t.stat": "Statistics",
+  "t.dep": "Depends on",
+  "t.need": "Needed by",
+  "dep.add": "+ dependency",
+  "runs.crumb": "Runs dashboard",
+  "runs.filter": "mission: {id}",
+  "runs.auto": "the mission filter is set automatically",
+  "runs.empty": "No runs yet",
+  "s.min": "{n} min",
+  "s.tok": "{n}K tok",
+  "s.cache": "cache {n}%",
+  "s.tps": "{n} tok/s",
+  "s.think": "thinking {n}%",
+  "tr.title": "Translations",
+  "tr.hint": "Stored in the database (board.i18n_strings). A missing translation falls back to English and is highlighted.",
+  "tr.lang": "Language",
+  "tr.add": "Add language",
+  "tr.code": "code (e.g. fr)",
+  "tr.name": "name (e.g. Français)",
+  "tr.missing": "only missing",
+  "tr.key": "Key",
+  "tr.en": "English",
+  "tr.tr": "Translation",
+  "tr.saved": "Saved to the database (demo: in memory). Missing: {n} of {total}.",
+  "switcher.label": "View",
+  "part2.note": "Coming in part 2",
+  "nav.missions": "Missions",
+  "nav.runs": "Runs",
+  "board.loading": "Loading the board…",
+  "board.offline": "The board service is offline (503 — board store unavailable).",
+  "board.bad_link": "Unrecognized board link: {error}",
+  "board.task_failed": "Task view failed: {error}",
+  "board.mission_failed": "Mission view failed: {error}",
+  "board.claudemd_failed": "CLAUDE.md editor failed: {error}",
+  "board.not_loaded": "View not loaded yet.",
+  "board.load_failed": "The board could not be loaded.",
+  "conflict.plan_changed": "The plan changed, refresh.",
+  "queue.group.running": "Running now",
+  "queue.group.queued": "Queued",
+  "queue.group.completed": "Completed",
+  "queue.group.not_completed": "Not completed / stopped",
+  "queue.group.disabled": "Disabled",
+  "queue.task_of": "{a} of {b}",
+  "queue.stats.title": "attempts · time · tokens · cache · cost · speed · thinking",
+  "queue.stats": "{attempts} attempts · {time} · {tokens} tokens · {cache} cache · {cost} · {speed} · {thinking} thinking",
+  "move.logic_missing": "move logic not loaded",
+  "move.refused": "the move was refused",
+  "move.failed": "move failed",
+  "board.reload_failed": "reload failed",
+  "action.failed": "{action} failed",
+  "mission.create_failed": "mission create failed",
+  "form.id": "id: {value}",
+  "error.unknown": "error",
+  "board.script_missing": "Board logic script not loaded — the deep link cannot be resolved.",
+  "board.offline_reason": "The board service is offline (503 — board store unavailable) — {reason}.",
+  "queue.up.title": "up (higher in the queue)",
+  "queue.down.title": "down (lower in the queue)",
+  "action.enable": "enable",
+  "action.disable": "disable",
+  "action.first": "to the top",
+  "action.last": "to the end",
+  "action.pause": "pause",
+  "action.stop": "stop",
+  "action.retry": "retry",
+  "action.disable.title": "Disable mission",
+  "action.stop.title": "Stop mission",
+  "action.retry.title": "Retry the unfinished mission",
+  "action.pause.title": "Pause the queue after the current mission",
+  "new.title": "New mission",
+  "new.template": "template:",
+  "new.empty": "— empty mission —",
+  "new.option_template": "template: {name}",
+  "new.option_copy": "copy of: {id}",
+  "new.name": "name",
+  "new.objective": "objective",
+  "new.position": "queue position",
+  "new.submit": "create",
+  "form.title": "Launch configuration",
+  "form.back": "Missions",
+  "form.status": "status: {value}",
+  "form.task": "task {n}",
+  "form.enabled": "enabled: {value}",
+  "form.yes": "yes",
+  "form.no": "no",
+  "form.folder": "folder: {value}",
+  "form.midrun": "While the mission runs, changes apply from the next task; the greyed fields do not apply.",
+  "form.locked.working_directory": "The mission is running: the working folder is bound to the live Worker session and does not change during a run.",
+  "form.locked.state_namespace": "The mission is running: the state key points to a live row and does not change during a run.",
+  "form.locked.retrieval_corpora": "The mission is running: the retrieval corpora go into the live run query and do not change during a run.",
+  "form.field.name": "name",
+  "form.field.objective": "objective",
+  "form.field.rules": "rules",
+  "form.field.acceptance_criteria": "acceptance criteria",
+  "form.field.working_directory": "working folder",
+  "form.field.enabled": "enabled",
+  "form.field.attempts_per_task": "attempts per task (3/5/10)",
+  "form.field.worker_model": "Worker: model",
+  "form.field.worker_provider": "Worker: provider",
+  "form.field.reviewer_model": "Reviewer: model",
+  "form.field.reviewer_provider": "Reviewer: provider",
+  "form.field.architect_model": "Architect: model",
+  "form.field.architect_provider": "Architect: provider",
+  "form.field.max_tasks": "max tasks",
+  "form.field.worker_think_policy": "Worker: thinking policy",
+  "form.field.worker_think_policy_from_task": "Worker: thinking from task",
+  "form.field.retrieval_corpora": "retrieval corpora",
+  "form.field.hints": "hints",
+  "form.field.required_files": "required_files",
+  "save.button": "Save",
+  "save.reset": "Reset",
+  "save.copy_from": "Copy from another mission",
+  "save.no_changes": "No changes.",
+  "save.nothing_to_save": "No changes — nothing to save.",
+  "save.confirm": "Save the changes?",
+  "save.copy_prompt": "Mission to copy from (id):",
+  "save.copied": "Fields copied — confirm the save.",
+  "save.failed": "Saving failed.",
+  "save.load_failed": "The mission could not be loaded.",
+  "save.update_failed": "The update failed.",
+  "save.server_changed": "There are changes on the server.",
+  "save.server_changed_kept": "{message} — there are changes on the server.",
+  "claudemd.title": "CLAUDE.md",
+  "claudemd.save": "Save",
+  "claudemd.storage.file": "Write: file {path}",
+  "claudemd.storage.working_folder": "Text: file in the working folder",
+  "claudemd.storage.db": "Text: in the database (config `claudemd`) — {note}",
+  "claudemd.storage.operator": "applied by the operator",
+  "claudemd.storage.text": "Text: {source}",
+  "claudemd.save_failed": "saving failed: {error}",
+  "claudemd.tpl.big_file.label": "big file: do not read whole",
+  "claudemd.tpl.big_file.body": "## big file: do not read whole\n\nA big file (including GGUF and other binary data) must not be opened whole in memory: read it in parts (head/tail, line by line, mmap) and do not load the whole file into RAM.\n",
+  "claudemd.tpl.where.label": "where the data is",
+  "claudemd.tpl.where.body": "## where the data is\n\nMission data: working folder — <path>; states and logs — in the store; retrieval corpora — in the retrieval service.\n",
+  "claudemd.tpl.never.label": "what not to do",
+  "claudemd.tpl.never.body": "## what not to do\n\nDo not change the live entities of a run (working folder, state key, corpora) during the mission; do not read big binary files whole; do not delete other people's unsaved changes.\n",
+  "claudemd.tpl.gguf.label": "GGUF: do not parse by hand",
+  "claudemd.tpl.gguf.body": "## parsing big binary files (GGUF)\n\nparsing big binary files (GGUF) by hand eats memory: use ready-made dumps and the gguf package.\n",
+  "running.warn": "The mission is running: the new order applies from the next task.",
+  "kpi.first": "Accepted on the first attempt",
+  "kpi.chart": "Accepted tasks over time",
+  "spr.empty": "No accepted tasks yet",
+  "spr.noobst": "No obstacles",
+  "imp.rejected_3x": "Rejected 3 or more times",
+  "imp.timeout": "The run ended with a timeout",
+  "imp.interrupted": "The run was interrupted",
+};
+
+function own(table, key) {
+  return table && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
+}
+
+let current = DEFAULT_LANG;
+try {
+  current = localStorage.getItem(STORAGE_KEY) || DEFAULT_LANG;
+} catch (e) {
+  current = DEFAULT_LANG;
+}
+
+const languages = [{ code: DEFAULT_LANG, name: "English" }];
+let strings = { [DEFAULT_LANG]: BUNDLED_EN };
+let loading = null;
+const listeners = [];
+
+function t(key, params) {
+  const text = own(strings[current], key) ?? own(strings[DEFAULT_LANG], key) ??
+    own(BUNDLED_EN, key) ?? key;
+  if (!params) return text;
+  return text.replace(/\{(\w+)\}/g, (m, name) =>
+    own(params, name) !== undefined ? String(params[name]) : m);
+}
+
+function getLanguage() {
+  return current;
+}
+
+function setLanguage(code) {
+  current = code;
+  try {
+    localStorage.setItem(STORAGE_KEY, code);
+  } catch (e) {
+    // storage may be blocked; the choice still applies to this page
+  }
+  listeners.forEach((fn) => fn(code));
+}
+
+function setString(lang, key, text) {
+  const table = strings[lang] || (strings[lang] = {});
+  if (text) table[key] = text;
+  else delete table[key];
+  listeners.forEach((fn) => fn(lang));
+}
+
+function onChange(fn) {
+  listeners.push(fn);
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+
+function load() {
+  if (!loading) {
+    // board.js (which defines getJSON) is the last script of the page, the views call load() earlier
+    const get = typeof getJSON === "function" ? getJSON : fetchJSON;
+    loading = get("/api/board/i18n").then(
+      (data) => {
+        languages.splice(0, languages.length,
+          ...data.languages.filter((lang) => lang.enabled !== false));
+        strings = data.strings;
+      },
+      (err) => {
+        console.warn("board i18n: using the bundled English table", err);
+      },
+    );
+  }
+  return loading;
+}
+
+globalThis.BoardI18n = { t, setLanguage, getLanguage, languages, load, onChange, setString };
+globalThis.t = t;
+})();
