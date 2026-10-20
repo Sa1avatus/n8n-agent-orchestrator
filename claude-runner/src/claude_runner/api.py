@@ -135,7 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 guard_task.cancel()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.7.400", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.8.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -230,6 +230,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/runs/{run_id}/cancel", dependencies=[Depends(authorize)])
     async def cancel_run(run_id: str, request: Request) -> dict[str, Any]:
         return await manager(request).cancel(run_id)
+
+    @app.get("/v1/processes", dependencies=[Depends(authorize)])
+    async def list_processes(request: Request) -> list[dict[str, Any]]:
+        """The CLI processes this runner started, from its own registry (T011).
+        Each entry has the pid, age, the run's session id, the run id and the run's
+        status: no environment values and no command line."""
+        return manager(request).list_processes()
+
+    @app.post("/v1/processes/{pid}/terminate", dependencies=[Depends(authorize)])
+    async def terminate_process(pid: int, request: Request) -> dict[str, Any]:
+        """Stop one of the runner's own CLI processes by pid (T011). Refused with
+        404 ``process_not_found`` (not in the registry, or foreign to this runner)
+        and 409 ``run_active`` (the run is queued or running); answered with the
+        terminate outcome otherwise."""
+        result = await manager(request).terminate_pid(pid)
+        outcome = result["outcome"]
+        if outcome in ("not_found", "not_owned"):
+            raise RunnerError(
+                "process_not_found",
+                f"Process {pid} is not tracked by this runner.",
+                404,
+            )
+        if outcome == "run_active":
+            raise RunnerError("run_active", f"Run {result['run_id']} is {result['status']}.", 409)
+        return result
 
     @app.get("/v1/sessions/{session_id}", dependencies=[Depends(authorize)])
     async def get_session(session_id: str, request: Request) -> dict[str, Any]:

@@ -221,6 +221,17 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 #content { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #boardpane { flex: 1; min-height: 0; display: flex; }
 #boardframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
+/* guards status strip (above the tab bar; always visible in both tabs) */
+#guardstrip { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 5px 14px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+#guardstrip .gh { color: var(--muted); font-weight: 600; }
+#guardstrip .g { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; background: var(--bg); color: var(--muted); }
+#guardstrip .g b { color: var(--ink); font-weight: 600; }
+#guardstrip .g .st { font-weight: 600; }
+#guardstrip .g .st.ok { color: var(--ok); }
+#guardstrip .g .st.warning { color: var(--retry); }
+#guardstrip .g .st.error { color: var(--err); }
+#guardstrip button { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; padding: 2px 9px; font-size: 12px; }
+#guardstrip button:hover { background: var(--hover); }
 </style>
 </head>
 <body>
@@ -239,6 +250,7 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   <nav id="list"></nav>
 </aside>
 <div id="content">
+<div id="guardstrip"></div>
 <nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Runs</button><button id="tabboard" type="button">Missions</button></nav>
 <div id="boardpane" hidden>
   <iframe id="boardframe" title="Missions" hidden></iframe>
@@ -1081,6 +1093,78 @@ fetch("/api/board/i18n", { cache: "no-store" }).then((r) => (r.ok ? r.json() : n
 }).catch(() => {});
 window.addEventListener("storage", (e) => { if (e.key === "board.lang") applyShellLang(); });
 applyShellLang();
+// ---------------------------------------------------------------- guards status strip
+// dashboard.html has no translation table of its own: like the shell tabs
+// above, the text comes from the board i18n strings (GET /api/board/i18n,
+// the board's language choice), with English fallbacks in the shell.
+const GUARD_TEXT = {
+  en: {
+    title: "Guards",
+    off: "guards disabled",
+    last: "last",
+    refresh: "Refresh",
+    ok: "ok",
+    warning: "warning",
+    error: "error",
+    none: "—",
+  },
+  ru: {
+    title: "Стражи",
+    off: "стражи выключены",
+    last: "последний",
+    refresh: "Обновить",
+    ok: "в норме",
+    warning: "предупреждение",
+    error: "ошибка",
+    none: "—",
+  },
+};
+let guardStrings = null;
+function guardT(key, fallback) {
+  const lang = shellLang();
+  const t = (guardStrings && guardStrings[lang]) || {};
+  return t["guards." + key] || (GUARD_TEXT[lang] || GUARD_TEXT.en)[key] || fallback;
+}
+function renderGuardStrip(d) {
+  const el = document.getElementById("guardstrip");
+  if (!el) return;
+  const title = `<span class="gh">${esc(guardT("title", "Guards"))}</span>`;
+  if (!d || !d.enabled) {
+    setHTML(el, title + `<span>${esc(guardT("off", "guards disabled"))}</span>`);
+    return;
+  }
+  const parts = d.guards.map((g) => {
+    const status = g.status || "ok";
+    const action = g.last_action != null ? esc(g.last_action) : esc(guardT("none", "—"));
+    const run = g.last_run ? esc(new Date(g.last_run * 1000).toLocaleString()) : esc(guardT("none", "—"));
+    return `<span class="g"><b>${esc(g.name)}</b> <span class="st ${esc(status)}">${esc(guardT(status, status))}</span> · ${guardT("last", "last")} ${action} · ${run}</span>`;
+  });
+  setHTML(el, title + parts.join("") + `<button id="guardrefresh" type="button">${esc(guardT("refresh", "Refresh"))}</button>`);
+}
+let guardCache = null;
+function loadGuards() {
+  return fetch("/api/guards", { cache: "no-store" })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => {
+      guardCache = d;
+      renderGuardStrip(d);
+      return d;
+    })
+    .catch(() => {});
+}
+// refresh the strip when the board's language choice changes
+fetch("/api/board/i18n", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => {
+  if (!d || !d.strings) return;
+  guardStrings = {};
+  for (const lang of Object.keys(d.strings)) guardStrings[lang] = d.strings[lang] || {};
+  renderGuardStrip(guardCache);
+}).catch(() => {});
+loadGuards();
+window.addEventListener("storage", (e) => { if (e.key === "board.lang") renderGuardStrip(guardCache); });
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("#guardrefresh");
+  if (b) { e.preventDefault(); loadGuards(); }
+});
 let TAB = "runs";
 function setTab(name) {
   const runs = name === "runs";

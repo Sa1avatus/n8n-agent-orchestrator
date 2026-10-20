@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.7.400** | **9** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.8.0** | **12** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -41,9 +41,9 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- status:start -->
 | | |
 |---|---|
-| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) |
-| 🔄 **Now** | guards inside the dashboard (mission `ahawr-guards-in-dashboard`) → **0.8.0** (runner renamed to `ahawr-runner`) |
-| ➡️ **Next** | cloud thinking control · Worker attempt chains · adaptive split · **1.0.0: Codex as the third executor** |
+| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) |
+| 🔄 **Now** | QA acceptance and guards migration → **0.9.0**; the runner is renamed to `ahawr-runner` in **0.10.0** |
+| ➡️ **Next** | Worker attempt chains · report pack · **1.0.0: Codex as the third executor** |
 <!-- status:end -->
 
 Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [sa1avatus.github.io/n8n-agent-orchestrator](https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html).

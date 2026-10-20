@@ -152,7 +152,13 @@ def main() -> int:
     history.append(json.dumps({"prompt": prompt}))
     transcript.write_text("\n".join(history) + "\n")
     if m := re.search(r"\[\[child:([^\]]+)\]\]", prompt):
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+        # the tool process keeps its own stdout (a real tool's output is captured by
+        # the CLI, not shared with its pipe), so a run can finish while it runs on
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(120)"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         Path(m.group(1)).write_text(str(child.pid))
     if m := re.search(r"\[\[sleep:(\d+(?:\.\d+)?)\]\]", prompt):
         time.sleep(float(m.group(1)))

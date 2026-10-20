@@ -20,7 +20,7 @@ import asyncio
 import json
 import os
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from importlib import resources
@@ -33,6 +33,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from . import board_api, export
 from .board_stats import _mission_run_ids
+from .guards import GuardSettings, GuardSupervisor, Notifier
 from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
@@ -86,7 +87,18 @@ def create_dashboard_app(
                 if settings.hermes_url
                 else None
             )
-            yield
+            # the guard supervisor starts here and stops at shutdown (matching
+            # the runner's lifespan): DASHBOARD_GUARDS unset, no tasks run
+            app.state.guards = GuardSupervisor(
+                GuardSettings.from_env(),
+                [],
+                Notifier(),
+            )
+            await app.state.guards.start()
+            try:
+                yield
+            finally:
+                await app.state.guards.stop()
 
     app = FastAPI(
         title="AHAWR dashboard", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
@@ -96,7 +108,9 @@ def create_dashboard_app(
 
     # Board mutation routes (POST/PUT/DELETE under /api/board) require the same
     # X-AHAWR-Dashboard header as cancel_run; read-only board routes are open.
-    async def board_header_guard(request: Request, call_next):
+    async def board_header_guard(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         path = request.url.path
         if (
             path.startswith("/api/board/")
@@ -147,6 +161,22 @@ def create_dashboard_app(
     @app.get("/healthz")
     async def healthz(request: Request) -> dict[str, Any]:
         return {"status": "ok", "sources": [s.name for s in sources(request)]}
+
+    @app.get("/api/guards")
+    async def api_guards(request: Request) -> dict[str, Any]:
+        """The guard supervisor's state: whether it is enabled, dry-run mode,
+        and each guard's name, status, last run, last result, last action and
+        error count. It carries no environment values."""
+        state = request.app.state.guards.state()
+        return {
+            "enabled": request.app.state.guards.settings.master,
+            "dry_run": state["dry_run"],
+            "running": state["running"],
+            "guards": [
+                {"name": name, **guards}
+                for name, guards in state["guards"].items()
+            ],
+        }
 
     @app.get("/api/runs")
     async def list_runs(
@@ -214,7 +244,7 @@ def create_dashboard_app(
             else:
                 states.setdefault(src.name, "ok")
                 runs += result
-        runs = _runs_match(runs, values)
+        runs = _runs_match([_with_display_status(r) for r in runs], values)
         if mission_runs is not None:
             runs = [r for r in runs if r.get("run_id") in mission_runs]
         runs.sort(key=lambda r: str(r.get("updated_at") or r.get("created_at") or ""), reverse=True)
@@ -365,6 +395,14 @@ def _download(
         media_type=media,
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+def _with_display_status(run: dict[str, Any]) -> dict[str, Any]:
+    """Queued and running rows keep their status; a superseded queued run shows as cancelled."""
+    error = run.get("error")
+    if isinstance(error, dict) and error.get("code") == "superseded":
+        return {**run, "status": "cancelled"}
+    return run
 
 
 def _runs_match(runs: list[dict[str, Any]], values: dict[str, set[str]]) -> list[dict[str, Any]]:

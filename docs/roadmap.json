@@ -5,16 +5,16 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.7.400 · October 19, 2026",
-    "tag": "Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0",
+    "date": "0.8.0 · October 21, 2026",
+    "tag": "Guards in the dashboard, cloud thinking control and adaptive split — next 0.9.0",
     "stats": [
       [
         "Current version",
-        "0.7.400"
+        "0.8.0"
       ],
       [
         "Missions completed",
-        "9"
+        "12"
       ],
       [
         "Missions in the queue",
@@ -22,7 +22,7 @@
       ],
       [
         "Next milestone",
-        "0.8.0 · 1.0.0"
+        "0.9.0 · 1.0.0"
       ]
     ],
     "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next."
@@ -249,21 +249,21 @@
       "v": "0.8.0 and up",
       "d": "Guards, adaptive split and the executor settings",
       "m": [
-        0,
-        8
+        3,
+        9
       ],
       "items": [
         [
           "todo",
-          "0.8.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), after the 0.7.0 release at a queue pause"
+          "0.10.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause"
         ],
         [
-          "todo",
-          "ahawr-guards-in-dashboard: all watchers inside the dashboard container"
+          "ok",
+          "ahawr-guards-in-dashboard: all watchers inside the dashboard container (0.8.0; the migration of the host watchers is ahawr-guards-migration)"
         ],
         [
-          "todo",
-          "ahawr-cloud-thinking-control: thinking policy for cloud Workers"
+          "ok",
+          "ahawr-cloud-thinking-control: thinking policy for cloud Workers (0.8.0)"
         ],
         [
           "todo",
@@ -278,8 +278,8 @@
           "ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite"
         ],
         [
-          "todo",
-          "ahawr-adaptive-split: plan size gate and automatic split"
+          "ok",
+          "ahawr-adaptive-split: plan size gate and automatic split (0.8.0; files and patch, not yet applied to the live workflow)"
         ],
         [
           "todo",
@@ -333,6 +333,10 @@
       "items": [
         [
           "todo",
+          "Code review and refactoring mission (right after 1.0): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)"
+        ],
+        [
+          "todo",
           "ahawr-parallel-missions: one workflow, per-mission model and folder"
         ],
         [
@@ -358,15 +362,15 @@
     "status": [
       [
         "✅ **Done**",
-        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7)"
+        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8)"
       ],
       [
         "🔄 **Now**",
-        "guards inside the dashboard (mission `ahawr-guards-in-dashboard`) → **0.8.0** (runner renamed to `ahawr-runner`)"
+        "QA acceptance and guards migration → **0.9.0**; the runner is renamed to `ahawr-runner` in **0.10.0**"
       ],
       [
         "➡️ **Next**",
-        "cloud thinking control · Worker attempt chains · adaptive split · **1.0.0: Codex as the third executor**"
+        "Worker attempt chains · report pack · **1.0.0: Codex as the third executor**"
       ]
     ]
   },

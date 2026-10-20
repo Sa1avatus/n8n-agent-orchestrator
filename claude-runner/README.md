@@ -372,6 +372,34 @@ A Worker runs shell and Python in the container, and a careless script (`bytes()
 2. **System prompt rule** (`MEMORY RULE`, Worker role only): tells the model what `MemoryError` / `Killed` / exit 137 mean and how to read big files (mmap, `seek`/`read(n)`, `head -c`, `gguf`).
 3. **`mem_guard.py`**, the backstop: once a second it kills the biggest non-`claude` process when it holds more than `CLAUDE_RUNNER_MEM_GUARD_PROC_MB` of anonymous memory (default 5000) or when the container's anonymous memory passes `CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT` (85) of its limit; a `mem_guard` event with the command goes to the run's log. Set the container limit in `docker-compose.yml` (`mem_limit`, 6g).
 
+## Run summary, process groups, supersede and watchdog
+
+Run summary fields (`run_views.py`): `compactions` (context compactions in the run), `steps`, `edits`,
+and `files_changed` (at most 40 paths). The adaptive split path reads `compactions` and `steps`.
+
+Process groups: each Claude Code process starts in its own session (`start_new_session`). Stopping a
+run sends SIGTERM to the whole group (`os.killpg`), then SIGKILL if the process has not exited after
+`interrupt_grace_seconds` (10 s). Child processes of the Claude Code process go with it.
+
+Supersede: `store.supersede_queued` cancels queued runs of a session that a newer run replaces. They get
+status `cancelled` and error code `superseded`; the dashboard shows them as cancelled.
+
+Watchdog (`runs.py`, Linux only, reads `/proc`): every `CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS`
+(default 60) it samples each active run's Claude Code process group and ends the run with one of two codes:
+
+- `child_hung`: the process used more CPU than `CLAUDE_RUNNER_WATCHDOG_CPU_SECONDS` (default 900)
+  since the last event of the run. The run is stopped and reported with this code.
+- `orphan`: a Claude Code process whose parent is no longer the runner. The run is stopped and reported
+  with this code.
+
+Both codes are error codes of the run; each has a message in `WATCHDOG_MESSAGES` (`runs.py`). The
+watchdog does nothing on platforms without `/proc`. To check for orphans by
+hand in the container (read-only):
+
+```
+docker exec claude-runner ps -eo pid,ppid,etimes,args | grep -E 'claude|node'
+```
+
 ## Mission board: files
 
 The mission board lives in `src/claude_runner/`: `board.py` (the in-memory store and the models), `board_pg.py` (the PostgreSQL store), `board_api.py` (the `/api/board` routes), `board_stats.py` (the figures), `board_plan.py` (the plan), and the browser files `board_views.js`, `board_view_projects.js`, `board_view_kanban.js`, `board_view_grid.js`, `board_queue.js`, `board_dnd.js`, `board_actions.js`, `board_i18n.js`, `board_i18n_ui.js`, `board_task.js`, `board_tasks.js`, `board_plan_edit.js`, `board_ready_ui.js`, `board_think_ui.js`, `board_history_ui.js`, `board_claude_md.js`, `board_mission.js`, `board_mission_save.js`. The schema is `docs/board-schema.sql`, the role is `docs/board-role.sql`, and the summary, project rules, translation routes, the frontend views and the database apply steps are described in `docs/board-views.md`.

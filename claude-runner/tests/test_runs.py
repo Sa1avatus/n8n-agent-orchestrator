@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import stat
+import sys
 import time
 import uuid
 from pathlib import Path
@@ -11,7 +13,7 @@ from claude_runner.api import create_app
 from claude_runner.config import ProviderProfile, Settings
 from claude_runner.store import Store
 
-from .conftest import calls, wait_for
+from .conftest import FAKE, calls, wait_for
 
 
 def start(client: TestClient, **body: object) -> dict[str, object]:
@@ -322,6 +324,45 @@ def _alive(pid: int) -> bool:
     return state != "Z"
 
 
+def test_completed_and_cancelled_runs_remove_proc_entry_and_kill_children(
+    settings: Settings, tmp_path: Path
+) -> None:
+    """The helper must run on every exit path: a run that exits normally leaves the
+    background tool process it started dead, and a cancelled run's child dies too.
+    In both cases ``_procs`` holds no entry for the finished run."""
+    from claude_runner.runs import RunManager
+
+    # 1) normal completion with a background child
+    pid_file = tmp_path / "child_done.pid"
+    with TestClient(create_app(settings)) as client:
+        manager: RunManager = client.app.state.manager
+        run = start(client, input=f"[[child:{pid_file}]]")
+        done = wait_for(client, run["run_id"])
+        assert done["status"] == "completed"
+        child = int(pid_file.read_text())
+        assert not _alive(child)
+        assert run["run_id"] not in manager._procs
+
+    # 2) cancellation while the CLI is still running
+    pid_file = tmp_path / "child_cancel.pid"
+    with TestClient(create_app(settings)) as client:
+        manager = client.app.state.manager
+        run = start(client, input=f"[[child:{pid_file}]] [[sleep:30]]")
+        wait_for(client, run["run_id"], lambda r: r["status"] == "running", timeout=5)
+        deadline = time.monotonic() + 5
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        child = int(pid_file.read_text())
+        assert _alive(child)
+        cancelled = client.post(f"/v1/runs/{run['run_id']}/cancel").json()
+        assert cancelled["status"] == "cancelled"
+        deadline = time.monotonic() + 5
+        while _alive(child) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _alive(child)
+        assert run["run_id"] not in manager._procs
+
+
 def test_unknown_run_and_restart_recovery(settings: Settings) -> None:
     with TestClient(create_app(settings)) as client:
         missing = client.get("/v1/runs/run_nope")
@@ -411,6 +452,23 @@ def test_missing_cli_reports_unavailable(settings: Settings) -> None:
         done = wait_for(client, start(client)["run_id"])
         assert done["status"] == "failed" and done["error"]["code"] == "cli_unavailable"
         assert done["http_code"] == 503
+
+
+def test_stub_bin_by_bare_name_on_path_completes(settings: Settings, tmp_path: Path) -> None:
+    # A bare claude_bin name is resolved through the child env's PATH, so a run
+    # with claude_bin set to the stub's directory name completes normally.
+    stub_dir = tmp_path / "claude_bin_dir"
+    stub_dir.mkdir()
+    stub = stub_dir / "claude"
+    stub.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{FAKE}" "$@"\n')
+    stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+    object.__setattr__(settings, "claude_bin", "claude")
+    with TestClient(create_app(settings)) as client:
+        import os
+        os.environ["PATH"] = f"{stub_dir}:{os.environ.get('PATH', '')}"
+        run = start(client)
+        done = wait_for(client, run["run_id"])
+        assert done["status"] == "completed"
 
 
 def test_shutdown_leaves_runs_resumable(settings: Settings) -> None:

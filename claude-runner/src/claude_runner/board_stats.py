@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 from .board import BoardStore
+from .board_order import task_sort_key
 from .local_pricing import FIELDS
 from .mission_stats import _run_ids_with_compactions, stats_for_runs, token_totals
 from .runs import RunManager
@@ -221,7 +222,7 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
                 if e.get("task_attempt") is not None
             }
         )
-        for view in board.task_views(state_key)
+        for view in sorted(board.task_views(state_key), key=lambda v: task_sort_key(v.task_id))
     }
     return {
         "state_key": state_key,
@@ -254,7 +255,7 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
                 "last_review_score": view.review_score,
                 "last_review_reason": view.review_reason,
             }
-            for view in board.task_views(state_key)
+            for view in sorted(board.task_views(state_key), key=lambda v: task_sort_key(v.task_id))
         },
     }
 
@@ -360,7 +361,9 @@ def cached_mission_figures(
     return hit[1] if hit is not None else dict(_NULL_FIGURES)
 
 
-def task_stats(manager: RunManager, board: BoardStore, state_key: str, task_id: str) -> dict[str, Any]:
+def task_stats(
+    manager: RunManager, board: BoardStore, state_key: str, task_id: str
+) -> dict[str, Any]:
     """One task: its runs aggregated, its attempts (against the mission's
     ``max_attempts_per_task``) and the time of each attempt, plus the last Reviewer
     score and reason."""
@@ -470,12 +473,15 @@ def mission_timeline(
         for task, rows in rejections.items():
             if len(rows) >= 3:
                 last = rows[-1]
-                obstacles.append({
-                    "kind": "rejected_3x",
-                    "task": task,
-                    "ts": _iso(last.get("created_at")),
-                    "detail": f"rejected {len(rows)} times, last reason: {last.get('review_reason') or ''}",
-                })
+                obstacles.append(
+                    {
+                        "kind": "rejected_3x",
+                        "task": task,
+                        "ts": _iso(last.get("created_at")),
+                        "detail": f"rejected {len(rows)} times, last reason: "
+                        + (last.get("review_reason") or ""),
+                    }
+                )
         for run_id, task in run_task.items():
             run = manager.store.get_run(run_id)
             if not run:

@@ -17,6 +17,13 @@ from typing import Any
 
 ACTIVE = ("queued", "running")
 
+# Owner tokens live here while their manager instance is running. A token is
+# f"{pid}:{boot_id}" (boot_id is a uuid4 per RunManager). A token is live only
+# while in this registry: a manager adds it on startup and removes it on
+# shutdown, so a row from a dead manager, or a row from a *different* manager
+# in the same process (same pid, different boot id), is never skipped.
+_LIVE_OWNER_TOKENS: set[str] = set()
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
@@ -53,9 +60,12 @@ CREATE TABLE IF NOT EXISTS runs (
     think_after INTEGER NOT NULL DEFAULT -1,
     think_after_steps INTEGER NOT NULL DEFAULT -1,
     think_task INTEGER NOT NULL DEFAULT 0,
+    think_variant TEXT,
+    think_mode TEXT,
     created_at TEXT NOT NULL,
     started_at TEXT,
-    finished_at TEXT
+    finished_at TEXT,
+    owner_pid INTEGER
 );
 CREATE INDEX IF NOT EXISTS runs_by_session ON runs(session_id, status);
 """
@@ -81,6 +91,9 @@ class Store:
             ("think_after", "INTEGER NOT NULL DEFAULT -1"),
             ("think_after_steps", "INTEGER NOT NULL DEFAULT -1"),
             ("think_task", "INTEGER NOT NULL DEFAULT 0"),
+            ("think_variant", "TEXT"),
+            ("think_mode", "TEXT"),
+            ("owner_pid", "INTEGER"),
         ):
             if (
                 column not in have
@@ -178,6 +191,46 @@ class Store:
                 (session_id, *ACTIVE),
             ).fetchone()
         return self.get_run(row["run_id"]) if row else None
+
+    def supersede_queued(self, session_id: str) -> list[str]:
+        """Cancel the queued runs of a session that a later run or an interrupted parent supersedes.
+
+        The parent of a run is the run before it in the session; it supersedes only when it was
+        interrupted after the queued run was created.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT run_id, status, created_at, finished_at FROM runs "
+                "WHERE session_id = ? ORDER BY created_at, rowid",
+                (session_id,),
+            ).fetchall()
+            superseded = []
+            for index, row in enumerate(rows):
+                if row["status"] != "queued":
+                    continue
+                parent = rows[index - 1] if index else None
+                newer = index < len(rows) - 1
+                parent_interrupted = (
+                    parent is not None
+                    and parent["status"] == "interrupted"
+                    and (parent["finished_at"] or "") > row["created_at"]
+                )
+                if newer or parent_interrupted:
+                    superseded.append(row["run_id"])
+            if superseded:
+                self._db.executemany(
+                    "UPDATE runs SET status = 'cancelled', error_code = 'superseded', "
+                    "error_message = ?, finished_at = ? WHERE run_id = ? AND status = 'queued'",
+                    [
+                        (
+                            "Superseded by a newer run or an interrupted parent; never started.",
+                            now(),
+                            run_id,
+                        )
+                        for run_id in superseded
+                    ],
+                )
+        return superseded
 
     def local_compaction_running(self) -> list[str]:
         """Run ids of the running compactions of local Worker sessions."""
@@ -322,13 +375,30 @@ class Store:
             ids = [row["run_id"] for row in self._db.execute(sql, (*params, limit))]
         return [run for run in map(self.get_run, ids) if run]
 
+    def _owner_alive(self, owner_token: str | None) -> bool:
+        """True when the owner token belongs to a live manager instance (registry)."""
+        if not owner_token:
+            return False
+        return owner_token in _LIVE_OWNER_TOKENS
+
     def interrupt_active_runs(self, reason: str) -> int:
-        """Runs a previous runner process left behind can never finish: mark them."""
+        """Mark runs a previous runner process left behind as interrupted.
+        A row is skipped only when its owner token is registered as live (a
+        manager added it on startup and has not removed it yet). A token from a
+        dead manager, or a token from a *different* manager in the same process
+        (different boot id, even the same pid), is not live and is interrupted."""
         with self._lock:
-            cursor = self._db.execute(
+            rows = self._db.execute(
+                "SELECT run_id, owner_pid FROM runs WHERE status IN (?, ?)",
+                ACTIVE,
+            ).fetchall()
+            orphaned = [row["run_id"] for row in rows if not self._owner_alive(row["owner_pid"])]
+            if not orphaned:
+                return 0
+            cursor = self._db.executemany(
                 "UPDATE runs SET status = 'interrupted', error_code = 'run_not_found', "
-                "error_message = ?, finished_at = ? WHERE status IN (?, ?)",
-                (reason, now(), *ACTIVE),
+                "error_message = ?, finished_at = ? WHERE run_id = ? AND status IN (?, ?)",
+                [(reason, now(), run_id, *ACTIVE) for run_id in orphaned],
             )
         return cursor.rowcount
 

@@ -446,6 +446,9 @@ Recorded 2026-10-17 (T007), read-only, from `claude-runner/src/claude_runner/boa
   locking: `update_hermes_config(expected_version, **fields)`, `profile_id` immutable,
   `updatedAt` bumped (`board_pg.py:726-769`, `board.py:307-311`); the dashboard form edits
   the same fields (`board_mission.js:88-93`).
+- **Cloud runs**: the policy is forwarded for Anthropic Workers too, but the runner applies it
+  only to local runs unless `CLAUDE_RUNNER_CLOUD_THINK=1` is set; see
+  [`docs/cloud-thinking.md`](../../docs/cloud-thinking.md).
 - `board_ready.py:279-295` reads `worker_model` from the row to probe
   llama-server's `/v1/models` and its `--ctx-size`.
 

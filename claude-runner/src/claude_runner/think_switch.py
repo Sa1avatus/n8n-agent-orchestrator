@@ -212,7 +212,7 @@ class ThinkSwitch:
                 continue
             # the task number is stored with the run (from the whole prompt);
             # runs made before that are read from the head of the prompt
-            found = re.search(r"TASK T0*(\d+)", run["head"] or "")
+            found = re.search(r"TASK T0*(\d+)[A-Z]*", run["head"] or "")
             number = int(run.get("think_task") or 0) or (int(found.group(1)) if found else 0)
             parsed = self._json_policy(policy) if policy.lstrip().startswith("{") else None
             if policy.lstrip().startswith("{"):

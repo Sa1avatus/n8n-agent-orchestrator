@@ -5,12 +5,24 @@ Keep the two files in sync.
 
 import re
 
-_TASK_ID = re.compile(r"T[0-9]+[A-Z]*")
+_TASK_ID = re.compile(r"T([0-9]+)([A-Z]*)")
 
 
 def parse_task_id(text):
     s = str(text)
     return s if _TASK_ID.fullmatch(s) else None
+
+
+def task_sort_key(task_id: str) -> tuple:
+    """A sort key that orders task ids like T013, T013A, T013B, T014:
+    by the numeric part, then by the letter suffix (an empty suffix sorts
+    first, so T013 comes before T013A).  A non-task id sorts after every
+    task id, by its text."""
+    s = str(task_id)
+    m = _TASK_ID.fullmatch(s)
+    if m is None:
+        return (1, s)
+    return (0, int(m.group(1)), m.group(2))
 
 
 def dependents(deps, id_):

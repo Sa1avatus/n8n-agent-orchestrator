@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.7.400 · October 19, 2026** — Mission settings in a step-by-step window, board views in the agreed style — next 0.8.0
+**0.8.0 · October 21, 2026** — Guards in the dashboard, cloud thinking control and adaptive split — next 0.9.0
 
-Current version: **0.7.400** · Missions completed: **9** · Missions in the queue: **13** · Next milestone: **0.8.0 · 1.0.0**
+Current version: **0.8.0** · Missions completed: **12** · Missions in the queue: **13** · Next milestone: **0.9.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next.
 
@@ -84,15 +84,15 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 
 ### Reliability and control — Next (Q4 2026)
 
-0.8.0 and up · Guards, adaptive split and the executor settings · 0/8 milestones, 0%
+0.8.0 and up · Guards, adaptive split and the executor settings · 3/9 milestones, 33%
 
-- [ ] 0.8.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), after the 0.7.0 release at a queue pause
-- [ ] ahawr-guards-in-dashboard: all watchers inside the dashboard container
-- [ ] ahawr-cloud-thinking-control: thinking policy for cloud Workers
+- [ ] 0.10.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause
+- [x] ahawr-guards-in-dashboard: all watchers inside the dashboard container (0.8.0; the migration of the host watchers is ahawr-guards-migration)
+- [x] ahawr-cloud-thinking-control: thinking policy for cloud Workers (0.8.0)
 - [ ] ahawr-worker-attempt-chain: provider and model per attempt as a setting
 - [ ] ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
-- [ ] ahawr-adaptive-split: plan size gate and automatic split
+- [x] ahawr-adaptive-split: plan size gate and automatic split (0.8.0; files and patch, not yet applied to the live workflow)
 - [ ] ahawr-rag-quality: offline evaluation and lexical precision
 - [ ] Dashboard over the local network and on mobile
 
@@ -109,6 +109,7 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 
 after 1.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
 
+- [ ] Code review and refactoring mission (right after 1.0): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
 - [ ] ahawr-parallel-missions: one workflow, per-mission model and folder
 - [ ] Hermes runs on par with Claude Code on the dashboard
 - [ ] Mission templates and A/B of executors

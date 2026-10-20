@@ -408,6 +408,11 @@ class Settings:
     # itself) instead of an OOM kill; a memory-mapped file is not counted. 0 = off
     proc_data_limit_mb: int = 4096
     mem_guard_cgroup_percent: int = 85
+    # watchdog (runs.py): every interval, a run's CLI process that used more than
+    # cpu_seconds of CPU since the run's last event is killed as child_hung, and one
+    # with no live parent as orphan
+    watchdog_interval_seconds: int = 60
+    watchdog_cpu_seconds: int = 900
     think_policy: str = ""
     think_policy_from_task: int = 1
     # Local runs priced as a cloud model by thinking mode (local_pricing.py);
@@ -434,6 +439,9 @@ class Settings:
     local_tool_output_limits: bool = False
     # local runs: no billing-header hash and no auto-memory path at the start of the prompt
     local_shared_prefix: bool = True
+    # Cloud (Anthropic) runs: apply the local thinking policy per attempt (cloud_think.py);
+    # off by default, then the CLI's default thinking behaviour is used for the chosen model.
+    cloud_think: bool = False
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -495,6 +503,8 @@ class Settings:
             mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
             proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
             mem_guard_cgroup_percent=_int(env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", 85),
+            watchdog_interval_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS", 60, 1),
+            watchdog_cpu_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_CPU_SECONDS", 900, 1),
             think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
             think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
             local_pricing_env={
@@ -516,6 +526,7 @@ class Settings:
             ),
             local_tool_output_limits=_bool(env, "CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS", False),
             local_shared_prefix=_bool(env, "CLAUDE_RUNNER_LOCAL_SHARED_PREFIX", True),
+            cloud_think=_bool(env, "CLAUDE_RUNNER_CLOUD_THINK", False),
         )
 
     def profile(self, role: str) -> RoleProfile:

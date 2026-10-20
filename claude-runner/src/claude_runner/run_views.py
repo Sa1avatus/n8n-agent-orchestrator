@@ -4,6 +4,7 @@ the run list and each run's activity log, read by the dashboard."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import PurePath
 from typing import Any
 
 from fastapi import APIRouter, Query
@@ -13,11 +14,47 @@ from .mission_stats import stats_for_runs
 from .runs import RunManager, RunnerError
 from .titles import title_of
 
+EDIT_TOOLS = ("Edit", "Write")
+MAX_FILES_CHANGED = 40
+
+
+def _relative(path: str, cwd: str) -> str:
+    if not cwd:
+        return path
+    try:
+        return PurePath(path).relative_to(cwd).as_posix()
+    except ValueError:
+        return path
+
+
+def _change_stats(entries: list[dict[str, Any]], cwd: str) -> dict[str, Any]:
+    compactions = steps = edits = 0
+    files: dict[str, None] = {}
+    for entry in entries:
+        kind = entry.get("kind")
+        if kind == "compact":
+            compactions += 1
+        elif kind == "step":
+            steps += 1
+        elif kind == "tool_use" and entry.get("name") in EDIT_TOOLS:
+            edits += 1
+            tool_input = entry.get("input")
+            path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
+            if isinstance(path, str) and path:
+                files.setdefault(_relative(path, cwd), None)
+    return {
+        "compactions": compactions,
+        "steps": steps,
+        "edits": edits,
+        "files_changed": list(files)[:MAX_FILES_CHANGED],
+    }
+
 
 def summary(run: dict[str, Any], manager: RunManager) -> dict[str, Any]:
     details = run.get("details") or {}
     usage = details.get("usage") or {}
     active = run["status"] in ("queued", "running")
+    entries, _ = manager.events.read(run["run_id"])
     return {
         "run_id": run["run_id"],
         "kind": run.get("kind", "run"),
@@ -48,6 +85,7 @@ def summary(run: dict[str, Any], manager: RunManager) -> dict[str, Any]:
         if run["error_code"] or run["error_message"]
         else None,
         "live": active and manager.events.is_live(run["run_id"]),
+        **_change_stats(entries, run["cwd"] or ""),
     }
 
 

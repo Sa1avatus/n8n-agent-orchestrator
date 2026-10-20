@@ -44,5 +44,6 @@
 "claudemd.tpl.never.label":"what not to do",
 "claudemd.tpl.never.body":"## what not to do\n\nDo not change the live entities of a run (working folder, state key, corpora) during the mission; do not read big binary files whole; do not delete other people's unsaved changes.\n",
 "claudemd.tpl.gguf.label":"GGUF: do not parse by hand",
-"claudemd.tpl.gguf.body":"## parsing big binary files (GGUF)\n\nparsing big binary files (GGUF) by hand eats memory: use ready-made dumps and the gguf package.\n"
+"claudemd.tpl.gguf.body":"## parsing big binary files (GGUF)\n\nparsing big binary files (GGUF) by hand eats memory: use ready-made dumps and the gguf package.\n",
+"guards.title":"Guards","guards.off":"guards disabled","guards.last":"last","guards.refresh":"Refresh","guards.ok":"ok","guards.warning":"warning","guards.error":"error","guards.none":"—"
 }

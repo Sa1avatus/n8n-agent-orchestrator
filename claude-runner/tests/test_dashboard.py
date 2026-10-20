@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from claude_runner.api import create_app
@@ -318,6 +319,47 @@ def dashboard(runner_app: TestClient, **overrides: Any) -> TestClient:
         create_dashboard_app(DashboardSettings(**values), transport=httpx.MockTransport(handler)),
         base_url="http://localhost:8701",
     )
+
+
+# ------------------------------------------------------------------ guards route
+def test_guards_route_off_by_default_and_stops_cleanly(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With DASHBOARD_GUARDS unset the route answers enabled=false with no
+    guards, no task runs, and the supervisor stops at shutdown."""
+    monkeypatch.delenv("DASHBOARD_GUARDS", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is False
+        assert body["guards"] == []
+        # no per-guard task is created while the master is off
+        assert dash.app.state.guards._tasks == {}
+        # the shutdown path stops the supervisor and marks it not running
+        assert dash.app.state.guards._running is True
+    assert dash.app.state.guards._running is False
+
+
+def test_guards_route_reports_dry_run_and_no_env_values(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The state fields are the supervisor's own; no environment value
+    (made-up Telegram variables here) appears in the response."""
+    token = "fake-token-12345"
+    chat = "987654321"
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_DRY_RUN", "1")
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_CHAT_ID", chat)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is True
+        assert body["dry_run"] is True
+        assert body["running"] is True
+        assert body["guards"] == []
+        text = body.__repr__()
+        assert token not in text and chat not in text
+        # the supervisor still stops cleanly at shutdown
+    assert dash.app.state.guards._running is False
 
 
 def test_dashboard_theme_switcher(client: TestClient) -> None:

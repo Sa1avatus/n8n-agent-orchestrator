@@ -3,7 +3,48 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.7.400** (claude-runner `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.8.0** (claude-runner `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-21 (0.8.0)
+
+New functions of the missions that ran since 0.7.400: the guard supervisor in the dashboard,
+thinking control for cloud runs, adaptive split of wide plans and tasks, and the agent guide.
+Every new switch defaults to off; with the switches off behaviour is unchanged.
+
+- **Guard supervisor in the dashboard app** (mission ahawr-guards-in-dashboard).
+  `GuardSupervisor` (`guards.py`) is created in the dashboard `lifespan`, started there and
+  stopped at shutdown. With `DASHBOARD_GUARDS` unset no guard task runs; with
+  `DASHBOARD_GUARDS=1` each registered guard runs in its own task. `GET /api/guards` is
+  read-only like the other dashboard read routes and returns `enabled`, `dry_run`, `running`
+  and, per guard, `name`, `status`, `last_run`, `last_result`, `last_action`, `error_count`;
+  no environment values. `.env.example` lists the variable names without values
+  (`DASHBOARD_GUARDS`, `DASHBOARD_GUARDS_DRY_RUN`, `DASHBOARD_TELEGRAM_BOT_TOKEN`,
+  `DASHBOARD_TELEGRAM_CHAT_ID`). See [`docs/guards.md`](docs/guards.md).
+- **Cloud thinking control** (mission ahawr-cloud-thinking-control). `CLAUDE_RUNNER_CLOUD_THINK`
+  (default off, `config.py`): when on, each cloud attempt runs with the policy's per-attempt
+  mode (first attempt `first[0]`, retry `retry[0]`), each attempt as a fresh CLI process.
+  `cloud_think.py` holds the mapping; `claude_cli.py` passes the mode to the child env
+  (`CLOUD_THINK_ENV_VARS`). See [`docs/cloud-thinking.md`](docs/cloud-thinking.md).
+- **Adaptive split** (mission ahawr-adaptive-split). Three switches in `hermes_config`
+  (`adaptive_split`, `plan_no_truncate`, `run_hygiene`), all off:
+  - *Plan gate* (`plan_gate.js`): flags wide tasks; a plan of more than `max_tasks` (15) tasks
+    is no longer cut silently but cut into 2-5 parts at phase boundaries (a part may reach
+    `max_tasks_hard`, 30), each part its own mission; a plan needing more than 5 parts is
+    refused.
+  - *Runtime split* (`shouldSplit`, `task_split.js`): a task that timed out, had 2 compactions
+    or 150+ steps is replaced by 2-4 narrower tasks with letter-suffixed ids (T013A); at most 6
+    splits and 40 tasks.
+  - *Run hygiene*: a new run cancels the previous run of the same session.
+  - Runner: the run summary gains `compactions`, `steps`, `edits`, `files_changed`; cancel,
+    interrupt and timeout kill the whole process group; superseded queued runs never start; a
+    watchdog ends hung children and orphans (`child_hung`, `orphan`); task-id parsers accept
+    letter suffixes.
+  - Ops: `data-tables/ops/adaptive_split_patch.py` (idempotent, not applied to the live
+    workflow) and `mission_lint.py`. See [`docs/adaptive-split.md`](docs/adaptive-split.md) and
+    [`docs/mission-authoring.md`](docs/mission-authoring.md).
+- **Agent guide.** `CLAUDE.md` (loaded for every Worker, Reviewer and Architect run) and
+  [`docs/naming.md`](docs/naming.md); the plan of the code review and refactoring after 1.0 is
+  [`docs/review-refactor-plan.md`](docs/review-refactor-plan.md).
 
 ## 2026-10-19 (0.7.400)
 

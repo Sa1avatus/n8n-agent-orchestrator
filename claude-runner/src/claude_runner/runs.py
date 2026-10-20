@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 import re
 import shutil
 import signal
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import cloud_think, store
 from .claude_cli import (
     UUID_RE,
     Outcome,
@@ -28,6 +31,8 @@ from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
 from .local_pricing import LocalPricing
 from .store import Store, now
+
+log = logging.getLogger("claude_runner.runs")
 
 STDERR_TAIL = 8000
 
@@ -67,6 +72,74 @@ def run_cost(total: Any, previous: float | None) -> float | None:
     return round(float(total) - previous, 6)
 
 
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+WATCHDOG_MESSAGES = {
+    "child_hung": "The Claude Code process used more CPU without any progress; it was stopped.",
+    "orphan": "The Claude Code process lost its runner parent; it was stopped.",
+}
+
+
+@dataclass(frozen=True)
+class ProcSample:
+    pid: int
+    ppid: int
+    cpu_seconds: float
+    pgrp: int = 0
+
+
+def read_sample(pid: int, proc_root: Path = Path("/proc")) -> ProcSample | None:
+    try:
+        text = (proc_root / str(pid) / "stat").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    # comm can hold spaces and parentheses: the fields start after the last ')'
+    fields = text[text.rfind(")") + 2 :].split()
+    ticks = os.sysconf("SC_CLK_TCK")
+    return ProcSample(
+        pid,
+        int(fields[1]),
+        (int(fields[11]) + int(fields[12])) / ticks,
+        int(fields[2]),
+    )
+
+
+def group_sample(pid: int, proc_root: Path = Path("/proc")) -> ProcSample | None:
+    """The run's CLI process plus every process in its session (group) or descendants:
+    its own ppid, kept for the orphan check, and the summed utime+stime of every member
+    whose pgrp is the leader's pid, so a hung tool child is caught, not just the CLI."""
+    sample = read_sample(pid, proc_root)
+    if sample is None:
+        return None
+    total = 0.0
+    for entry in proc_root.iterdir():
+        if not entry.is_dir():
+            continue
+        member = read_sample(entry.name, proc_root)
+        if member is not None and member.pgrp == pid:
+            total += member.cpu_seconds
+    return ProcSample(pid, sample.ppid, total, sample.pgrp)
+
+
+def watchdog_verdict(
+    sample: ProcSample, cpu_at_last_event: float, cpu_limit: float, runner_pid: int
+) -> str | None:
+    """Why the run's CLI process must be stopped, or None. ``cpu_at_last_event`` is the
+    process's CPU time when the run last produced an event, so the difference is the CPU
+    it used since then."""
+    if sample.ppid != runner_pid:
+        return "orphan"
+    if sample.cpu_seconds - cpu_at_last_event > cpu_limit:
+        return "child_hung"
+    return None
+
+
 class RunnerError(Exception):
     def __init__(self, code: str, message: str, status_code: int = 400) -> None:
         super().__init__(message)
@@ -78,7 +151,7 @@ def task_number(prompt: str) -> int:
     """The AHAWR task number in a Worker prompt (``TASK T010`` -> 10), 0 when
     there is none. In a first-attempt prompt it stands after several thousand
     characters of rules, so the whole text is searched."""
-    found = re.search(r"TASK T0*(\d+)", prompt or "")
+    found = re.search(r"TASK T0*(\d+)[A-Z]*", prompt or "")
     return int(found.group(1)) if found else 0
 
 
@@ -100,6 +173,14 @@ class RunManager:
     def __init__(self, settings: Settings, store: Store | None = None) -> None:
         self.settings = settings
         self.store = store or Store(settings.data_dir / "runner.sqlite")
+        # Owner token for the run rows this manager starts: f"{pid}:{boot_id}"
+        # (boot_id is a uuid4 per manager instance). A row carries it as
+        # ``owner_pid``; ``interrupt_active_runs`` skips it only while the token
+        # is in the store's live registry, so a second manager in the same
+        # process (same pid, different boot id) cannot mark this manager's live
+        # rows interrupted, and a row from a dead manager is interrupted even
+        # when the pid was reused.
+        self.owner_pid = f"{os.getpid()}:{uuid.uuid4().hex}"
         self.on_run_start: Callable[[], object] | None = (
             None  # set by the app: think policy (think_switch.py)
         )
@@ -110,12 +191,25 @@ class RunManager:
         self._slots = asyncio.Semaphore(settings.max_concurrent)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._procs: dict[str, asyncio.subprocess.Process] = {}
+        # Monotonic start of each CLI process (for process listing); kept per process
+        # so the age is right even when a run id is reused.
+        self._proc_started_at: dict[asyncio.subprocess.Process, float] = {}
         self._cancelled: set[str] = set()
         self._shutting_down = False
         self._session_lock = asyncio.Lock()
         self.events = EventLog(settings.data_dir / "events", settings.event_retention_days)
+        self._last_event_at: dict[str, float] = {}
+        self._cpu_at_event: dict[str, tuple[float, float]] = {}
+        self._watchdog_codes: dict[str, str] = {}
+        self._watchdog_task: asyncio.Task[None] | None = None
 
     async def startup(self) -> int:
+        # Register this manager's owner token before rewriting orphan rows: a
+        # second manager in the same process then protects its own live rows
+        # from the first manager's ``interrupt_active_runs``.
+        store._LIVE_OWNER_TOKENS.add(self.owner_pid)
+        if Path("/proc").is_dir():  # the watchdog reads /proc: Linux only
+            self._watchdog_task = asyncio.create_task(self._watchdog_loop())
         return self.store.interrupt_active_runs(
             "Run was interrupted by a claude-runner restart; resume the session to continue."
         )
@@ -124,11 +218,16 @@ class RunManager:
         # Runs stopped here stay resumable: they are reported as run_not_found, which makes
         # the Run Manager continue the saved Claude Code session after the restart.
         self._shutting_down = True
+        if self._watchdog_task is not None:
+            self._watchdog_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._watchdog_task
         for run_id in list(self._tasks):
             await self.cancel(run_id)
         for task in list(self._tasks.values()):
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await asyncio.wait_for(task, self.settings.interrupt_grace_seconds + 5)
+        store._LIVE_OWNER_TOKENS.discard(self.owner_pid)
         self.store.close()
 
     # --------------------------------------------------------------------------- helpers
@@ -227,7 +326,9 @@ class RunManager:
                 think_after=request.think_off_after_seconds,
                 think_after_steps=request.think_off_after_steps,
                 think_task=task_number(prompt),
+                owner_pid=self.owner_pid,
             )
+            self.store.supersede_queued(session_id)
             self.store.touch_session(session_id, run_id, None)
         self._launch(run_id, prompt, model, role, claude_id, resume, cwd, request.provider.strip())
         run = self.store.get_run(run_id)
@@ -296,16 +397,23 @@ class RunManager:
         compact: bool,
     ) -> None:
         async with self._slots:
-            if run_id in self._cancelled:
+            # the check and the switch to running below have no await between them
+            self.store.supersede_queued((self.store.get_run(run_id) or {}).get("session_id", ""))
+            current = self.store.get_run(run_id) or {}
+            if run_id in self._cancelled or current.get("status") != "queued":
                 self._finish(
                     run_id,
                     Outcome(
-                        "cancelled", error_code="cancelled", error_message="Run was cancelled."
+                        "cancelled",
+                        error_code=current.get("error_code") or "cancelled",
+                        error_message=current.get("error_message") or "Run was cancelled.",
                     ),
                     None,
                 )
                 return
-            self.store.update_run(run_id, status="running", started_at=now())
+            self.store.update_run(
+                run_id, status="running", started_at=now(), owner_pid=self.owner_pid
+            )
             if self.on_run_start is not None:
                 with contextlib.suppress(Exception):
                     self.on_run_start()
@@ -318,6 +426,45 @@ class RunManager:
                     )
             profile = self.settings.profile(role)
             provider = self.settings.provider(provider_name)
+            # Cloud thinking: resolve the per-attempt mode for non-local providers when the
+            # setting is on; None when the provider is local, the setting is off, or the
+            # policy is empty/invalid. An unconfigured cloud provider is still resolved: the
+            # mapping checks the provider name itself, so a container-env Anthropic run gets
+            # the variant/mode recorded even without a provider profile. The result's env
+            # vars and (empty) args are added to the child env and command below.
+            ct_setting: cloud_think.CloudThinkSetting | None = None
+            if self.settings.cloud_think and provider_name != "local":
+                run = self.store.get_run(run_id)
+                if run is not None:
+                    session_id = str(run.get("session_id", ""))
+                    is_retry = (
+                        self.store.last_completed_worker_finish(session_id, run_id) is not None
+                    )
+                    ct_setting = cloud_think.resolve_cloud_think(
+                        run.get("think_policy", ""),
+                        int(run.get("think_task", 0) or 0),
+                        is_retry,
+                        provider_name,
+                        self.settings.cloud_think,
+                    )
+                    if ct_setting is not None:
+                        # Record the chosen variant and mode for the event log (the
+                        # extraction pipeline derives the per-step think flag from
+                        # thinking/redacted_thinking entries, same as the local path) and
+                        # in the run record itself, as optional fields absent from local
+                        # runs (no variant/mode fields there).
+                        self.events.add(
+                            run_id,
+                            {
+                                "kind": "thinking_state",
+                                "thinking": "on" if ct_setting.mode == "think" else "off",
+                                "variant": ct_setting.variant,
+                                "retry": is_retry,
+                            },
+                        )
+                        self.store.update_run(
+                            run_id, think_variant=ct_setting.variant, think_mode=ct_setting.mode
+                        )
             cmd = build_command(
                 self.settings,
                 profile,
@@ -328,6 +475,7 @@ class RunManager:
                 provider=provider,
                 search_first=self.settings.search_first_for(role, provider),
                 memory_rule=role == "worker" and self.settings.proc_data_limit_mb > 0,
+                cloud_think=ct_setting,
             )
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
@@ -338,6 +486,7 @@ class RunManager:
                 role=role,
                 local_tool_output_limits=self.settings.local_tool_output_limits,
                 shared_prefix=self.settings.local_shared_prefix,
+                cloud_think=ct_setting,
             )
             if provider is not None and provider.context_probe_url:
                 # the window of the model as llama-server runs it now, not a fixed 65536
@@ -363,8 +512,16 @@ class RunManager:
             stderr_chunks: list[bytes] = []
             timed_out = False
             try:
+                cmd_to_exec = self._limited(cmd)
+                # When prlimit is available it is argv[0], so the missing claude binary
+                # fails inside the prlimit child (exit 127) instead of raising OSError
+                # here; pre-check the target to keep the cli_unavailable branch working.
+                if cmd_to_exec[0] != cmd[0] and shutil.which(
+                    cmd[0], path=env.get("PATH")
+                ) is None:
+                    raise OSError(f"[Errno 2] No such file or directory: {cmd[0]!r}")
                 proc = await asyncio.create_subprocess_exec(
-                    *self._limited(cmd),
+                    *cmd_to_exec,
                     cwd=cwd,
                     env=env,
                     stdin=asyncio.subprocess.PIPE,
@@ -383,6 +540,7 @@ class RunManager:
                 self._finish(run_id, outcome, None)
                 return
             self._procs[run_id] = proc
+            self._proc_started_at[proc] = time.monotonic()
             pump_error: Exception | None = None
             try:
                 assert proc.stdin and proc.stdout and proc.stderr
@@ -396,6 +554,7 @@ class RunManager:
                     async for raw in proc.stdout:
                         event = state.feed(raw.decode("utf-8", "replace"))
                         if event is not None:
+                            self._last_event_at[run_id] = time.monotonic()
                             self.events.feed(run_id, event)
 
                 async def pump_stderr() -> None:
@@ -410,14 +569,17 @@ class RunManager:
                     await asyncio.wait_for(asyncio.shield(pumps), timeout)
                 except TimeoutError:
                     timed_out = True
-                    await self._stop(proc)
+                    await self._terminate_proc(run_id)
                     with contextlib.suppress(Exception):
                         await asyncio.wait_for(pumps, self.settings.interrupt_grace_seconds + 5)
             except Exception as exc:  # stream failure must still finish the run record
                 pump_error = exc
-                await self._stop(proc)
+                await self._terminate_proc(run_id)
             finally:
-                self._procs.pop(run_id, None)
+                # every exit path (completion, failure, timeout, stream error, and
+                # cancellation) goes through the helper so leftover tool processes in
+                # the group are killed and the entry cannot be left behind
+                await asyncio.shield(self._terminate_proc(run_id))
             stderr = b"".join(stderr_chunks).decode("utf-8", "replace")[-STDERR_TAIL:]
             outcome = classify(
                 state,
@@ -430,6 +592,11 @@ class RunManager:
             if pump_error is not None and outcome.status == "failed" and not state.result:
                 outcome.error_code = "cli_error"
                 outcome.error_message = f"Reading Claude Code output failed: {pump_error!r}"
+            watchdog_code = self._watchdog_codes.pop(run_id, None)
+            if watchdog_code is not None:
+                outcome.status = "failed"
+                outcome.error_code = watchdog_code
+                outcome.error_message = WATCHDOG_MESSAGES[watchdog_code]
             if stderr.strip():
                 outcome.details["stderr_tail"] = stderr[-2000:]
             if state.compact_result:
@@ -506,21 +673,108 @@ class RunManager:
             )
 
     async def _stop(self, proc: asyncio.subprocess.Process) -> None:
-        """SIGINT ends the turn cleanly (the transcript stays resumable); then escalate to the
-        whole process group (the CLI runs in its own session), so tool processes it started do
-        not outlive it."""
-        for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
-            if proc.returncode is not None:
-                break
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                if sig == signal.SIGINT:
-                    proc.send_signal(sig)
-                else:
-                    os.killpg(proc.pid, sig)
+        """SIGINT ends the turn cleanly (the transcript stays resumable); then SIGTERM and
+        SIGKILL go to the whole process group (the CLI runs in its own session), so tool
+        processes it started do not outlive it, even when the CLI exited on SIGINT."""
+        grace = self.settings.interrupt_grace_seconds
+        if proc.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                proc.send_signal(signal.SIGINT)
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(proc.wait(), self.settings.interrupt_grace_seconds)
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(proc.pid, signal.SIGKILL)  # tools left behind by a CLI that exited
+                await asyncio.wait_for(proc.wait(), grace)
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            if not _group_alive(proc.pid):
+                return
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(proc.pid, sig)
+            deadline = time.monotonic() + grace
+            while _group_alive(proc.pid) and time.monotonic() < deadline:
+                await asyncio.sleep(0.05)
+
+    async def _terminate_proc(self, run_id: str) -> None:
+        """Terminate the run's CLI process tree (SIGINT -> SIGTERM -> SIGKILL with grace)
+        and remove it from ``_procs``. No-op when no process was started or it has
+        already exited."""
+        proc = self._procs.get(run_id)
+        if proc is None:
+            return
+        try:
+            await self._stop(proc)
+        finally:
+            self._procs.pop(run_id, None)
+            self._proc_started_at.pop(proc, None)
+            self._last_event_at.pop(run_id, None)
+            self._cpu_at_event.pop(run_id, None)
+
+    def watchdog_scan(self) -> None:
+        cpu_limit = self.settings.watchdog_cpu_seconds
+        for run_id, proc in list(self._procs.items()):
+            sample = group_sample(proc.pid)
+            if sample is None:
+                continue
+            mark = self._last_event_at.get(run_id, 0.0)
+            base = self._cpu_at_event.get(run_id)
+            if base is None or base[0] != mark:
+                base = (mark, sample.cpu_seconds)
+                self._cpu_at_event[run_id] = base
+            code = watchdog_verdict(sample, base[1], cpu_limit, os.getpid())
+            if code is None:
+                continue
+            log.warning("watchdog stops run %s (pid %s): %s", run_id, proc.pid, code)
+            self._watchdog_codes[run_id] = code
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(proc.pid, signal.SIGKILL)
+
+    async def _watchdog_loop(self) -> None:
+        while True:
+            try:
+                self.watchdog_scan()
+            except Exception:
+                log.exception("watchdog scan failed")
+            await asyncio.sleep(self.settings.watchdog_interval_seconds)
+
+    # --------------------------------------------------------------------------- processes
+    def list_processes(self) -> list[dict[str, Any]]:
+        """The CLI processes this manager started, from its own ``_procs`` registry (not a
+        host process list): pid, age in seconds, the run's session id, the run id and the
+        run's status. No environment values and no unmasked command line."""
+        procs: list[dict[str, Any]] = []
+        for run_id, proc in self._procs.items():
+            run = self.store.get_run(run_id) or {}
+            procs.append(
+                {
+                    "pid": proc.pid,
+                    "age_seconds": round(time.monotonic() - self._proc_started_at.get(
+                        proc, 0.0
+                    ), 1),
+                    "session_id": str(run.get("session_id") or ""),
+                    "run_id": run_id,
+                    "status": str(run.get("status") or ""),
+                }
+            )
+        return procs
+
+    async def terminate_pid(self, pid: int) -> dict[str, Any]:
+        """Terminate one of the manager's own CLI processes by pid. Refused with
+        ``not_found`` (not in the registry), ``not_owned`` (a run of a session this
+        manager does not own) and ``run_active`` (the run is queued or running);
+        ``terminated`` when the process was stopped. Only the run's session id and
+        run id are returned: never the environment or an unmasked command line."""
+        entry = None
+        for run_id, proc in self._procs.items():
+            if proc.pid == pid:
+                entry = (run_id, proc)
+                break
+        if entry is None:
+            return {"outcome": "not_found", "pid": pid}
+        run_id, proc = entry
+        run = self.store.get_run(run_id) or {}
+        if self.store.get_session(str(run.get("session_id") or "")) is None:
+            return {"outcome": "not_owned", "pid": pid, "run_id": run_id}
+        if str(run.get("status") or "") in ("queued", "running"):
+            return {"outcome": "run_active", "pid": pid, "run_id": run_id, "status": run["status"]}
+        await self._terminate_proc(run_id)
+        return {"outcome": "terminated", "pid": pid, "run_id": run_id}
 
     def get(self, run_id: str) -> dict[str, Any]:
         run = self.store.get_run(run_id)
@@ -537,9 +791,7 @@ class RunManager:
             raise RunnerError("run_not_found", f"Run {run_id} not found.", 404)
         if run["status"] in ("queued", "running"):
             self._cancelled.add(run_id)
-            proc = self._procs.get(run_id)
-            if proc is not None:
-                await self._stop(proc)
+            await self._terminate_proc(run_id)
             task = self._tasks.get(run_id)
             if task is not None:
                 with contextlib.suppress(Exception):
@@ -623,6 +875,7 @@ class RunManager:
                 provider=provider_name,
                 cwd=session["cwd"],
                 input=compact_prompt,
+                owner_pid=self.owner_pid,
             )
             task = self._launch(
                 run_id,

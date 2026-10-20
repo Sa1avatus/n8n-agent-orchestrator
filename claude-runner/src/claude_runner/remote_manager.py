@@ -166,3 +166,40 @@ class RemoteRunManager:
         except ValueError:
             return None
         return body if isinstance(body, dict) else None
+
+    def list_processes(self) -> list[dict[str, Any]]:
+        """The runner's own CLI processes from ``GET /v1/processes``: pid, age, the run's
+        session id, the run id and the run's status (no environment values, no command line)."""
+        try:
+            response = self.client.get(self.url + "/v1/processes", headers=self.headers)
+        except httpx.HTTPError:
+            return []
+        if response.status_code != 200:
+            return []
+        try:
+            body = response.json()
+        except ValueError:
+            return []
+        if isinstance(body, list):
+            return [p for p in body if isinstance(p, dict)]
+        if isinstance(body, dict):
+            return [p for p in (body.get("processes") or []) if isinstance(p, dict)]
+        return []
+
+    def terminate_process(self, pid: int) -> dict[str, Any] | None:
+        """Terminate one of the runner's CLI processes by pid via
+        ``POST /v1/processes/{pid}/terminate``; None when the runner does not answer
+        with 200 (not found, foreign to the runner, or the run is still active)."""
+        try:
+            response = self.client.post(
+                f"{self.url}/v1/processes/{int(pid)}/terminate", headers=self.headers
+            )
+        except httpx.HTTPError:
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            body = response.json()
+        except ValueError:
+            return None
+        return body if isinstance(body, dict) else None

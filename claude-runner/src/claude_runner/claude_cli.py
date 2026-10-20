@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import cloud_think
 from .config import CREDENTIAL_VARS, ProviderProfile, RoleProfile, Settings
 
 UUID_RE = re.compile(
@@ -126,6 +127,7 @@ def build_command(
     provider: ProviderProfile | None = None,
     search_first: bool = False,
     memory_rule: bool = False,
+    cloud_think: cloud_think.CloudThinkSetting | None = None,
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
     if settings.live_tokens and not compact:
@@ -181,6 +183,10 @@ def build_command(
         ]
     elif compact_hook:
         cmd += ["--settings", _compact_settings_path(settings.compact_instructions)]
+    if cloud_think is not None:
+        # cloud thinking mode: the env vars (cloud_think.env) are added to the child env;
+        # no CLI flag switches thinking, so cloud_think.args stays empty.
+        cmd += list(cloud_think.args)
     cmd += list(settings.extra_args)
     return cmd
 
@@ -199,6 +205,9 @@ SECONDARY_MODEL_VARS = (
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
     "CLAUDE_CODE_SUBAGENT_MODEL",
 )
+# Cloud thinking env vars the runner may set per attempt (cloud_think.py); the runner
+# keeps them out of its own ``CLAUDE_RUNNER_*`` whitelist and applies them per attempt.
+CLOUD_THINK_ENV_VARS = cloud_think.CLOUD_THINK_ENV_VARS
 
 
 def child_env(
@@ -207,6 +216,7 @@ def child_env(
     role: str = "",
     local_tool_output_limits: bool = False,
     shared_prefix: bool = False,
+    cloud_think: cloud_think.CloudThinkSetting | None = None,
 ) -> dict[str, str]:
     """The CLI inherits the container env (model credentials) minus the runner's own settings,
     with the run's provider block on top. A provider with its own endpoint or credential does
@@ -216,7 +226,9 @@ def child_env(
     With ``local_tool_output_limits`` the caps from docs/cold-prefill.md Part B are added
     only for the Worker on the local provider; the default settings (flag off) add nothing,
     so the env every role gets is unchanged. With ``shared_prefix`` a run on a custom provider
-    (the local model) gets the two switches that make the start of its prompt task-independent."""
+    (the local model) gets the two switches that make the start of its prompt task-independent.
+    With ``cloud_think`` the per-attempt thinking-mode env vars (``CLOUD_THINK_ENV_VARS``)
+    are added for cloud runs; ``None`` leaves the env unchanged."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE_RUNNER_")}
     if provider is not None:
         if provider.isolates_credentials:
@@ -237,6 +249,11 @@ def child_env(
         # task, which is what a prefix cache needs.
         env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
         env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    if cloud_think is not None:
+        # Cloud thinking mode: the runner sets the allowed env vars per attempt.
+        for key in CLOUD_THINK_ENV_VARS:
+            if key in cloud_think.env:
+                env[key] = cloud_think.env[key]
     env.setdefault("DISABLE_AUTOUPDATER", "1")
     env.setdefault("CLAUDE_CODE_RESUME_INTERRUPTED_TURN", "1")
     return env
