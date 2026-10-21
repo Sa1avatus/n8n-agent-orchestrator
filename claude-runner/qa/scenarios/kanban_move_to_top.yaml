@@ -1,0 +1,16 @@
+name: kanban queued card moves to the top
+tags: [ui, queue]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      order: [Never started, Queued with status, Waiting in line]
+  - drag:
+      from: Waiting in line
+      onto: Never started
+    expect:
+      order: [Waiting in line, Never started, Queued with status]
+      request_2xx: [/api/board/queue/move]
+      no_console_error: true
+      no_mutation_without_header: true

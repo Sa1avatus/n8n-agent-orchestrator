@@ -1,0 +1,12 @@
+name: kanban shows queue order from the fixture
+tags: [ui, queue]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban]
+      order: [Never started, Queued with status, Waiting in line]
+      request_2xx: [/api/board]
+      no_console_error: true
+      no_mutation_without_header: true

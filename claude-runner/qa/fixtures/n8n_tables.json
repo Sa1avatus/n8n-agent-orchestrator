@@ -1,0 +1,390 @@
+{
+ "data_table_user_hYAqO52ZGHXxhhHX": [
+  [
+   "id",
+   "integer"
+  ],
+  [
+   "mission_id",
+   "text"
+  ],
+  [
+   "state_namespace",
+   "text"
+  ],
+  [
+   "working_directory",
+   "text"
+  ],
+  [
+   "version",
+   "double precision"
+  ],
+  [
+   "enabled",
+   "boolean"
+  ],
+  [
+   "name",
+   "text"
+  ],
+  [
+   "objective",
+   "text"
+  ],
+  [
+   "rules_json",
+   "text"
+  ],
+  [
+   "acceptance_criteria_json",
+   "text"
+  ],
+  [
+   "retrieval_corpora_json",
+   "text"
+  ],
+  [
+   "createdAt",
+   "timestamp with time zone"
+  ],
+  [
+   "updatedAt",
+   "timestamp with time zone"
+  ]
+ ],
+ "data_table_user_Yn9lOhVhQ9gFymNs": [
+  [
+   "id",
+   "integer"
+  ],
+  [
+   "worker_session_id",
+   "text"
+  ],
+  [
+   "state_key",
+   "text"
+  ],
+  [
+   "plan_json",
+   "text"
+  ],
+  [
+   "task_index",
+   "double precision"
+  ],
+  [
+   "task_attempt",
+   "double precision"
+  ],
+  [
+   "status",
+   "text"
+  ],
+  [
+   "review_feedback",
+   "text"
+  ],
+  [
+   "last_review_score",
+   "double precision"
+  ],
+  [
+   "last_review_reason",
+   "text"
+  ],
+  [
+   "updated_at",
+   "text"
+  ],
+  [
+   "reviewer_session_id",
+   "text"
+  ],
+  [
+   "reviewer_run_id",
+   "text"
+  ],
+  [
+   "reviewer_status",
+   "text"
+  ],
+  [
+   "worker_run_id",
+   "text"
+  ],
+  [
+   "worker_status",
+   "text"
+  ],
+  [
+   "architect_run_id",
+   "text"
+  ],
+  [
+   "architect_status",
+   "text"
+  ],
+  [
+   "architect_session_id",
+   "text"
+  ],
+  [
+   "createdAt",
+   "timestamp with time zone"
+  ],
+  [
+   "updatedAt",
+   "timestamp with time zone"
+  ]
+ ],
+ "data_table_user_ceJ7PFzVJvPN0LsV": [
+  [
+   "id",
+   "integer"
+  ],
+  [
+   "state_key",
+   "text"
+  ],
+  [
+   "task_id",
+   "text"
+  ],
+  [
+   "task_index",
+   "double precision"
+  ],
+  [
+   "task_attempt",
+   "double precision"
+  ],
+  [
+   "event_type",
+   "text"
+  ],
+  [
+   "worker_run_id",
+   "text"
+  ],
+  [
+   "worker_status",
+   "text"
+  ],
+  [
+   "worker_output",
+   "text"
+  ],
+  [
+   "worker_error",
+   "text"
+  ],
+  [
+   "reviewer_run_id",
+   "text"
+  ],
+  [
+   "reviewer_status",
+   "text"
+  ],
+  [
+   "reviewer_output",
+   "text"
+  ],
+  [
+   "reviewer_error",
+   "text"
+  ],
+  [
+   "review_status",
+   "text"
+  ],
+  [
+   "review_score",
+   "double precision"
+  ],
+  [
+   "review_reason",
+   "text"
+  ],
+  [
+   "review_next_task",
+   "text"
+  ],
+  [
+   "created_at",
+   "text"
+  ],
+  [
+   "createdAt",
+   "timestamp with time zone"
+  ],
+  [
+   "updatedAt",
+   "timestamp with time zone"
+  ]
+ ],
+ "data_table_user_1S21PsMqT0FpR7eD": [
+  [
+   "id",
+   "integer"
+  ],
+  [
+   "profile_id",
+   "text"
+  ],
+  [
+   "enabled",
+   "boolean"
+  ],
+  [
+   "architect_provider",
+   "text"
+  ],
+  [
+   "architect_model",
+   "text"
+  ],
+  [
+   "worker_provider",
+   "text"
+  ],
+  [
+   "worker_model",
+   "text"
+  ],
+  [
+   "reviewer_provider",
+   "text"
+  ],
+  [
+   "reviewer_model",
+   "text"
+  ],
+  [
+   "service_provider",
+   "text"
+  ],
+  [
+   "service_model",
+   "text"
+  ],
+  [
+   "max_tasks",
+   "double precision"
+  ],
+  [
+   "max_attempts_per_task",
+   "double precision"
+  ],
+  [
+   "architect_max_polls",
+   "double precision"
+  ],
+  [
+   "worker_max_polls",
+   "double precision"
+  ],
+  [
+   "reviewer_max_polls",
+   "double precision"
+  ],
+  [
+   "architect_poll_seconds",
+   "double precision"
+  ],
+  [
+   "worker_poll_seconds",
+   "double precision"
+  ],
+  [
+   "reviewer_poll_seconds",
+   "double precision"
+  ],
+  [
+   "architect_max_retries",
+   "double precision"
+  ],
+  [
+   "worker_max_retries",
+   "double precision"
+  ],
+  [
+   "reviewer_max_retries",
+   "double precision"
+  ],
+  [
+   "retry_delays_json",
+   "text"
+  ],
+  [
+   "telegram_chat_id",
+   "text"
+  ],
+  [
+   "retrieval_enabled",
+   "boolean"
+  ],
+  [
+   "retrieval_url",
+   "text"
+  ],
+  [
+   "retrieval_corpora_json",
+   "text"
+  ],
+  [
+   "retrieval_worker_max_tokens",
+   "double precision"
+  ],
+  [
+   "retrieval_reviewer_max_tokens",
+   "double precision"
+  ],
+  [
+   "retrieval_timeout_ms",
+   "double precision"
+  ],
+  [
+   "retrieval_label",
+   "text"
+  ],
+  [
+   "runner_url",
+   "text"
+  ],
+  [
+   "run_manager_workflow_id",
+   "text"
+  ],
+  [
+   "createdAt",
+   "timestamp with time zone"
+  ],
+  [
+   "updatedAt",
+   "timestamp with time zone"
+  ],
+  [
+   "worker_think_policy",
+   "text"
+  ],
+  [
+   "worker_think_policy_from_task",
+   "double precision"
+  ],
+  [
+   "worker_think_off_after_seconds",
+   "double precision"
+  ],
+  [
+   "worker_think_off_after_steps",
+   "double precision"
+  ],
+  [
+   "roles_json",
+   "text"
+  ]
+ ]
+}

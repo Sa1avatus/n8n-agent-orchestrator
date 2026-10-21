@@ -1,0 +1,72 @@
+# Order checks use fixture values only: "#" is the row id, Mission is the lowercase name,
+# ID is the lowercase mission_id. Disabled missions m11/m12 are left out of the order lists.
+# State, Tasks, Project, Started and Last activity are also ordered over the six fixture missions
+# that have live rows (Parser rewrite, Cache layer, Failed import, Never started, Docs pass, Metrics).
+# Tasks ties (five missions with 0 done) keep summary order, which is mission_id order (board.py:646).
+# Tasks derivation: Parser rewrite has 1 done (T001 accepted_retry); all other listed missions have 0.
+# Attempts, Time, Cache %, Cost and Tok/s have header and click checks only: their values are
+# computed in the background from run data (board_stats), not stored in the fixture rows.
+name: grid sorts by every column and shows the header of each
+tags: [ui]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/grid
+    expect:
+      text_visible: [Grid, Mission, ID, Project, State, Tasks, Started, Last activity, Attempts, "Time, h", "Cache %", Cost, "Tok/s"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "#"
+    expect:
+      order: [Parser rewrite, Cache layer, Never started, Docs pass, Metrics]
+      no_console_error: true
+  - click: Mission
+    expect:
+      order: [Cache layer, Docs pass, Metrics, Never started, Parser rewrite]
+      no_console_error: true
+  - click: ID
+    expect:
+      order: [Parser rewrite, Cache layer, Never started, Docs pass, Metrics]
+      no_console_error: true
+  - click: Project
+    expect:
+      order: [Never started, Parser rewrite, Cache layer, Docs pass, Metrics, Failed import]
+      no_console_error: true
+  - click: State
+    expect:
+      order: [Parser rewrite, Cache layer, Failed import, Never started, Docs pass, Metrics]
+      no_console_error: true
+  - click: Tasks
+    expect:
+      order: [Cache layer, Never started, Docs pass, Metrics, Failed import, Parser rewrite]
+      no_console_error: true
+  - click: Started
+    expect:
+      order: [Never started, Docs pass, Metrics, Failed import, Parser rewrite, Cache layer]
+      no_console_error: true
+  - click: Last activity
+    expect:
+      order: [Parser rewrite, Cache layer, Never started, Docs pass, Metrics, Failed import]
+      no_console_error: true
+  - click: Attempts
+    expect:
+      text_visible: [Attempts]
+      no_console_error: true
+  - click: "Time, h"
+    expect:
+      text_visible: ["Time, h"]
+      no_console_error: true
+  - click: "Cache %"
+    expect:
+      text_visible: ["Cache %"]
+      no_console_error: true
+  - click: Cost
+    expect:
+      text_visible: [Cost]
+      no_console_error: true
+  - click: "Tok/s"
+    expect:
+      text_visible: ["Tok/s"]
+      request_2xx: [/api/board]
+      no_console_error: true
+      no_mutation_without_header: true

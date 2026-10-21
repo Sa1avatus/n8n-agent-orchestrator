@@ -5,10 +5,13 @@ the optimistic rollback against a drift, and the atomic mission creation."""
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
 from typing import Any
 
 import pytest
 
+from claude_runner import board_ready
 from claude_runner.board import ConflictError, InMemoryBoardStore, LiveState, Mission, QueueEntry
 from claude_runner.board_ready import (
     MissionIdError,
@@ -17,6 +20,7 @@ from claude_runner.board_ready import (
     check_not_running,
     check_plan_present,
     check_preflight_fresh,
+    check_qa_ready,
     check_required_files,
     check_runner_health,
     check_working_folder,
@@ -659,7 +663,7 @@ class TestCollectReadiness:
         checks = {i["check"] for i in summary["items"]}
         assert checks == {
             "working_folder", "required_files", "runner", "litellm",
-            "llama_model", "plan", "live_state", "not_running", "preflight",
+            "llama_model", "plan", "live_state", "not_running", "preflight", "qa",
         }
         assert summary["status"] == "error"
         assert summary["confirmed_needed"] is True
@@ -693,6 +697,98 @@ class TestCollectReadiness:
         assert start_guard(summary)["allowed"] is True
         # a confirmed start is allowed even with warnings
         assert start_guard(summary, confirmed=True)["allowed"] is True
+
+
+QA_PARTS_PRESENT = {"playwright": None, "chromium": None, "stack": None}
+REAL_PROBE_QA_ENVIRONMENT = board_ready.probe_qa_environment
+
+
+@pytest.fixture(autouse=True)
+def qa_parts_present(monkeypatch):
+    monkeypatch.setattr(board_ready, "probe_qa_environment", lambda: dict(QA_PARTS_PRESENT))
+
+
+class TestQaReady:
+    def test_mode_off_is_a_warning_even_with_missing_parts(self):
+        environment = {"playwright": "playwright is not installed", "chromium": None,
+                       "stack": None}
+        item = check_qa_ready({}, environment)
+        assert item["check"] == "qa"
+        assert item["status"] == "warning"
+        assert item["mode"] == "off"
+
+    def test_mode_on_with_every_part_present_is_ok(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "final"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "ok"
+        assert item["model"] == "anthropic/sonnet"
+
+    def test_mode_on_with_missing_chromium_is_a_blocker(self):
+        environment = {"playwright": None, "chromium": "chromium is not installed", "stack": None}
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "nightly"}}}
+        item = check_qa_ready(roles, environment)
+        assert item["status"] == "error"
+        assert "chromium is not installed" in item["reason"]
+
+    def test_invalid_mode_is_a_blocker(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "always"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "error"
+        assert "'always'" in item["reason"]
+
+    def test_invalid_model_setting_is_a_blocker(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"fresh": "maybe"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "error"
+
+    def test_missing_playwright_skips_the_chromium_lookup(self, monkeypatch):
+        monkeypatch.setattr(board_ready.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(board_ready, "_stack_help_problem", lambda: None)
+        monkeypatch.setattr(
+            board_ready, "_chromium_problem",
+            lambda: pytest.fail("chromium must not be checked without playwright"),
+        )
+        environment = REAL_PROBE_QA_ENVIRONMENT()
+        assert "not installed" in environment["playwright"]
+        assert environment["stack"] is None
+
+    def test_stack_help_failure_is_reported(self, monkeypatch):
+        completed = subprocess.CompletedProcess(args=[], returncode=2)
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._stack_help_problem() == "qa stack --help exited with 2"
+
+    def test_stack_help_success_is_no_problem(self, monkeypatch):
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._stack_help_problem() is None
+
+    def test_chromium_missing_on_disk_is_reported(self, monkeypatch, tmp_path):
+        missing = tmp_path / "chrome"
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{missing}\n")
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert "playwright install chromium" in board_ready._chromium_problem()
+
+    def test_chromium_present_on_disk_is_no_problem(self, monkeypatch, tmp_path):
+        binary = tmp_path / "chrome"
+        binary.write_text("")
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{binary}\n")
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._chromium_problem() is None
+
+    def test_collect_readiness_uses_the_mission_qa_mode(self, board: InMemoryBoardStore):
+        seed(board)
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "final"}}}
+        board.set_mission_config("m1", {"roles_json": json.dumps(roles)}, None)
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        qa = next(i for i in summary["items"] if i["check"] == "qa")
+        assert qa["status"] == "ok"
+
+    def test_collect_readiness_blocks_on_unparseable_roles_json(self, board: InMemoryBoardStore):
+        seed(board)
+        board.set_mission_config("m1", {"roles_json": "{not json"}, None)
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        qa = next(i for i in summary["items"] if i["check"] == "qa")
+        assert qa["status"] == "error"
 
 
 def test_settings_without_providers_do_not_break_the_service_urls(monkeypatch):

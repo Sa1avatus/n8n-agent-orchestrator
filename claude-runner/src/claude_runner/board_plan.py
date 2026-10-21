@@ -502,7 +502,9 @@ def update_mission_config(
     a changelog payload; raises :class:`GuardError` for rejected fields and
     :class:`ConflictError` when the version is missing or stale.
     """
-    _check_version(expected_version, stored_version)
+    # no config row yet (stored None) and no version sent: the first save creates the row
+    if stored_version is not None or expected_version is not None:
+        _check_version(expected_version, stored_version)
     for name, value in fields.items():
         if mission_running and name not in MIDRUN_CONFIG_FIELDS:
             reason = NON_EDITABLE_CONFIG_FIELDS.get(

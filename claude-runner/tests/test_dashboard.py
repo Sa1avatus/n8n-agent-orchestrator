@@ -355,10 +355,40 @@ def test_guards_route_reports_dry_run_and_no_env_values(
         assert body["enabled"] is True
         assert body["dry_run"] is True
         assert body["running"] is True
-        assert body["guards"] == []
+        # the five registered container guards (master on), all dry-run;
+        # the queue and mission-notice sources are unconfigured here, so they
+        # report unknown state and never act
+        names = [g["name"] for g in body["guards"]]
+        assert names == ["idle", "mission_notice", "queue_restart",
+                        "host_heartbeat", "tg_relay"]
+        assert all(g["dry_run"] is True for g in body["guards"])
+        # the two host heartbeat entries carry every required field;
+        # dry_run is True under DASHBOARD_GUARDS_DRY_RUN=1
+        hb_names = [h["name"] for h in body["heartbeats"]]
+        assert hb_names == ["docker_watchdog", "gpu_power_governor"]
+        for h in body["heartbeats"]:
+            assert set(h.keys()) == {"name", "status", "time", "last_action",
+                                    "last_result", "dry_run"}
+            assert h["dry_run"] is True
         text = body.__repr__()
         assert token not in text and chat not in text
         # the supervisor still stops cleanly at shutdown
+    assert dash.app.state.guards._running is False
+
+
+def test_guards_route_unset_returns_previous_shape(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With DASHBOARD_GUARDS unset the response has no guards, no
+    heartbeats key, and the same body keys as before the guards were added."""
+    monkeypatch.delenv("DASHBOARD_GUARDS", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is False
+        assert body["guards"] == []
+        assert "heartbeats" not in body
+        assert set(body.keys()) == {"enabled", "dry_run", "running", "guards"}
+        assert dash.app.state.guards._tasks == {}
     assert dash.app.state.guards._running is False
 
 
@@ -1076,3 +1106,33 @@ def test_poll_keeps_running_after_a_drawing_error_and_has_a_request_timeout() ->
     poll = html[html.index("async function poll()"):html.index("// ---------------------------------------------------------------- RAG")]
     assert "catch (e)" in poll and poll.index("catch (e)", poll.index("grew")) < poll.index("S.timer = setTimeout(poll, isActive")
     assert "AbortController" in html and "25000" in html
+
+
+def test_guards_tab_off_keeps_the_answer_and_has_no_history_route(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without DASHBOARD_GUARDS_TAB the answer has no tab keys and the history is empty."""
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.delenv("DASHBOARD_GUARDS_TAB", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert "tab" not in body and "history_summary" not in body
+        assert dash.get("/api/guards/history").json() == {"window": "24h", "guards": {}}
+
+
+def test_guards_tab_on_serves_history_and_rejects_a_bad_window(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    token = "fake-token-12345"
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_TAB", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_BOT_TOKEN", token)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["tab"] is True and "history_summary" in body
+        history = dash.get("/api/guards/history?window=7d")
+        assert history.status_code == 200 and history.json()["window"] == "7d"
+        assert token not in history.text
+        assert dash.get("/api/guards/history?window=9y").status_code == 422
+    assert (tmp_path / "guards_history.json").exists()

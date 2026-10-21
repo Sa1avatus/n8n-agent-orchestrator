@@ -12,12 +12,12 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.8.0** | **12** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.9.0** | **14** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
 
-<p align="center"><img src="docs/img/flow.svg" alt="Mission, Architect, Worker, Reviewer, Result; n8n, claude-runner, models, dashboard" width="100%"></p>
+<p align="center"><img src="docs/img/flow.svg" alt="Mission, Architect, Worker, Reviewer, QA; n8n, claude-runner, models, dashboard" width="100%"></p>
 
 1. A **mission** (objective, rules, acceptance criteria, working folder) is taken from the queue.
 2. The **Architect** splits it into small tasks.
@@ -42,7 +42,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 | | |
 |---|---|
 | ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) |
-| 🔄 **Now** | QA acceptance and guards migration → **0.9.0**; the runner is renamed to `ahawr-runner` in **0.10.0** |
+| 🔄 **Now** | Features config, QA smoke, providers in the web UI and report pack; the runner is renamed to `ahawr-runner` in **0.10.0** |
 | ➡️ **Next** | Worker attempt chains · report pack · **1.0.0: Codex as the third executor** |
 <!-- status:end -->
 

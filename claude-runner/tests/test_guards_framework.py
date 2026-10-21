@@ -235,7 +235,10 @@ async def test_state_snapshot_has_expected_fields() -> None:
     await sup.start()
     snap = sup.state()
     assert isinstance(snap, SupervisorSnapshot)
-    expected = {"last_run", "last_result", "last_action", "error_count", "status"}
+    expected = {
+        "name", "last_run", "last_result", "last_action", "error_count", "status",
+        "enabled", "dry_run",
+    }
     for guard_state in snap["guards"].values():
         assert set(guard_state) == expected
     # the supervisor-level fields are present too

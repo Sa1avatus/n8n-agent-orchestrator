@@ -23,7 +23,8 @@
 //      state; a task not in the plan renders the read-only form;
 //  10. add, delete, duplicate, move, retry and hint send the right requests;
 //      retry is refused with a note unless the task is not_accepted;
-//      a failed operation shows its message; a 409 reloads.
+//      a failed operation shows its message; a 409 reloads;
+//  11. ui_check is shown read-only and escaped, and a save never carries it.
 
 "use strict";
 const path = require("path");
@@ -77,6 +78,20 @@ const activeRows = PE.renderEditForm(
   true);
 check("an active mission shows the running warning",
   has(activeRows, 'class="pedit-warning">Editing the plan of a running mission can be overwritten by the workflow: do it on a pause.'));
+
+// --- ui_check: shown read-only and escaped, never a form row ---
+const withCheck = PE.renderEditForm(
+  { status: "waiting" },
+  { title: "t1", objective: "o1", acceptance_criteria: ["c1"], verification: [], scope: [],
+    hint: "h1",
+    ui_check: { needed: true, why: HOSTILE, scenario: "открыть отчёт", steps: ["шаг 1", "шаг 2"] } },
+  false);
+check("ui_check block shows the flag, the steps and the scenario",
+  has(withCheck, 'class="pedit-uicheck"') && has(withCheck, "UI check needed: yes") &&
+  has(withCheck, "<li>шаг 2</li>") && has(withCheck, "scenario: открыть отчёт"));
+check("ui_check text is escaped", !has(withCheck, HOSTILE) && has(withCheck, "&lt;img src=x"));
+check("ui_check adds no form row", (withCheck.match(/data-key="[^"]*"/g) || []).length === 6);
+check("a task without ui_check has no ui_check block", !has(rows, "pedit-uicheck"));
 
 // --- readForm: CRLF normalisation and listarea parsing ---
 function makeBox(keys) {
@@ -318,6 +333,24 @@ function editData(taskId, overrides, viewStatus) {
   check("onSave reloaded the plan (two GETs after the post)",
     requests.filter((r) => !r.method || r.method === "GET").length === 2 &&
     noteStub.textContent === "");
+  requests.length = 0;
+
+  // --- onSave: the task's ui_check is kept out of the save body ---
+  const withCheckPlan = JSON.parse(JSON.stringify(plan));
+  withCheckPlan.plan.tasks.find((t) => t.id === "T003").ui_check =
+    { needed: false, why: "нет", scenario: "", steps: [] };
+  planState = withCheckPlan;
+  const checkData = editData("T003", detail.task_overrides);
+  lastBox = makeEditBox(true, checkData.initial);
+  attach(lastBox, checkData);
+  Object.fromEntries(lastBox.els.map((e) => [e.dataset.key, e])).title.value = "заголовок-uc";
+  window.confirm = () => true;
+  await PE.onSave(lastBox, checkData);
+  const ucPost = requests.find((r) => r.method === "POST");
+  check("onSave with ui_check posts only the title and the expected version",
+    JSON.stringify(Object.keys(ucPost.body).sort()) ===
+    JSON.stringify(["expected_version", "title"]));
+  planState = plan;
   requests.length = 0;
 
   // --- onSave: a declined confirmation posts nothing ---

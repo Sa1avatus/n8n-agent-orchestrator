@@ -1,0 +1,30 @@
+name: every board view opens with tabs and no console error on the default fixture
+tags: [ui, nightly]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/proj
+    expect:
+      text_visible: [Projects]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - open: /static/board.html#board/view/lane
+    expect:
+      text_visible: [Lanes]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - open: /static/board.html#board/view/spr
+    expect:
+      text_visible: [Sprint]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - open: /static/board.html#board/view/grid
+    expect:
+      text_visible: [Grid]
+      request_2xx: [/api/board]
+      no_console_error: true

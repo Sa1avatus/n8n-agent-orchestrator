@@ -30,8 +30,17 @@ const ROLES = [
   ["ew.worker", "#ff8a3d", "worker_model", "worker_provider"],
   ["ew.reviewer", "#b39bff", "reviewer_model", "reviewer_provider"],
   ["ew.architect", "#ffb454", "architect_model", "architect_provider"],
+  ["ew.qa", "#5fd0c0", "qa_model", "qa_provider"],
 ];
 const LOCKED = ["working_directory", "retrieval_corpora"];
+const QA_LIMITS = [["mode", "qa_mode"], ["max_minutes", "qa_max_minutes"], ["max_cost_usd", "qa_max_cost_usd"]];
+const QA_LABEL_KEYS = {
+  provider: "ew.provider", model: "ew.model", mode: "ew.qa.mode",
+  max_minutes: "ew.qa.max_minutes", max_cost_usd: "ew.qa.max_cost_usd",
+};
+// The QA role lives in roles_json (qa), not in the form: its controls are not data-key inputs.
+let qaFields = {};
+let qa = null;   // { text, version, initial } from GET /api/board/missions/<id>/roles
 
 function tr(key, params) {
   return typeof t === "function" ? t(key, params) : key;
@@ -117,7 +126,107 @@ function pageNode(id) {
   return document.getElementById("ew-page-" + id);
 }
 
+function labelled(caption, el) {
+  const cell = mk("div", "ew-cell");
+  cell.append(mk("small", "", caption), el);
+  return cell;
+}
+
+function makeQaFields() {
+  const ph = BoardRoles.qaPlaceholders();
+  const fields = {};
+  for (const [field, key] of [["provider", "qa_provider"], ["model", "qa_model"]].concat(QA_LIMITS)) {
+    let el;
+    if (field === "mode") {
+      el = mk("select", "");
+      const none = mk("option", "", tr("ew.qa.default", { v: ph.mode }));
+      none.value = "";
+      el.appendChild(none);
+      for (const m of BoardRoles.QA_MODES) {
+        const o = mk("option", "", tr("ew.qa.mode." + m));
+        o.value = m;
+        el.appendChild(o);
+      }
+    } else {
+      el = mk("input", "");
+      el.type = field.startsWith("max_") ? "number" : "text";
+      if (el.type === "number") el.placeholder = ph[field];
+    }
+    el.dataset.extra = key;
+    fields[key] = el;
+  }
+  return fields;
+}
+
+function qaCurrent() {
+  const values = {};
+  for (const [field, key] of [["provider", "qa_provider"], ["model", "qa_model"]].concat(QA_LIMITS)) {
+    values[field] = qaFields[key].value;
+  }
+  return values;
+}
+
+function qaFill(values) {
+  for (const [field, key] of [["provider", "qa_provider"], ["model", "qa_model"]].concat(QA_LIMITS)) {
+    qaFields[key].value = values[field];
+  }
+}
+
+function qaRows() {
+  if (!qa) return [];
+  return BoardRoles.qaDiffRows(qa.initial, qaCurrent()).map((d) => ({ ...d, field: "qa." + d.field }));
+}
+
+function qaProblem() {
+  const values = qaCurrent();
+  try {
+    BoardRoles.qaOptionsFrom(values);
+  } catch (e) {
+    return true;
+  }
+  return (values.provider === "") !== (values.model === "");
+}
+
+function isDirty(box) {
+  const s = save();
+  return (s ? s.formDirty(box) : false) || qaRows().length > 0;
+}
+
+// The mission id: the save state has it once the form is attached; a quick click can come
+// earlier, so the #board/<mission_id> fragment of the mission screen is the fallback.
+function currentMissionId() {
+  const s = save();
+  if (s && s.SaveState.missionId) return s.SaveState.missionId;
+  const match = /^#board\/([^/?]+)/.exec(globalThis.location ? globalThis.location.hash : "");
+  return match && match[1] !== "view" ? decodeURIComponent(match[1]) : null;
+}
+
+async function loadQa() {
+  const s = save();
+  const id = currentMissionId();
+  const note = document.getElementById("ew-qa-note");
+  try {
+    if (!id) throw new Error("no mission id");
+    qa = await BoardRoles.loadQaRoles(s, "/api/board/missions/" + encodeURIComponent(id) + "/roles");
+    qaFill(qa.initial);
+    note.textContent = "";
+    for (const el of Object.values(qaFields)) el.disabled = false;
+  } catch (e) {
+    qa = null;
+    note.textContent = tr("ew.qa.loadfail");
+    for (const el of Object.values(qaFields)) el.disabled = true;
+  }
+}
+
+async function saveQa() {
+  if (!qa) return;
+  const id = currentMissionId();
+  qa = await BoardRoles.saveQaRoles(save(), "/api/board/missions/" + encodeURIComponent(id) + "/roles",
+    qaCurrent(), qa);
+}
+
 function fillPages(box, win) {
+  qaFields = makeQaFields();
   const lockedNote = (key) => {
     const row = rowOf(box, key);
     const cur = control(box, key);
@@ -168,7 +277,7 @@ function fillPages(box, win) {
     for (const [key, cap] of [[km, tr("ew.model")], [kp, tr("ew.provider")]]) {
       const cell = mk("div", "ew-cell");
       cell.appendChild(mk("small", "", cap));
-      const c = control(box, key);
+      const c = control(box, key) || qaFields[key];
       const row = rowOf(box, key);
       if (c) cell.appendChild(c);
       if (row) { row.hidden = true; }
@@ -184,7 +293,13 @@ function fillPages(box, win) {
   move(l, "enabled");
   const th = sec(tr("ew.sec.policy"), tr("ew.hint.policy"));
   move(th, "worker_think_policy");
-  p2.append(a, r, l, th);
+  const q = sec(tr("ew.sec.qa"));
+  const qaNote = mk("div", "ew-warn");
+  qaNote.id = "ew-qa-note";
+  const qaRow = mk("div", "ew-row2");
+  for (const [field, key] of QA_LIMITS) qaRow.appendChild(labelled(tr(QA_LABEL_KEYS[field]), qaFields[key]));
+  q.append(qaNote, qaRow);
+  p2.append(a, r, q, l, th);
 
   // page 3
   const p3 = pageNode("ctx");
@@ -195,11 +310,15 @@ function fillPages(box, win) {
   p3.append(h, c3);
 }
 
+function diffLabel(box, field) {
+  return field.startsWith("qa.") ? tr("ew.qa") + " · " + tr(QA_LABEL_KEYS[field.slice(3)]) : labelOf(box, field);
+}
+
 function reviewHtml(box) {
   const page = pageNode("review");
   page.textContent = "";
   const s = save();
-  const diff = s ? s.currentDiff(box) : [];
+  const diff = (s ? s.currentDiff(box) : []).concat(qaRows());
   const sec = mk("div", "ew-sec");
   sec.appendChild(mk("h4", "", tr("ew.s4")));
   sec.appendChild(mk("p", "", diff.length ? tr("ew.changes", { n: diff.length }) : tr("ew.nochange")));
@@ -210,7 +329,7 @@ function reviewHtml(box) {
     table.appendChild(head);
     for (const d of diff) {
       const row = mk("tr", "");
-      row.append(mk("td", "ew-field", labelOf(box, d.field)),
+      row.append(mk("td", "ew-field", diffLabel(box, d.field)),
         mk("td", "ew-old", show(d.old).slice(0, 160)), mk("td", "ew-new", show(d.new).slice(0, 160)));
       table.appendChild(row);
     }
@@ -226,6 +345,7 @@ function problems(box) {
   const cur = save() ? save().readForm(box) : {};
   if (!String(cur.name || "").trim() || !String(cur.objective || "").trim()) return { page: 0, text: tr("ew.invalid") };
   if (typeof cur.worker_think_policy === "string" && cur.worker_think_policy.trim() !== "") return { page: 1, text: tr("ew.badjson") };
+  if (qaProblem()) return { page: 1, text: tr("ew.qa.invalid") };
   return null;
 }
 
@@ -233,7 +353,7 @@ function paint(box) {
   const win = document.getElementById("ew-win");
   if (!win) return;
   const total = PAGES.length + 1;
-  const dirty = save() ? save().formDirty(box) : false;
+  const dirty = isDirty(box);
   document.getElementById("ew-bar").style.width = ((step + 1) / total * 100) + "%";
   const labels = PAGES.map((p) => tr(p.label)).concat([tr("ew.s4")]);
   const steps = document.getElementById("ew-steps");
@@ -261,8 +381,9 @@ function paint(box) {
 
 function closeWin(box, force) {
   const s = save();
-  if (!force && s && s.formDirty(box) && !window.confirm(tr("ew.discard"))) return;
+  if (!force && isDirty(box) && !window.confirm(tr("ew.discard"))) return;
   if (!force && s && s.formDirty(box)) s.onReset(box);
+  if (!force && qa) qaFill(qa.initial);
   const scrim = document.getElementById("ew-scrim");
   if (scrim) scrim.classList.remove("open");
   document.body.dataset.editing = "";
@@ -283,7 +404,11 @@ async function onNext(box) {
   const next = document.getElementById("ew-next");
   next.disabled = true;
   try {
+    await saveQa();
     await save().doSave(box);          // re-renders #boardmission: the observer builds the card again
+  } catch (e) {
+    document.getElementById("ew-err").textContent = e.message || tr("ew.qa.loadfail");
+    next.disabled = false;
   } finally {
     document.body.dataset.editing = "";
   }
@@ -297,6 +422,7 @@ function openWin(box) {
   document.body.dataset.editing = "1";
   document.addEventListener("keydown", onKey);
   paint(box);
+  loadQa().then(() => paint(box));
 }
 
 function buildWindow(box) {
@@ -363,8 +489,7 @@ function buildWindow(box) {
 
 // repaint the dirty badge and the review button without leaving the page
 function paint2(box) {
-  const s = save();
-  const dirty = s ? s.formDirty(box) : false;
+  const dirty = isDirty(box);
   document.getElementById("ew-dirty").classList.toggle("on", dirty);
   if (step === PAGES.length) {
     document.getElementById("ew-next").disabled = !dirty;

@@ -22,15 +22,16 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import logging
 import re
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
-from . import board_order, board_plan, board_ready, board_stats, board_think
+from . import board_order, board_plan, board_ready, board_stats, board_think, roles_config
 from .board import (
     BoardStore,
     ConflictError,
@@ -40,11 +41,17 @@ from .board import (
     get_board_store,
     now,
 )
+from .board_ops_redact import scrub
 from .board_pg import UnavailableBoardStore
 from .board_plan import update_mission_config
 from .board_ready import MissionIdError, create_mission, rollback, save_template, start_guard
+from .qa import NIGHTLY_VERDICT_PATH
+from .qa_runner import RUN_DIR_PREFIX, RUNS_DIR
 
 __all__ = ["router", "add_board_routes"]
+
+logger = logging.getLogger(__name__)
+_QA_SCREENSHOT_RE = re.compile(r"^qa-[0-9a-f]+/[A-Za-z0-9_.-]+\.png$")
 
 
 def _error(exc: Exception, code: str, status: int) -> JSONResponse:
@@ -91,6 +98,19 @@ _I18N_LANG_RE = re.compile(r"[a-z]{2,8}")
 def _require_dashboard_header(request: Request) -> None:
     if request.headers.get("x-ahawr-dashboard") != "1":
         raise GuardError("missing X-AHAWR-Dashboard header")
+
+
+def _roles_text(request: Request, body: dict[str, Any]) -> str:
+    text = body.get("roles_json", "")
+    if not isinstance(text, str):
+        raise ValueError("roles_json must be a string holding the JSON text")
+    if not text.strip():
+        return ""
+    providers = getattr(request.app.state.settings, "providers", {})
+    report = roles_config.validate_roles_json(text, list(providers))
+    if report.errors:
+        raise ValueError("; ".join(report.errors))
+    return text
 
 
 def _i18n_file(lang: str) -> dict[str, str]:
@@ -211,6 +231,56 @@ def _config_version(store: BoardStore, mission_id: str) -> str | None:
         return store._mission_config_version.get(mission_id, None)
     config = store.mission_config(mission_id)
     return (config or {}).get("updated_at")
+
+
+_UI_CHECK_KEYS = frozenset({"needed", "why", "scenario", "steps"})
+_PLAN_QA_KEYS = frozenset({"needed", "reasons", "scenarios"})
+_MAX_NEEDED_UI_CHECKS = 3
+
+
+def _is_str_list(value: Any) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _check_ui_check(label: str, check: Any) -> None:
+    if not isinstance(check, dict) or set(check) != _UI_CHECK_KEYS:
+        keys = sorted(_UI_CHECK_KEYS)
+        raise ValueError(f"task {label}: ui_check must be an object with the keys {keys}")
+    if not isinstance(check["needed"], bool):
+        raise ValueError(f"task {label}: ui_check.needed must be true or false")
+    if not isinstance(check["why"], str) or not isinstance(check["scenario"], str):
+        raise ValueError(f"task {label}: ui_check.why and ui_check.scenario must be strings")
+    if not _is_str_list(check["steps"]):
+        raise ValueError(f"task {label}: ui_check.steps must be a list of strings")
+
+
+def _check_plan_qa(qa: Any, needed_ui_checks: int) -> None:
+    if not isinstance(qa, dict) or set(qa) != _PLAN_QA_KEYS:
+        raise ValueError(f"qa must be an object with the keys {sorted(_PLAN_QA_KEYS)}")
+    if not isinstance(qa["needed"], bool):
+        raise ValueError("qa.needed must be true or false")
+    if not _is_str_list(qa["reasons"]) or not _is_str_list(qa["scenarios"]):
+        raise ValueError("qa.reasons and qa.scenarios must be lists of strings")
+    if qa["needed"] and not needed_ui_checks:
+        raise ValueError("qa.needed is true but no task has a needed ui_check")
+
+
+def _check_plan(plan: Any) -> None:
+    if not isinstance(plan, dict):
+        return
+    tasks = plan.get("tasks") or []
+    if not isinstance(tasks, list):
+        raise ValueError("plan tasks must be a list")
+    needed = 0
+    for index, task in enumerate(tasks):
+        if isinstance(task, dict) and "ui_check" in task:
+            _check_ui_check(str(task.get("id") or index + 1), task["ui_check"])
+            if task["ui_check"]["needed"]:
+                needed += 1
+    if needed > _MAX_NEEDED_UI_CHECKS:
+        raise ValueError(f"at most {_MAX_NEEDED_UI_CHECKS} tasks may carry a needed ui_check")
+    if "qa" in plan:
+        _check_plan_qa(plan["qa"], needed)
 
 
 def add_board_routes(app: Any, settings: Any) -> None:
@@ -408,6 +478,64 @@ def _summary_projects(
     return [by_key[k] for k in sorted(by_key)]
 
 
+def _read_qa_json(path: Path) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning("qa file %s unreadable: %s", path.name, type(exc).__name__)
+        return None
+
+
+def _qa_matches(scenarios: set[str]) -> list[tuple[float, dict[str, Any]]]:
+    matches: list[tuple[float, dict[str, Any]]] = []
+    if RUNS_DIR.is_dir():
+        for path in RUNS_DIR.glob(f"{RUN_DIR_PREFIX}*/verdict.json"):
+            verdict = _read_qa_json(path)
+            if isinstance(verdict, dict) and verdict.get("scenario") in scenarios:
+                matches.append((path.stat().st_mtime, verdict))
+    if NIGHTLY_VERDICT_PATH.is_file():
+        nightly = _read_qa_json(NIGHTLY_VERDICT_PATH)
+        if isinstance(nightly, list):
+            mtime = NIGHTLY_VERDICT_PATH.stat().st_mtime
+            matches.extend(
+                (mtime, item)
+                for item in nightly
+                if isinstance(item, dict) and item.get("scenario") in scenarios
+            )
+    return matches
+
+
+def _qa_view(verdict: dict[str, Any]) -> dict[str, Any]:
+    """The verdict with its text scrubbed again and its screenshots as links;
+    only names matching the qa output layout become links."""
+    failed_step = verdict.get("failed_step")
+    shots = verdict.get("screenshots") or []
+    links = [
+        {"name": shot, "url": f"/api/board/qa/screenshots/{shot}"}
+        for shot in shots
+        if isinstance(shot, str) and _QA_SCREENSHOT_RE.match(shot)
+    ]
+    return {
+        "scenario": scrub(str(verdict.get("scenario", ""))),
+        "verdict": str(verdict.get("verdict", "")),
+        "blocked_reason": _scrubbed_or_none(verdict.get("blocked_reason")),
+        "failed_step": failed_step if isinstance(failed_step, int) else None,
+        "failed_reason": scrub(str(verdict.get("failed_reason") or "")),
+        "console_errors": _scrubbed_list(verdict.get("console_errors")),
+        "network_errors": _scrubbed_list(verdict.get("network_errors")),
+        "screenshots": links,
+    }
+
+
+def _scrubbed_or_none(value: object) -> str | None:
+    return None if value is None else scrub(str(value))
+
+
+def _scrubbed_list(value: object) -> list[str]:
+    items = value if isinstance(value, list) else []
+    return [scrub(str(item)) for item in items]
+
+
 def _build_router() -> APIRouter:
     """The mission board as an APIRouter under ``/api/board``.
 
@@ -451,11 +579,32 @@ def _build_router() -> APIRouter:
             "task_overrides": store.task_overrides(mission_id),
         }
 
+    @router.get("/missions/{mission_id}/qa")
+    def mission_qa(request: Request, mission_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        plan_qa = _live_plan(store, _state_key_of(store, mission_id)).get("qa")
+        scenarios = set(plan_qa.get("scenarios") or []) if isinstance(plan_qa, dict) else set()
+        matches = _qa_matches(scenarios) if scenarios else []
+        if not matches:
+            return {"verdict": None}
+        _, latest = max(matches, key=lambda match: match[0])
+        return {"verdict": _qa_view(latest)}
+
+    @router.get("/qa/screenshots/{run_name}/{file_name}")
+    def qa_screenshot(run_name: str, file_name: str) -> FileResponse:
+        if not _QA_SCREENSHOT_RE.match(f"{run_name}/{file_name}"):
+            raise KeyError(f"screenshot {file_name!r} not found")
+        path = (RUNS_DIR / run_name / file_name).resolve()
+        if not path.is_relative_to(RUNS_DIR.resolve()) or not path.is_file():
+            raise KeyError(f"screenshot {file_name!r} not found")
+        return FileResponse(path, media_type="image/png")
+
     # ``create`` is registered before the ``{mission_id}`` route, so Starlette
     # matches the literal path instead of treating ``create`` as a mission id
     @router.post("/missions/create")
     def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         store = _store_guard(request)
+        _check_plan(body.get("plan"))
         return create_mission(
             store,
             body.get("mission_id", ""),
@@ -536,6 +685,7 @@ def _build_router() -> APIRouter:
         fields = {k: v for k, v in body.items() if k not in ("who", "state_key")}
         if not fields:
             raise ValueError("no fields to update")
+        _check_plan(fields.get("plan"))
         updated = store.upsert_live_state(state_key, expected, who=body.get("who", ""), **fields)
         return {"live_state": updated.model_dump()}
 
@@ -1279,6 +1429,46 @@ def _build_router() -> APIRouter:
         store.put_project_rules(rules, body.get("expected_version"), actor=body.get("who", ""))
         rules, version = store.get_project_rules()
         return {"rules": rules, "version": version}
+
+    @router.get("/roles")
+    def get_roles(request: Request) -> dict[str, Any]:
+        row = _store_guard(request).hermes_config() or {}
+        return {"roles_json": row.get("roles_json") or "", "version": row.get("updatedAt")}
+
+    @router.put("/roles")
+    def put_roles(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        text = _roles_text(request, body)
+        store.update_hermes_config(body.get("expected_version"), roles_json=text)
+        return {"roles_json": text, "version": (store.hermes_config() or {}).get("updatedAt")}
+
+    @router.get("/missions/{mission_id}/roles")
+    def get_mission_roles(request: Request, mission_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        if store.get_mission(mission_id) is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        config = store.mission_config(mission_id) or {}
+        return {
+            "roles_json": config.get("roles_json") or "",
+            "version": _config_version(store, mission_id),
+        }
+
+    @router.put("/missions/{mission_id}/roles")
+    def put_mission_roles(
+        request: Request, mission_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        if store.get_mission(mission_id) is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        text = _roles_text(request, body)
+        config = store.mission_config(mission_id) or {}
+        store.set_mission_config(
+            mission_id, {**config, "roles_json": text},
+            expected_version=body.get("expected_version"), who=body.get("who", ""),
+        )
+        return {"roles_json": text, "version": _config_version(store, mission_id)}
 
     @router.get("/i18n")
     def get_i18n(request: Request) -> dict[str, Any]:

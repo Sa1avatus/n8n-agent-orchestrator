@@ -3,7 +3,44 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.8.0** (claude-runner `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.9.0** (claude-runner `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-21 (0.9.0)
+
+New functions of the missions that ran since 0.8.0: the QA role with its stack and runner, the
+guards moved into the dashboard with their own tab, the per-attempt worker chain, and fixes found
+by the QA scenarios. Every new switch defaults to off; with the switches off behaviour is unchanged.
+
+- **QA role** (missions ahawr-qa-acceptance, ahawr-worker-attempt-chain). `python -m claude_runner.qa
+  stack|run|nightly`: a throwaway Docker stack (`qa-*` containers with the four n8n data tables and
+  a fixture board), a Playwright runner that clicks through the dashboard like a user (14 scenarios in
+  `claude-runner/qa/scenarios`: Kanban drag-and-drop and conflict, settings, plan edit, language,
+  guards strip and others), a verdict JSON per run and QA panels on the board. QA is OFF by default
+  and is not yet connected to the workflow (the workflow patch follows `ahawr-features-config`).
+  The Worker chain (`roles_json`): provider and model per role and per attempt (cloud first, local
+  retries) read by the launch settings window and the workflow. See `claude-runner/docs/qa-acceptance.md`.
+- **Guards moved into the dashboard container** (mission ahawr-guards-migration). New guards
+  `mission_notice`, `idle`, `queue_restart`, `host_heartbeat` and `tg_relay` (the Telegram long-poll
+  relay) in `guard_queue.py`, `guard_restart.py`, `guard_heartbeat.py` and `guard_relay.py`; dry-run
+  mode and automatic disabling after three errors in a row; a host launcher `queue_launcher.py` that
+  executes a restart request written by the container; heartbeat lines in `docker_watchdog.ps1` and
+  `gpu_power_governor.py`. Cut over by the operator: `tg_relay` runs in the container; the notice
+  guards wait for a host publisher of the queue log (`board.queue_log` is not fed yet), so
+  `queue_watch.py` stays on the host. What cannot move (restart of the queue shell, `taskkill`,
+  PowerShell, Docker Desktop) is listed in [`docs/guards.md`](docs/guards.md).
+- **Guards tab** (`DASHBOARD_GUARDS_TAB`, off by default). A third dashboard tab next to Runs and
+  Missions with three views (cards, flow diagram, timelines), a history of the last 500 checks per
+  guard saved to the state volume, and `GET /api/guards/history?window=1h|24h|7d`. All texts are
+  board i18n keys in English and Russian. With the flag on the old strip above the tabs is hidden.
+- **Logo and diagrams:** the Result gear is replaced by a QA gear (rose, bug icon) in `mark.svg`,
+  `logo.svg`, `favicon.svg`, `banner.svg` and `flow.svg` (`scripts/make_logo.py`).
+- **Fixed bugs:** the settings window could not save a mission's launch settings when the mission had
+  no config row yet; the Kanban version-conflict message was invisible; the mission cost was not shown
+  in the report rows; Telegram notices vanished (silent retries with an unchecked chat id).
+- **Store:** the Postgres board connection no longer uses prepared statements
+  (`prepare_threshold=None`), which broke after the database restarted.
+- **Docs:** `docs/config-columns-plan.md` (plan to move the `hermes_config` columns into JSON),
+  `docs/guards.md` sections for the migration and the Guards tab.
 
 ## 2026-10-21 (0.8.0)
 

@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from claude_runner.roles_config import (
+    legacy_role,
+    merge,
+    resolve,
+    split_model,
+    validate_roles,
+    validate_roles_json,
+)
+
+CASES: dict[str, Any] = json.loads(
+    (Path(__file__).parent / "roles_cases.json").read_text(encoding="utf-8")
+)
+PROVIDERS: list[str] = CASES["providers"]
+
+MESSAGE_FRAGMENTS = {
+    "first_key": "first attempt key",
+    "key_order": "is not greater than",
+    "bad_key": "must be a positive integer",
+    "duplicate_key": "duplicate key",
+    "bad_role_value": "value must be a model string or an object",
+    "array_model": "model must be a string",
+    "object_model": "model must be a string",
+    "unknown_provider": "unknown provider",
+    "empty_model": "has no model name",
+    "empty_value": "has no model name",
+    "too_many_keys": "keys, at most",
+    "too_many_models": "distinct models",
+    "unknown_option": "unknown option",
+    "unknown_role": "is not a known role",
+}
+
+
+def _matches(expected: dict[str, str], message: str) -> bool:
+    element = expected["element"].split(".")[-1]
+    return MESSAGE_FRAGMENTS[expected["code"]] in message and element in message
+
+
+def _assert_expected(expected: list[dict[str, str]], actual: tuple[str, ...]) -> None:
+    if not expected:
+        assert actual == ()
+    for item in expected:
+        assert any(_matches(item, message) for message in actual), (item, actual)
+
+
+@pytest.mark.parametrize("case", CASES["validation"], ids=lambda case: case["name"])
+def test_shared_validation_case(case: dict[str, Any]) -> None:
+    report = validate_roles_json(case["input"], PROVIDERS)
+    _assert_expected(case["errors"], report.errors)
+    _assert_expected(case["warnings"], report.warnings)
+
+
+@pytest.mark.parametrize("case", CASES["resolve"], ids=lambda case: case["name"])
+def test_shared_resolve_case(case: dict[str, Any]) -> None:
+    roles = merge(case["global"], case["mission"])
+    resolved = resolve(roles, case["role"], case["attempt"], case["legacy"])
+    expect = case["expect"]
+    assert resolved.provider == expect["provider"]
+    assert resolved.model == expect["model"]
+    if "think" in expect:
+        assert resolved.think == expect["think"]
+    if "fresh" in expect:
+        assert resolved.fresh == expect["fresh"]
+    for key, value in expect.get("options", {}).items():
+        assert resolved.options.get(key) == value
+
+
+def test_split_model_keeps_nested_path_in_model_name() -> None:
+    assert split_model("openrouter/deepseek/deepseek-chat") == (
+        "openrouter",
+        "deepseek/deepseek-chat",
+    )
+
+
+def test_merge_mission_replaces_role_and_keeps_other_roles() -> None:
+    global_roles = {"worker": "anthropic/haiku", "qa": "anthropic/sonnet"}
+    merged = merge(global_roles, {"worker": "local/m"})
+    assert merged == {"worker": "local/m", "qa": "anthropic/sonnet"}
+    assert global_roles == {"worker": "anthropic/haiku", "qa": "anthropic/sonnet"}
+
+
+def test_merge_without_either_side_is_empty() -> None:
+    assert merge(None, None) == {}
+
+
+def test_legacy_role_without_provider_column_has_no_first_attempt() -> None:
+    assert legacy_role({"worker_model": "haiku"}, "worker") == {"options": {}}
+
+
+def test_resolve_legacy_model_without_provider_column_raises() -> None:
+    with pytest.raises(ValueError, match="no model configured for role 'worker'"):
+        resolve({}, "worker", 1, {"worker_model": "haiku"})
+
+
+def test_resolve_global_role_ignores_absent_legacy_columns() -> None:
+    resolved = resolve({"worker": "anthropic/haiku"}, "worker", 1, {})
+    assert (resolved.provider, resolved.model) == ("anthropic", "haiku")
+
+
+def test_qa_without_roles_or_legacy_resolves_to_defaults() -> None:
+    resolved = resolve(merge(None, None), "qa", 1, {})
+    assert (resolved.provider, resolved.model) == ("anthropic", "sonnet")
+    assert resolved.options["mode"] == "off"
+    assert resolved.options["max_minutes"] == 20
+    assert resolved.options["max_cost_usd"] == 1
+
+
+def test_qa_options_from_roles_json_override_defaults() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final", "max_minutes": 5}}}
+    resolved = resolve(roles, "qa", 1, {})
+    assert resolved.options["mode"] == "final"
+    assert resolved.options["max_minutes"] == 5
+    assert resolved.options["max_cost_usd"] == 1
+
+
+def test_qa_validation_accepts_modes_and_limits() -> None:
+    options = {"mode": "nightly", "max_minutes": 20, "max_cost_usd": 1.5}
+    qa = {"1": "anthropic/sonnet", "options": options}
+    assert validate_roles({"qa": qa}, PROVIDERS).errors == ()
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"mode": "always"},
+        {"mode": None},
+        {"max_minutes": -1},
+        {"max_minutes": 0},
+        {"max_minutes": "20"},
+        {"max_minutes": True},
+        {"max_cost_usd": -0.5},
+        {"max_cost_usd": float("inf")},
+    ],
+)
+def test_qa_validation_rejects_bad_mode_or_limit_with_reason(options: dict[str, Any]) -> None:
+    report = validate_roles({"qa": {"1": "anthropic/sonnet", "options": options}}, PROVIDERS)
+    assert len(report.errors) == 1
+    assert "role 'qa'" in report.errors[0]
+    assert "option" in report.errors[0]
+
+
+def test_qa_only_options_are_unknown_for_other_roles() -> None:
+    roles = {"worker": {"1": "anthropic/haiku", "options": {"mode": "off"}}}
+    report = validate_roles(roles, PROVIDERS)
+    assert report.errors == ("role 'worker': unknown option 'mode'",)

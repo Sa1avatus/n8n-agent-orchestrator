@@ -14,7 +14,7 @@ import shutil
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-ROLES = ("architect", "worker", "reviewer", "generic")
+ROLES = ("architect", "worker", "reviewer", "qa", "generic")
 PERMISSION_MODES = {
     "default",
     "acceptEdits",
@@ -173,6 +173,7 @@ DEFAULT_RETRY_INPUT_CHARS = 32_000
 AUTO_COMPACT_WINDOW = 65_536
 AUTO_COMPACT_TOOL_RESERVE = 20_000
 DEFAULT_MAX_OUTPUT_TOKENS = 8_192
+QA_MAX_MINUTES = 20
 
 
 @dataclass(frozen=True)
@@ -328,6 +329,7 @@ DEFAULT_PROFILES: dict[str, RoleProfile] = {
         allowed_tools=_REVIEWER_BASH_ALLOW,
         disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY + _REVIEWER_BASH_DENY,
     ),
+    "qa": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
     "generic": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
 }
 
@@ -413,6 +415,9 @@ class Settings:
     # with no live parent as orphan
     watchdog_interval_seconds: int = 60
     watchdog_cpu_seconds: int = 900
+    # QA runs skip the CPU check (test suites burn CPU between events); each is stopped
+    # as qa_timeout once it has run longer than qa_max_minutes
+    qa_max_minutes: int = QA_MAX_MINUTES
     think_policy: str = ""
     think_policy_from_task: int = 1
     # Local runs priced as a cloud model by thinking mode (local_pricing.py);
@@ -505,6 +510,7 @@ class Settings:
             mem_guard_cgroup_percent=_int(env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", 85),
             watchdog_interval_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS", 60, 1),
             watchdog_cpu_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_CPU_SECONDS", 900, 1),
+            qa_max_minutes=_int(env, "CLAUDE_RUNNER_QA_MAX_MINUTES", QA_MAX_MINUTES, 1),
             think_policy=env.get("CLAUDE_RUNNER_THINK_POLICY", "").strip().lower(),
             think_policy_from_task=_int(env, "CLAUDE_RUNNER_THINK_POLICY_FROM_TASK", 1, 1),
             local_pricing_env={

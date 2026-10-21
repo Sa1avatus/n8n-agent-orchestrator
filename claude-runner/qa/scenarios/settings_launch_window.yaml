@@ -1,0 +1,44 @@
+# Save is a POST (board_mission_save.js postJson, line 555) to /api/board/missions/<id> or .../config,
+# with X-AHAWR-Dashboard: 1. The save confirm (board_mission_save.js line 287) is accepted by the runner's dialog handler.
+name: launch settings window saves a changed model and shows it after reload
+tags: [ui, settings]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/m01
+    expect:
+      text_visible: ["Edit launch settings"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission", "acceptance criteria"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Execution, Roles]
+      placeholder_visible: [example-large]
+      no_console_error: true
+  - type:
+      into: worker_model
+      text: claude-sonnet-check
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review, "1 field(s) will change."]
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: Save changes
+    expect:
+      text_visible: [claude-sonnet-check]
+      request_2xx: [/api/board/missions/]
+      no_console_error: true
+      no_mutation_without_header: true
+reload_persistence: true

@@ -52,3 +52,7 @@ docs/cold-prefill/partB-cache-trace-snapshot.jsonl
 # mission reports (local only)
 docs/mission-reports/
 pydeps/
+
+# QA run artifacts (screenshots and verdicts of python -m claude_runner.qa)
+claude-runner/qa/runs/
+claude-runner/qa/nightly-verdict.json

@@ -532,3 +532,23 @@ def test_run_cost_is_this_runs_share(tmp_path: Path) -> None:
     assert store.session_cost_before("c", "z") == 3.5
     assert store.session_cost_before("other", "z") is None
     assert store.session_total_before("c", "z", "duration_api_ms") is None
+
+
+def test_qa_run_records_a_verdict_event_and_other_roles_do_not(
+    client: TestClient, settings: Settings
+) -> None:
+    import json
+
+    qa = wait_for(client, str(start(client, role="qa", input="verify")["run_id"]))
+    worker = wait_for(client, str(start(client, role="worker", input="build")["run_id"]))
+    events_dir = settings.data_dir / "events"
+
+    def kinds(run_id: str) -> list[dict[str, object]]:
+        lines = (events_dir / f"{run_id}.jsonl").read_text(encoding="utf-8").splitlines()
+        return [json.loads(line) for line in lines]
+
+    verdicts = [e for e in kinds(qa["run_id"]) if e.get("kind") == "qa_verdict"]
+    assert len(verdicts) == 1
+    assert verdicts[0]["role"] == "qa" and verdicts[0]["status"] == "completed"
+    assert str(verdicts[0]["summary"]).startswith("echo[1]: verify")
+    assert not [e for e in kinds(worker["run_id"]) if e.get("kind") == "qa_verdict"]

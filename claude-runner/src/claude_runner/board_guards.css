@@ -1,0 +1,33 @@
+/* Guards tab of the dashboard (board_guards.js); colours come from the dashboard variables */
+#guardspane { flex: 1; overflow: auto; padding: 12px 16px; }
+#guardspane[hidden] { display: none; }
+.gt-head { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.gt-head b { color: var(--ink); }
+.gt-views, .gt-windows { display: flex; gap: 6px; margin-bottom: 12px; }
+.gt-views button, .gt-windows button { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; padding: 3px 12px; font-size: 12px; }
+.gt-views button.on, .gt-windows button.on { background: var(--hover); color: var(--ink); font-weight: 600; }
+.gt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.gt-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--panel); min-width: 0; }
+.gt-name { font-size: 13px; overflow-wrap: anywhere; }
+.gt-sub { font-size: 12px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.gt-mark { font-size: 11px; color: var(--muted); font-style: italic; }
+.gt-sec { font-size: 13px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }
+.gt-st { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.gt-st.ok { color: var(--ok); } .gt-st.warning { color: var(--retry); } .gt-st.error { color: var(--err); } .gt-st.off { color: var(--muted); }
+.gt-strip { display: flex; gap: 2px; margin-top: 8px; }
+.gt-strip i { flex: 1; height: 14px; border-radius: 2px; background: var(--line); }
+.gt-strip i.ok { background: var(--ok); } .gt-strip i.warning { background: var(--retry); } .gt-strip i.error { background: var(--err); }
+.gt-flow svg { width: 100%; max-width: 680px; height: auto; }
+.gt-colhead { font-size: 12px; fill: var(--muted); }
+.gt-wire { stroke: var(--line); stroke-width: 1.5; }
+.gt-wire.lit { stroke: var(--ok); stroke-width: 2.5; }
+.gt-node rect { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+.gt-node text { font-size: 12px; fill: var(--ink); }
+.gt-node.ok rect { stroke: var(--ok); } .gt-node.warning rect { stroke: var(--retry); } .gt-node.error rect { stroke: var(--err); stroke-dasharray: 4 3; }
+.gt-lane { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.gt-lname { width: 190px; flex: none; font-size: 12px; overflow-wrap: anywhere; }
+.gt-track { position: relative; flex: 1; height: 20px; background: var(--panel); border-radius: 4px; }
+.gt-dot { position: absolute; top: 6px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--ok); }
+.gt-dot.warning { background: var(--retry); } .gt-dot.error { background: var(--err); border-radius: 2px; }
+.gt-dot.act { outline: 2px solid var(--ink); outline-offset: 1px; }
+@media (max-width: 520px) { .gt-lane { flex-direction: column; align-items: stretch; gap: 4px; } .gt-lname { width: auto; } }

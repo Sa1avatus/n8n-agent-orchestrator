@@ -10,12 +10,16 @@ unescaped (board.js uses ``esc()`` for every ``innerHTML`` value)."""
 from __future__ import annotations
 
 import copy
+import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from claude_runner import board_api
 from claude_runner.board import InMemoryBoardStore, Mission, QueueEntry
+from claude_runner.qa_runner import build_verdict
 
 
 async def _run_lifespan(app) -> None:
@@ -1377,6 +1381,103 @@ def _objectives(plan: dict) -> list[str]:
     return [t["objective"] for t in plan["tasks"]]
 
 
+def _ui_check(needed: bool = False, **over) -> dict:
+    check = {"needed": needed, "why": "shows the form", "scenario": "submit", "steps": ["open"]}
+    check.update(over)
+    return check
+
+
+class TestPlanUiCheckAndQa:
+    """The optional per-task ui_check and plan-level qa: old plans stay valid
+    and unchanged, the fields survive a save, and malformed values get a 400
+    with the reason."""
+
+    async def test_plan_without_the_fields_is_saved_unchanged(self, settings):
+        plan = {"tasks": [{"id": "T1", "objective": "one"}]}
+        async with _plan_client(settings) as (c, _store):
+            live = await _live(c)
+            r = await c.post("/api/board/live-states/sk1", json={
+                "expected_version": live["updated_at"], "plan": copy.deepcopy(plan),
+            })
+            assert r.status_code == 200
+            assert r.json()["live_state"]["plan"] == plan
+
+    async def test_ui_check_and_qa_round_trip_through_a_save(self, settings):
+        plan = {
+            "tasks": [
+                {"id": "T1", "objective": "one", "ui_check": _ui_check(needed=True)},
+                {"id": "T2", "objective": "two", "ui_check": _ui_check(needed=False)},
+            ],
+            "qa": {"needed": True, "reasons": ["form"], "scenarios": ["submit"]},
+        }
+        async with _plan_client(settings) as (c, _store):
+            live = await _live(c)
+            r = await c.post("/api/board/live-states/sk1", json={
+                "expected_version": live["updated_at"], "plan": copy.deepcopy(plan),
+            })
+            assert r.status_code == 200
+            assert r.json()["live_state"]["plan"] == plan
+            assert (await _live(c))["plan"] == plan
+
+    @pytest.mark.parametrize("check, reason", [
+        ({"needed": "yes", "why": "w", "scenario": "s", "steps": []}, "ui_check.needed"),
+        ({"needed": True, "why": "w", "scenario": "s"}, "ui_check must be an object"),
+        ({"needed": True, "why": "w", "scenario": "s", "steps": "open"}, "ui_check.steps"),
+        ({"needed": True, "why": 3, "scenario": "s", "steps": []}, "ui_check.why"),
+    ])
+    async def test_malformed_ui_check_is_400_with_the_reason(self, settings, check, reason):
+        plan = {"tasks": [{"id": "T1", "objective": "one", "ui_check": check}]}
+        async with _plan_client(settings) as (c, _store):
+            live = await _live(c)
+            r = await c.post("/api/board/live-states/sk1", json={
+                "expected_version": live["updated_at"], "plan": plan,
+            })
+            assert r.status_code == 400
+            assert r.json()["code"] == "bad_request"
+            assert reason in r.json()["error"]["message"]
+
+    async def test_qa_needed_without_a_needed_ui_check_is_400(self, settings):
+        plan = {
+            "tasks": [{"id": "T1", "objective": "one", "ui_check": _ui_check(needed=False)}],
+            "qa": {"needed": True, "reasons": ["form"], "scenarios": ["submit"]},
+        }
+        async with _plan_client(settings) as (c, _store):
+            live = await _live(c)
+            r = await c.post("/api/board/live-states/sk1", json={
+                "expected_version": live["updated_at"], "plan": plan,
+            })
+            assert r.status_code == 400
+            assert "no task has a needed ui_check" in r.json()["error"]["message"]
+
+    async def test_more_than_three_needed_ui_checks_is_400(self, settings):
+        plan = {"tasks": [
+            {"id": f"T{i}", "objective": f"o{i}", "ui_check": _ui_check(needed=True)}
+            for i in range(1, 5)
+        ]}
+        async with _plan_client(settings) as (c, _store):
+            live = await _live(c)
+            r = await c.post("/api/board/live-states/sk1", json={
+                "expected_version": live["updated_at"], "plan": plan,
+            })
+            assert r.status_code == 400
+            assert "at most 3" in r.json()["error"]["message"]
+
+    async def test_create_rejects_a_malformed_ui_check(self, board_client):
+        r = await board_client.post("/api/board/missions/create", json={
+            "mission_id": "m2", "source_mission_id": "m1", "objective": "x",
+            "plan": {"tasks": [{"id": "T1", "ui_check": {"needed": 1}}]},
+        })
+        assert r.status_code == 400
+        assert "ui_check" in r.json()["error"]["message"]
+
+    async def test_create_accepts_a_valid_ui_check(self, board_client):
+        r = await board_client.post("/api/board/missions/create", json={
+            "mission_id": "m2", "source_mission_id": "m1", "objective": "x",
+            "plan": {"tasks": [{"id": "T1", "ui_check": _ui_check(needed=True)}]},
+        })
+        assert r.status_code == 200
+
+
 class TestPlanWrites:
     """Reorder, dependency and move writes on the in-memory store: the status
     codes (200, 403 guard, 409 conflict, 422 cycle) and running_warning."""
@@ -1551,3 +1652,112 @@ def test_queue_version_accepts_a_method() -> None:
     assert _queue_version(WithMethod()) == "2026-10-17T00:00:00+00:00"
     assert _queue_version(WithStamp()) == "v7"
     assert _queue_version(Empty()) is None
+
+
+QA_SCENARIO = "kanban stale queue version shows the refresh message"
+PNG_BYTES = b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.fixture
+def qa_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    runs = tmp_path / "runs"
+    nightly = tmp_path / "nightly-verdict.json"
+    monkeypatch.setattr(board_api, "RUNS_DIR", runs)
+    monkeypatch.setattr(board_api, "NIGHTLY_VERDICT_PATH", nightly)
+    return runs, nightly
+
+
+async def _plan_qa(client, scenarios: list[str]) -> None:
+    store = client._transport.app.state.board_store
+    plan = {"tasks": [{"id": "T1", "objective": "one"}],
+            "qa": {"needed": True, "reasons": ["ui"], "scenarios": scenarios}}
+    store.upsert_live_state("sk1", None, plan=plan, status="queued")
+
+
+def _write_run(runs: Path, name: str, verdict: dict) -> Path:
+    run = runs / name
+    run.mkdir(parents=True)
+    (run / "verdict.json").write_text(json.dumps(verdict), encoding="utf-8")
+    (run / "step-2.png").write_bytes(PNG_BYTES)
+    return run
+
+
+class TestMissionQa:
+    async def test_no_verdict_is_an_empty_answer(self, board_client, qa_dirs) -> None:
+        await _plan_qa(board_client, [QA_SCENARIO])
+        response = await board_client.get("/api/board/missions/m1/qa")
+        assert response.status_code == 200
+        assert response.json() == {"verdict": None}
+
+    async def test_plan_without_scenarios_gets_no_verdict(self, board_client, qa_dirs) -> None:
+        runs, _ = qa_dirs
+        _write_run(runs, "qa-ab12", build_verdict(scenario=QA_SCENARIO, failed_step=2))
+        await _plan_qa(board_client, [])
+        response = await board_client.get("/api/board/missions/m1/qa")
+        assert response.json() == {"verdict": None}
+
+    async def test_failing_verdict_names_the_step_and_links_the_screenshot(
+        self, board_client, qa_dirs
+    ) -> None:
+        runs, _ = qa_dirs
+        _write_run(runs, "qa-ab12", build_verdict(
+            scenario=QA_SCENARIO, failed_step=2, failed_reason="no refresh message",
+            screenshots=["qa-ab12/step-2.png"]))
+        await _plan_qa(board_client, [QA_SCENARIO])
+        verdict = (await board_client.get("/api/board/missions/m1/qa")).json()["verdict"]
+        assert verdict["verdict"] == "fail"
+        assert verdict["failed_step"] == 2
+        assert verdict["failed_reason"] == "no refresh message"
+        assert verdict["screenshots"] == [
+            {"name": "qa-ab12/step-2.png", "url": "/api/board/qa/screenshots/qa-ab12/step-2.png"}
+        ]
+
+    async def test_blocked_verdict_carries_its_reason(self, board_client, qa_dirs) -> None:
+        runs, _ = qa_dirs
+        _write_run(runs, "qa-cd34", build_verdict(
+            scenario=QA_SCENARIO, blocked_reason="stack did not start"))
+        await _plan_qa(board_client, [QA_SCENARIO])
+        verdict = (await board_client.get("/api/board/missions/m1/qa")).json()["verdict"]
+        assert verdict["verdict"] == "blocked"
+        assert verdict["blocked_reason"] == "stack did not start"
+
+    async def test_nightly_file_is_read_when_no_run_matches(self, board_client, qa_dirs) -> None:
+        _, nightly = qa_dirs
+        nightly.write_text(json.dumps([build_verdict(scenario=QA_SCENARIO)]), encoding="utf-8")
+        await _plan_qa(board_client, [QA_SCENARIO])
+        verdict = (await board_client.get("/api/board/missions/m1/qa")).json()["verdict"]
+        assert verdict["verdict"] == "pass"
+
+    async def test_text_is_redacted_on_the_way_out(self, board_client, qa_dirs) -> None:
+        runs, _ = qa_dirs
+        secret = "sk-abcdefghijklmnopqrstuvwxyz0123"
+        _write_run(runs, "qa-ab12", build_verdict(
+            scenario=QA_SCENARIO, failed_step=0, failed_reason=f"token {secret}"))
+        await _plan_qa(board_client, [QA_SCENARIO])
+        response = await board_client.get("/api/board/missions/m1/qa")
+        assert secret not in response.text
+
+    async def test_unknown_mission_is_not_found(self, board_client, qa_dirs) -> None:
+        response = await board_client.get("/api/board/missions/nope/qa")
+        assert response.status_code == 404
+
+    async def test_screenshot_is_served_from_the_runs_directory(
+        self, board_client, qa_dirs
+    ) -> None:
+        runs, _ = qa_dirs
+        _write_run(runs, "qa-ab12", build_verdict(scenario=QA_SCENARIO))
+        response = await board_client.get("/api/board/qa/screenshots/qa-ab12/step-2.png")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content == PNG_BYTES
+
+    async def test_traversal_out_of_the_runs_directory_is_refused(
+        self, board_client, qa_dirs, tmp_path
+    ) -> None:
+        runs, _ = qa_dirs
+        _write_run(runs, "qa-ab12", build_verdict(scenario=QA_SCENARIO))
+        (tmp_path / "secret.png").write_bytes(PNG_BYTES)
+        for path in ("qa-ab12/..%2F..%2Fsecret.png", "..%2F..%2Fsecret.png/x.png",
+                     "qa-ab12/%2e%2e%2fsecret.png", "qa-ab12/notes.txt"):
+            response = await board_client.get(f"/api/board/qa/screenshots/{path}")
+            assert response.status_code == 404, path

@@ -58,8 +58,31 @@ class FlakyGuard(Guard):
         return []
 
 
+class ScriptedGuard(Guard):
+    """A guard whose checks raise for each ``True`` outcome, then succeed."""
+
+    def __init__(self, name: str, errors: list[bool]) -> None:
+        super().__init__(name, interval=0.01)
+        self._errors = list(errors)
+
+    async def check(self) -> list[Finding]:
+        if self._errors and self._errors.pop(0):
+            raise RuntimeError("check failed")
+        return []
+
+
 def settings_from(env: dict[str, str]) -> GuardSettings:
     return GuardSettings.from_env(env)
+
+
+def capturing_notifier() -> tuple[Notifier, list[str]]:
+    sent: list[str] = []
+
+    async def transport(text: str) -> bool:
+        sent.append(text)
+        return True
+
+    return Notifier(env={}, transport=transport), sent
 
 
 async def test_no_tasks_when_master_off() -> None:
@@ -169,3 +192,103 @@ async def test_failing_guard_recovers(
     assert snap["guards"]["flaky"]["error_count"] == 1
     # failure, backoff sleep, then several successful checks
     assert flaky.check_count > 2
+
+
+def test_dry_run_is_off_by_default() -> None:
+    settings = settings_from({"DASHBOARD_GUARDS": "1"})
+    assert settings.dry_run is False
+    assert settings.dry_run_for("good") is False
+
+
+def test_dry_run_can_be_set_per_guard() -> None:
+    settings = settings_from({"DASHBOARD_GUARDS": "1", "DASHBOARD_GUARDS_GOOD_DRY_RUN": "1"})
+    assert settings.dry_run_for("good") is True
+    assert settings.dry_run_for("other") is False
+    assert settings.dry_run is False
+
+
+def test_state_exposes_enabled_and_dry_run_per_guard() -> None:
+    settings = settings_from({"DASHBOARD_GUARDS": "1", "DASHBOARD_GUARDS_GOOD_DRY_RUN": "1"})
+    sup = GuardSupervisor(settings, [OkGuard("good")])
+    guard_state = sup.state()["guards"]["good"]
+    assert guard_state["dry_run"] is True
+    assert guard_state["enabled"] is True
+    assert "error_count" in guard_state
+    assert "last_run" in guard_state
+    assert "last_result" in guard_state
+
+
+def test_build_guards_registers_all_five_when_master_on() -> None:
+    from claude_runner.dashboard import _build_guards
+
+    notifier = Notifier(env={})
+    off = settings_from({})
+    assert _build_guards(off, notifier) == []
+    on = settings_from({"DASHBOARD_GUARDS": "1"})
+    names = [g.name for g in _build_guards(on, notifier)]
+    assert names == ["idle", "mission_notice", "queue_restart",
+                     "host_heartbeat", "tg_relay"]
+
+
+async def test_dry_run_logs_notice_without_sending(caplog: pytest.LogCaptureFixture) -> None:
+    token = "1234567890-AbCdEfGhIjK"
+    chat_id = "424242"
+    sent: list[str] = []
+
+    async def transport(text: str) -> bool:
+        sent.append(text)
+        return True
+
+    notifier = Notifier(
+        env={"DASHBOARD_TELEGRAM_BOT_TOKEN": token, "DASHBOARD_TELEGRAM_CHAT_ID": chat_id},
+        transport=transport,
+    )
+    settings = settings_from({"DASHBOARD_GUARDS": "1", "DASHBOARD_GUARDS_DRY_RUN": "1"})
+    sup = GuardSupervisor(settings, [OkGuard("good")], notifier)
+    with caplog.at_level(logging.INFO, logger="claude_runner.guards"):
+        await sup.start()
+        await asyncio.sleep(0.05)
+        await sup.stop()
+    assert sent == []
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("dry-run" in m and "guard good" in m for m in messages)
+    assert not any(token in m or chat_id in m for m in messages)
+
+
+async def test_three_consecutive_errors_disable_guard_with_one_notice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import claude_runner.guards as guards_module
+
+    monkeypatch.setattr(guards_module, "BACKOFF_BASE_S", 0.001)
+    notifier, sent = capturing_notifier()
+    bad = FailingGuard("bad")
+    sup = GuardSupervisor(settings_from({"DASHBOARD_GUARDS": "1"}), [bad], notifier)
+    await sup.start()
+    for _ in range(300):
+        if not bad.state.enabled:
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    await sup.stop()
+    assert bad.state.error_count == 3
+    assert bad.state.enabled is False
+    assert sup.state()["guards"]["bad"]["enabled"] is False
+    assert len(sent) == 1
+    assert sent[0] == "guard bad: disabled after 3 errors in a row"
+
+
+async def test_success_resets_the_error_streak(monkeypatch: pytest.MonkeyPatch) -> None:
+    import claude_runner.guards as guards_module
+
+    monkeypatch.setattr(guards_module, "BACKOFF_BASE_S", 0.001)
+    notifier, sent = capturing_notifier()
+    flaky = ScriptedGuard("flaky", [True, True, False, True, True, False])
+    sup = GuardSupervisor(settings_from({"DASHBOARD_GUARDS": "1"}), [flaky], notifier)
+    await sup.start()
+    await asyncio.sleep(0.3)
+    await sup.stop()
+    assert flaky.state.error_count == 4
+    assert flaky.state.consecutive_errors == 0
+    assert flaky.state.enabled is True
+    assert sent == []

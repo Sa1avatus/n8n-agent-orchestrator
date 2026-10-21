@@ -9,18 +9,21 @@ stub process that spins on the CPU checks the whole path for real.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import stat
 import sys
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 
+from claude_runner import runs
 from claude_runner.api import create_app
 from claude_runner.config import Settings
-from claude_runner.runs import ProcSample, group_sample, read_sample, watchdog_verdict
+from claude_runner.runs import ProcSample, RunManager, group_sample, read_sample, watchdog_verdict
 
 from .conftest import wait_for
 
@@ -32,12 +35,24 @@ def test_healthy_when_parent_is_runner_and_cpu_is_under_limit() -> None:
     assert watchdog_verdict(sample, cpu_at_last_event=5.0, cpu_limit=900, runner_pid=RUNNER) is None
 
 
+def test_qa_runs_are_not_stopped_for_cpu_but_orphans_still_are() -> None:
+    busy = ProcSample(pid=100, ppid=RUNNER, cpu_seconds=1000.0)
+    orphan = ProcSample(pid=100, ppid=999, cpu_seconds=1000.0)
+    assert watchdog_verdict(busy, 50.0, 900, RUNNER, cpu_watch=False) is None
+    assert watchdog_verdict(orphan, 50.0, 900, RUNNER, cpu_watch=False) == "orphan"
+
+
 def test_hung_when_cpu_since_last_event_exceeds_limit() -> None:
     sample = ProcSample(pid=100, ppid=RUNNER, cpu_seconds=1000.0)
     assert (
         watchdog_verdict(sample, cpu_at_last_event=50.0, cpu_limit=900, runner_pid=RUNNER)
         == "child_hung"
     )
+
+
+def test_qa_time_limit_defaults_to_20_minutes_and_comes_from_env() -> None:
+    assert Settings.from_env({}).qa_max_minutes == 20
+    assert Settings.from_env({"CLAUDE_RUNNER_QA_MAX_MINUTES": "45"}).qa_max_minutes == 45
 
 
 def test_cpu_limit_is_strict() -> None:
@@ -237,3 +252,57 @@ def test_idle_parent_with_spinning_child_is_stopped_as_child_hung(tmp_path: Path
         assert not _alive(parent)
         assert not _alive(child)
         assert run_id not in manager._procs
+
+
+def _scanned_manager(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cpu: dict[int, float]
+) -> tuple[RunManager, list[int]]:
+    killed: list[int] = []
+
+    def fake_sample(pid: int) -> ProcSample:
+        return ProcSample(pid=pid, ppid=os.getpid(), cpu_seconds=cpu[pid])
+
+    monkeypatch.setattr(runs, "group_sample", fake_sample)
+    monkeypatch.setattr(os, "killpg", lambda pid, _sig: killed.append(pid))
+    return RunManager(Settings.from_env({"CLAUDE_RUNNER_DATA_DIR": str(tmp_path)})), killed
+
+
+class _FakeProc:
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+
+
+def _register_proc(
+    manager: RunManager, run_id: str, pid: int, *, qa: bool, started_ago: float = 0.0
+) -> None:
+    proc = cast("asyncio.subprocess.Process", _FakeProc(pid))
+    manager._procs[run_id] = proc
+    manager._proc_started_at[proc] = time.monotonic() - started_ago
+    if qa:
+        manager._qa_runs.add(run_id)
+
+
+def test_qa_run_past_its_time_limit_is_stopped_and_other_runs_are_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manager, killed = _scanned_manager(tmp_path, monkeypatch, {101: 0.0, 102: 0.0})
+    over_limit = 21 * 60
+    _register_proc(manager, "qa-run", 101, qa=True, started_ago=over_limit)
+    _register_proc(manager, "worker-run", 102, qa=False, started_ago=over_limit)
+    manager.watchdog_scan()
+    assert manager._watchdog_codes == {"qa-run": "qa_timeout"}
+    assert killed == [101]
+
+
+def test_watchdog_scan_stops_only_the_non_qa_run_over_cpu_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cpu = {201: 0.0, 202: 0.0}
+    manager, killed = _scanned_manager(tmp_path, monkeypatch, cpu)
+    _register_proc(manager, "qa-run", 201, qa=True)
+    _register_proc(manager, "worker-run", 202, qa=False)
+    manager.watchdog_scan()
+    cpu[201] = cpu[202] = 1000.0
+    manager.watchdog_scan()
+    assert manager._watchdog_codes == {"worker-run": "child_hung"}
+    assert killed == [202]

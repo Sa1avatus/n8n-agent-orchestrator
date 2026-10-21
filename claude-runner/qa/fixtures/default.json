@@ -1,0 +1,423 @@
+{
+  "name": "default",
+  "tables": {
+    "data_table_user_hYAqO52ZGHXxhhHX": [
+      {
+        "id": 1,
+        "mission_id": "m01",
+        "state_namespace": "sk_m01",
+        "name": "Parser rewrite",
+        "objective": "Rewrite the input parser.",
+        "working_directory": "/d/example/qa/m01",
+        "version": 3.0,
+        "enabled": true,
+        "rules_json": "[\"run tasks in plan order\"]",
+        "acceptance_criteria_json": "[\"every task accepted by the reviewer\"]",
+        "retrieval_corpora_json": "[\"example-corpus\"]",
+        "createdAt": "2026-10-01T09:00:00+00:00",
+        "updatedAt": "2026-10-10T12:30:00+00:00"
+      },
+      {
+        "id": 2,
+        "mission_id": "m02",
+        "state_namespace": "sk_m02",
+        "name": "Cache layer",
+        "objective": "Add a result cache.",
+        "working_directory": "/d/example/qa/m02",
+        "version": 2.0,
+        "enabled": true,
+        "rules_json": "[\"keep changes reviewable\"]",
+        "acceptance_criteria_json": "[\"reviewer acceptance\"]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-02T09:00:00+00:00",
+        "updatedAt": "2026-10-11T08:00:00+00:00"
+      },
+      {
+        "id": 3,
+        "mission_id": "m03",
+        "state_namespace": "sk_m03",
+        "name": "Never started",
+        "objective": "A mission that has never started.",
+        "working_directory": null,
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-03T09:00:00+00:00",
+        "updatedAt": "2026-10-03T09:00:00+00:00"
+      },
+      {
+        "id": 4,
+        "mission_id": "m04",
+        "state_namespace": "sk_m04",
+        "name": "Queued with status",
+        "objective": "Queued by the operator.",
+        "working_directory": "/d/example/qa/m04",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-04T09:00:00+00:00",
+        "updatedAt": "2026-10-04T09:00:00+00:00"
+      },
+      {
+        "id": 5,
+        "mission_id": "m05",
+        "state_namespace": "sk_m05",
+        "name": "Docs pass",
+        "objective": "Refresh the operator docs.",
+        "working_directory": "/d/example/qa/m05",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[\"docs match the code\"]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-05T09:00:00+00:00",
+        "updatedAt": "2026-10-06T09:00:00+00:00"
+      },
+      {
+        "id": 6,
+        "mission_id": "m06",
+        "state_namespace": "sk_m06",
+        "name": "Metrics",
+        "objective": "Add the run metrics.",
+        "working_directory": "/d/example/qa/m06",
+        "version": 2.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-05T10:00:00+00:00",
+        "updatedAt": "2026-10-07T09:00:00+00:00"
+      },
+      {
+        "id": 7,
+        "mission_id": "m07",
+        "state_namespace": "sk_m07",
+        "name": "Refactor logger",
+        "objective": "Split the logger module.",
+        "working_directory": "/d/example/qa/m07",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-06T09:00:00+00:00",
+        "updatedAt": "2026-10-08T09:00:00+00:00"
+      },
+      {
+        "id": 8,
+        "mission_id": "m08",
+        "state_namespace": "sk_m08",
+        "name": "Failed import",
+        "objective": "Import the legacy data.",
+        "working_directory": "/d/example/qa/m08",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-07T09:00:00+00:00",
+        "updatedAt": "2026-10-09T09:00:00+00:00"
+      },
+      {
+        "id": 9,
+        "mission_id": "m09",
+        "state_namespace": "sk_m09",
+        "name": "Stopped by operator",
+        "objective": "Stopped mid-run.",
+        "working_directory": "/d/example/qa/m09",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-08T09:00:00+00:00",
+        "updatedAt": "2026-10-09T10:00:00+00:00"
+      },
+      {
+        "id": 10,
+        "mission_id": "m10",
+        "state_namespace": "sk_m10",
+        "name": "Waiting in line",
+        "objective": "Queued, no Live State yet.",
+        "working_directory": "/d/example/qa/m10",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-09T09:00:00+00:00",
+        "updatedAt": "2026-10-09T09:00:00+00:00"
+      },
+      {
+        "id": 11,
+        "mission_id": "m11",
+        "state_namespace": "sk_m11",
+        "name": "Disabled while active",
+        "objective": "Disabled, but its Live State says active.",
+        "working_directory": "/d/example/qa/m11",
+        "version": 2.0,
+        "enabled": false,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-10T09:00:00+00:00",
+        "updatedAt": "2026-10-10T11:00:00+00:00"
+      },
+      {
+        "id": 12,
+        "mission_id": "m12",
+        "state_namespace": "sk_m12",
+        "name": "Disabled",
+        "objective": "Switched off by the operator.",
+        "working_directory": "/d/example/qa/m12",
+        "version": 1.0,
+        "enabled": false,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-11T09:00:00+00:00",
+        "updatedAt": "2026-10-11T09:00:00+00:00"
+      }
+    ],
+    "data_table_user_Yn9lOhVhQ9gFymNs": [
+      {
+        "state_key": "sk_m01",
+        "status": "active",
+        "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Map the parser\", \"objective\": \"List the entry points\", \"dependencies\": []}, {\"id\": \"T002\", \"title\": \"Rewrite the tokenizer\", \"objective\": \"Split the scanner\", \"dependencies\": [\"T001\"]}, {\"id\": \"T003\", \"title\": \"Write the tests\", \"objective\": \"Cover the tokenizer\", \"dependencies\": [\"T002\"]}, {\"id\": \"T004\", \"title\": \"Write the docs\", \"objective\": \"Describe the parser\", \"dependencies\": [\"T003\"]}]}",
+        "task_index": 1,
+        "task_attempt": 2
+      },
+      {
+        "state_key": "sk_m02",
+        "status": "active",
+        "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Pick the cache key\", \"objective\": \"Hash the request\", \"dependencies\": []}]}",
+        "task_index": 0,
+        "task_attempt": 1
+      },
+      {
+        "state_key": "sk_m04",
+        "status": "queued"
+      },
+      {
+        "state_key": "sk_m05",
+        "status": "completed"
+      },
+      {
+        "state_key": "sk_m06",
+        "status": "completed"
+      },
+      {
+        "state_key": "sk_m07",
+        "status": "completed"
+      },
+      {
+        "state_key": "sk_m08",
+        "status": "failed"
+      },
+      {
+        "state_key": "sk_m09",
+        "status": "stopped"
+      },
+      {
+        "state_key": "sk_m11",
+        "status": "active"
+      }
+    ],
+    "data_table_user_ceJ7PFzVJvPN0LsV": [
+      {
+        "state_key": "sk_m01",
+        "task_id": "T001",
+        "task_index": 0,
+        "task_attempt": 1,
+        "event_type": "worker_completed",
+        "created_at": "2026-10-10T10:00:00+00:00"
+      },
+      {
+        "state_key": "sk_m01",
+        "task_id": "T001",
+        "task_index": 0,
+        "task_attempt": 1,
+        "event_type": "review_parsed",
+        "review_status": "needs_changes",
+        "review_score": 0.4,
+        "review_reason": "needs_changes",
+        "created_at": "2026-10-10T10:05:00+00:00"
+      },
+      {
+        "state_key": "sk_m01",
+        "task_id": "T001",
+        "task_index": 0,
+        "task_attempt": 2,
+        "event_type": "review_parsed",
+        "review_status": "pass",
+        "review_score": 0.9,
+        "review_reason": "pass",
+        "created_at": "2026-10-10T11:00:00+00:00"
+      },
+      {
+        "state_key": "sk_m01",
+        "task_id": "T002",
+        "task_index": 1,
+        "task_attempt": 1,
+        "event_type": "worker_terminal",
+        "worker_status": "error",
+        "worker_error": "worker stopped with an error",
+        "created_at": "2026-10-10T11:30:00+00:00"
+      },
+      {
+        "state_key": "sk_m01",
+        "task_id": "T002",
+        "task_index": 1,
+        "task_attempt": 2,
+        "event_type": "worker_completed",
+        "worker_status": "completed",
+        "created_at": "2026-10-10T12:00:00+00:00"
+      },
+      {
+        "state_key": "sk_m02",
+        "task_id": "T001",
+        "task_index": 0,
+        "task_attempt": 1,
+        "event_type": "worker_completed",
+        "created_at": "2026-10-11T07:00:00+00:00"
+      },
+      {
+        "state_key": "sk_m02",
+        "task_id": "T001",
+        "task_index": 0,
+        "task_attempt": 1,
+        "event_type": "review_parsed",
+        "review_status": "needs_changes",
+        "review_score": 0.5,
+        "review_reason": "needs_changes",
+        "created_at": "2026-10-11T07:10:00+00:00"
+      }
+    ],
+    "data_table_user_1S21PsMqT0FpR7eD": [
+      {
+        "id": 1,
+        "profile_id": "alt-profile",
+        "enabled": true,
+        "worker_provider": "claude-cli",
+        "worker_model": "example-small",
+        "reviewer_provider": "claude-cli",
+        "reviewer_model": "example-small",
+        "architect_provider": "claude-cli",
+        "architect_model": "example-large",
+        "max_tasks": 12,
+        "max_attempts_per_task": 3,
+        "retrieval_enabled": false
+      },
+      {
+        "id": 2,
+        "profile_id": "claude-code",
+        "enabled": true,
+        "worker_provider": "claude-cli",
+        "worker_model": "example-large",
+        "reviewer_provider": "claude-cli",
+        "reviewer_model": "example-large",
+        "architect_provider": "claude-cli",
+        "architect_model": "example-large",
+        "max_tasks": 20,
+        "max_attempts_per_task": 4,
+        "retrieval_enabled": true
+      }
+    ],
+    "queue": [
+      {
+        "position": 0,
+        "mission_id": "m01",
+        "enabled": true,
+        "attempts_per_task": 3.0,
+        "retry_failed": false,
+        "note": null
+      },
+      {
+        "position": 1,
+        "mission_id": "m02",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null
+      },
+      {
+        "position": 2,
+        "mission_id": "m03",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null
+      },
+      {
+        "position": 3,
+        "mission_id": "m04",
+        "enabled": false,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": "paused by the operator"
+      },
+      {
+        "position": 4,
+        "mission_id": "m05",
+        "enabled": true,
+        "attempts_per_task": 2.0,
+        "retry_failed": true,
+        "note": null
+      },
+      {
+        "position": 5,
+        "mission_id": "m06",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null
+      },
+      {
+        "position": 6,
+        "mission_id": "m10",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null
+      }
+    ],
+    "i18n_languages": [
+      {
+        "code": "en",
+        "name": "English",
+        "enabled": true
+      },
+      {
+        "code": "ru",
+        "name": "Русский",
+        "enabled": true
+      }
+    ],
+    "i18n_strings": [
+      {
+        "lang": "en",
+        "key": "board.title",
+        "text": "Board"
+      },
+      {
+        "lang": "ru",
+        "key": "board.title",
+        "text": "Доска"
+      },
+      {
+        "lang": "en",
+        "key": "queue.empty",
+        "text": "The queue is empty"
+      },
+      {
+        "lang": "ru",
+        "key": "queue.empty",
+        "text": "Очередь пуста"
+      }
+    ]
+  }
+}

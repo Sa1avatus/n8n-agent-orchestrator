@@ -18,8 +18,14 @@ mission as a reusable template without its objective and plan.
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
+import json
 import os
 import re
+import subprocess
+import sys
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -32,6 +38,7 @@ from .board import (
     Mission,
 )
 from .context_probe import ctx_from_models
+from .roles_config import QA_MODES, merge, resolve
 from .sources import RunnerSource, _check
 
 HOST_CHECK_NOTE = "checked on the host"
@@ -255,6 +262,107 @@ def check_preflight_fresh(
     return _item("preflight", "ok", f"preflight is {age:.0f}s old", checked_at=checked_at)
 
 
+QA_CHECK = "qa"
+QA_ROLE = "qa"
+QA_PROBE_TIMEOUT_SECONDS = 30.0
+_CHROMIUM_PATH_CODE = (
+    "from playwright.sync_api import sync_playwright\n"
+    "with sync_playwright() as p:\n"
+    "    print(p.chromium.executable_path)\n"
+)
+
+
+def probe_qa_environment() -> dict[str, str | None]:
+    """Each QA part's problem text, or None when present; no browser is launched."""
+    problems: dict[str, str | None] = {}
+    if importlib.util.find_spec("playwright") is None:
+        problems["playwright"] = "playwright is not installed (the qa extra)"
+        problems["chromium"] = "chromium cannot be checked without playwright"
+    else:
+        problems["playwright"] = None
+        problems["chromium"] = _chromium_problem()
+    problems["stack"] = _stack_help_problem()
+    return problems
+
+
+def _chromium_problem() -> str | None:
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", _CHROMIUM_PATH_CODE],
+            capture_output=True, text=True, timeout=QA_PROBE_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"chromium check failed: {exc}"
+    path = result.stdout.strip()
+    if result.returncode != 0 or not path:
+        return f"playwright gave no chromium path (exit {result.returncode})"
+    if not os.path.exists(path):
+        return "chromium is not installed (python -m playwright install chromium)"
+    return None
+
+
+def _stack_help_problem() -> str | None:
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "claude_runner.qa", "stack", "--help"],
+            capture_output=True, timeout=QA_PROBE_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"qa stack command failed to run: {exc}"
+    if result.returncode != 0:
+        return f"qa stack --help exited with {result.returncode}"
+    return None
+
+
+def check_qa_ready(
+    roles: Mapping[str, Any], environment: Mapping[str, str | None]
+) -> dict[str, Any]:
+    """Warning while the QA mode is off; error when it is on and a part is missing."""
+    try:
+        resolved = resolve(roles, QA_ROLE, 1, {})
+    except ValueError as exc:
+        return _item(QA_CHECK, "error", str(exc))
+    mode = str(resolved.options.get("mode"))
+    model = f"{resolved.provider}/{resolved.model}"
+    if mode not in QA_MODES:
+        return _item(QA_CHECK, "error", f"qa mode {mode!r} is not one of {', '.join(QA_MODES)}")
+    problems = [problem for problem in environment.values() if problem]
+    if mode == "off":
+        status, reason = "warning", f"qa mode is off (model {model})"
+    else:
+        status = "error" if problems else "ok"
+        reason = f"qa mode {mode} with model {model}"
+    if problems:
+        reason += ": " + "; ".join(problems)
+    return _item(QA_CHECK, status, reason, mode=mode, model=model)
+
+
+def _parse_roles(text: Any) -> dict[str, Any]:
+    """A roles_json text as a dict; an absent or empty text is no roles."""
+    if not text:
+        return {}
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise ValueError("roles_json must be a JSON object")
+    return parsed
+
+
+def effective_roles(board: BoardStore, mission_id: str) -> dict[str, Any]:
+    """Global roles_json overridden per role by the mission's roles_json."""
+    global_roles = _parse_roles(board.hermes_config().get("roles_json"))
+    mission_roles = _parse_roles((board.mission_config(mission_id) or {}).get("roles_json"))
+    return merge(global_roles, mission_roles)
+
+
+async def _qa_item(board: BoardStore, mission_id: str) -> dict[str, Any]:
+    try:
+        roles = effective_roles(board, mission_id)
+    except ValueError as exc:
+        return _item(QA_CHECK, "error", f"roles_json is not valid JSON: {exc}")
+    environment = await asyncio.to_thread(probe_qa_environment)
+    return check_qa_ready(roles, environment)
+
+
 # -------------------------------------------------------------------------- collection
 
 
@@ -325,6 +433,7 @@ async def collect_readiness(
     items.append(check_live_state_present(live))
     items.append(check_not_running(board, mission.mission_id))
     items.append(check_preflight_fresh(board, mission.mission_id, preflight_max_age_seconds))
+    items.append(await _qa_item(board, mission.mission_id))
     return _summarize(mission.mission_id, items)
 
 

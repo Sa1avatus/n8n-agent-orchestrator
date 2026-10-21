@@ -80,9 +80,11 @@ def _group_alive(pgid: int) -> bool:
     return True
 
 
+QA_SUMMARY_CHARS = 500
 WATCHDOG_MESSAGES = {
     "child_hung": "The Claude Code process used more CPU without any progress; it was stopped.",
     "orphan": "The Claude Code process lost its runner parent; it was stopped.",
+    "qa_timeout": "The QA run exceeded its time limit; it was stopped.",
 }
 
 
@@ -128,14 +130,19 @@ def group_sample(pid: int, proc_root: Path = Path("/proc")) -> ProcSample | None
 
 
 def watchdog_verdict(
-    sample: ProcSample, cpu_at_last_event: float, cpu_limit: float, runner_pid: int
+    sample: ProcSample,
+    cpu_at_last_event: float,
+    cpu_limit: float,
+    runner_pid: int,
+    cpu_watch: bool = True,
 ) -> str | None:
     """Why the run's CLI process must be stopped, or None. ``cpu_at_last_event`` is the
     process's CPU time when the run last produced an event, so the difference is the CPU
-    it used since then."""
+    it used since then. ``cpu_watch=False`` skips the CPU check (QA runs, whose test
+    suites legitimately burn CPU between events)."""
     if sample.ppid != runner_pid:
         return "orphan"
-    if sample.cpu_seconds - cpu_at_last_event > cpu_limit:
+    if cpu_watch and sample.cpu_seconds - cpu_at_last_event > cpu_limit:
         return "child_hung"
     return None
 
@@ -201,6 +208,7 @@ class RunManager:
         self._last_event_at: dict[str, float] = {}
         self._cpu_at_event: dict[str, tuple[float, float]] = {}
         self._watchdog_codes: dict[str, str] = {}
+        self._qa_runs: set[str] = set()
         self._watchdog_task: asyncio.Task[None] | None = None
 
     async def startup(self) -> int:
@@ -540,6 +548,8 @@ class RunManager:
                 self._finish(run_id, outcome, None)
                 return
             self._procs[run_id] = proc
+            if role == "qa":
+                self._qa_runs.add(run_id)
             self._proc_started_at[proc] = time.monotonic()
             pump_error: Exception | None = None
             try:
@@ -615,6 +625,7 @@ class RunManager:
 
     def _finish(self, run_id: str, outcome: Outcome, state: StreamState | None) -> None:
         self._cancelled.discard(run_id)
+        self._qa_runs.discard(run_id)
         if self._shutting_down and outcome.status == "cancelled":
             outcome.status = "interrupted"
             outcome.error_code = "run_not_found"
@@ -655,6 +666,17 @@ class RunManager:
             details=details,
             finished_at=now(),
         )
+        if record.get("role") == "qa":
+            self.events.add(
+                run_id,
+                {
+                    "kind": "qa_verdict",
+                    "role": "qa",
+                    "status": outcome.status,
+                    "summary": outcome.output[:QA_SUMMARY_CHARS],
+                    "cost_usd": cost,
+                },
+            )
         self.events.add(
             run_id,
             {
@@ -706,6 +728,12 @@ class RunManager:
             self._last_event_at.pop(run_id, None)
             self._cpu_at_event.pop(run_id, None)
 
+    def _qa_overdue(self, run_id: str, proc: asyncio.subprocess.Process) -> bool:
+        started = self._proc_started_at.get(proc)
+        if run_id not in self._qa_runs or started is None:
+            return False
+        return time.monotonic() - started > self.settings.qa_max_minutes * 60
+
     def watchdog_scan(self) -> None:
         cpu_limit = self.settings.watchdog_cpu_seconds
         for run_id, proc in list(self._procs.items()):
@@ -717,7 +745,11 @@ class RunManager:
             if base is None or base[0] != mark:
                 base = (mark, sample.cpu_seconds)
                 self._cpu_at_event[run_id] = base
-            code = watchdog_verdict(sample, base[1], cpu_limit, os.getpid())
+            code = watchdog_verdict(
+                sample, base[1], cpu_limit, os.getpid(), cpu_watch=run_id not in self._qa_runs
+            )
+            if code is None and self._qa_overdue(run_id, proc):
+                code = "qa_timeout"
             if code is None:
                 continue
             log.warning("watchdog stops run %s (pid %s): %s", run_id, proc.pid, code)

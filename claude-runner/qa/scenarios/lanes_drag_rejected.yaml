@@ -1,0 +1,19 @@
+name: lanes task drop that breaks the dependency chain is rejected
+tags: [ui, queue]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/lane
+    expect:
+      text_visible: [Lanes]
+      order: [Write the tests, Write the docs]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - drag:
+      from: Write the docs
+      onto: Write the tests
+    expect:
+      text_visible: ["depends on"]
+      order: [Write the tests, Write the docs]
+      no_console_error: true
+      no_mutation_without_header: true

@@ -5,7 +5,7 @@
 
 The mark: six gears of one size stand in a ring and mesh with their neighbours (the last one with the first, so the ring turns:
 neighbours go in opposite directions). The axis in the middle is n8n, the loop that drives them. One gear per process:
-Missions (blue), Architect (amber), Retrieval (teal), Worker (orange), Reviewer (violet), Result (green).
+Missions (blue), Architect (amber), Retrieval (teal), Worker (orange), Reviewer (violet), QA (rose).
 The legend text is abstract on purpose: it names roles, not models.
 """
 import math
@@ -13,7 +13,7 @@ import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "docs", "img")
-BLU, AMB, TEAL, ORA, VIO, GRN = "#6aa8ff", "#ffb454", "#4fd1c5", "#ff8a3d", "#b39bff", "#5cc98b"
+BLU, AMB, TEAL, ORA, VIO, ROSE = "#6aa8ff", "#ffb454", "#4fd1c5", "#ff8a3d", "#b39bff", "#ff6b8a"
 AXIS, GRY, CARD, LINE, TXT, DARK = "#eceef3", "#a3a9b8", "#20232b", "#33384a", "#eceef3", "#10131a"
 FONT = "Segoe UI, Helvetica, Arial, sans-serif"
 MOD = 6.4          # tooth module: the same for every gear so that they mesh
@@ -25,7 +25,7 @@ ROLES = (
     ("Q", TEAL, "Retrieval", "finds the context the roles need", "doc"),
     ("W", ORA, "Worker", "builds one task at a time", "code"),
     ("R", VIO, "Reviewer", "scores the result: retry with the review, or next task", "lens"),
-    ("X", GRN, "Result", "the report for the operator", "check"),
+    ("X", ROSE, "QA", "clicks through the UI, accepts or sends back", "bug"),
 )
 AXIS_LINE = ("Axis: n8n", "the loop: queue, retries, state")
 
@@ -34,7 +34,7 @@ DEFS = f'''<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" 
 <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern>
 <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="{GRY}"/></marker>
 <marker id="b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="{VIO}"/></marker>
-<marker id="g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="{GRN}"/></marker>'''
+<marker id="g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="{ROSE}"/></marker>'''
 
 
 # ------------------------------------------------------------------ gear geometry
@@ -125,8 +125,14 @@ def icon(kind, x, y, s, color):
     if kind == "lens":
         return (f'<circle cx="{x - s * 0.12:.1f}" cy="{y - s * 0.12:.1f}" r="{s * 0.44:.1f}" fill="none" stroke="{color}" stroke-width="{w:.1f}"/>'
                 f'<path d="M{x + s * 0.22:.1f} {y + s * 0.22:.1f}L{x + s * 0.62:.1f} {y + s * 0.62:.1f}" stroke="{color}" stroke-width="{w * 1.3:.1f}" stroke-linecap="round"/>')
-    if kind == "check":
-        return f'<path d="M{x - s * 0.5:.1f} {y + s * 0.02:.1f}L{x - s * 0.12:.1f} {y + s * 0.4:.1f}L{x + s * 0.55:.1f} {y - s * 0.4:.1f}" stroke="{color}" stroke-width="{w * 1.2:.1f}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>'
+    if kind == "bug":
+        u = s / 10.0
+        return (f'<ellipse cx="{x:.1f}" cy="{y + 1.4 * u:.1f}" rx="{4.6 * u:.1f}" ry="{6 * u:.1f}" fill="none" stroke="{color}" stroke-width="{w:.1f}"/>'
+                f'<circle cx="{x:.1f}" cy="{y - 5.6 * u:.1f}" r="{2.4 * u:.1f}" fill="none" stroke="{color}" stroke-width="{w * 0.9:.1f}"/>'
+                f'<path d="M{x - 4.6 * u:.1f} {y - 0.6 * u:.1f}l{-3.8 * u:.1f} {-1.8 * u:.1f}M{x + 4.6 * u:.1f} {y - 0.6 * u:.1f}l{3.8 * u:.1f} {-1.8 * u:.1f}'
+                f'M{x - 4.6 * u:.1f} {y + 2.4 * u:.1f}h{-4.2 * u:.1f}M{x + 4.6 * u:.1f} {y + 2.4 * u:.1f}h{4.2 * u:.1f}'
+                f'M{x - 4.2 * u:.1f} {y + 5.4 * u:.1f}l{-3.6 * u:.1f} {2.2 * u:.1f}M{x + 4.2 * u:.1f} {y + 5.4 * u:.1f}l{3.6 * u:.1f} {2.2 * u:.1f}M{x:.1f} {y - 3.4 * u:.1f}V{y + 8 * u:.1f}" '
+                f'fill="none" stroke="{color}" stroke-width="{w * 0.85:.1f}" stroke-linecap="round"/>')
     return ""
 
 
@@ -192,18 +198,18 @@ def flow():
         return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="14" fill="{CARD}" stroke="{color}" stroke-width="2"/>'
                 f'<text x="{x + w / 2}" y="{y + h / 2 - 2}" fill="{color}" font-size="17" font-weight="700">{title}</text>'
                 f'<text x="{x + w / 2}" y="{y + h / 2 + 17}" fill="{GRY}" font-size="12.5" font-weight="400">{sub}</text>')
-    top = ((BLU, "Missions", "queue, rules, criteria"), (AMB, "Architect", "small tasks"), (ORA, "Worker", "builds one task"), (VIO, "Reviewer", "score and verdict"), (GRN, "Result", "report, notices"))
+    top = ((BLU, "Missions", "queue, rules, criteria"), (AMB, "Architect", "small tasks"), (ORA, "Worker", "builds one task"), (VIO, "Reviewer", "score and verdict"), (ROSE, "QA", "clicks the UI, accepts"))
     xs = (30, 235, 440, 645, 850)
     out = "".join(box(x, 40, 170, 62, c, t, s) for x, (c, t, s) in zip(xs, top))
     arrows = "".join(f'<path d="M{xs[i] + 170} 71H{xs[i + 1] - 2}" marker-end="url(#a)"/>' for i in range(3))
-    arrows += f'<path d="M{xs[3] + 170} 71H{xs[4] - 2}" stroke="{GRN}" marker-end="url(#g)"/>'
+    arrows += f'<path d="M{xs[3] + 170} 71H{xs[4] - 2}" stroke="{ROSE}" marker-end="url(#g)"/>'
     retry = f'<path d="M730 102V150H525V104" stroke="{VIO}" stroke-dasharray="6 5" marker-end="url(#b)"/>'
     out += f'<g stroke="{GRY}" stroke-width="2.5" fill="none" stroke-linecap="round">{arrows}{retry}</g>'
     out += f'<text x="628" y="144" fill="{VIO}" font-size="12.5" font-weight="600">retry with the review</text>'
     out += box(292, 116, 140, 50, TEAL, "Retrieval", "context for the roles")
     out += f'<path d="M432 141H452V104" stroke="{TEAL}" stroke-width="2" stroke-dasharray="3 4" fill="none" marker-end="url(#a)"/>'
     layers = ((AXIS, "n8n: the axis", "the loop, queue, retries, state"), (GRY, "claude-runner", "runs the roles, sessions"),
-              (GRY, "Models", "local and cloud"), (GRY, "Dashboard + Telegram", "runs, mission board, notices"))
+              (GRY, "Models", "local and cloud"), (GRY, "Dashboard + Telegram", "runs, board, notices, report"))
     for i, (c, t, s) in enumerate(layers):
         x = 30 + i * 262
         out += (f'<rect x="{x}" y="206" width="250" height="56" rx="12" fill="#1b1e26" stroke="{LINE}"/><rect x="{x}" y="206" width="6" height="56" rx="3" fill="{c}"/>'

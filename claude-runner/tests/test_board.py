@@ -303,6 +303,16 @@ class TestMissionConfig:
         assert payload["plan"]["hints"] == "new"
         assert payload["plan"]["required_files"] == ["/a"]
 
+    def test_first_config_save_needs_no_version_when_no_row_exists(self):
+        new_config, _ = update_mission_config(
+            {}, None, None, mission_running=False, worker_model="claude-sonnet-check",
+        )
+        assert new_config["worker_model"] == "claude-sonnet-check"
+
+    def test_config_save_without_version_is_refused_when_a_row_exists(self):
+        with pytest.raises(ConflictError):
+            update_mission_config({"hints": "x"}, None, "v1", mission_running=False, hints="y")
+
     def test_update_mission_config_refuses_non_midrun_fields_while_running(self,
                                                                          board: InMemoryBoardStore):
         with pytest.raises(GuardError):

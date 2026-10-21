@@ -1,0 +1,21 @@
+name: kanban stale queue version shows the refresh message
+tags: [ui, queue]
+allow_http_status: [409]
+freeze_refresh: true
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban]
+      order: [Never started, Queued with status, Waiting in line]
+      request_2xx: [/api/board]
+  - api_post:
+      path: /api/board/queue/move
+      body: {mission_id: m03, to_position: 0}
+  - drag:
+      from: Queued with status
+      onto: Never started
+    expect:
+      text_visible: ["The plan changed, refresh."]
+      no_mutation_without_header: true

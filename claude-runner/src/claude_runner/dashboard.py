@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -27,15 +28,29 @@ from importlib import resources
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from . import board_api, export
+from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
 from .board_stats import _mission_run_ids
-from .guards import GuardSettings, GuardSupervisor, Notifier
+from .guard_heartbeat import HeartbeatSettings, HostHeartbeatGuard
+from .guard_queue import IdleGuard, MissionNoticeGuard, SeenStore
+from .guard_relay import TelegramRelay
+from .guard_restart import QueueRestartGuard
+from .guards import (
+    Finding,
+    Guard,
+    GuardSettings,
+    GuardSupervisor,
+    Notifier,
+)
+from .guards_history import WINDOWS_S, GuardHistory
 from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
+
+logger = logging.getLogger("claude_runner.dashboard")
 
 
 @dataclass(frozen=True)
@@ -89,10 +104,21 @@ def create_dashboard_app(
             )
             # the guard supervisor starts here and stops at shutdown (matching
             # the runner's lifespan): DASHBOARD_GUARDS unset, no tasks run
+            guard_settings = GuardSettings.from_env()
+            history = (
+                GuardHistory(
+                    os.path.join(guard_settings.state_dir, "guards_history.json")
+                    if guard_settings.state_dir
+                    else ""
+                )
+                if guard_settings.tab
+                else None
+            )
             app.state.guards = GuardSupervisor(
-                GuardSettings.from_env(),
-                [],
+                guard_settings,
+                _build_guards(guard_settings, Notifier()),
                 Notifier(),
+                history,
             )
             await app.state.guards.start()
             try:
@@ -166,17 +192,36 @@ def create_dashboard_app(
     async def api_guards(request: Request) -> dict[str, Any]:
         """The guard supervisor's state: whether it is enabled, dry-run mode,
         and each guard's name, status, last run, last result, last action and
-        error count. It carries no environment values."""
+        error count. The host heartbeat entries (docker_watchdog and
+        gpu_power_governor) appear only when the supervisor is enabled.
+        It carries no environment values."""
         state = request.app.state.guards.state()
-        return {
+        body: dict[str, Any] = {
             "enabled": request.app.state.guards.settings.master,
             "dry_run": state["dry_run"],
             "running": state["running"],
-            "guards": [
-                {"name": name, **guards}
-                for name, guards in state["guards"].items()
-            ],
+            "guards": list(state["guards"].values()),
         }
+        if request.app.state.guards.settings.master:
+            body["heartbeats"] = _heartbeat_entries(
+                request.app.state.guards.guards, request.app.state.guards.settings
+            )
+        history = request.app.state.guards.history
+        if history is not None:
+            body["tab"] = True
+            body["history_summary"] = history.summary()
+        return body
+
+    @app.get("/api/guards/history")
+    async def api_guards_history(request: Request, window: str = "24h") -> dict[str, Any]:
+        """Checks of every guard inside the window (1h, 24h or 7d), thinned; empty
+        unless the Guards tab is on.  It carries no environment values."""
+        history = request.app.state.guards.history
+        if history is None:
+            return {"window": window, "guards": {}}
+        if window not in WINDOWS_S:
+            raise HTTPException(status_code=422, detail="window must be 1h, 24h or 7d")
+        return {"window": window, "guards": history.window(window)}
 
     @app.get("/api/runs")
     async def list_runs(
@@ -431,6 +476,271 @@ def _describe_error(exc: BaseException) -> str:
     if isinstance(exc, httpx.TimeoutException):
         return "timed out"
     return str(exc) or type(exc).__name__
+
+
+def _build_guards(settings: GuardSettings, notifier: Notifier) -> list[Guard]:
+    """The container guards of the supervisor.
+
+    With ``settings.master`` off the list is empty: no guard is registered and
+    no per-guard task is started.  Each guard is registered regardless of
+    whether its source is configured: a missing source keeps the guard inert
+    (unknown state, no action) instead of failing its check.  Paths and the
+    DSN come from environment variable names only; their values are never
+    logged or returned."""
+    if not settings.master:
+        return []
+    env = dict(os.environ)
+    guards: list[Guard] = []
+    ops_store = _ops_store(env)
+    guards.append(
+        IdleGuard(
+            lambda: _queue_alive(ops_store), lambda: _queue_running(ops_store),
+            notifier,
+            interval=settings.interval("idle"),
+            dry_run=lambda: settings.dry_run_for("idle"),
+        )
+    )
+    seen_path = env.get("DASHBOARD_GUARDS_QUEUE_STATE_PATH", "").strip()
+    seen = SeenStore(seen_path) if seen_path else _EmptySeenStore()
+    guards.append(
+        MissionNoticeGuard(
+            ops_store, _mission_events(ops_store), seen, notifier,
+            interval=settings.interval("mission_notice"),
+            dry_run=lambda: settings.dry_run_for("mission_notice"),
+        )
+    )
+    request_dir = env.get("DASHBOARD_GUARDS_QUEUE_REQUEST_DIR", "").strip()
+    request_path = f"{request_dir}/queue_restart.req" if request_dir else ""
+    guards.append(
+        QueueRestartGuard(
+            _queue_state(ops_store), request_path,
+            interval=settings.interval("queue_restart"),
+            dry_run=lambda: settings.dry_run_for("queue_restart"),
+        )
+    )
+    guards.append(
+        HostHeartbeatGuard(
+            HeartbeatSettings.from_env(env), notifier,
+            interval=settings.interval("host_heartbeat"),
+            dry_run=lambda: settings.dry_run_for("host_heartbeat"),
+        )
+    )
+    guards.append(_RelayGuard(settings, env))
+    return guards
+
+
+def _heartbeat_entries(
+    guards: list[Guard], settings: GuardSettings
+) -> list[dict[str, object]]:
+    """The two host heartbeat entries (docker_watchdog, gpu_power_governor)."""
+    for guard in guards:
+        if isinstance(guard, HostHeartbeatGuard):
+            entries = guard.status_entries()
+            dry_run = settings.dry_run_for("host_heartbeat")
+            last_result = guard.state.last_result
+            out: list[dict[str, object]] = []
+            for entry in entries:
+                out.append(
+                    {
+                        "name": entry["name"],
+                        "status": entry["status"],
+                        "time": entry["time"],
+                        "last_action": entry["last_action"],
+                        "last_result": str(entry["detail"]) or last_result,
+                        "dry_run": dry_run,
+                    }
+                )
+            return out
+    return []
+
+
+def _ops_store(env: dict[str, str]) -> Any:
+    """The ops store for the guard sources: the Pg ops store when the DSN is
+    set and connectable, ``None`` otherwise (the guards stay registered but
+    inert).  A driver import failure or a refused connection both leave the
+    store unset: the guards read unknown state and never fail their check."""
+    dsn = env.get("DASHBOARD_BOARD_PG_DSN", "").strip()
+    if not dsn:
+        return None
+    store = get_ops_store(dsn)
+    if isinstance(store, UnavailableOpsStore):
+        return None
+    return store
+
+
+def _queue_state(ops_store: Any) -> Any:
+    """Queue liveness and run count from the published snapshot rows; an inert
+    state (unknown, never an error) when the store or the data is unknown, so
+    the restart guard stays inert."""
+    if ops_store is None:
+        return _InertQueueState()
+    try:
+        return _LiveQueueState(_queue_alive(ops_store), _queue_running(ops_store))
+    except Exception as exc:
+        logger.exception("queue state read failed: %s", exc)
+        return _InertQueueState()
+
+
+def _snapshot_data(ops_store: Any) -> dict[str, Any]:
+    """The newest host_snapshot row's ``data_json`` (``{}`` when there is none
+    or it is not an object)."""
+    if ops_store is None:
+        return {}
+    for row in ops_store.get_snapshot("host_snapshot", limit=1):
+        data = row.get("data_json")
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def _queue_alive(ops_store: Any) -> bool | None:
+    """Whether the queue process is alive, from the published snapshot rows.
+    Returns ``None`` when no snapshot is present (unknown, never an error)."""
+    data = _snapshot_data(ops_store)
+    queue = data.get("queue")
+    alive = queue.get("alive") if isinstance(queue, dict) else None
+    if isinstance(alive, bool):
+        return alive
+    value = data.get("alive")
+    if isinstance(value, bool):
+        return value
+    return None
+
+
+def _queue_running(ops_store: Any) -> int | None:
+    """The queue's running run count (executions plus runner runs, the queue
+    watcher's own ``running`` total); ``None`` when unknown."""
+    data = _snapshot_data(ops_store)
+    value = data.get("running")
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return None
+
+
+class _LiveQueueState:
+    def __init__(self, alive: bool | None, running: int | None) -> None:
+        self._alive = alive
+        self._running = running
+
+    def is_alive(self) -> bool | None:
+        return self._alive
+
+    def running_count(self) -> int | None:
+        return self._running
+
+
+class _InertQueueState:
+    """A queue state that is always unknown: the restart guard never acts."""
+
+    def is_alive(self) -> bool | None:
+        return None
+
+    def running_count(self) -> int | None:
+        return None
+
+
+class _EmptySeenStore(SeenStore):
+    """A seen store with no keys: every line is unseen, so notices would fire
+    but dry-run or the inert sources keep them from being sent."""
+
+    def __init__(self) -> None:
+        self.fresh = True
+
+    def has(self, key: str) -> bool:
+        return False
+
+    def add(self, key: str) -> None:
+        pass
+
+    def add_all(self, keys: list[str]) -> None:
+        pass
+
+    def save(self) -> None:
+        pass
+
+
+class _EmptyEventSource:
+    """An event source that returns no events: the mission notice guard finds
+    no review data, which is inert when the store is missing."""
+
+    def events(self, state_key: str) -> list[dict[str, Any]]:
+        return []
+
+
+def _mission_events(ops_store: Any) -> Any:
+    """The event source for mission reviews: an empty source when the store is
+    missing, so the notice guard stays inert without failing its check."""
+    if ops_store is None:
+        return _EmptyEventSource()
+    return ops_store
+
+
+class _RelayGuard(Guard):
+    """The Telegram relay as a registered guard: its check reports the relay's
+    state (config, dry-run, running) and its act is inert — the relay itself
+    runs as a task of the supervisor, started when the guard starts and
+    stopped when it stops."""
+
+    def __init__(self, settings: GuardSettings, env: dict[str, str]) -> None:
+        super().__init__("tg_relay", settings.interval("tg_relay"))
+        self._settings = settings
+        self._env = env
+        self._relay: TelegramRelay | None = None
+        self._stop_event: asyncio.Event | None = None
+        self._task: asyncio.Task[None] | None = None
+        self._configured = False
+        self._dry_run = False
+        self._last_state: str | None = None
+
+    def _configure(self) -> None:
+        from .guard_relay import (
+            TOKEN_VAR,
+            build_telegram_client,
+            build_webhook_client,
+            load_relay_settings,
+        )
+
+        try:
+            relay_settings = load_relay_settings(self._env)
+            token = self._env.get(TOKEN_VAR, "").strip()
+            if not token:
+                return
+            telegram = build_telegram_client(self._env)
+            webhook = build_webhook_client()
+            self._relay = TelegramRelay(relay_settings, telegram, webhook)
+            self._configured = True
+            self._dry_run = relay_settings.dry_run
+        except (ValueError, KeyError):
+            self._configured = False
+
+    async def check(self) -> list[Finding]:
+        self._configure()
+        if self._task is None and self._configured:
+            self._stop_event = asyncio.Event()
+            self._task = asyncio.create_task(self._run())
+        state = "dry-run" if (self._configured and self._dry_run) else (
+            "running" if self._configured else "unconfigured"
+        )
+        if state != self._last_state:
+            self._last_state = state
+            return [Finding(detail=f"relay {state}")]
+        return []
+
+    async def act(self, findings: list[Finding]) -> str | None:
+        return None
+
+    async def _run(self) -> None:
+        if self._relay is None or self._stop_event is None:
+            return
+        await self._relay.run(self._stop_event)
+
+    def stop_task(self) -> None:
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
+        if self._stop_event is not None:
+            self._stop_event.set()
+        self._task = None
+        self._stop_event = None
 
 
 def main(argv: list[str] | None = None) -> int:

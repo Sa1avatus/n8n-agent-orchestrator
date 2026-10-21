@@ -1,3 +1,101 @@
+# QA acceptance: design
+
+QA acceptance checks a finished mission the way a user would: it opens the dashboard in a
+throwaway stack, clicks and types through the user-level scenarios, and gives a verdict. It
+is a separate step from the Reviewer, which judges each Worker attempt from the code and the
+output. This document is the design; the mission `ahawr-qa-acceptance` (ROADMAP.md) builds it.
+
+## Modes
+
+QA has four modes, set by `mode` in the `qa` options of `roles_json` (see `roles-config.md`):
+
+- `off` - QA never runs. This is the default when the feature is not switched on.
+- `final` - QA runs once, at the end of a mission, and only if the mission changed UI files or routes. It is the default when QA is on.
+- `ui_tasks` - `final`, plus a run after a task whose plan carries an explicit `ui_check` scenario written by the Architect.
+- `nightly` - the whole stored scenario suite runs against the current main, independent of missions. It is started by `python -m claude_runner.qa nightly` and is not scheduled.
+
+The validator already accepts `mode`, `max_minutes` and `max_cost_usd` under `qa`; the
+meaning of the modes is set here and is not yet wired into the workflow.
+
+## Why QA does not run after every task
+
+- Most tasks touch no UI. A QA run after them spends minutes and money for nothing.
+- Each QA run costs minutes and money. Per task, that adds up quickly over a mission.
+- A UI task often depends on later tasks. Its scenario fails until those tasks are done, which
+  gives a false failure.
+- Flaky per-task checks train the queue to ignore red. A check that is red for no real reason
+  is worse than no check, so QA runs where a failure means something.
+
+## What QA may and may not do
+
+QA may, in the throwaway stack only: read the pages, click, type, and capture screenshots,
+console errors and network errors.
+
+QA may not touch: the production dashboard, the production database, n8n, the queue, or any
+provider.
+
+## Verdicts
+
+- `pass` - every scenario step ran and matched the expected result.
+- `fail` - a step ran and did not match. The verdict names the failing step and carries a
+  screenshot of the failure.
+- `blocked` - the stack did not start, so no scenario ran. Blocked is never a pass. A blocked
+  run must be shown as blocked in the board and must not advance the mission.
+
+## Fail to review to retry
+
+A `fail` becomes a review, so the existing retry chain handles it:
+
+1. The QA verdict is written as a review with `review_status` = `needs_changes`.
+2. The failing step (its name and expected/actual text) is written as the review's
+   `next_task`, which is the instruction the next attempt receives.
+3. `Retry Current Task` picks it up: `combined_feedback = review_next_task || review_reason`,
+   `task_attempt += 1`, and the task runs again. The attempt limit (`max_attempts_per_task`,
+   default 3) and the blind guard apply as for any Reviewer verdict.
+
+This follows the call chain documented under "Verdict → review_status" and "Retry Current
+Task" below. `review_status` is written only by `Parse Review`; QA must not set it another way.
+
+## Limits
+
+The `qa` role in `roles_json` is decided as:
+
+```json
+{"qa": {"model": "anthropic/sonnet", "mode": "off", "max_minutes": 20, "max_cost_usd": 1}}
+```
+
+`max_minutes` (20) and `max_cost_usd` (1) cap one QA run. A run that exceeds either limit ends
+as `blocked`, never `pass`.
+
+## Stored artefacts
+
+Per QA run: the verdict JSON, the screenshots, the console errors and the network errors. Files
+are stored in the mission's folder and kept 30 days, then deleted. The verdict JSON path is
+recorded in the event log.
+
+## Scoring the planning models on the ui_check set (operator)
+
+`claude-runner/tests/qa_ui_check_cases.json` holds 12 example plan tasks: 6 with `needed: true`
+(visible on a page) and 6 with `needed: false` (no visible change). Each case has an `objective`,
+the expected `needed` and a one-line `why`. The test only checks the shape and the 6/6 balance.
+
+The test does not call any model, and the scoring is left to the operator. To score a planning
+model by hand:
+
+1. Give the model the planning prompt with one case's `objective` as the only task.
+2. Read the `ui_check.needed` it returns for that task.
+3. Compare it with the case's `needed`, and count the matches out of 12.
+4. Record the model name and the score in your own notes; do not commit them.
+
+A model that answers `true` for every case scores 6/12, so it is not better than the set's balance.
+
+## Regression list, 2026-10-19 (0.7.400)
+
+The fixes of 0.7.400 in `CHANGELOG.md` are the regression list QA must keep green on the
+board: Kanban drag-and-drop (the empty `board.queue`, the missing `X-AHAWR-Dashboard` header on
+mutation fetches, the duplicate-key error on queue moves, the false version conflict), the
+Projects card alignment, and the mission `#` column in the Grid.
+
 # Implementation notes: call chain
 
 Research notes for the QA-acceptance mission: how the Architect (planning and final

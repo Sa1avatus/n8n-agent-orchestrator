@@ -481,3 +481,43 @@ class TestRunLinkage:
         assert stats["max_attempts_per_task"] == 4
         stats = task_stats(run_manager, board, "sk1", "T001")
         assert stats["max_attempts_per_task"] == 4
+
+
+class TestRoleRows:
+    """The per-role rows of the mission card: the QA run is linked through a
+    ``qa_run_id`` event row, and the rows exist whether roles_json is set, absent or invalid."""
+
+    def _qa_run(self, board: InMemoryBoardStore, store: Store) -> None:
+        base = datetime(2026, 1, 1, 10, 0)
+        _add_run(store, "run_q1", "s3", "qa", base,
+                 base + timedelta(minutes=6), 0.4)
+        board.append_event("sk1", _event("sk1", qa_run_id="run_q1"))
+
+    def test_qa_row_with_roles_json_shows_the_configured_model(self, board, run_manager):
+        _seed_board(board)
+        board.set_mission_config("m1", {"roles_json": json.dumps(
+            {"qa": {"1": "anthropic/haiku", "options": {"mode": "final"}}})}, None)
+        self._qa_run(board, run_manager.store)
+        rows = mission_card_stats(run_manager, board, "sk1")["roles"]
+        assert rows["qa"] == {
+            "label": "QA", "runs": 1, "minutes": 6.0, "cost_usd": 0.4,
+            "model": "anthropic/haiku",
+        }
+        assert rows["worker"]["runs"] == 0
+        assert rows["worker"]["model"] is None
+
+    def test_qa_row_without_roles_json_uses_the_default_model(self, board, run_manager):
+        _seed_board(board)
+        self._qa_run(board, run_manager.store)
+        rows = mission_card_stats(run_manager, board, "sk1")["roles"]
+        assert rows["qa"]["label"] == "QA"
+        assert rows["qa"]["runs"] == 1
+        assert rows["qa"]["model"] == "anthropic/sonnet"
+
+    def test_invalid_roles_json_counts_as_no_roles(self, board, run_manager):
+        _seed_board(board)
+        board.set_mission_config("m1", {"roles_json": "{not json"}, None)
+        self._qa_run(board, run_manager.store)
+        rows = mission_card_stats(run_manager, board, "sk1")["roles"]
+        assert rows["qa"]["runs"] == 1
+        assert rows["qa"]["model"] == "anthropic/sonnet"

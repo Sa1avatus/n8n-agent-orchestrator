@@ -1,0 +1,14 @@
+[
+  {"id": "C01", "objective": "Add a Retry button to the failed task card on the board", "needed": true, "why": "A new control the operator clicks, and its result shows on the card."},
+  {"id": "C02", "objective": "Show the QA verdict chip on the mission card", "needed": true, "why": "A new visible element on a dashboard page that the scenario can look for."},
+  {"id": "C03", "objective": "Change the label of the Save button in the plan editor", "needed": true, "why": "Visible text the operator reads; a wrong or missing label is a UI regression."},
+  {"id": "C04", "objective": "Disable the plan editor Save button while a save request is in flight", "needed": true, "why": "Changes how a control behaves on screen, so a click path must be exercised."},
+  {"id": "C05", "objective": "Sort the Grid view by mission id instead of by creation date", "needed": true, "why": "The row order on a page changes, which only a rendered check can confirm."},
+  {"id": "C06", "objective": "Add a link from the mission card to its stored QA report", "needed": true, "why": "A new navigation path on a page; the link must lead to the right report."},
+  {"id": "C07", "objective": "Add a unit test for the retry delay calculation", "needed": false, "why": "Test code only; nothing a user sees changes."},
+  {"id": "C08", "objective": "Add an index on the queue position column in the board schema", "needed": false, "why": "Database change with no visible effect on any page."},
+  {"id": "C09", "objective": "Add a duration_s field to the JSON returned by GET /api/board/stats", "needed": false, "why": "An API field that no page renders yet, so there is nothing on screen to check."},
+  {"id": "C10", "objective": "Raise the default QA max_minutes value from 10 to 15 in the config", "needed": false, "why": "A configuration default; the page shows no change for this task."},
+  {"id": "C11", "objective": "Document the qa options of roles_json in docs/roles-config.md", "needed": false, "why": "Documentation only; no runtime behaviour changes."},
+  {"id": "C12", "objective": "Replace the duplicated timestamp helper in the runner log writer with the shared one", "needed": false, "why": "Internal refactor with unchanged output; no screen is affected."}
+]

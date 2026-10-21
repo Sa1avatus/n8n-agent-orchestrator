@@ -10,9 +10,17 @@ from claude_runner.claude_cli import StreamState, build_command, child_env, clas
 from claude_runner.config import (
     AUTO_COMPACT_WINDOW,
     DEFAULT_RETRY_INPUT_CHARS,
+    ROLES,
     ProviderProfile,
     Settings,
 )
+
+
+def test_qa_is_a_runner_role_with_its_own_profile(tmp_path: Path) -> None:
+    s = Settings.from_env({"CLAUDE_RUNNER_DATA_DIR": str(tmp_path)})
+    assert "qa" in ROLES
+    assert s.profile("qa").permission_mode == "dontAsk"
+    assert s.profile("qa").disallowed_tools == s.profile("generic").disallowed_tools
 
 
 def test_settings_from_env_profiles_and_validation(tmp_path: object) -> None:

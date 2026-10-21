@@ -4,9 +4,11 @@ A guard is a named check with an interval and an action.  ``GuardSupervisor``
 runs the registered guards, each in its own asyncio task: a check failure in
 one guard increments its error count and backoff delay, and never stops the
 other guards.  ``DASHBOARD_GUARDS=1`` turns every per-guard setting on at once;
-``DASHBOARD_GUARDS_DRY_RUN=1`` records intended actions without performing
-them.  Notices go to Telegram through the container bot variables
-(``DASHBOARD_TELEGRAM_BOT_TOKEN``, ``DASHBOARD_TELEGRAM_CHAT_ID``); their
+``DASHBOARD_GUARDS_DRY_RUN=1`` (or ``DASHBOARD_GUARDS_<NAME>_DRY_RUN=1``) records
+intended actions and notices without performing or sending them.  A guard with
+three errors in a row is disabled and sends one notice.  Notices go to Telegram
+through the container bot variables (``DASHBOARD_TELEGRAM_BOT_TOKEN``,
+``DASHBOARD_TELEGRAM_CHAT_ID``); their
 values are never logged, redacted, or returned.
 """
 
@@ -22,6 +24,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from .guards_history import GuardHistory
+
 logger = logging.getLogger("claude_runner.guards")
 
 # Telegram variables of the container (names from T005).  Only their *names*
@@ -33,6 +37,10 @@ TELEGRAM_CHAT_VAR = "DASHBOARD_TELEGRAM_CHAT_ID"
 # error, capped at one hour.  One failed check never delays another guard.
 BACKOFF_BASE_S = 60.0
 BACKOFF_CAP_S = 3600.0
+
+# A guard is disabled after this many errors in a row (one notice is sent); one
+# successful check resets the streak.
+DISABLE_AFTER_ERRORS = 3
 
 # Default interval for a guard without its own setting.
 DEFAULT_INTERVAL_S = 60.0
@@ -99,12 +107,16 @@ class GuardSettings:
 
     master: bool
     dry_run: bool
+    dry_run_guards: frozenset[str]
     per_guard: dict[str, GuardEntry]
     notice_limit: float
     orphan_confirm_checks: int
     interrupt_loop_threshold: int
     interrupt_loop_window_s: float
     interrupt_loop_quick_s: float
+    queue_state_path: str = ""
+    tab: bool = False
+    state_dir: str = ""
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> GuardSettings:
@@ -113,9 +125,10 @@ class GuardSettings:
         env = dict(os.environ if env is None else env)
         master = _bool(env, "DASHBOARD_GUARDS", False)
         per_guard: dict[str, GuardEntry] = {}
+        dry_run_guards: set[str] = set()
         if master:
             # DASHBOARD_GUARDS=1 turns everything on; per-guard settings are
-            # then read from DASHBOARD_GUARDS_<NAME>_ENABLED / _INTERVAL.
+            # then read from DASHBOARD_GUARDS_<NAME>_ENABLED / _INTERVAL / _DRY_RUN.
             for key in env:
                 upper = key.upper()
                 prefix = "DASHBOARD_GUARDS_"
@@ -135,12 +148,17 @@ class GuardSettings:
                             enabled=True,
                             interval=_float(env, key, DEFAULT_INTERVAL_S),
                         )
+                elif upper.endswith("_DRY_RUN"):
+                    name = (upper[len(prefix) : -len("_DRY_RUN")]).lower()
+                    if name and _bool(env, key, False):
+                        dry_run_guards.add(name)
         notice_limit = _float(
             env, "DASHBOARD_GUARDS_NOTICE_LIMIT", NOTICE_LIMIT_PER_MIN
         )
         return cls(
             master=master,
             dry_run=_bool(env, "DASHBOARD_GUARDS_DRY_RUN", False),
+            dry_run_guards=frozenset(dry_run_guards),
             per_guard=per_guard,
             notice_limit=max(notice_limit, 0.0),
             orphan_confirm_checks=_int(
@@ -155,6 +173,9 @@ class GuardSettings:
             interrupt_loop_quick_s=_float(
                 env, "DASHBOARD_GUARDS_INTERRUPT_LOOP_QUICK_S", INTERRUPT_QUICK_S
             ),
+            queue_state_path=env.get("DASHBOARD_GUARDS_QUEUE_STATE_PATH", "").strip(),
+            tab=master and _bool(env, "DASHBOARD_GUARDS_TAB", False),
+            state_dir=env.get("DASHBOARD_GUARDS_STATE_DIR", "").strip(),
         )
 
     def enabled(self, name: str) -> bool:
@@ -166,6 +187,9 @@ class GuardSettings:
     def interval(self, name: str) -> float:
         entry = self.per_guard.get(name.lower())
         return entry.interval if entry is not None else DEFAULT_INTERVAL_S
+
+    def dry_run_for(self, name: str) -> bool:
+        return self.dry_run or name.lower() in self.dry_run_guards
 
 
 @dataclass
@@ -184,7 +208,9 @@ class GuardState:
     last_result: str | None = None
     last_action: str | None = None
     error_count: int = 0
+    consecutive_errors: int = 0
     status: str = "ok"
+    enabled: bool = True
 
     def snapshot(self) -> dict[str, object]:
         return {
@@ -445,10 +471,12 @@ class GuardSupervisor:
         settings: GuardSettings,
         guards: list[Guard],
         notifier: Notifier | None = None,
+        history: GuardHistory | None = None,
     ) -> None:
         self.settings = settings
         self.guards = guards
         self.notifier = notifier
+        self.history = history
         self.limiter = NoticeLimiter(settings.notice_limit)
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._notice_tasks: set[asyncio.Task[bool]] = set()
@@ -480,6 +508,8 @@ class GuardSupervisor:
             task.cancel()
         await asyncio.gather(*self._tasks.values(), return_exceptions=True)
         self._tasks.clear()
+        if self.history is not None:
+            self.history.save()
         for notice_task in self._notice_tasks:
             notice_task.cancel()
         if self._notice_tasks:
@@ -492,8 +522,16 @@ class GuardSupervisor:
         return SupervisorSnapshot(
             dry_run=self.settings.dry_run,
             running=self._running,
-            guards={g.name: g.state.snapshot() for g in self.guards},
+            guards={g.name: self._guard_status(g) for g in self.guards},
         )
+
+    def _guard_status(self, guard: Guard) -> dict[str, object]:
+        return {
+            "name": guard.name,
+            **guard.state.snapshot(),
+            "enabled": self.settings.enabled(guard.name) and guard.state.enabled,
+            "dry_run": self.settings.dry_run_for(guard.name),
+        }
 
     async def _run_guard(self, guard: Guard) -> None:
         backoff = BACKOFF_BASE_S
@@ -501,9 +539,10 @@ class GuardSupervisor:
         stop_event = self._stop_event
         assert stop_event is not None
         while not stop_event.is_set():
+            started = time.monotonic()
             try:
                 findings = await guard.check()
-                if self.settings.dry_run:
+                if self.settings.dry_run_for(guard.name):
                     # dry-run: record the intended action without performing it
                     action: str | None = (
                         f"dry-run: {guard.name} would act on {len(findings)} finding(s)"
@@ -513,19 +552,26 @@ class GuardSupervisor:
                 recovered = failing
                 failing = False
                 backoff = BACKOFF_BASE_S
+                guard.state.consecutive_errors = 0
                 guard.state.last_run = time.time()
                 guard.state.last_result = (
                     "ok (recovered)" if recovered else f"findings={len(findings)}"
                 )
                 guard.state.last_action = action
                 guard.state.status = "ok"
+                self._record(guard, "ok", started)
                 if findings and action is not None:
                     self._notify(guard, action)
             except Exception:
                 failing = True
                 guard.state.error_count += 1
+                guard.state.consecutive_errors += 1
                 guard.state.status = "error"
+                self._record(guard, "error", started)
                 logger.exception("guard %s check failed; backoff %d s", guard.name, backoff)  # noqa: UP031
+                if guard.state.consecutive_errors >= DISABLE_AFTER_ERRORS:
+                    self._disable(guard)
+                    return
             try:
                 if stop_event.is_set():
                     break
@@ -537,10 +583,29 @@ class GuardSupervisor:
             if failing:
                 backoff = min(backoff * 2, BACKOFF_CAP_S)
 
+    def _record(self, guard: Guard, result: str, started: float) -> None:
+        if self.history is not None:
+            self.history.record(
+                guard.name, result, guard.state.last_action,
+                int((time.monotonic() - started) * 1000),
+            )
+
     def _notify(self, guard: Guard, action: str) -> None:
         if not self.limiter.allow():
             return
-        text = f"guard {guard.name}: {action}"
+        self._post(guard, action)
+
+    def _disable(self, guard: Guard) -> None:
+        guard.state.enabled = False
+        self._post(
+            guard, f"disabled after {guard.state.consecutive_errors} errors in a row"
+        )
+
+    def _post(self, guard: Guard, detail: str) -> None:
+        text = f"guard {guard.name}: {detail}"
+        if self.settings.dry_run_for(guard.name):
+            logger.info("dry-run, notice not sent: %s", text)
+            return
         if self.notifier is None:
             logger.info("guard notice: %s", text)
             return

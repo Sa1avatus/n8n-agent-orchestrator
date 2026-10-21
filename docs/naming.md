@@ -1,7 +1,7 @@
 # Naming conventions
 
 How names look in this repository. Applies to new code now and to the cleanup that the code review and
-refactoring mission will do after 1.0. A name says WHAT the thing is, in the words of the vocabulary below; it
+refactoring mission will do before 1.0. A name says WHAT the thing is, in the words of the vocabulary below; it
 does not say how it is stored, and it is not shortened to save letters.
 
 ## 1. Casing by language

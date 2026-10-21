@@ -1,0 +1,17 @@
+--- a/data-tables/ops/_start_watchers_hidden.ps1
++++ b/data-tables/ops/_start_watchers_hidden.ps1
+@@ -4,9 +4,11 @@
+ function Start-Hidden($file, $argList) {
+     Start-Process -FilePath $file -ArgumentList $argList -WorkingDirectory $ops -WindowStyle Hidden
+ }
+-Start-Hidden $py "-X utf8 `"$ops\queue_watch.py`""
+-Start-Hidden $py "-X utf8 `"$ops\orphan_guard.py`""
+-Start-Hidden $py "`"$ops\tg_relay.py`""
++$launcher_poll_seconds = 60
++if ($env:AHAWR_QUEUE_LAUNCHER_ENABLED -eq '1') {
++    $launcher_mode = if ($env:AHAWR_QUEUE_LAUNCHER_DRY_RUN -eq '0') { '' } else { '--dry-run' }
++    Start-Hidden 'powershell.exe' "-NoProfile -WindowStyle Hidden -Command `"while (`$true) { & '$py' -X utf8 '$ops\queue_launcher.py' --request-dir '$ops\guard_requests' $launcher_mode; Start-Sleep -Seconds $launcher_poll_seconds }`""
++}
+ $env:PYTHONUTF8 = '1'
+ Start-Hidden $py "`"$ops\gpu_power_governor.py`""
+ Start-Hidden 'powershell.exe' "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$ops\docker_watchdog.ps1`""

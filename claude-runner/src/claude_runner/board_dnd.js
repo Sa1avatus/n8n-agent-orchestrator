@@ -280,6 +280,21 @@ function showState(text) {
     state.textContent = text;
     state.className = "bad";
   }
+  // #boardstate is hidden while a view (Kanban, Lanes...) is shown: say it in a visible line too
+  if (!state || state.hidden) showNotice(text);
+}
+
+function showNotice(text) {
+  const body = document.getElementById("boardviewbody");
+  if (!body || !body.parentNode) return;
+  let notice = document.getElementById("boardnotice");
+  if (!notice) {
+    notice = document.createElement("div");
+    notice.id = "boardnotice";
+    notice.setAttribute("role", "status");
+    body.parentNode.insertBefore(notice, body);
+  }
+  notice.textContent = text;
 }
 
 // Attach the controls to every queued card in #boardqueue.  Fills

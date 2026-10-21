@@ -760,3 +760,340 @@ volumes:
     target: /d
     read_only: true
 ```
+
+## Migration research: framework
+
+Facts for the guard migration (read-only; line numbers from the working tree).
+
+- `guards.py:97` `GuardSettings` fields: `master`, `dry_run`, `per_guard`, `notice_limit`, `orphan_confirm_checks`, `interrupt_loop_threshold`, `interrupt_loop_window_s`, `interrupt_loop_quick_s`. `from_env` (`guards.py:110`) reads them.
+- Env names read by `GuardSettings.from_env` (`guards.py:114-156`): `DASHBOARD_GUARDS` (master, bool, default off); `DASHBOARD_GUARDS_<NAME>_ENABLED` and `DASHBOARD_GUARDS_<NAME>_INTERVAL` (per guard, read only when master is on, `guards.py:119-137`); `DASHBOARD_GUARDS_NOTICE_LIMIT` (float, default `NOTICE_LIMIT_PER_MIN` = 1.0, clamped to >= 0, `guards.py:41,138-145`); `DASHBOARD_GUARDS_DRY_RUN` (bool, default off, `guards.py:143`); `DASHBOARD_GUARDS_ORPHAN_CONFIRM_CHECKS` (default 2, `guards.py:146`); `DASHBOARD_GUARDS_INTERRUPT_LOOP_THRESHOLD` (default 3, `guards.py:149`); `DASHBOARD_GUARDS_INTERRUPT_LOOP_WINDOW_S` (default 900.0, `guards.py:152`); `DASHBOARD_GUARDS_INTERRUPT_LOOP_QUICK_S` (default 120.0, `guards.py:155`).
+- Parsing helpers: `_float`, `_int`, `_bool` (`guards.py:53,62,71`). `GuardSettings.enabled` and `interval` (`guards.py:160,166`): with master off, `enabled` is always False.
+- Defaults: `DEFAULT_INTERVAL_S` = 60.0 (`guards.py:37`), `BACKOFF_BASE_S` = 60.0 (`guards.py:34`).
+- `Guard` base (`guards.py:199`), constructor `Guard(name, interval)`. `Finding(detail, severity)` (`guards.py:172`). `GuardState` fields `last_run`, `last_result`, `last_action`, `error_count`, `status`; `snapshot()` (`guards.py:180-196`).
+- `RunnerClient` (`guards.py:216`): injectable interface with `list_processes()`, `list_runs()`, `terminate(pid)`. No concrete httpx implementation exists in `guards.py`.
+- `OrphanProcessGuard(client, notifier, interval, confirm_checks)` (`guards.py:244`): closed-run pid must be seen for `confirm_checks` checks in a row (`guards.py:269-273`); `act` calls `client.terminate` (`guards.py:284`).
+- `InterruptLoopGuard(client, notifier, interval, threshold, window_s, quick_s)` (`guards.py:301`): notice only, one per window (`guards.py:331-333`); `act` logs when no notifier (`guards.py:343-345`).
+- `NoticeLimiter(limit_per_minute)` (`guards.py:350`): fixed 60 s window, `allow(now)` (`guards.py:358`). Created in `GuardSupervisor.__init__` with `settings.notice_limit` (`guards.py:443-450`).
+- `Notifier(env, transport, env_provider)` (`guards.py:369,378`): token and chat id from `DASHBOARD_TELEGRAM_BOT_TOKEN` and `DASHBOARD_TELEGRAM_CHAT_ID` (`guards.py:29-30`); `send(text)` (`guards.py:399`) returns True on log fallback; `_notify` in the supervisor applies the limiter first (`guards.py:540-541`).
+- `GuardSupervisor` (`guards.py:440`): `start()` (`guards.py:458`), `stop()` (`guards.py:473`), `state()` (`guards.py:491`) returns `SupervisorSnapshot` with `dry_run`, `running`, `guards` (`guards.py:433-437`).
+- Dashboard wiring: `dashboard.py:92-101` creates `GuardSupervisor(GuardSettings.from_env(), [], Notifier())`, starts it in the lifespan and stops it in `finally`. No guards are registered in production (`[]` at `dashboard.py:94`).
+- `GET /api/guards` (`dashboard.py:165-179`): returns `enabled` (settings master), `dry_run`, `running`, and `guards` as a list of `{name, status, last_run, last_result, last_action, error_count}`. No auth header is checked, matching the other read routes.
+- Guard strip in `dashboard.html`: `<div id="guardstrip">` (`dashboard.html:253`), styled at `dashboard.html:224-236`. `renderGuardStrip` shows `off` text when `enabled` is false, otherwise one `<span class="g">` per guard (`guardEntryHtml`: status, last action, last run, `result` = `last_result`, and a `dry run` mark when `dry_run`), then one read-only `<span class="g">` per host heartbeat (`heartbeatHtml`: `fresh`/`stale`/`error`/`unknown`, last action, time, result, `read-only` mark), plus a `#guardrefresh` button. Heartbeats come from the same `/api/guards` response, so the existing `loadGuards` refresh covers them; no new poller.
+- i18n: `GUARD_TEXT` holds English and Russian fallbacks; `guardT` first reads `guards.<key>` from the board i18n payload fetched from `/api/board/i18n`, then the fallback. The `guards.*` keys live in `board_i18n_en.json` and `board_i18n_ru.json`. They are also in `BUNDLED_EN` in `board_i18n.js`: the parity test "bundled table matches the JSON file" requires every key of `board_i18n_en.json` to be in the bundled table, so the new keys were added there too. They are not `L()` keys.
+- Tests covering guards: `tests/test_guards.py` (settings, notifier, supervisor; fakes `FailingGuard`, `OkGuard`, `FlakyGuard`, helper `settings_from`); `tests/test_guards_framework.py` (supervisor, limiter, snapshot; fakes `FiringGuard`, `FailingGuard`, `FlakyGuard`, `QuietGuard`, `_fake_transport`, helper `_supervisor`; no network); `tests/test_guards_api.py` (`GET /api/guards` with fake `FiringGuard` and the `client` fixture; no secret in the response); `tests/test_dashboard.py:325-362` (route off by default, dry-run field, no env values; helper `dashboard(client)` at `test_dashboard.py:290`).
+- Not tested: `OrphanProcessGuard` and `InterruptLoopGuard` have no test in `tests/` (grep for both class names returns only `guards.py`), and `RunnerClient` has no fake in the tests.
+- Open points: `docs/guards.md` has no open-points section; its "Container guards planned" list (`docs/guards.md:47-60`) is the work still to do. This notes file has no open-question section either.
+- `dashboard.html` has no `L()` keys; the board `L()` mechanism is separate (see `i18n in dashboard.html`, `guards-notes.md:247`).
+
+## Migration research: queue_watch
+
+Read-only research for the guard migration (line numbers from `data-tables/ops/queue_watch.py` and `data-tables/ops/notify.py`; store lines from `claude-runner/src/claude_runner/board_pg.py`).
+
+Duties, one line each: function, limit constant and value, data source.
+
+- Loop every 60 s: `main()` `time.sleep(60)` (queue_watch.py:262); limit 60 s; host-only, no store equivalent.
+- Mission not completed with last review: `main()` regex `MISSION NOT COMPLETED: (\S+) \((\w+)\)` (queue_watch.py:204-206) and `last_review()` (queue_watch.py:100-109), review text cut to 350 chars (queue_watch.py:102); trigger from host file `real_queue.log`; review from `_EVENT_LOG_TABLE` (board_pg.py:46) via `BoardStore.events(state_key)` (board_pg.py:489), filtered in SQL by `event_type = 'review_parsed'` and ordered by `"createdAt"` (store orders by `id` and returns `created_at`).
+- Mission completed: `main()` regex `ended (\S+): completed` (queue_watch.py:207-209); limit none; source host file `real_queue.log`; store only has a copy of the line via `get_queue_log()` (board_ops_store_pg.py:601, table `queue_log`), not a parsed event.
+- ALERT lines: `main()` (queue_watch.py:213-214), skipped when the line contains `DISABLE_THINKING`, `new missions were not inserted` or `REAL QUEUE STOPPED`; limit none; source host file `real_queue.log`; store copy via `get_queue_log()`.
+- Queue stopped: `main()` (queue_watch.py:210-212), sets `queue_end = "stopped"`; limit none; source host file `real_queue.log`; store copy via `get_queue_log()`.
+- Queue done: `main()` (queue_watch.py:215-217), sets `queue_end = "done"`; limit none; source host file `real_queue.log`; store copy via `get_queue_log()`.
+- Docker notices: `main()` (queue_watch.py:218-224), markers `restarting Docker Desktop`, `containers are back`, `not restarting again`; the 3-restarts-per-hour limit is in `data-tables/ops/docker_watchdog.ps1:12`, not in queue_watch.py; source host file `docker_watchdog.log`; store has no parsed log markers (watchdog CSV is a separate snapshot, `board_ops_parsers.parse_watchdog_csv`).
+- Queue restart: `main()` (queue_watch.py:227-241), `start_queue()` (queue_watch.py:182); limit `len(restarts) < 4` within 3600 s (queue_watch.py:233-234), gated by `executions_running() == 0` and `queue_end != "done"`; sources: `queue_alive()` PowerShell `Win32_Process` count (queue_watch.py:122-126) and n8n Postgres `execution_entity` (queue_watch.py:131); no store method exposes process state.
+- Idle notice: `main()` (queue_watch.py:243-251); limit 1200 s, flag `idle_notified`; sources: `executions_running()` and `runner_running()` (queue_watch.py:138-146, runner `/health` via `docker exec`, counts `running` + `queued`); store has per-mission status in `list_live_states()` (board_pg.py:444) but no runner run counts. Known gap: a queued-only runner run keeps `runner_running()` above 0, so the timer never starts (see the queue_watch.py:244-246 note above).
+- Notice cap 20 per hour: `notify()` (queue_watch.py:42-48), window 3600 s, kept in memory in `sent_times`; store none (lost on restart).
+- Pending notices: `notify()` keeps up to 10 (queue_watch.py:51), `retry_pending()` (queue_watch.py:55-66) drops them after 6 h (line 59) and retries each minute; in memory; store none.
+- Start tg_relay: `ensure_relay()` (queue_watch.py:170-179); limit: runs only when `tg_relay.enabled` exists (queue_watch.py:175); sources: host process list and `data-tables/ops/tg_relay.enabled`; the Python path `D:\Python312\python.exe` is a literal in the command (queue_watch.py:177) and needs a setting in the migration; store exposes only the `tg_relay` panel fields (`board_ops_api.py:234`), not the start action.
+- Think archive every 6 h: `archive_think_steps()` (queue_watch.py:161-167), `6 * 3600`, timeout 900; host-only (not in the task list but still a duty of the loop).
+
+`queue_watch.state.json` fields: only `q` (bytes of `real_queue.log` already read) and `d` (bytes of `docker_watchdog.log` already read), written by `save_state()` (queue_watch.py:76-77) from `new_lines()` (queue_watch.py:192-193). Host file; `parse_queue_watch_state()` (board_ops_parsers.py:189) parses it and returns `q`, `d`, `notices_per_hour` and `last_notifications`; the publisher that writes it into the store was not checked here.
+
+Telegram text formats (exact, as sent by queue_watch.py; `mission` and `state` are regex captures, `\n` joins lines):
+
+- `❌ Миссия {mission} не завершена (состояние {state}).` + review block when a `review_parsed` event exists: `\nПоследнее ревью: задача {task_index+1}, попытка {task_attempt}, оценка {review_score}.\n{review_reason[:350]}` (newlines in the reason replaced by spaces).
+- `✅ Миссия {mission} завершена.`
+- `⛔ Очередь миссий остановилась: {text after "REAL QUEUE STOPPED:"}. Сторож запустит её заново, когда n8n освободится.`
+- `⚠️ {text after "ALERT:"}`
+- `🏁 Очередь миссий закончилась: все миссии пройдены или пропущены.`
+- `🐳 Docker завис, сторож перезапускает Docker Desktop.`
+- `🐳 Docker вернулся, контейнеры подняты. Очередь продолжит сама.`
+- `🐳 Docker зависает слишком часто (3 перезапуска в час), сторож больше не перезапускает его. Нужно вмешательство.`
+- `🔁 Очередь миссий запущена заново (после остановки).` or `🔁 Очередь миссий запущена заново (её процесса не было).`
+- `💤 Ничего не выполняется уже 20 минут, хотя очередь жива. Проверьте прогон.`
+- Late retry prefix (queue_watch.py:62): `(с опозданием, событие в HH:MM) ` before the original text.
+
+Added by `notify.send()` (notify.py:27-59, 60-72) before every notice, which the new guards must reproduce: a tag line `📌 {mission} · T{NNN}` plus a newline, from the active row of the live-state table (`status = 'active'`, newest `updatedAt`), or `📌 {last started mission}` from `real_queue.log` when the database is unreachable; not added when the mission id is already in the text. The text is posted as JSON to `http://localhost:5678/webhook/<AHAWR_ALERT_WEBHOOK_PATH>` with the chat id from `telegram_chat_id` (id 5 of the table `data_table_user_1S21PsMqT0FpR7eD`).
+
+Checks: no code changed; `git diff --stat` is checked in the report.
+
+## Migration research: relay and orphan guard
+
+Read-only study of `data-tables/ops/tg_relay.py`, `tg_commands.py` and `orphan_guard.py` (T003). No code changed.
+
+### `tg_relay.py` facts (file:function)
+
+- `main()` (tg_relay.py:70): exits with code 1 and logs when `TELEGRAM_BOT_TOKEN` or `AHAWR_TG_WEBHOOK_PATH` is missing in `.env` (lines 71-75).
+- Long poll, `main()` line 86: `getUpdates` with body `timeout` 50 s, `limit` 50, `allowed_updates` `["message", "callback_query"]`. The HTTP read timeout is 70 s (`call()` default, line 44).
+- `set_menu()` (line 51): `setMyCommands` with HTTP timeout 30 s; the list is built from `COMMANDS` as `{"command", "description"[:256]}`.
+- Offset file: `OFFSET_FILE` = `data-tables/ops/tg_relay.offset` (line 24). Format: plain decimal text, one integer, `update_id + 1`. `load_offset()` (line 63) returns 0 when the file is missing or not an integer.
+- Offset save: `main()` line 94, once per update, and only after `forward()` (lines 57-60, POST, timeout 30 s, accepts 2xx) returned true (lines 91-92). A rejected update raises at line 92; the offset stays at the last saved value and the update is delivered again.
+- Webhook URL: `N8N` = env `AHAWR_N8N_URL`, default `http://localhost:5678` (line 26). Path from `.env` variable `AHAWR_TG_WEBHOOK_PATH` via `env()` (line 29, read at line 72). URL built at line 76 as `<N8N>/webhook/<path>`. Token from `.env` variable `TELEGRAM_BOT_TOKEN` (line 71), replaced by `<token>` in error text (line 98).
+- Retry and backoff: `main()` wraps each cycle in `except Exception` (line 96). `fails` counter, reset to 0 after each successful `getUpdates` (line 89). Sleep `min(60, 3 * fails)` seconds (line 101), so 3, 6, 9 ... up to 60 s. No sleep after a good cycle (the long poll paces it). A `getUpdates` answer with `ok` false raises (line 88) and enters the backoff.
+- Menu retry: `menu_done` is set after `set_menu()` returns (lines 79, 85). If the call raises, it is retried on the next cycle. If Telegram answers `ok` false, no exception is raised, `menu_done` is still set, and the log says `ok=False` (line 54); the menu is not retried until the process restarts.
+- Log lines (`log()`, line 39, file `tg_relay.log`, line 25): `relay started, offset N` (78), `setMyCommands: ok=..., N commands` (54), `forwarded update N (message|callback)` (95), `error #N: ...` (100, first 3 errors and every 20th; text stripped of CR/LF and cut to 200 characters).
+
+### `tg_commands.py` facts
+
+- `COMMANDS` (tg_commands.py:6-33): 26 tuples `(name, category, description)`. Categories: Session 13, AHAWR 3, Configuration 3, Info 7. Descriptions are in Russian, 3-256 characters, no `<>&`.
+- `python data-tables/ops/tg_commands.py` (self-check, line 38-41) printed `26 commands ok`.
+- `ALIASES` (line 36): 4 names `progress`, `tasks`, `restart`, `commands`. No importer uses it (grep for `ALIASES` finds only the definition).
+- Importers: `tg_relay.py:22` and `patch_bot_webhook.py:20` (`from tg_commands import COMMANDS`).
+- Reachability from the container: the `claude-runner` service builds from `context: ./claude-runner` (`docker-compose.yml:120-121`, `208-209`). `data-tables/ops/` is outside that context and no compose volume or Dockerfile line mounts `data-tables` (grep finds none). `data-tables/ops/` is not in git. Conclusion: the file cannot be imported from the container.
+
+**Decision: copy the list into the claude-runner package and add an equality test.** Reason: the container cannot import `data-tables/ops/tg_commands.py`, and making it reachable needs a new mount or build change, which is a Docker topology change (ask first). The copy keeps `tg_relay.py` and `patch_bot_webhook.py` unchanged. The equality test must skip when `data-tables/ops/tg_commands.py` is absent, because a git checkout does not contain that folder. This matches the mission plan in `data-tables/ops/_make_guards2_mission.py:19`.
+
+### `orphan_guard.py` duties and framework coverage
+
+| # | orphan_guard.py duty (file:line) | Framework (guards.py) | Covered |
+|---|---|---|---|
+| 1 | Reads CLI processes (`processes()`, :66) and runs (`runs()`, :84) | `RunnerClient.list_processes` / `list_runs` (:221-228): interface only, no concrete implementation | Partly |
+| 2 | Match process to run by `session_id` or `claude_session_id` (:121-131), session id from `--session-id`/`--resume` (:79) | `OrphanProcessGuard.check` (:258-275) works on a `status` per pid supplied by the client; the matching rule is not in guards.py | Only if the client does it |
+| 3 | Orphan seen in two checks in a row (:136-139) | `confirm_checks` = 2 (`ORPHAN_CONFIRM_CHECKS`, :249, :269-273) | Yes |
+| 4 | Process younger than `MIN_AGE_SECONDS` (120 s) is never touched (:133-134) | No age check anywhere in `OrphanProcessGuard` | **No (gap)** |
+| 5 | Unknown state never kills: nothing is done when docker or the API does not answer (:122, :163-165) | A client error raises in `check()` and produces no findings; the supervisor's handling was not checked here. A process with no `status` is counted as closed (`str(... or "")` at :266-268), so a client that omits status would kill every process | **Gap** |
+| 6 | Kill, then `kill -9` after 10 s if alive (:94-102) | `OrphanProcessGuard.act` calls `client.terminate(pid)` (:284); escalation is not in guards.py and the runner endpoint behind it was not verified | Unknown |
+| 7 | Telegram notice for every kill, at most one per 600 s (:142-145) | `OrphanProcessGuard.act` (:277-290) never calls `self.notifier`; `self._noticed` is written (:289) and never read. `notifier` is stored at :253 only | **No (gap)** |
+| 8 | Three quick `interrupted` ends in 900 s raise one "interrupt loop" notice, no action (:149-162) | `InterruptLoopGuard` (:318-347): threshold 3, window 900 s, quick 120 s, notice only | Yes, with differences below |
+| 9 | Dry run `--once`, kills nothing (:113, :137-138) | `DASHBOARD_GUARDS_DRY_RUN` (guards-notes.md section "Migration research: framework") | Yes, by setting |
+| 10 | Process filter: only `claude -p` processes (:76-77) | None in guards.py | Only if the client does it |
+
+Differences in the interrupt loop (row 8):
+- Quick end test: orphan_guard uses `f - s < 120` (:155), the framework uses `<= quick_s` (guards.py:329).
+- Notice gap: orphan_guard waits 1800 s between notices (:158), the framework waits `window_s` = 900 s (guards.py:331).
+- Notice text: orphan_guard sends the Russian text (:161-162); the framework sends its own English `Finding` detail through `notifier.send` (guards.py:346).
+
+**Gaps not covered by the existing guards:** the 120 s minimum age (row 4), the kill-notice to Telegram (row 7, because `OrphanProcessGuard.act` never sends), the empty-status-kills rule (row 5), and the `kill -9` escalation (row 6, unless the terminate endpoint does it). With the default 60 s interval and two confirmations, a process can be terminated about 60 s after its first closed reading, which is before the 120 s age limit that orphan_guard uses.
+
+**Tests:** no test file references `OrphanProcessGuard` or `InterruptLoopGuard` outside `guards.py` (grep under `claude-runner/tests` and `claude-runner/src` lists only `guards.py`). No test covers the gaps above.
+
+## Migration research: host side
+
+Read-only research for the heartbeat and launcher design. No script, compose file or queue was changed.
+
+### Facts per script (file:line)
+
+- `data-tables/ops/docker_watchdog.ps1` (242 lines)
+  - `$ops = $PSScriptRoot` at line 15; logs `docker_watchdog.csv` (16), `docker_incidents.csv` (17), `docker_watchdog.log` (18, `Log()` at 27), `real_queue.alert` (19), `docker_vm.csv` (92).
+  - Limits: `everySeconds=20` (22), `hungAfter=4` (23), `dashAfter=5` (24), `maxRestartsPerHour=3` (25).
+  - `Restart-DockerDesktop` at 137: `Stop-Process` (139), `& wsl.exe --shutdown` (141), `Start-Process` of Docker Desktop (148).
+  - Main loop `while ($true) {` at 192; `Add-Incident` at 224, 231, 235; dashboard restart `& docker restart ahawr-dashboard` at 229; alert write at 217; pacing `sleep` at 241.
+- `data-tables/ops/gpu_power_governor.py` (195 lines)
+  - `OPS` = script directory (28); `log()` writes `gpu_power_governor.log` (36-43); JSONL write at 110.
+  - `boost()` at 75 calls `_run(high_cmd)` (82); `release()` at 90 calls `_run(low_cmd)` (100).
+  - Watchdog thread 115-119; `run()` at 158; `while True` at 166; `docker logs -f llama-cpp-server` via `Popen` at 168; reconnect sleep at 177.
+  - Defaults `schtasks /run /tn GPU_PL_HIGH` (188) and `GPU_PL_LOW` (189); `--apply` at 183, dry run by default.
+- `docker-compose.yml` (292 lines)
+  - Service keys at 4, 21, 69, 119, 207, 252; top-level `volumes:` at 288-292; no `networks:` key.
+  - `ahawr-dashboard` block 207-250: `environment` 17-25 (`DASHBOARD_RUNNER_URL`, `DASHBOARD_BOARD_PG_DSN`, `DASHBOARD_RUNNER_API_KEY`, `DASHBOARD_HERMES_URL`, `DASHBOARD_HERMES_API_KEY`, `DASHBOARD_HERMES_SOURCE`), `extra_hosts` 27-29, `healthcheck` 31-35, no `volumes`.
+  - `ahawr-retrieval` read-only bind of `/d` at 104-108: the existing pattern for a read-only mount.
+- `data-tables/ops/_start_watchers_hidden.ps1`
+  - `$ops` (2), `$py` (3), `Start-Hidden` helper (4-6); starts `queue_watch.py` (7), `orphan_guard.py` (8), `tg_relay.py` (9), `gpu_power_governor.py` (11), `docker_watchdog.ps1` (12), and `bash _restart_queue_at_end.sh` (13). It does not start `real_queue.sh` directly.
+- `data-tables/ops/_stop_queue.sh`
+  - `kill_tree()` (3); patterns `[q]ueue_watch\.py` (4) and `[r]eal_queue\.sh|[w]ait_mission_end|[l]aunch_mission` (5). Bracketed regex avoids self-match.
+- `data-tables/ops/_restart_queue_at_end.sh`
+  - Waits for `ahawr-dashboard-board-views-2` (11-16); `kill_tree` (18-19); `docker stop`/`start n8n-autonomous-agents` if executions still run (23-30); log `restart_queue_at_end.log`; starts `queue_watch.py` at 32 via `Invoke-CimMethod`.
+- `real_queue.sh` start path: `queue_watch.py:182-187` runs `bash real_queue.sh` with `NOWAIT=1`, output to `real_queue.out`. `real_queue.sh` writes `real_queue.log` (line 11) and `real_queue.alert` (line 67). Also documented in `claude-runner/docs/board-ops.md:302`.
+
+### Proposal
+
+1. Heartbeat: one JSON line per write, overwriting a single file per watcher:
+   `{"name":"docker_watchdog","time":"2026-10-21T12:00:00+03:00","last_action":"engine ok"}`
+   Fields: `name` (watcher id), `time` (ISO 8601 with offset), `last_action` (short text, no secrets, no prompts).
+2. Heartbeat host directory: `data-tables/ops/heartbeat/` (`D:\n8n\data-tables\ops\heartbeat\`). It is outside git, like the rest of `data-tables/ops/`.
+3. Queue restart request file: `data-tables/ops/requests/queue_restart.req`. The dashboard writes it; a small host launcher (about 40 lines) reads it, runs the `_restart_queue_at_end.sh` path only when no execution runs, and limits itself to 4 restarts per hour. Record the final choice in `docs/guards.md`.
+4. Read-only bind mount for the dashboard (example, not applied):
+   ```yaml
+   ahawr-dashboard:
+     volumes:
+       - /d/n8n/data-tables/ops/heartbeat:/heartbeat:ro
+   ```
+   The request directory needs a read-write mount, so it is a separate, larger decision.
+
+### Alternative launcher: scheduled task
+
+The only scheduled-task mechanism in the repo is `schtasks /run /tn GPU_PL_HIGH` and `GPU_PL_LOW` (`gpu_power_governor.py:188-189`). Only `/query` and `/run` appear; no `/create` exists in the repo, so the tasks are registered outside it. A scheduled task for the launcher would need the same out-of-repo registration.
+
+### Open items
+
+- Changing `docker-compose.yml` (new mounts) is Docker topology: ask first.
+- Heartbeat directory and request path are proposals, not decisions.
+
+## Migration baseline
+
+Recorded before any code change (task T005).
+
+Pytest (`tests/test_guards.py`, `test_guards_framework.py`, `test_guards_api.py`, `test_dashboard.py`, `-q --no-cov`):
+- Exit 0, no failing tests; no `F` or `E` progress markers. Progress reached `[100%]`.
+- The run printed no pass-count summary line (`-q` with this config), so the count is not quoted.
+
+Node (`tests/board_i18n.test.js`, `tests/board_i18n_ui.test.js`):
+- `# tests 2`, `# pass 2`, `# fail 0`.
+
+Lint counts (before the change):
+
+| File | ruff | mypy |
+| --- | --- | --- |
+| `src/claude_runner/guards.py` | 0 (`All checks passed!`) | 0 errors |
+| `src/claude_runner/dashboard.py` | 0 (`All checks passed!`) | 0 errors |
+
+Mypy reported `Found 67 errors in 9 files (checked 2 source files)`; all 67 are in imported modules (`board_pg.py`, `board_ready.py`, `board_api.py`, `board_stats.py`), not in the two checked files.
+
+SHA-256 of files that must not change:
+- `docker-compose.yml`: `11899924f9e5cf0f1898c01503000cfd9e739daa5899bbef60759a031bcaf1ce`
+- `data-tables/ops/_start_watchers_hidden.ps1`: `159d8ed95f6bf832bf8ffbb72475d270ff44cef1d2089aeec04dd45c39b0c410`
+
+## Migration heartbeats
+
+Task T014. Heartbeat writes added to the two host watchers. Additive only: no existing line was removed or changed.
+
+- `docker_watchdog.ps1`: `Write-Heartbeat` (before the main loop) writes `data-tables/ops/heartbeat/docker_watchdog.json` once per loop, just before the pacing sleep. Its own try/catch logs a failed write and returns, so the loop continues. `last_action` is the loop action (`docker-desktop-restart`, `dashboard-restart`, ...) or `engine ok` / `engine failed`.
+- `gpu_power_governor.py`: `Governor.heartbeat()` writes `data-tables/ops/heartbeat/gpu_power_governor.json` from the watchdog thread every 10 s. `last_action` is the current state (`boosting` or `idle`), not a history.
+- Both write `{"name", "time" (UTC, ISO 8601 with Z), "last_action"}` as one JSON object, replacing the previous file.
+- Not run: neither script was executed. Checks: `py_compile` of the Python file and a diff check (below). The PowerShell parse check did not run (no PowerShell on the host).
+
+Diff of `docker_watchdog.ps1` (untracked file; compared with a copy taken before the edit):
+
+```diff
+@@ -183,6 +183,16 @@
+     return $true
+ }
+
++function Write-Heartbeat($action) {
++    # a failed write is logged; it must never stop the watchdog loop
++    try {
++        $hbDir = Join-Path $ops 'heartbeat'
++        New-Item -ItemType Directory -Force -Path $hbDir | Out-Null
++        $json = [ordered]@{ name = 'docker_watchdog'; time = [DateTime]::UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [System.Globalization.CultureInfo]::InvariantCulture); last_action = [string]$action } | ConvertTo-Json -Compress
++        [System.IO.File]::WriteAllText((Join-Path $hbDir 'docker_watchdog.json'), $json, (New-Object System.Text.UTF8Encoding($false)))
++    } catch { Log ('heartbeat write failed: ' + $_.Exception.Message) }
++}
++
+ if (-not (Test-Path $probeLog)) { Set-Content -Path $probeLog -Value 'time,engine,engine_ms,n8n,dashboard,llama,free_ram_gb' -Encoding UTF8 }
+ Log 'watchdog started'
+ $failEngine = 0; $failDash = 0
+@@ -237,6 +247,7 @@
+         $episode = $null
+     }
+
++    Write-Heartbeat $(if ($action) { $action } elseif ($engine) { 'engine ok' } else { 'engine failed' })
+     $spent = ((Get-Date) - $t0).TotalSeconds
+     if ($spent -lt $everySeconds) { Start-Sleep -Seconds ([int]($everySeconds - $spent)) }
+ }
+```
+
+Diff of `gpu_power_governor.py`:
+
+```diff
+@@ -26,6 +26,7 @@
+ import time
+
+ OPS = os.path.dirname(os.path.abspath(__file__))
++HEARTBEAT_DIR = os.path.join(OPS, "heartbeat")
+ ANSI = re.compile(r"\x1b\[[0-9;]*m")
+ SEL = re.compile(r"selected slot by (?:LCP similarity, f_sim_best = ([\d.]+).*f_keep = ([\d.]+)|lru)")
+ REL = re.compile(r"stop processing: n_tokens = (\d+)")
+@@ -112,9 +113,20 @@
+             except OSError:
+                 pass
+
++    def heartbeat(self):
++        action = "boosting" if self.boosted_at is not None else "idle"
++        try:
++            os.makedirs(HEARTBEAT_DIR, exist_ok=True)
++            with open(os.path.join(HEARTBEAT_DIR, "gpu_power_governor.json"), "w", encoding="utf-8") as f:
++                json.dump({"name": "gpu_power_governor", "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
++                           "last_action": action}, f)
++        except OSError as e:
++            log("heartbeat write failed: %s" % e)
++
+     def watchdog(self):
+         while True:
+             time.sleep(10)
++            self.heartbeat()
+             if self.boosted_at is not None and time.time() - self.boosted_at > self.a.max_boost_seconds:
+                 self.release("max boost time")
+
+```
+
+## Migration dry-run
+
+Replay: `claude-runner/tests/replay_guard_queue.py` (offline, read-only). It runs `MissionNoticeGuard` and
+`IdleGuard` with `dry_run`, a `SeenStore` path that must not exist (so no state file is read or written),
+an empty event source and a `Notifier` with no environment (nothing is sent). It reads
+`data-tables/ops/real_queue.log` and `queue_watch.log` and changes neither.
+
+Mission: `ahawr-worker-attempt-chain`, completed at `real_queue.log:2647` (2026-10-21 04:43:10), the last
+finished mission in the log. Window: `real_queue.log` lines 2406-2784 (the end line of the previous mission,
+`ahawr-guards-in-dashboard`, to the last line), 379 rows. Each row gets the timestamp of the last timestamped
+line above it; the real database rows may carry other timestamps, which can shift the 50-55 s delays below.
+
+Would-be notices (5): 2026-10-20 03:43:26 `ahawr-guards-in-dashboard` completed; 2026-10-20 07:48:22
+`ahawr-qa-acceptance` not completed (failed); 2026-10-21 04:43:10 `ahawr-worker-attempt-chain` completed;
+2026-10-21 08:44:37 `ahawr-qa-acceptance` not completed; 2026-10-21 09:17:25 `ahawr-qa-acceptance` not completed.
+
+Sent by `queue_watch.py` from 2026-10-20 03:43:26 (12): 5 matched by the replay, 7 restart notices
+("queue started again", process-table check).
+
+Differences and reasons:
+
+- Restart notices (7 sent, 0 would-be): the guard only reads queue-log lines. `queue_watch.py:227-241` sends
+  them from the process table, so they are not in the log. Not replayable from the logs.
+- `ahawr-qa-acceptance` notices (3 matched, text differs): the sent text adds the "last review" block
+  (task, attempt, score, reason) from the database `events`. The replay has an empty event source, so it
+  sends only the first line. In production `MissionNoticeGuard._last_review` supplies this block.
+- Delays (26-55 s between the log line and the send): the send time comes from the sender's own poll cycle, not from the log line. Not a content difference (cause not verified).
+- Idle notice: none sent in the window (`queue_watch.log` has no idle notice), and none would be sent by the
+  replay, which has no historical run counts. The synthetic check (running=0, alive=True, clock only) fires at
+  minute 20 (`IdleGuard`, default 20 min). Not a replay result.
+- Queued-only gap: `queue_watch.py:144` counts running plus queued runs as "running", so the idle branch at
+  `queue_watch.py:244-246` never fires while work is queued. `IdleGuard.check` (`guard_queue.py:273-277`)
+  counts only running runs. The two can differ when runs are queued and none is running. Not replayable: the
+  logs hold no run counts.
+- ALERT lines ("new missions were not inserted", "DISABLE_THINKING is still in .env") are ignored by both
+  sides, as in `ALERT_IGNORED`.
+
+Completed or failed: the replay takes "finished" as the last line that ended a mission with "completed". The
+last failed event is `ahawr-qa-acceptance` at `real_queue.log:2724` (2026-10-21 09:17:25); the replay has a
+`MISSION NOT COMPLETED` notice for it, and `queue_watch.log` sent one at 09:17:51.
+
+Checks: `python tests/replay_guard_queue.py` exit 0, 5 would-be notices, 12 sent, 5 matched, 7 restart notices
+unmatched, idle synthetic minute 20. `python -m ruff check tests/replay_guard_queue.py`: "All checks passed!".
+Not run: mypy on the script, pytest (no test covers the script).
+
+
+## Migration final
+
+Task T025. Final checks of the guards work and a CHANGELOG entry proposal. CHANGELOG.md, README.md, ROADMAP.md and docs/roadmap.json were not edited by this task.
+
+Checks (run from `claude-runner/`):
+
+- Targeted pytest: `python -m pytest tests/test_guards.py tests/test_guard_queue.py tests/test_guard_restart.py tests/test_guard_relay.py tests/test_guard_heartbeat.py tests/test_queue_launcher.py tests/test_dashboard.py --no-cov`: `112 passed in 53.11s`.
+- Node: `node --test tests/board_i18n.test.js`: `# tests 1`, `# pass 1`, `# fail 0`. `node --test tests/board_i18n_ui.test.js` (the second T005 file): `# tests 1`, `# pass 1`, `# fail 0`.
+- Ruff: `python -m ruff check src/claude_runner/guards.py src/claude_runner/guard_*.py src/claude_runner/dashboard.py`: `All checks passed!`.
+- Mypy on the six target files (guards, guard_queue, guard_restart, guard_relay, guard_heartbeat, dashboard): `Found 72 errors in 10 files (checked 6 source files)`; none are in the six target files. The +1 against T005's 71 (the record read 67 in 9 files) is `board_ops_redact.py:124 Incompatible types in assignment`. That file has no working-tree diff against HEAD, and the read-only HEAD copy (`git show HEAD:...`) shows the identical error at line 124, so it is not caused by this mission.
+- Changed files against HEAD (read-only `git archive HEAD` copy in /tmp):
+  - Ruff over the 22 tracked changed .py files: 74 errors at HEAD, 74 now, identical per file. The 23 new untracked .py files add 0 errors (ruff over all 45 changed .py files: `Found 74 errors.`).
+  - Mypy over the 11 tracked changed src files: 76 errors at HEAD, 77 now. The one extra error is `src/claude_runner/board_ops_redact.py: error: Incompatible types in assignment`, in a file that is not modified; not investigated. Mypy over all 19 changed src files: `Found 77 errors in 11 files`; the new untracked src files add 0 errors.
+- `git diff --check`: exit 0 after stripping the trailing space on lines 969, 986, 998, 1007, 1024 (blank `+` lines in the diff blocks of the Migration heartbeats section, written under T014). CRLF endings preserved (1099/1099 lines CRLF); `git diff --check -- claude-runner/docs/guards-notes.md` prints no trailing-whitespace lines.
+- SHA-256 unchanged against T005: `docker-compose.yml` `11899924f9e5cf0f1898c01503000cfd9e739daa5899bbef60759a031bcaf1ce`; `data-tables/ops/_start_watchers_hidden.ps1` `159d8ed95f6bf832bf8ffbb72475d270ff44cef1d2089aeec04dd45c39b0c410`.
+- `data-tables/ops/docker_watchdog.ps1` against `docker_watchdog.ps1.bak-T010` (the newest copy found): 0 removed lines, 32 added lines. The copy is older than the T014 edit, so this covers every edit since T010, not T014 alone.
+- `data-tables/ops/gpu_power_governor.py`: additions-only is unverified because no pre-edit copy exists and the file is gitignored (`/data-tables/` in .gitignore line 41), so `git diff -- data-tables/ops/gpu_power_governor.py` is empty by definition, not proof of additions-only.
+- DASHBOARD_GUARDS unset is covered by passing tests: `tests/test_dashboard.py::test_guards_route_off_by_default_and_stops_cleanly` and `test_guards_route_unset_returns_previous_shape` (`-k` run: `2 passed, 40 deselected`), and `tests/test_guards.py:225` (`_build_guards(settings_from({}), notifier) == []`).
+- Unchanged files: CHANGELOG.md and README.md are absent from `git status` and `git diff --stat`. ROADMAP.md (10 lines) and docs/roadmap.json (28 lines) were already modified in the working tree before this task and were not reverted, so the literal "unchanged" criterion is not met for them.
+
+Not run: the full pytest suite and other test files of the changed modules (outside the verification list); the PowerShell parse check (no PowerShell on the host); mypy on the test files.
+
+Risks: the mypy and ruff comparisons use HEAD as the baseline because the T005 per-file record is incomplete; the host-script additions-only check is partial as described above.
+
+CHANGELOG proposal (text only; to be pasted into the `## 2026-10-21 (0.8.0)` section of CHANGELOG.md by the owner of that file; the version stays 0.8.0 because the new functions raised the middle number from 0.7.400 once):
+
+- **Guard supervisor: host heartbeat, queue restart, Telegram relay and notices** (new functions). `GuardSupervisor` (`guards.py`) runs the guards `idle`, `mission_notice`, `queue_restart`, `host_heartbeat` (`HostHeartbeatGuard` in `guard_heartbeat.py`, read-only over the host heartbeat files) and `tg_relay` (`TelegramRelay` in `guard_relay.py`). `DASHBOARD_GUARDS=1` starts them; `DASHBOARD_GUARDS_DRY_RUN=1` sets dry run. With `DASHBOARD_GUARDS` unset `_build_guards` returns no guards and `GET /api/guards` answers `enabled: false` with the previous body shape. The host watchers `docker_watchdog.ps1` and `gpu_power_governor.py` write one heartbeat file per loop to `data-tables/ops/heartbeat/`.

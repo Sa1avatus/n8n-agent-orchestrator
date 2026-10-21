@@ -22,9 +22,13 @@ from typing import Any
 
 from .board import BoardStore
 from .board_order import task_sort_key
+from .board_ready import effective_roles
 from .local_pricing import FIELDS
-from .mission_stats import _run_ids_with_compactions, stats_for_runs, token_totals
+from .mission_stats import _minutes, _run_ids_with_compactions, stats_for_runs, token_totals
+from .roles_config import resolve
 from .runs import RunManager
+
+ROLE_LABELS = {"worker": "Worker", "reviewer": "Reviewer", "architect": "Architect", "qa": "QA"}
 
 
 def _mission_run_ids(board: BoardStore, state_key: str) -> list[str]:
@@ -186,6 +190,37 @@ def _max_attempts(board: BoardStore, mission_id: str) -> float | None:
     return None
 
 
+def _role_model(roles: dict[str, Any], role: str, legacy: dict[str, Any]) -> str | None:
+    try:
+        resolved = resolve(roles, role, 1, legacy)
+    except ValueError:
+        return None
+    return f"{resolved.provider}/{resolved.model}"
+
+
+def _role_rows(
+    manager: RunManager, board: BoardStore, mission_id: str, runs: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    """Runs, minutes, cost and the configured model per role.  An absent or invalid
+    roles_json counts as no roles, so each row falls back to the defaults."""
+    try:
+        roles = effective_roles(board, mission_id)
+    except ValueError:
+        roles = {}
+    legacy = board.hermes_config()
+    rows: dict[str, dict[str, Any]] = {}
+    for role, label in ROLE_LABELS.items():
+        role_runs = [run for run in runs if run.get("role") == role]
+        rows[role] = {
+            "label": label,
+            "runs": len(role_runs),
+            "minutes": round(sum(_minutes(run) for run in role_runs), 2),
+            "cost_usd": round(sum(_cost_usd(manager, run) for run in role_runs), 2),
+            "model": _role_model(roles, role, legacy),
+        }
+    return rows
+
+
 def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -> dict[str, Any]:
     """The mission card: the mission's runs aggregated (``stats_for_runs``), its
     status, the attempts per task against the configured maximum and the last
@@ -249,6 +284,7 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
         "thinking_off_tokens": off_tokens,
         "thinking_steps": total_steps,
         "max_attempts_per_task": _max_attempts(board, mission_id),
+        "roles": _role_rows(manager, board, mission_id, runs),
         "tasks": {
             view.task_id: {
                 "attempts": attempts[view.task_id],

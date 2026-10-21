@@ -1,0 +1,43 @@
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -229,7 +229,35 @@
+       - DASHBOARD_HERMES_API_KEY=${HERMES_API_KEY:-}
+       # Hermes sessions started through its API (AHAWR); empty = all sessions (Telegram, CLI, ...).
+       - DASHBOARD_HERMES_SOURCE=${HERMES_SESSION_SOURCE-api_server}
++      - DASHBOARD_GUARDS=${DASHBOARD_GUARDS:-0}
++      - DASHBOARD_GUARDS_DRY_RUN=${DASHBOARD_GUARDS_DRY_RUN:-1}
++      - DASHBOARD_GUARDS_MISSION_NOTICE_ENABLED=${DASHBOARD_GUARDS_MISSION_NOTICE_ENABLED:-0}
++      - DASHBOARD_GUARDS_IDLE_ENABLED=${DASHBOARD_GUARDS_IDLE_ENABLED:-0}
++      - DASHBOARD_GUARDS_QUEUE_RESTART_ENABLED=${DASHBOARD_GUARDS_QUEUE_RESTART_ENABLED:-0}
++      - DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED=${DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED:-0}
++      - DASHBOARD_GUARDS_TG_RELAY_ENABLED=${DASHBOARD_GUARDS_TG_RELAY_ENABLED:-0}
++      - DASHBOARD_GUARDS_HEARTBEAT_DIR=/guards/heartbeat
++      - DASHBOARD_GUARDS_QUEUE_REQUEST_DIR=/guards/requests
++      - DASHBOARD_GUARDS_QUEUE_STATE_PATH=/guards/state/queue_seen.json
++      - DASHBOARD_GUARDS_TG_OFFSET_PATH=/guards/state/tg_relay.offset
++      - DASHBOARD_GUARDS_TG_WEBHOOK_URL=${DASHBOARD_GUARDS_TG_WEBHOOK_URL:-}
+ 
++    volumes:
++      # heartbeat files of the host watchers, read-only
++      - type: bind
++        source: D:\n8n\data-tables\ops\heartbeat
++        target: /guards/heartbeat
++        read_only: true
++        bind:
++          create_host_path: true
++      # restart requests written by the container, read by the host queue launcher
++      - type: bind
++        source: D:\n8n\data-tables\ops\guard_requests
++        target: /guards/requests
++        bind:
++          create_host_path: true
++      # seen-state of the queue notices and the Telegram relay offset
++      - ahawr-guards-state:/guards/state
+     extra_hosts:
+       # the Hermes API server on the Docker host
+       - "host.docker.internal:host-gateway"
+@@ -290,3 +318,4 @@
+   ahawr-retrieval-data:
+   claude-runner-home:
+   claude-runner-data:
++  ahawr-guards-state:

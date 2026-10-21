@@ -83,6 +83,24 @@ function fieldHtml(key, label, control, shown, disabled) {
   );
 }
 
+// Read-only view of the task's ui_check (the server does not accept it from the
+// editor, so it is never a form row and never part of the save body).
+function uiCheckHtml(check) {
+  if (!check || typeof check !== "object") return "";
+  const steps = Array.isArray(check.steps) ? check.steps : [];
+  const items = steps.map((s) => "<li>" + esc(s) + "</li>").join("");
+  const stepsHtml = steps.length ? '<ol class="pedit-steps">' + items + "</ol>" : "";
+  const needed = check.needed ? L("pe.uc.yes", "yes") : L("pe.uc.no", "no");
+  return (
+    `<div class="pedit-uicheck"><h4>${esc(L("pe.uc.title", "UI check"))}</h4>` +
+    `<div class="pedit-readonly">${esc(L("pe.uc.note", "Read-only: the UI check is set by the plan and is not edited here."))}</div>` +
+    `<div>${esc(L("pe.uc.needed", "UI check needed"))}: ${esc(needed)}</div>` +
+    `<div>${esc(L("pe.uc.why", "why"))}: ${esc(check.why)}</div>` +
+    `<div>${esc(L("pe.uc.scenario", "scenario"))}: ${esc(check.scenario)}</div>` +
+    `<div>${esc(L("pe.uc.steps", "steps"))}:</div>` + stepsHtml + "</div>"
+  );
+}
+
 // Pure render: the form rows, the read-only note for a non-waiting task, and
 // the running-mission warning.  Returns the escaped HTML string.  view is
 // the task's TaskView ({ status, ... }) and task the plan's task object
@@ -99,7 +117,8 @@ function renderEditForm(view, task, running) {
   const warning = running ?
     `<div class="pedit-warning">${esc(L("pe.warn", "Editing the plan of a running mission can be overwritten by the workflow: do it on a pause."))}</div>` : "";
   return (
-    `<h3>${esc(L("pe.title", "Edit task"))}</h3>` + rows.join("") + readOnly + warning
+    `<h3>${esc(L("pe.title", "Edit task"))}</h3>` + rows.join("") + uiCheckHtml(t.ui_check) +
+    readOnly + warning
   );
 }
 

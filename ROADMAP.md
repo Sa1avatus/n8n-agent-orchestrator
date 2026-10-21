@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.8.0 · October 21, 2026** — Guards in the dashboard, cloud thinking control and adaptive split — next 0.9.0
+**0.9.0 · October 21, 2026** — QA role, guards moved into the dashboard with their own tab, worker attempt chains — next 0.10.0
 
-Current version: **0.8.0** · Missions completed: **12** · Missions in the queue: **13** · Next milestone: **0.9.0 · 1.0.0**
+Current version: **0.9.0** · Missions completed: **14** · Missions in the queue: **13** · Next milestone: **0.10.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next.
 
@@ -84,22 +84,29 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 
 ### Reliability and control — Next (Q4 2026)
 
-0.8.0 and up · Guards, adaptive split and the executor settings · 3/9 milestones, 33%
+0.8.0 and up · Guards, adaptive split and the executor settings · 3/13 milestones, 23%
 
 - [ ] 0.10.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause
 - [x] ahawr-guards-in-dashboard: all watchers inside the dashboard container (0.8.0; the migration of the host watchers is ahawr-guards-migration)
 - [x] ahawr-cloud-thinking-control: thinking policy for cloud Workers (0.8.0)
-- [ ] ahawr-worker-attempt-chain: provider and model per attempt as a setting
-- [ ] ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task
+- [x] ahawr-worker-attempt-chain: provider and model per attempt as a setting (0.9.0)
+- [x] ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task (0.9.0; QA is OFF by default and is connected to the workflow after ahawr-features-config)
+- [x] ahawr-guards-migration: guards of the host watchers moved into the dashboard container, host launcher and heartbeats (0.9.0; the notice guards wait for a host publisher of the queue log)
+- [x] Guards tab in the dashboard: cards, flow and timelines with a history of checks (0.9.0)
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [x] ahawr-adaptive-split: plan size gate and automatic split (0.8.0; files and patch, not yet applied to the live workflow)
 - [ ] ahawr-rag-quality: offline evaluation and lexical precision
 - [ ] Dashboard over the local network and on mobile
+- [ ] Configuration columns to JSON (docs/config-columns-plan.md): hermes_config from 41 to 10 columns through roles_json, thinking_json, retrieval_json, engine_json; missions overrides_json; legacy columns removed one release after the JSON works
+- [ ] ahawr-features-config: features_json for the workflow features, surgical split patch, Features section in the launch settings, live proof of the split
+- [ ] ahawr-providers-ui: providers, models, prices and write-only API keys in the web UI
+- [ ] ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios
 
 ### Version 1.0: more executors — Next (Q4 2026 – Q1 2027)
 
-1.0.0 · Codex as a third executor next to Hermes and Claude Code · 0/4 milestones, 0%
+1.0.0 · Codex as a third executor next to Hermes and Claude Code · 0/5 milestones, 0%
 
+- [ ] Code review and refactoring mission (before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
 - [ ] ahawr-codex-executor: the OpenAI Codex CLI as an engine of a provider block
 - [ ] DeepSeek Harness evaluated as a third executor
 - [ ] Stable provider-block configuration and event format
@@ -109,7 +116,6 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 
 after 1.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
 
-- [ ] Code review and refactoring mission (right after 1.0): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
 - [ ] ahawr-parallel-missions: one workflow, per-mission model and folder
 - [ ] Hermes runs on par with Claude Code on the dashboard
 - [ ] Mission templates and A/B of executors

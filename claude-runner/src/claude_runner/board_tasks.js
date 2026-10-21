@@ -89,6 +89,10 @@ function taskCardHtml(missionId, task, stats) {
     stats.thinking_steps,
   ) : "—";
 
+  const qaChip = task.ui_check && task.ui_check.needed === true
+    ? `<span class="tqa" title="${esc(task.ui_check.scenario || "")}">${esc(L("qa.chip", "QA"))}</span>`
+    : "";
+
   return (
     `<a class="tcard" href="#board/${esc(missionId)}/${esc(id)}" ` +
     `data-mission-id="${esc(missionId)}" data-task-id="${esc(id)}">` +
@@ -96,6 +100,7 @@ function taskCardHtml(missionId, task, stats) {
     `<span class="tname">${esc(task.title == null ? "" : task.title)}</span>` +
     `<span class="tstatus">${esc(L("tstat." + status, status))}</span>` +
     `<div class="tmeta">` +
+    qaChip +
     `<span class="tstats" title="${esc(L("tc.title", "attempts · time · tokens · cache · cost · speed · thinking"))}">` +
     attempts + " " + L("tc.attempts", "attempts") + " · " + esc(time) + " · " + esc(tokens) + " " + L("tc.tokens", "tokens") + " · " +
     esc(cache) + " " + L("tc.cache", "cache") + " · " + esc(cost) + " · " + esc(speed) + " · " + esc(thinking) +
@@ -180,7 +185,11 @@ async function renderBoardTasks(container, missionId, opts) {
     renderError(container, e && e.message ? e.message : e);
     return;
   }
-  const tasks = Array.isArray(planData.tasks) ? planData.tasks : [];
+  const uiChecks = new Map();
+  const planTasks = planData.plan && Array.isArray(planData.plan.tasks) ? planData.plan.tasks : [];
+  for (const pt of planTasks) if (pt && pt.id != null) uiChecks.set(pt.id, pt.ui_check);
+  const views = Array.isArray(planData.tasks) ? planData.tasks : [];
+  const tasks = views.map((v) => Object.assign({}, v, { ui_check: uiChecks.get(v.task_id) }));
   const data = { stats: {} };
   render(container, missionId, tasks, data.stats);
   const keys = tasks.map((t) => t.task_id).filter((k) => k != null);

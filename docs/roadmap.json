@@ -5,16 +5,16 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.8.0 · October 21, 2026",
-    "tag": "Guards in the dashboard, cloud thinking control and adaptive split — next 0.9.0",
+    "date": "0.9.0 · October 21, 2026",
+    "tag": "QA role, guards moved into the dashboard with their own tab, worker attempt chains — next 0.10.0",
     "stats": [
       [
         "Current version",
-        "0.8.0"
+        "0.9.0"
       ],
       [
         "Missions completed",
-        "12"
+        "14"
       ],
       [
         "Missions in the queue",
@@ -22,7 +22,7 @@
       ],
       [
         "Next milestone",
-        "0.9.0 · 1.0.0"
+        "0.10.0 · 1.0.0"
       ]
     ],
     "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next."
@@ -250,7 +250,7 @@
       "d": "Guards, adaptive split and the executor settings",
       "m": [
         3,
-        9
+        13
       ],
       "items": [
         [
@@ -266,12 +266,20 @@
           "ahawr-cloud-thinking-control: thinking policy for cloud Workers (0.8.0)"
         ],
         [
-          "todo",
-          "ahawr-worker-attempt-chain: provider and model per attempt as a setting"
+          "ok",
+          "ahawr-worker-attempt-chain: provider and model per attempt as a setting (0.9.0)"
         ],
         [
-          "todo",
-          "ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task"
+          "ok",
+          "ahawr-qa-acceptance: QA by user-level UI scenarios (Playwright on a throwaway stack) at the end of a mission and nightly, not after every task (0.9.0; QA is OFF by default and is connected to the workflow after ahawr-features-config)"
+        ],
+        [
+          "ok",
+          "ahawr-guards-migration: guards of the host watchers moved into the dashboard container, host launcher and heartbeats (0.9.0; the notice guards wait for a host publisher of the queue log)"
+        ],
+        [
+          "ok",
+          "Guards tab in the dashboard: cards, flow and timelines with a history of checks (0.9.0)"
         ],
         [
           "todo",
@@ -288,6 +296,22 @@
         [
           "todo",
           "Dashboard over the local network and on mobile"
+        ],
+        [
+          "todo",
+          "Configuration columns to JSON (docs/config-columns-plan.md): hermes_config from 41 to 10 columns through roles_json, thinking_json, retrieval_json, engine_json; missions overrides_json; legacy columns removed one release after the JSON works"
+        ],
+        [
+          "todo",
+          "ahawr-features-config: features_json for the workflow features, surgical split patch, Features section in the launch settings, live proof of the split"
+        ],
+        [
+          "todo",
+          "ahawr-providers-ui: providers, models, prices and write-only API keys in the web UI"
+        ],
+        [
+          "todo",
+          "ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios"
         ]
       ]
     },
@@ -299,9 +323,13 @@
       "d": "Codex as a third executor next to Hermes and Claude Code",
       "m": [
         0,
-        4
+        5
       ],
       "items": [
+        [
+          "todo",
+          "Code review and refactoring mission (before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)"
+        ],
         [
           "todo",
           "ahawr-codex-executor: the OpenAI Codex CLI as an engine of a provider block"
@@ -333,10 +361,6 @@
       "items": [
         [
           "todo",
-          "Code review and refactoring mission (right after 1.0): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)"
-        ],
-        [
-          "todo",
           "ahawr-parallel-missions: one workflow, per-mission model and folder"
         ],
         [
@@ -366,7 +390,7 @@
       ],
       [
         "🔄 **Now**",
-        "QA acceptance and guards migration → **0.9.0**; the runner is renamed to `ahawr-runner` in **0.10.0**"
+        "Features config, QA smoke, providers in the web UI and report pack; the runner is renamed to `ahawr-runner` in **0.10.0**"
       ],
       [
         "➡️ **Next**",

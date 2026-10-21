@@ -223,12 +223,14 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 #boardframe { flex: 1; width: 100%; border: 0; background: var(--bg); }
 /* guards status strip (above the tab bar; always visible in both tabs) */
 #guardstrip { flex: none; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 5px 14px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 12px; }
+#guardstrip[hidden] { display: none; }
 #guardstrip .gh { color: var(--muted); font-weight: 600; }
 #guardstrip .g { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: 7px; padding: 3px 9px; background: var(--bg); color: var(--muted); }
 #guardstrip .g b { color: var(--ink); font-weight: 600; }
 #guardstrip .g .st { font-weight: 600; }
-#guardstrip .g .st.ok { color: var(--ok); }
-#guardstrip .g .st.warning { color: var(--retry); }
+#guardstrip .g .st.ok, #guardstrip .g .st.fresh { color: var(--ok); }
+#guardstrip .g .st.warning, #guardstrip .g .st.stale { color: var(--retry); }
+#guardstrip .g .gmark { color: var(--muted); font-style: italic; }
 #guardstrip .g .st.error { color: var(--err); }
 #guardstrip button { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; padding: 2px 9px; font-size: 12px; }
 #guardstrip button:hover { background: var(--hover); }
@@ -442,6 +444,7 @@ function onValueClick(e) {
 let BACK = "";  // the board hash this page was opened from (the back link)
 function writeUrl(filter) {
   if (typeof TAB !== "undefined" && TAB === "board") return;  // the board tab owns the hash
+  if (location.hash === "#guards") return;  // so does the Guards tab (it may still be loading)
   try {
     const parts = [filterToQuery(filter)];
     if (BACK) parts.push("from=" + encodeURIComponent(BACK));
@@ -1107,6 +1110,12 @@ const GUARD_TEXT = {
     warning: "warning",
     error: "error",
     none: "—",
+    result: "result",
+    dry: "dry run",
+    readonly: "read-only",
+    fresh: "fresh",
+    stale: "stale",
+    unknown: "unknown",
   },
   ru: {
     title: "Стражи",
@@ -1117,6 +1126,12 @@ const GUARD_TEXT = {
     warning: "предупреждение",
     error: "ошибка",
     none: "—",
+    result: "результат",
+    dry: "пробный режим",
+    readonly: "только чтение",
+    fresh: "свежий",
+    stale: "устарел",
+    unknown: "неизвестно",
   },
 };
 let guardStrings = null;
@@ -1125,20 +1140,36 @@ function guardT(key, fallback) {
   const t = (guardStrings && guardStrings[lang]) || {};
   return t["guards." + key] || (GUARD_TEXT[lang] || GUARD_TEXT.en)[key] || fallback;
 }
+function guardOrNone(v) { return esc(v != null && v !== "" ? v : guardT("none", "—")); }
+function guardMark(entry) { return entry.dry_run ? ` <span class="gmark">${esc(guardT("dry", "dry run"))}</span>` : ""; }
+function guardEntryHtml(g) {
+  const status = g.status || "ok";
+  const run = g.last_run ? esc(new Date(g.last_run * 1000).toLocaleString()) : guardOrNone(null);
+  return `<span class="g"><b>${esc(g.name)}</b> <span class="st ${esc(status)}">${esc(guardT(status, status))}</span> · ${guardT("last", "last")} ${guardOrNone(g.last_action)} · ${run} · ${guardT("result", "result")} ${guardOrNone(g.last_result)}${guardMark(g)}</span>`;
+}
+function heartbeatHtml(h) {
+  const status = h.status || "unknown";
+  const time = h.time ? esc(new Date(h.time).toLocaleString()) : guardOrNone(null);
+  return `<span class="g"><b>${esc(h.name)}</b> <span class="st ${esc(status)}">${esc(guardT(status, status))}</span> · ${guardT("last", "last")} ${guardOrNone(h.last_action)} · ${time} · ${guardT("result", "result")} ${guardOrNone(h.last_result)} <span class="gmark">${esc(guardT("readonly", "read-only"))}</span>${guardMark(h)}</span>`;
+}
+function relabelGuardsTab() {
+  const btn = document.getElementById("tabguards");
+  if (btn) btn.textContent = guardT("title", "Guards");
+  if (guardsMounted) BoardGuards.rerender();
+}
 function renderGuardStrip(d) {
   const el = document.getElementById("guardstrip");
   if (!el) return;
+  relabelGuardsTab();
+  // with the Guards tab on, the tab replaces the strip
+  el.hidden = !!(d && d.tab);
+  if (el.hidden) { setHTML(el, ""); return; }
   const title = `<span class="gh">${esc(guardT("title", "Guards"))}</span>`;
   if (!d || !d.enabled) {
     setHTML(el, title + `<span>${esc(guardT("off", "guards disabled"))}</span>`);
     return;
   }
-  const parts = d.guards.map((g) => {
-    const status = g.status || "ok";
-    const action = g.last_action != null ? esc(g.last_action) : esc(guardT("none", "—"));
-    const run = g.last_run ? esc(new Date(g.last_run * 1000).toLocaleString()) : esc(guardT("none", "—"));
-    return `<span class="g"><b>${esc(g.name)}</b> <span class="st ${esc(status)}">${esc(guardT(status, status))}</span> · ${guardT("last", "last")} ${action} · ${run}</span>`;
-  });
+  const parts = d.guards.map(guardEntryHtml).concat((d.heartbeats || []).map(heartbeatHtml));
   setHTML(el, title + parts.join("") + `<button id="guardrefresh" type="button">${esc(guardT("refresh", "Refresh"))}</button>`);
 }
 let guardCache = null;
@@ -1148,6 +1179,7 @@ function loadGuards() {
     .then((d) => {
       guardCache = d;
       renderGuardStrip(d);
+      if (d && d.tab) enableGuardsTab();
       return d;
     })
     .catch(() => {});
@@ -1168,6 +1200,8 @@ document.addEventListener("click", (e) => {
 let TAB = "runs";
 function setTab(name) {
   const runs = name === "runs";
+  const board = name === "board";
+  const guards = name === "guards";
   TAB = name;
   const mainEl = document.getElementById("main");
   if (mainEl) mainEl.hidden = !runs;  // the runs column would otherwise squeeze the board pane to a strip
@@ -1175,16 +1209,70 @@ function setTab(name) {
   const tabboard = document.getElementById("tabboard");
   const pane = document.getElementById("boardpane");
   if (tabruns) tabruns.classList.toggle("on", runs);
-  if (tabboard) tabboard.classList.toggle("on", !runs);
-  if (pane) pane.hidden = runs;
+  if (tabboard) tabboard.classList.toggle("on", board);
+  if (pane) pane.hidden = !board;
   if (boardframe) {
-    if (!runs && !boardframe.src) boardframe.src = boardFrameUrl();
-    boardframe.hidden = runs;
+    if (board && !boardframe.src) boardframe.src = boardFrameUrl();
+    boardframe.hidden = !board;
+  }
+  showGuardsTab(guards);
+}
+function syncTab() {
+  const h = location.hash || "";
+  setTab(h.startsWith("#board") ? "board" : h === "#guards" && guardsTabOn ? "guards" : "runs");
+}
+// The Guards tab exists only when /api/guards says the tab flag is on (DASHBOARD_GUARDS_TAB): the
+// button, the pane, the script and the stylesheet are created then, so with the flag off the page is unchanged.
+let guardsTabOn = false;
+let guardsMounted = false;
+function showGuardsTab(on) {
+  const btn = document.getElementById("tabguards");
+  const pane = document.getElementById("guardspane");
+  if (!btn || !pane) return;
+  btn.classList.toggle("on", on);
+  pane.hidden = !on;
+  if (on && !guardsMounted && globalThis.BoardGuards) {
+    guardsMounted = true;
+    BoardGuards.mount(pane, { t: guardT, esc, setHTML });
+  } else if (!on && guardsMounted) {
+    guardsMounted = false;
+    BoardGuards.unmount();
   }
 }
-function syncTab() { setTab((location.hash || "").startsWith("#board") ? "board" : "runs"); }
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("script");
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = reject;
+    document.head.appendChild(el);
+  });
+}
+async function enableGuardsTab() {
+  if (guardsTabOn) return;
+  guardsTabOn = true;
+  const css = document.createElement("link");
+  css.rel = "stylesheet";
+  css.href = "/static/board_guards.css";
+  document.head.appendChild(css);
+  const btn = document.createElement("button");
+  btn.id = "tabguards";
+  btn.type = "button";
+  btn.textContent = guardT("title", "Guards");
+  document.getElementById("viewtabs").appendChild(btn);
+  const pane = document.createElement("div");
+  pane.id = "guardspane";
+  pane.hidden = true;
+  document.getElementById("boardpane").insertAdjacentElement("afterend", pane);
+  btn.addEventListener("click", () => { location.hash = "#guards"; syncTab(); });
+  try {
+    await loadScript("/static/board_guards_view.js");
+    await loadScript("/static/board_guards.js");
+  } catch (e) { return; }
+  syncTab();
+}
 document.getElementById("tabruns").addEventListener("click", () => {
-  if ((location.hash || "").startsWith("#board")) history.replaceState(null, "", location.pathname);
+  if ((location.hash || "").startsWith("#board") || location.hash === "#guards") history.replaceState(null, "", location.pathname);
   setTab("runs");
 });
 document.getElementById("tabboard").addEventListener("click", () => {

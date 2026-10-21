@@ -1,0 +1,27 @@
+{
+  "now": 1000000,
+  "normalise": [
+    {"name": "all ok", "guards": {"enabled": true, "guards": [{"name": "a", "status": "ok", "enabled": true}, {"name": "b", "status": "ok", "enabled": true}]}, "summary": {"total": 2, "ok": 2, "warning": 0, "error": 0, "off": 0}},
+    {"name": "one error", "guards": {"enabled": true, "guards": [{"name": "a", "status": "error", "enabled": true}, {"name": "b", "status": "ok", "enabled": true}]}, "summary": {"total": 2, "ok": 1, "warning": 0, "error": 1, "off": 0}},
+    {"name": "disabled guard counts as off", "guards": {"enabled": true, "guards": [{"name": "a", "status": "ok", "enabled": false}]}, "summary": {"total": 1, "ok": 0, "warning": 0, "error": 0, "off": 1}},
+    {"name": "empty answer", "guards": null, "summary": {"total": 0, "ok": 0, "warning": 0, "error": 0, "off": 0}},
+    {"name": "master off", "guards": {"enabled": false, "guards": []}, "summary": {"total": 0, "ok": 0, "warning": 0, "error": 0, "off": 0}}
+  ],
+  "status_class": {"ok": "ok", "fresh": "ok", "warning": "warning", "stale": "warning", "error": "error", "off": "off", "unknown": "off", "weird": "off"},
+  "strip": [
+    {"name": "no history pads with none", "series": [], "length": 4, "expect": ["none", "none", "none", "none"]},
+    {"name": "keeps the last ones", "series": ["ok", "error", "ok", "ok", "error"], "length": 3, "expect": ["ok", "ok", "error"]},
+    {"name": "short history pads left", "series": ["error"], "length": 3, "expect": ["none", "none", "error"]}
+  ],
+  "lanes": [
+    {"name": "inside the window", "window": "1h", "series": [{"t": 998200, "result": "ok", "action": null}], "expect": [{"pct": 50.5, "result": "ok", "action": false, "count": 1}]},
+    {"name": "outside the window is dropped", "window": "1h", "series": [{"t": 900000, "result": "ok", "action": null}], "expect": []},
+    {"name": "same bucket merges, the worst result wins", "window": "1h", "series": [{"t": 998200, "result": "ok", "action": null}, {"t": 998201, "result": "error", "action": "x"}], "expect": [{"pct": 50.5, "result": "error", "action": true, "count": 2}]},
+    {"name": "7 day window", "window": "7d", "series": [{"t": 999999, "result": "warning", "action": null}], "expect": [{"pct": 99.5, "result": "warning", "action": false, "count": 1}]}
+  ],
+  "wires": [
+    {"name": "recent action lights the wire", "guards": [{"name": "tg_relay", "status": "ok", "enabled": true, "last_run": 999999, "last_action": "sent"}], "lit": ["tg_relay"]},
+    {"name": "old action does not", "guards": [{"name": "tg_relay", "status": "ok", "enabled": true, "last_run": 999900, "last_action": "sent"}], "lit": []},
+    {"name": "no action does not", "guards": [{"name": "tg_relay", "status": "ok", "enabled": true, "last_run": 999999, "last_action": null}], "lit": []}
+  ]
+}

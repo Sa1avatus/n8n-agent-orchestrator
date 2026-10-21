@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pytest
 
@@ -96,6 +96,25 @@ def _make_store(monkeypatch) -> tuple[PgBoardStore, FakeConnection]:
     monkeypatch.setattr(psycopg, "connect", fake_connect)
     store = PgBoardStore("postgresql://u:p@h/db")
     return store, conn
+
+
+class TestConnectionOptions:
+    def test_server_side_prepared_statements_are_off(self, monkeypatch):
+        """A column added to a data table must not break the cached plan of `select *`."""
+        seen: dict = {}
+        conn = FakeConnection()
+        conn.set_response("SELECT max(at)", [{"max": None}])
+        conn.set_response("updatedAt", [{"updatedAt": None}])
+        conn.set_response("SET search_path", [])
+
+        def fake_connect(dsn, **kwargs):
+            seen.update(kwargs)
+            return conn
+
+        _install_driver(monkeypatch)
+        monkeypatch.setattr(psycopg, "connect", fake_connect)
+        PgBoardStore("postgresql://u:p@h/db")
+        assert "prepare_threshold" in seen and seen["prepare_threshold"] is None
 
 
 class TestQueueVersion:
@@ -398,3 +417,26 @@ class TestPlanWriteContract:
     def test_timeline_without_events_is_empty(self, monkeypatch):
         store, _ = _make_store(monkeypatch)
         assert mission_timeline(None, store, "T001") == {"accepted": [], "obstacles": []}
+
+
+class TestHermesRolesJson:
+    def test_settings_read_without_roles_json_column(self, monkeypatch):
+        from claude_runner import board_api
+
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT * FROM", [{"worker_model": "qwen", "max_attempts_per_task": 5}])
+        assert "roles_json" not in store.hermes_config()
+        assert board_api._config_defaults(store) == {
+            "worker_model": "qwen",
+            "max_attempts_per_task": 5,
+        }
+
+    def test_update_hermes_config_writes_roles_json(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": datetime(2026, 1, 1, tzinfo=UTC)}])
+        store.update_hermes_config(None, roles_json="[]")
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert "roles_json = %s" in sql
+        assert "[]" in params

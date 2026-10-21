@@ -9,7 +9,8 @@
 //      getJSON), and the cards are redrawn as the figures arrive;
 //   5. each card links to #board/<mission_id>/<task_id>;
 //   6. an empty plan renders the empty state and a failed plan load
-//      renders the error state.
+//      renders the error state;
+//   7. the QA chip shows only for a task whose ui_check.needed is true.
 
 "use strict";
 const path = require("path");
@@ -151,6 +152,43 @@ globalThis.document = {
   check("a failed plan load renders the error state",
     has(errorContainer.innerHTML, '<div class="terror">board offline</div>') &&
     stateStub.textContent === "board offline" && stateStub.className === "error");
+  delete globalThis.document;
+  delete globalThis.getJSON;
+
+  // --- 7. the QA chip shows only for ui_check.needed === true ---
+  const qaTask = (uiCheck) => Object.assign({}, tasks[0], uiCheck === undefined ? {} : { ui_check: uiCheck });
+  const needed = BT.taskCardHtml("m_running", qaTask({ needed: true, why: "w", scenario: "Login page renders", steps: [] }), null);
+  check("the chip shows with the scenario as its title when needed is true",
+    has(needed, '<span class="tqa" title="Login page renders">QA</span>'));
+  const notNeeded = BT.taskCardHtml("m_running", qaTask({ needed: false, why: "", scenario: "", steps: [] }), null);
+  const noField = BT.taskCardHtml("m_running", qaTask(undefined), null);
+  check("no chip when needed is false or ui_check is missing",
+    !has(notNeeded, "tqa") && !has(noField, "tqa"));
+  const hostileScenario = BT.taskCardHtml("m_running", qaTask({ needed: true, why: "", scenario: '<b>"x"</b>', steps: [] }), null);
+  check("the scenario in the chip title is escaped",
+    has(hostileScenario, 'title="&lt;b&gt;&quot;x&quot;&lt;/b&gt;"') && !has(hostileScenario, "<b>"));
+
+  globalThis.document = {
+    getElementById: (id) => (id === "boardstate" ? null : containerStub),
+    createElement: () => ({ innerHTML: "" }),
+  };
+  globalThis.getJSON = async (url) => {
+    if (/\/plan$/.test(String(url))) {
+      return {
+        plan: { tasks: [
+          { id: "T001", ui_check: { needed: true, why: "w", scenario: "Folder is mounted", steps: [] } },
+          { id: "T002", ui_check: { needed: false, why: "", scenario: "", steps: [] } },
+        ] },
+        version: 1,
+        tasks: [{ task_id: "T001", title: "A", status: "waiting" }, { task_id: "T002", title: "B", status: "waiting" }],
+      };
+    }
+    return null;
+  };
+  await BT.render(containerStub, "m_running", {});
+  const chipCards = containerStub.innerHTML.split('<a class="tcard"');
+  check("through render, only the needed task gets the chip",
+    chipCards.length === 3 && has(chipCards[1], 'title="Folder is mounted"') && !has(chipCards[2], "tqa"));
   delete globalThis.document;
   delete globalThis.getJSON;
   console.log("all ok");

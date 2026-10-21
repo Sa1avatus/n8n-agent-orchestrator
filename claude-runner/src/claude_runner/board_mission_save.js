@@ -547,12 +547,12 @@ async function fetchJson(url) {
   return body;
 }
 
-// POST a JSON body to one endpoint; a 409 raises the "план изменился"
+// Send a JSON body to one endpoint (POST, or PUT for the roles save); a 409 raises the "план изменился"
 // message, like board_actions.js's postJson.  Board mutation routes require
-// the X-AHAWR-Dashboard header, so every POST carries it.
-async function postJson(url, body) {
+// the X-AHAWR-Dashboard header, so every mutation carries it.
+async function postJson(url, body, method = "POST") {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
@@ -582,7 +582,7 @@ const BoardMissionSave = {
   captureInitial, formDirty, currentDiff, diffHtml,
   ensurePanel, showBanner, attachControls, attachToBox,
   onSave, onReset, onCopy, copyIntoForm, doSave,
-  fetchServerData, renderClean, refresh,
+  fetchServerData, renderClean, refresh, fetchJson, postJson,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardMissionSave;

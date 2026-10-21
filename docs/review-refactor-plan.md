@@ -1,4 +1,6 @@
-# Code review and refactoring: plan for the mission after 1.0
+# Code review and refactoring: plan for the mission before 1.0
+
+Timing (operator 2026-10-21): this mission runs BEFORE the 1.0 release, after the 0.x feature missions (features-config, qa-smoke, providers-ui, the JSON configuration steps of docs/config-columns-plan.md) and before the Codex executor: 1.0 freezes the configuration and event formats, so every rename across a boundary and the removal of legacy columns must be done first.
 
 The mission is written from this file. It is the checklist of what to look at, in which order and with which
 tools. Tools marked (research) were confirmed by a web search on 2026-10-20; tools marked (known) come from

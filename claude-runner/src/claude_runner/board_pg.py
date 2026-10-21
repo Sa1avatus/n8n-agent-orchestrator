@@ -321,7 +321,9 @@ class PgBoardStore(BoardStore):
 
         self._lock = threading.RLock()
         self._dsn = dsn
-        self._conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=True)
+        self._conn = psycopg.connect(
+            dsn, row_factory=dict_row, autocommit=True, prepare_threshold=None
+        )  # no server-side prepared statements: a changed table schema must not break cached plans
         # Reads: board schema + public schema both on the search path.
         self._conn.execute("SET search_path TO board, public")
         # Version stamps for tables without a per-row version column.
@@ -808,6 +810,7 @@ class PgBoardStore(BoardStore):
                     "retrieval_label", "runner_url", "run_manager_workflow_id",
                     "worker_think_policy", "worker_think_policy_from_task",
                     "worker_think_off_after_seconds", "worker_think_off_after_steps",
+                    "roles_json",
                 }
                 sets = ", ".join(
                     f"{name} = %s"
