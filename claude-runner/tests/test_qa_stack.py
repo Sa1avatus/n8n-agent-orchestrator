@@ -63,8 +63,12 @@ def _created_names(calls: list[list[str]]) -> list[str]:
         for flag in ("-t", "--name", "--network"):
             if flag in call:
                 names.append(call[call.index(flag) + 1])
-        if "-v" in call and ":" in call[call.index("-v") + 1]:
-            names.append(call[call.index("-v") + 1].split(":")[0])
+        for index, token in enumerate(call[:-1]):
+            mount = call[index + 1]
+            # a named volume only: a bind mount of a folder (the QA runs) has a path as source
+            is_path = mount.startswith("/") or mount[1:3] == ":\\"
+            if token == "-v" and ":" in mount and not is_path:
+                names.append(mount.split(":")[0])
     return names
 
 

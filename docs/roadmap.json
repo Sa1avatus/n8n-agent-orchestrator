@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.10.0 · October 23, 2026",
+    "date": "0.10.100 · October 23, 2026",
     "tag": "Host actions, the queue from the board, providers and report tasks come next in 0.11.0",
     "stats": [
       [
         "Current version",
-        "0.10.0"
+        "0.10.100"
       ],
       [
         "Missions completed",
@@ -354,7 +354,7 @@
         ],
         [
           "ok",
-          "ahawr-qa-container: QA in its own Linux container (Playwright, pytest, ruff, mypy, node), read-only mounts, no Docker socket, a light in-process stack for the UI and API layers (the code is in; the image, the parity check, retiring the host worker and closing the runner port are operator steps)"
+          "ahawr-qa-container: QA in its own Linux container (Playwright, pytest, ruff, mypy, node), read-only mounts, no Docker socket, a light in-process stack for the UI and API layers (built and run once: the API layer passes in the container, the in-process UI layer fails 9 of 17 scenarios, so UI QA stays on the host; the image, the parity check, retiring the host worker and closing the runner port are operator steps)"
         ],
         [
           "ok",
@@ -366,7 +366,7 @@
         ],
         [
           "ok",
-          "0.10.0 release: changelog, version, roadmap. Operator steps of QA still to do: build the QA image, compare the verdicts of both stack modes on the host, take the regression baseline in the container, retire the host worker, close the runner port"
+          "0.10.0 release: changelog, version, roadmap. Open QA steps: make the in-process UI stack pass all 17 scenarios, take the regression baseline, retire the host worker, close the runner port (not before that)"
         ]
       ]
     },

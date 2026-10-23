@@ -203,6 +203,56 @@ services:
 
     stop_grace_period: 60s
 
+  # AHAWR QA worker: runs the QA scenarios in its own container (claude-runner/qa/Dockerfile.qa).
+  # It polls the runner over the stack network; it publishes no port and gets no host access beyond the mounts below.
+  ahawr-qa:
+    build:
+      context: ./claude-runner
+      dockerfile: qa/Dockerfile.qa
+
+    container_name: ahawr-qa
+    # not started by a plain `up`: the in-process UI layer is not at parity with the Docker stack yet (docs/qa-container.md), the host worker runs QA
+    profiles: ["qa-container"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/node
+
+    # memory and CPU caps of the QA run; a runaway scenario is killed alone
+    mem_limit: ${AHAWR_QA_MEM_LIMIT:-4g}
+    memswap_limit: ${AHAWR_QA_MEM_LIMIT:-4g}
+    cpus: ${AHAWR_QA_CPUS:-2}
+
+    environment:
+      - CLAUDE_RUNNER_URL=http://claude-runner:8700
+      - CLAUDE_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
+      # the QA data (scenarios, fixtures, baselines) lives in the repository next to the source: run the QA code from the read-only mount,
+      # not from the installed copy in the image (its qa/ folder is not there), so the checked tree is the one that is tested
+      - PYTHONPATH=/d/n8n/claude-runner/src
+      - QA_RUNS_DIR=/qa-runs
+      - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
+
+    volumes:
+      # the repository and the missions' working directories, read-only (the same mapping as claude-runner)
+      - type: bind
+        source: ${AHAWR_HOST_DRIVE:-D:\}
+        target: /d
+        read_only: true
+      - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
+      # the QA worker heartbeat directory only; under /d so the default QA_WORKER_HEARTBEAT_PATH maps onto it
+      - type: bind
+        source: D:\n8n\data-tables\ops\heartbeat
+        target: /d/n8n/data-tables/ops/heartbeat
+        bind:
+          create_host_path: true
+      # verdicts, screenshots and logs of the QA runs
+      - qa-runs:/qa-runs
+
+    depends_on:
+      claude-runner:
+        condition: service_started
+
   # AHAWR dashboard: http://localhost:8701 (127.0.0.1 only, read-only). Every agent run with its
   # thinking, tool calls and results, steps, timings and tokens: Claude Code runs from
   # claude-runner and Hermes sessions from the Hermes API server (HERMES_API_URL/HERMES_API_KEY).
@@ -327,3 +377,4 @@ volumes:
   claude-runner-home:
   claude-runner-data:
   ahawr-guards-state:
+  qa-runs:

@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.10.0 · October 23, 2026** — Host actions, the queue from the board, providers and report tasks come next in 0.11.0
+**0.10.100 · October 23, 2026** — Host actions, the queue from the board, providers and report tasks come next in 0.11.0
 
-Current version: **0.10.0** · Missions completed: **20** · Missions in the queue: **23** · Next milestone: **0.11.0 · 0.12.0 · 1.0.0**
+Current version: **0.10.100** · Missions completed: **20** · Missions in the queue: **23** · Next milestone: **0.11.0 · 0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -116,10 +116,10 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] ahawr-qa-gate: QA runs on the host through a request queue in the runner, the workflow asks and waits; a fail sends the mission back at most twice, a blocked QA never rejects (switched on 2026-10-22, the first live mission with UI changes is still to come)
 - [x] Kanban: an interrupted mission that stays in the queue waits in Queued instead of Running; the board queue is synchronised with the queue shell
 - [x] Telegram relay runs in the dashboard container; the host relay is retired
-- [x] ahawr-qa-container: QA in its own Linux container (Playwright, pytest, ruff, mypy, node), read-only mounts, no Docker socket, a light in-process stack for the UI and API layers (the code is in; the image, the parity check, retiring the host worker and closing the runner port are operator steps)
+- [x] ahawr-qa-container: QA in its own Linux container (Playwright, pytest, ruff, mypy, node), read-only mounts, no Docker socket, a light in-process stack for the UI and API layers (built and run once: the API layer passes in the container, the in-process UI layer fails 9 of 17 scenarios, so UI QA stays on the host; the image, the parity check, retiring the host worker and closing the runner port are operator steps)
 - [x] ahawr-qa-layers: regression (pytest, node, ruff, mypy against a baseline), API routes, UI scenarios with smoke, nightly run; the QA panel mounted on the mission page
 - [x] ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios (the crawl does not yet reproduce the three replayed bugs: a drag and a forced 409 are the next step)
-- [x] 0.10.0 release: changelog, version, roadmap. Operator steps of QA still to do: build the QA image, compare the verdicts of both stack modes on the host, take the regression baseline in the container, retire the host worker, close the runner port
+- [x] 0.10.0 release: changelog, version, roadmap. Open QA steps: make the in-process UI stack pass all 17 scenarios, take the regression baseline, retire the host worker, close the runner port (not before that)
 
 ### 0.11.0: host actions, the queue from the board, providers and report tasks — Next (Q4 2026)
 

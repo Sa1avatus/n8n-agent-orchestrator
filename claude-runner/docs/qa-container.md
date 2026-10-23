@@ -1,6 +1,6 @@
 # QA in its own container
 
-Status: design. Nothing in this document has been built, started or run in this change. Every operator step is
+Status: built and run once on 2026-10-23 (see "First run" at the end); the host runs UI QA until the in-process stack is at parity. The text below was written before the build. Every operator step is
 marked NOT RUN. The files named here as planned (`claude-runner/qa/Dockerfile.qa`,
 `claude-runner/qa/compose-qa.patch`, `data-tables/ops/_retire_host_qa_worker.sh` and its rollback script) were not
 present in the workspace when this document was written; they must exist before the operator steps can run.
@@ -103,3 +103,17 @@ Each step is NOT RUN. Run them in this order on the host, and record the output 
 - Regression baseline inside the container: not taken.
 - Nightly run inside the container: not wired.
 - The host worker `data-tables/ops/qa_worker.py` is unchanged.
+
+## First run (2026-10-23)
+
+- Image built, container started with `docker compose --profile qa-container up -d ahawr-qa`; no Docker socket,
+  read-only root, the runner reached over the stack network, heartbeat written.
+- Found and fixed: the QA data was looked up beside the installed copy (`PYTHONPATH` now points at the
+  repository mount); verdicts need the writable `QA_RUNS_DIR=/qa-runs` volume.
+- API layer in the container: 49 of 49 pass. UI layer in the `inprocess` mode: 8 of 17 pass; the nine failures
+  (Kanban queue order after a move, the stale-version message, Grid sort, the launch settings model field)
+  pass on the Docker stack. The cause was not found: a move through the API and through a drag both work
+  against the in-process dashboard in a script, but the scenario runner sees no change. Until this is fixed
+  the container is not used (compose profile `qa-container`, runner port 8700 published on 127.0.0.1).
+- Not done: the regression baseline (`qa baseline claude-runner` needs a writable `qa/baselines` mount) and
+  the retirement of the host worker.

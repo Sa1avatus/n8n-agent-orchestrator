@@ -3,7 +3,32 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.10.0** (claude-runner `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.10.100** (claude-runner `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-23 (0.10.100)
+
+Bug-fix step after the first real run of the QA container and a check of the whole QA path. No new
+functions.
+
+Fixed bugs:
+
+- The QA container found its data (scenarios, fixtures, baselines) next to the installed copy of the
+  code, where it does not exist (`no scenario files`). The container now runs the code from the
+  read-only repository mount (`PYTHONPATH` in the `ahawr-qa` service).
+- QA verdicts and screenshots were written into the read-only repository mount. New `QA_RUNS_DIR`
+  (`qa_stack.QA_RUNS_DIR`, used by the runner, the stack and the CLI) points them at the writable
+  `qa-runs` volume; `Dockerfile.qa` creates the folder with the user `node` as owner.
+- The QA panel scenario failed on the Docker stack: the seeded verdict files lay on the host and the
+  dashboard container could not see them. The folder is now shared with the dashboard container read-only.
+- The QA worker moved from the retired `data-tables/ops/qa_worker.py` to `python -m claude_runner.qa_worker`
+  (host mode, Docker stack).
+- Role colours in the dashboard follow the logo (Architect amber, Worker orange, Reviewer violet,
+  QA rose, Retrieval teal); QA no longer shows teal.
+- The `ahawr-qa` service moves to the compose profile `qa-container` and the runner port 8700 stays
+  published on 127.0.0.1: the in-process stack fails 9 of 17 UI scenarios that the Docker stack passes
+  (Kanban order, stale-version message, Grid sort, launch settings), so UI QA keeps running on the
+  host until the in-process stack is at parity. The API layer passes 49 of 49 in the container.
+  See `claude-runner/docs/qa-container.md`.
 
 ## 2026-10-23 (0.10.0)
 

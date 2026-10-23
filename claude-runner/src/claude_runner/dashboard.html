@@ -23,6 +23,7 @@
   --tool: #c56a06; --ok: #16803c; --err: #d03b30; --retry: #b98900; --compact: #0f8f84;
   --model-wait: #cdbcf0; --model-gen: #8a5cd6; --tool-bar: #e0892a; --rag: #0e7490;
   --shadow: rgba(0,0,0,.15);
+  --r-architect: #c27a0e; --r-worker: #dc5f12; --r-reviewer: #8a68e6; --r-qa: #e0456c; --r-retrieval: #1a9d91;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 :root[data-theme="light"] {
@@ -37,6 +38,7 @@
     --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
     --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
     --shadow: rgba(0,0,0,.35);
+    --r-architect: #ffb454; --r-worker: #ff8a3d; --r-reviewer: #b39bff; --r-qa: #ff6b8a; --r-retrieval: #4fd1c5;
   }
 }
 :root[data-theme="dark"] {
@@ -47,6 +49,7 @@
   --tool: #f0a24e; --ok: #4cc27a; --err: #f2766b; --retry: #e3b341; --compact: #3cc4b6;
   --model-wait: #4b3c70; --model-gen: #9b72ea; --tool-bar: #d9822a; --rag: #33bfd6;
   --shadow: rgba(0,0,0,.35);
+  --r-architect: #ffb454; --r-worker: #ff8a3d; --r-reviewer: #b39bff; --r-qa: #ff6b8a; --r-retrieval: #4fd1c5;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -98,7 +101,8 @@ mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: va
 .src.claude-code { color: var(--assistant); background: color-mix(in srgb, var(--assistant) 12%, transparent); }
 .src.hermes { color: var(--compact); background: color-mix(in srgb, var(--compact) 14%, transparent); }
 .role { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
-.role.architect { color: var(--user); } .role.worker { color: var(--tool); } .role.reviewer { color: var(--think); }
+.role.architect { color: var(--r-architect); } .role.worker { color: var(--r-worker); } .role.reviewer { color: var(--r-reviewer); }
+.role.qa { color: var(--r-qa); } .role.retrieval { color: var(--r-retrieval); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.running, .dot.queued { background: var(--accent); animation: pulse 1.2s infinite; }
 .dot.completed { background: var(--ok); } .dot.failed, .dot.interrupted { background: var(--err); } .dot.cancelled { background: var(--retry); }

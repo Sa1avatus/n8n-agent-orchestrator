@@ -199,7 +199,7 @@ test("qaRolesText: a model without a provider is refused", () => {
 // the placeholder source exist in the window module; the rendered row is not exercised here.
 test("board_edit_win.js (source check, not a DOM test): QA role row and placeholders are wired", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "src", "claude_runner", "board_edit_win.js"), "utf8");
-  assert.ok(src.includes('["ew.qa", "#5fd0c0", "qa_model", "qa_provider"]'));
+  assert.ok(src.includes('["ew.qa", "var(--r-qa, #ff6b8a)", "qa_model", "qa_provider"]'));
   assert.ok(src.includes("BoardRoles.qaPlaceholders()"));
   assert.ok(src.includes('["smoke", "qa_smoke"]'));
   assert.ok(src.includes('smoke: "ew.qa.smoke"'));

@@ -27,10 +27,10 @@ const PAGES = [
   { id: "ctx", label: "ew.s3", keys: ["hints", "required_files", "retrieval_corpora"] },
 ];
 const ROLES = [
-  ["ew.worker", "#ff8a3d", "worker_model", "worker_provider"],
-  ["ew.reviewer", "#b39bff", "reviewer_model", "reviewer_provider"],
-  ["ew.architect", "#ffb454", "architect_model", "architect_provider"],
-  ["ew.qa", "#5fd0c0", "qa_model", "qa_provider"],
+  ["ew.worker", "var(--r-worker, #ff8a3d)", "worker_model", "worker_provider"],
+  ["ew.reviewer", "var(--r-reviewer, #b39bff)", "reviewer_model", "reviewer_provider"],
+  ["ew.architect", "var(--r-architect, #ffb454)", "architect_model", "architect_provider"],
+  ["ew.qa", "var(--r-qa, #ff6b8a)", "qa_model", "qa_provider"],
 ];
 const LOCKED = ["working_directory", "retrieval_corpora"];
 const QA_LIMITS = [["mode", "qa_mode"], ["max_minutes", "qa_max_minutes"],

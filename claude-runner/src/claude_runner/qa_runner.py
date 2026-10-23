@@ -63,7 +63,7 @@ API_PREFIX = "/api/"
 CARD_ANCESTOR = "xpath=ancestor::div[contains(@class,'kcard')][1]"
 BELOW_DROP_RATIO = 0.85
 SCENARIO_DIR = qa_stack.CLAUDE_RUNNER_DIR / "qa" / "scenarios"
-RUNS_DIR = qa_stack.CLAUDE_RUNNER_DIR / "qa" / "runs"
+RUNS_DIR = qa_stack.QA_RUNS_DIR
 RUN_DIR_PREFIX = "qa-"
 PLAYWRIGHT_HINT = (
     "Playwright is not available: install the qa extra with pip install -e '.[qa]', "

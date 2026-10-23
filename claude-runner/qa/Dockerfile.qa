@@ -34,5 +34,8 @@ ENV PATH="/opt/claude-runner/venv/bin:${PATH}" \
     QA_STACK_MODE=inprocess
 
 # Non-root: the scenarios run as the node user, with no privileges beyond the image.
+# the volume qa-runs takes this owner when it is created empty
+RUN mkdir -p /qa-runs && chown node:node /qa-runs
+
 USER node
 CMD ["python", "-m", "claude_runner.qa_worker"]

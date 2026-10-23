@@ -38,7 +38,10 @@ DOCKERFILE_PATH = CLAUDE_RUNNER_DIR / "Dockerfile"
 BOARD_SCHEMA_PATH = CLAUDE_RUNNER_DIR / "docs" / "board-schema.sql"
 N8N_TABLES_PATH = CLAUDE_RUNNER_DIR / "qa" / "fixtures" / "n8n_tables.json"
 FIXTURE_DIR = CLAUDE_RUNNER_DIR / "qa" / "fixtures"
-QA_RUNS_DIR = CLAUDE_RUNNER_DIR / "qa" / "runs"
+QA_RUNS_ENV = "QA_RUNS_DIR"
+RUNS_MOUNT = "/qa-runs"
+# verdicts and screenshots: their own writable place when the repository is mounted read-only
+QA_RUNS_DIR = Path(os.environ.get(QA_RUNS_ENV) or CLAUDE_RUNNER_DIR / "qa" / "runs")
 DOCKER_TIMEOUT_SECONDS = 120
 DOCKER_BUILD_TIMEOUT_SECONDS = 900
 HEALTH_MAX_POLLS = 30
@@ -215,10 +218,14 @@ def _start_postgres(stack: QaStack, password: str, network: str, volume: str) ->
 def _start_dashboard(stack: QaStack, image: str, network: str) -> None:
     dashboard = f"{QA_PREFIX}{stack.run_id}-dashboard"
     host_port = _free_port()
+    # the QA panel reads verdict files: the folder of the seeded ones is shared read-only
+    QA_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     _docker_checked(
         [
             "run", "-d", "--name", dashboard, "--network", network,
             "-p", f"127.0.0.1:{host_port}:{DASHBOARD_CONTAINER_PORT}",
+            "-v", f"{QA_RUNS_DIR}:{RUNS_MOUNT}:ro",
+            "-e", f"{QA_RUNS_ENV}={RUNS_MOUNT}",
             "-e", f"DASHBOARD_BOARD_PG_DSN={stack.dsn}",
             image, "ahawr-dashboard", "--host", "0.0.0.0",
         ],
