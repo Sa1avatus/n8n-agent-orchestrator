@@ -26,7 +26,7 @@ from .claude_cli import (
     classify,
     transcript_exists,
 )
-from .config import ROLES, Settings
+from .config import ROLES, Settings, map_host_path
 from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
 from .local_pricing import LocalPricing
@@ -241,12 +241,7 @@ class RunManager:
     # --------------------------------------------------------------------------- helpers
     def resolve_cwd(self, requested: str) -> str:
         raw = (requested or "").strip() or self.settings.workspace
-        for source, target in self.settings.path_map:
-            norm_raw, norm_src = raw.replace("\\", "/").lower(), source.replace("\\", "/").lower()
-            if norm_raw == norm_src or norm_raw.startswith(norm_src.rstrip("/") + "/"):
-                rest = raw.replace("\\", "/")[len(norm_src.rstrip("/")) :].lstrip("/")
-                raw = str(Path(target) / rest) if rest else target
-                break
+        raw = map_host_path(raw, self.settings.path_map)
         path = Path(raw).resolve()
         for root in self.settings.allowed_roots:
             base = Path(root).resolve()

@@ -1,0 +1,38 @@
+# claude-runner QA worker: runs QA scenarios in-process with Playwright Chromium.
+FROM node:22-bookworm-slim
+
+# Toolchains the QA scenarios need beyond the base image, e.g. "postgresql-client"
+ARG EXTRA_APT_PACKAGES=""
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       python3 python3-venv git ca-certificates curl ripgrep ${EXTRA_APT_PACKAGES} \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory '*'
+
+WORKDIR /opt/claude-runner
+COPY pyproject.toml ./
+COPY src ./src
+
+# Python 3.12 from a standalone uv build (Debian bookworm ships 3.11), as in claude-runner/Dockerfile.
+# [qa,dev] = pyyaml and playwright for the scenarios, pytest/ruff/mypy for the checks.
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN python3 -m venv /tmp/uvvenv \
+    && /tmp/uvvenv/bin/pip install --no-cache-dir uv \
+    && /tmp/uvvenv/bin/uv venv --seed --python 3.12 /opt/claude-runner/venv \
+    && /opt/claude-runner/venv/bin/pip install --no-cache-dir ".[qa,dev]" \
+    && rm -rf /tmp/uvvenv
+
+# Chromium and its system libraries, installed as root into a path every user can read.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
+RUN /opt/claude-runner/venv/bin/python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod -R a+rX /opt/playwright
+
+ENV PATH="/opt/claude-runner/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    QA_STACK_MODE=inprocess
+
+# Non-root: the scenarios run as the node user, with no privileges beyond the image.
+USER node
+CMD ["python", "-m", "claude_runner.qa_worker"]

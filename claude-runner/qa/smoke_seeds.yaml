@@ -1,0 +1,31 @@
+# Seeds of the QA smoke crawl (claude-runner/docs/qa-smoke.md).
+# Data, not code: a new destructive word or path is a line here.
+
+start_paths:
+  - "/static/board.html#board"
+  - "/static/board.html#board/view/kan"
+  - "/static/board.html#board/view/lane"
+  - "/static/board.html#board/view/proj"
+  - "/static/board.html#board/view/spr"
+  - "/static/board.html#board/view/grid"
+
+mission_paths:
+  source: "/api/board/missions"
+  list_key: "missions"
+  id_field: "mission_id"
+  template: "/static/board.html#board/{mission_id}"
+
+products:
+  runner:
+    - "/"
+  board:
+    - "/static/board.html"
+
+# Matched case-insensitively against control labels and request paths; the crawl skips a match.
+destructive:
+  - "delete"
+  - "remove"
+  - "cancel run"
+  - "terminate"
+  - "kill"
+  - "restart"

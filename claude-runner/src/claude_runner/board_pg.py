@@ -332,6 +332,12 @@ class PgBoardStore(BoardStore):
         self._HERMES_VERSION = self._row_version(_HERMES_TABLE, "updatedAt")
 
     # ---- internals ----------------------------------------------------------
+    def status(self) -> tuple[str, str]:
+        """Unavailable once the connection is closed or broken (the database restarted)."""
+        if getattr(self._conn, "closed", False) or getattr(self._conn, "broken", False):
+            return ("unavailable", "the database is unavailable: the connection was lost")
+        return ("ok", "")
+
     def _audit(
         self,
         action: str,
@@ -351,8 +357,8 @@ class PgBoardStore(BoardStore):
                 action,
                 mission_id,
                 task_key,
-                json.dumps(before) if before is not None else None,
-                json.dumps(after) if after is not None else None,
+                json.dumps(before, default=str) if before is not None else None,
+                json.dumps(after, default=str) if after is not None else None,
             ),
         )
 
@@ -810,7 +816,7 @@ class PgBoardStore(BoardStore):
                     "retrieval_label", "runner_url", "run_manager_workflow_id",
                     "worker_think_policy", "worker_think_policy_from_task",
                     "worker_think_off_after_seconds", "worker_think_off_after_steps",
-                    "roles_json",
+                    "roles_json", "features_json",
                 }
                 sets = ", ".join(
                     f"{name} = %s"

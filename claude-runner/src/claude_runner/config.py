@@ -11,6 +11,7 @@ import os
 import re
 import shlex
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -372,6 +373,17 @@ def _path_map(raw: str) -> list[tuple[str, str]]:
         if source.strip() and target.strip():
             pairs.append((source.strip(), target.strip()))
     return sorted(pairs, key=lambda p: len(p[0]), reverse=True)
+
+
+def map_host_path(raw: str, path_map: Sequence[tuple[str, str]]) -> str:
+    """Map a host path to its container path; the longest prefix wins, comparison is
+    case-insensitive, and an unmapped path is returned unchanged."""
+    for source, target in path_map:
+        norm_raw, norm_src = raw.replace("\\", "/").lower(), source.replace("\\", "/").lower()
+        if norm_raw == norm_src or norm_raw.startswith(norm_src.rstrip("/") + "/"):
+            rest = raw.replace("\\", "/")[len(norm_src.rstrip("/")) :].lstrip("/")
+            return str(Path(target) / rest) if rest else target
+    return raw
 
 
 @dataclass(frozen=True)

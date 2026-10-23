@@ -59,6 +59,37 @@ the local model on the retry):
 
 Here `<model>` is the local model name configured for the local profile; attempt 2 and later use it.
 
+### Escalation block `<role>_escalate`
+
+A role may have a second key, `<role>_escalate` (today used for `worker`). It moves a task to a stronger
+model after the task has used many steps. The attempt chain above stays plain: the block only overrides
+the model of the chain when its condition holds.
+
+```json
+{"worker": {"1": "anthropic/claude-haiku-5-5", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "4": "anthropic/sonnet"},
+ "worker_escalate": {"model": "anthropic/sonnet", "above_steps": 100, "below_score": 50}}
+```
+
+- `model`: the model used when the block fires;
+- `above_steps`: the step limit (a whole number, at least 1);
+- `below_score`: the review score under which a retry escalates (above 0, up to 100); optional, without it
+  the steps alone decide.
+
+The block is read when an attempt starts and fires in two cases, never in the middle of a run (stopping a
+run is the job of the adaptive split):
+
+1. **Retry of the same task.** The previous run used more than `above_steps` steps and the review score is
+   below `below_score`. A run that ended at 110 steps with score 40 sends the next retry to `model`; the same
+   run with score 70, or a run of 60 steps, does not.
+2. **Split part.** The task is a part made by an adaptive split that was forced by more than `above_steps`
+   steps (the split writes `split_steps` into the part). The whole part runs on `model`, from its first
+   attempt to its last, and the score is not checked.
+
+Facts come from the workflow: the score is `last_review_score` of the Live State row, the steps are
+`num_turns` of the previous run read from the runner (`GET /v1/runs/<id>`), and `split_steps` is a field of the
+task. A fact that is missing (the runner does not answer, no previous run) counts as unknown and the block does
+nothing. `fresh: auto` starts a fresh session whenever the model changes.
+
 ### Reserved key `options`
 
 A role map may contain the key `options`, which is not an attempt number. It holds per-role settings:

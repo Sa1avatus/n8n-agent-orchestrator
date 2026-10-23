@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "name": "clean run passes",
+      "found": {},
+      "baseline": {},
+      "expect": {"verdict": "pass"}
+    },
+    {
+      "name": "failing test with no baseline",
+      "found": {"pytest": ["tests/test_x.py::test_y"]},
+      "baseline": {},
+      "expect": {"verdict": "fail", "reason": "new failure tests/test_x.py::test_y"}
+    },
+    {
+      "name": "new failure next to a baseline failure",
+      "found": {"pytest": ["tests/test_x.py::test_other", "tests/test_x.py::test_y"]},
+      "baseline": {"pytest": ["tests/test_x.py::test_other"]},
+      "expect": {"verdict": "fail", "reason": "new failure tests/test_x.py::test_y"}
+    },
+    {
+      "name": "baseline-only failure passes",
+      "found": {"pytest": ["tests/test_x.py::test_y"]},
+      "baseline": {"pytest": ["tests/test_x.py::test_y"]},
+      "expect": {"verdict": "pass"}
+    },
+    {
+      "name": "missing command is blocked",
+      "found": {},
+      "baseline": {},
+      "blocked_reason": "command not found: ruff",
+      "expect": {"verdict": "blocked", "reason": "command not found: ruff"}
+    },
+    {
+      "name": "timeout",
+      "found": {},
+      "baseline": {},
+      "timed_out": true,
+      "expect": {"verdict": "timeout", "reason": "the regression layer timed out"}
+    },
+    {
+      "name": "no QA profile is skipped",
+      "has_profile": false,
+      "found": {},
+      "baseline": {},
+      "expect": {"verdict": "skipped", "reason": "no QA profile"}
+    }
+  ]
+}

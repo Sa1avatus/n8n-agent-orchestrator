@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import re
 import secrets
+import shutil
+import signal
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -24,12 +29,16 @@ PRODUCTION_HOST_NAMES = frozenset(
 PRODUCTION_DATABASE_NAMES = frozenset({"postgres", "n8n", "ahawr"})
 QA_POSTGRES_IMAGE = "postgres:16-alpine"
 QA_FIXTURES = ("default", "empty")
+STACK_MODES = ("docker", "inprocess")
+DASHBOARD_FIXTURE_ENV = "DASHBOARD_QA_FIXTURE"
+DASHBOARD_DSN_ENV = "DASHBOARD_BOARD_PG_DSN"
 DASHBOARD_CONTAINER_PORT = 8701
 CLAUDE_RUNNER_DIR = Path(__file__).resolve().parents[2]
 DOCKERFILE_PATH = CLAUDE_RUNNER_DIR / "Dockerfile"
 BOARD_SCHEMA_PATH = CLAUDE_RUNNER_DIR / "docs" / "board-schema.sql"
 N8N_TABLES_PATH = CLAUDE_RUNNER_DIR / "qa" / "fixtures" / "n8n_tables.json"
 FIXTURE_DIR = CLAUDE_RUNNER_DIR / "qa" / "fixtures"
+QA_RUNS_DIR = CLAUDE_RUNNER_DIR / "qa" / "runs"
 DOCKER_TIMEOUT_SECONDS = 120
 DOCKER_BUILD_TIMEOUT_SECONDS = 900
 HEALTH_MAX_POLLS = 30
@@ -40,6 +49,7 @@ _PASSWORD_BYTES = 24
 _RUN_ID_BYTES = 4
 _HOST_PATTERN = re.compile(r"qa-[a-z0-9-]{1,40}")
 _DATABASE_PATTERN = re.compile(r"qa_[a-z0-9_]{1,40}")
+_STACK_ID_PATTERN = re.compile(r"[0-9a-f]{8}")
 _PASSWORD_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
 _IDENTIFIER_PATTERN = re.compile(r"[a-z_][a-z0-9_]{0,62}")
 MIXED_CASE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
@@ -66,6 +76,7 @@ class QaStack:
     volumes: list[str] = field(default_factory=list)
     networks: list[str] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
+    process: subprocess.Popen[bytes] | None = field(default=None, repr=False)
 
 
 def new_qa_password() -> str:
@@ -96,9 +107,15 @@ def build_qa_dsn(host: str, database: str, password: str) -> str:
     return f"postgresql://{QA_USER}:{password}@{host}:{QA_PORT}/{database}"
 
 
-def stack_up(fixture: str = "default") -> QaStack:
+def stack_up(fixture: str = "default", mode: str = "docker") -> QaStack:
+    if mode not in STACK_MODES:
+        raise ValueError(f"mode {mode!r} is not one of {', '.join(STACK_MODES)}")
     if fixture not in QA_FIXTURES:
         raise ValueError(f"fixture {fixture!r} is not one of {', '.join(QA_FIXTURES)}")
+    if mode == "inprocess":
+        stack = _inprocess_up(fixture)
+        _seed_verdict_files(stack.run_id, fixture)
+        return stack
     sql = BOARD_SCHEMA_PATH.read_text(encoding="utf-8") + "\n" + _seed_sql(fixture)
     run_id = secrets.token_hex(_RUN_ID_BYTES)
     password = new_qa_password()
@@ -108,6 +125,7 @@ def stack_up(fixture: str = "default") -> QaStack:
     stack = QaStack(run_id=run_id, host=host, database=database, dsn=dsn)
     try:
         _start(stack, password, sql)
+        _seed_verdict_files(stack.run_id, fixture)
     except Exception:
         try:
             stack_down(stack)
@@ -117,9 +135,31 @@ def stack_up(fixture: str = "default") -> QaStack:
     return stack
 
 
+def stack_from_id(stack_id: str) -> QaStack:
+    if not _STACK_ID_PATTERN.fullmatch(stack_id):
+        raise ValueError(f"stack id {stack_id!r} is not 8 lowercase hex digits")
+    host = f"{QA_PREFIX}{stack_id}"
+    return QaStack(
+        run_id=stack_id,
+        host=host,
+        database=f"{QA_DATABASE_PREFIX}{stack_id}",
+        dsn="",
+        containers=[host, f"{host}-dashboard"],
+        volumes=[f"{host}-data"],
+        networks=[f"{host}-net"],
+        images=[f"{QA_PREFIX}dashboard:{stack_id}"],
+    )
+
+
 def stack_down(stack: QaStack) -> None:
+    _remove_seeded_runs(stack.run_id)
+    if stack.process is not None:
+        _kill_tree(stack.process)
+        return
     failures: list[str] = []
     for command in _teardown_commands(stack):
+        if not _present(command[-1]):
+            continue
         try:
             _docker_checked(command, DOCKER_TIMEOUT_SECONDS)
         except QaStackError as error:
@@ -187,6 +227,95 @@ def _start_dashboard(stack: QaStack, image: str, network: str) -> None:
     stack.containers.append(dashboard)
     _wait_until(lambda: _dashboard_healthy(host_port), "dashboard")
     stack.dashboard_url = f"http://127.0.0.1:{host_port}"
+
+
+def _inprocess_up(fixture: str) -> QaStack:
+    port = _free_port()
+    process = _spawn_dashboard(port, FIXTURE_DIR / f"{fixture}.json")
+    ready = False
+    try:
+        _wait_until(lambda: _dashboard_healthy(port), "dashboard")
+        ready = True
+    finally:
+        if not ready:
+            _kill_tree(process)
+    return QaStack(
+        run_id=secrets.token_hex(_RUN_ID_BYTES),
+        host="",
+        database="",
+        dsn="",
+        dashboard_url=f"http://127.0.0.1:{port}",
+        process=process,
+    )
+
+
+def _spawn_dashboard(port: int, fixture_file: Path) -> subprocess.Popen[bytes]:
+    search_path = [str(CLAUDE_RUNNER_DIR / "src"), os.environ.get("PYTHONPATH", "")]
+    env = {
+        name: value for name, value in os.environ.items() if name != DASHBOARD_DSN_ENV
+    }
+    env |= {
+        DASHBOARD_FIXTURE_ENV: str(fixture_file),
+        "PYTHONPATH": os.pathsep.join(entry for entry in search_path if entry),
+    }
+    return subprocess.Popen(
+        [
+            sys.executable, "-c",
+            "import sys; from claude_runner.dashboard import main; sys.exit(main(sys.argv[1:]))",
+            "--host", "127.0.0.1", "--port", str(port),
+        ],
+        env=env,
+        start_new_session=sys.platform != "win32",
+    )
+
+
+def _kill_tree(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True, check=False, timeout=DOCKER_TIMEOUT_SECONDS,
+            )
+        else:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+    process.wait(timeout=DOCKER_TIMEOUT_SECONDS)
+
+
+def _remove_seeded_runs(run_id: str) -> None:
+    """Remove the run dirs seeded for this stack, leaving other qa-* runs."""
+    prefix = f"{QA_PREFIX}{run_id}-"
+    if not QA_RUNS_DIR.is_dir():
+        return
+    for path in QA_RUNS_DIR.glob(prefix + "*"):
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
+            log.info("removed seeded qa run dir %s", path.name)
+
+
+def _seed_verdict_files(run_id: str, fixture: str) -> None:
+    """Write the fixture's seeded verdicts into one run dir per verdict, each
+    as verdict.json (the exact name board_api._qa_matches globs:
+    ``qa-*/verdict.json``)."""
+    fixture_path = FIXTURE_DIR / f"{fixture}.json"
+    try:
+        data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        log.warning("qa fixture %s unreadable: %s", fixture_path.name, type(exc).__name__)
+        return
+    verdicts = data.get("qa_verdicts")
+    if not isinstance(verdicts, list):
+        return
+    for index, verdict in enumerate(verdicts):
+        if not isinstance(verdict, dict):
+            log.warning(
+                "qa_verdicts entry %d is not an object in %s: %s",
+                index, fixture_path.name, type(verdict).__name__,
+            )
+            continue
+        run_dir = QA_RUNS_DIR / f"{QA_PREFIX}{run_id}-{index}"
+        run_dir.mkdir(parents=True)
+        (run_dir / "verdict.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
 
 
 def _seed_sql(fixture: str) -> str:
@@ -305,6 +434,13 @@ def _docker_checked(
     if result.returncode != 0:
         detail = result.stderr.strip()[-ERROR_TEXT_MAX_CHARS:]
         raise QaStackError(f"docker {args[0]} failed with exit code {result.returncode}: {detail}")
+
+
+def _present(name: str) -> bool:
+    try:
+        return _docker(["inspect", name], DOCKER_TIMEOUT_SECONDS).returncode == 0
+    except QaStackError:
+        return False
 
 
 def _docker(

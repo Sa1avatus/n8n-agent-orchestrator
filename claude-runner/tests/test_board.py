@@ -14,11 +14,12 @@ saved before every change."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from claude_runner.board import (
+    RUNNING_STALE_HOURS,
     ConflictError,
     GuardError,
     InMemoryBoardStore,
@@ -120,6 +121,34 @@ class TestMissionGroups:
         board._missions["m1"] = _mission("m1", "sk1")
         board._live["sk1"] = LiveState(state_key="sk1", status="failed")
         assert board.mission_groups()["not_completed"] == ["m1"]
+
+    def test_stale_active_row_is_an_interrupted_mission_not_a_running_one(
+        self, board: InMemoryBoardStore
+    ):
+        fresh = datetime.now(UTC).isoformat()
+        old = (datetime.now(UTC) - timedelta(hours=RUNNING_STALE_HOURS + 1)).isoformat()
+        board._missions["m1"] = _mission("m1", "sk1")
+        board._live["sk1"] = LiveState(state_key="sk1", status="active", updated_at=fresh)
+        board._missions["m2"] = _mission("m2", "sk2")
+        board._live["sk2"] = LiveState(state_key="sk2", status="active", updated_at=old)
+        board._missions["m3"] = _mission("m3", "sk3")
+        board._live["sk3"] = LiveState(state_key="sk3", status="active", updated_at="not a date")
+        groups = board.mission_groups()
+        assert groups["running"] == ["m1", "m3"]
+        assert groups["not_completed"] == ["m2"]
+        assert [m.mission_id for m in board.running_missions()] == ["m1", "m3"]
+
+    def test_interrupted_mission_in_the_queue_waits_instead_of_being_not_completed(
+        self, board: InMemoryBoardStore
+    ):
+        old = (datetime.now(UTC) - timedelta(hours=RUNNING_STALE_HOURS + 1)).isoformat()
+        for mission_id, key in (("m1", "sk1"), ("m2", "sk2")):
+            board._missions[mission_id] = _mission(mission_id, key)
+            board._live[key] = LiveState(state_key=key, status="active", updated_at=old)
+        board.set_queue([QueueEntry(position=0, mission_id="m1")], None)
+        groups = board.mission_groups()
+        assert groups["queued"] == ["m1"]
+        assert groups["not_completed"] == ["m2"]
 
 
 class TestQueue:

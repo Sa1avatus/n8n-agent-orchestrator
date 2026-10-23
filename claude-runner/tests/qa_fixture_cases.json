@@ -1,0 +1,33 @@
+{
+  "fixtures": {
+    "default": {"missions": 12, "queue": 7, "live_state": 9},
+    "empty": {"missions": 0, "queue": 0, "live_state": 0}
+  },
+  "invalid": [
+    {
+      "name": "no_tables_object",
+      "payload": {"name": "broken"},
+      "reason": "no 'tables' object"
+    },
+    {
+      "name": "tables_not_object",
+      "payload": {"name": "broken", "tables": []},
+      "reason": "no 'tables' object"
+    },
+    {
+      "name": "missing_queue_table",
+      "payload": {"name": "broken", "tables": {"data_table_user_hYAqO52ZGHXxhhHX": [], "data_table_user_Yn9lOhVhQ9gFymNs": []}},
+      "reason": "missing table 'queue'"
+    },
+    {
+      "name": "table_not_list",
+      "payload": {"name": "broken", "tables": {"data_table_user_hYAqO52ZGHXxhhHX": {}, "data_table_user_Yn9lOhVhQ9gFymNs": [], "queue": []}},
+      "reason": "table 'data_table_user_hYAqO52ZGHXxhhHX' is not a list"
+    },
+    {
+      "name": "row_not_object",
+      "payload": {"name": "broken", "tables": {"data_table_user_hYAqO52ZGHXxhhHX": [1], "data_table_user_Yn9lOhVhQ9gFymNs": [], "queue": []}},
+      "reason": "table 'data_table_user_hYAqO52ZGHXxhhHX' has a row that is not an object"
+    }
+  ]
+}

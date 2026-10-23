@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.9.0** | **14** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.10.0** | **20** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -41,9 +41,9 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- status:start -->
 | | |
 |---|---|
-| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) |
-| 🔄 **Now** | Features config, QA smoke, providers in the web UI and report pack; the runner is renamed to `ahawr-runner` in **0.10.0** |
-| ➡️ **Next** | Worker attempt chains · report pack · **1.0.0: Codex as the third executor** |
+| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) |
+| 🔄 **Now** | Host actions, the queue from the board, providers and report tasks → **0.11.0** |
+| ➡️ **Next** | Configuration columns to JSON and the runner rename to `ahawr-runner` (**0.12.0**) · code review and refactoring · **1.0.0: Codex as the third executor** |
 <!-- status:end -->
 
 Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [sa1avatus.github.io/n8n-agent-orchestrator](https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html).
@@ -820,6 +820,12 @@ Only the fields in the allow-list in `docs/telegram-bot.md` (model/provider, pol
 - Live Data Table exports and mission files are kept out of git (`data-tables/`); the repository ships `hermes_config.example.csv`, `agent_prompts.example.csv` and `missions.example.csv`.
 - Data Tables live in n8n's database. This installation runs n8n on Postgres 16 (`ahawr-postgres` service in `docker-compose.yml`, `N8N_PG_PASSWORD` in `.env`) because SQLite on a Windows bind mount ended executions with `SQLITE_BUSY`; the tables are named `data_table_user_<id>` (quote them: the names are mixed case). Take a `pg_dump` before editing them directly. Prefer the n8n UI where it is enough.
 - Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
+
+**11. The Worker model changes by attempt, and after a heavy task.**
+- *What.* `roles_json` (the `hermes_config` row, or a mission's own) sets the model per attempt: for example attempt 1 on Haiku, attempt 2 on the local model, attempt 4 and later on Sonnet. A second key, `worker_escalate`, moves a task to a stronger model when the task was heavy: more than `above_steps` steps in the last run and a review score below `below_score` (the retry goes to the stronger model), or a split part whose split came from that many steps (the whole part runs on it). Example and every field: [`claude-runner/docs/roles-config.md`](claude-runner/docs/roles-config.md).
+- *Why.* The local 2-bit Worker is cheap and fast, and it solves most tasks, but on a hard task it burns 150 steps and a whole attempt for nothing. A cloud model on the first attempt wastes money on easy tasks, so the cheap model goes first and the expensive one is called only on evidence: many steps and a poor score, or a split.
+- *Why steps and score, and why after the task.* Stopping a run in the middle throws away work, and stopping a runaway run is the job of the adaptive split. The step count and the score are known only when a run has ended, so the choice is made for the next attempt or the next task. A first plain version, a score condition inside a chain value, was dropped: a chain stays a plain list of models and the exceptions live in one separate block.
+- *Cost.* Missing data (the runner does not answer, no previous run) counts as unknown and the block does nothing; the chain then decides alone.
 
 **Known open problems.**
 - The llama-server prompt cache is not reused when Claude Code sends a compaction request, so each compaction re-prefills the whole prefix (about 7 minutes at 78K tokens; seven of them in one task). The cause (server build, Claude Code version or cache settings) is not established.
@@ -1620,6 +1626,12 @@ Claude Code сообщает стоимость каждого прогона. �
 - Живые выгрузки Data Tables и файлы миссий хранятся вне git (`data-tables/`); в репозитории лежат `hermes_config.example.csv`, `agent_prompts.example.csv` и `missions.example.csv`.
 - Data Tables лежат в базе n8n. Эта установка запускает n8n на Postgres 16 (сервис `ahawr-postgres` в `docker-compose.yml`, `N8N_PG_PASSWORD` в `.env`), потому что SQLite на bind-mount Windows обрывал выполнения ошибкой `SQLITE_BUSY`; таблицы называются `data_table_user_<id>` (имена со смешанным регистром, нужны кавычки). Перед прямой правкой делайте `pg_dump`. Где хватает интерфейса n8n, лучше пользоваться им.
 - Worker и Reviewer не могут читать файлы `.env` (любые варианты, кроме `.env.example`) и делать `git commit` и `git push`; коммитит оператор.
+
+**10. Модель Worker меняется по попыткам и после тяжёлой задачи.**
+- *Что.* `roles_json` (строка `hermes_config` или собственный у миссии) задаёт модель по попыткам: например, попытка 1 на Haiku, попытка 2 на локальной модели, попытка 4 и дальше на Sonnet. Второй ключ, `worker_escalate`, переводит задачу на более сильную модель, если она была тяжёлой: в последнем запуске больше `above_steps` шагов и скор ревью ниже `below_score` (ретрай идёт на сильную модель), либо это часть после сплита, который вызвало столько шагов (вся часть идёт на ней). Пример и все поля: [`claude-runner/docs/roles-config.md`](claude-runner/docs/roles-config.md).
+- *Зачем.* Локальный 2-битный Worker дёшев и быстр и решает большинство задач, но на трудной задаче тратит 150 шагов и целую попытку впустую. Облачная модель на первой попытке тратит деньги на лёгких задачах, поэтому сначала идёт дешёвая, а дорогая подключается только по признакам: много шагов и плохой скор или сплит.
+- *Почему шаги и скор и почему после задачи.* Остановка запуска посередине выбрасывает работу, а останавливать убежавший запуск должен адаптивный сплит. Число шагов и скор известны только после конца запуска, поэтому выбор делается для следующей попытки или следующей задачи. Первый простой вариант, условие по скору внутри значения цепочки, отвергнут: цепочка остаётся простым списком моделей, а исключения лежат в одном отдельном блоке.
+- *Цена.* Нет данных (runner не ответил, нет предыдущего запуска) считается неизвестным, блок ничего не делает, решает одна цепочка.
 
 **Известные открытые проблемы.**
 - Кэш промпта llama-server не используется, когда Claude Code присылает запрос сжатия, поэтому каждое сжатие заново обрабатывает весь префикс (около 7 минут на 78K токенов; семь таких сжатий в одной задаче). Причина (сборка сервера, версия Claude Code или настройки кэша) не установлена.

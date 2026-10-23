@@ -1,0 +1,23 @@
+F401 [*] `os` imported but unused
+ --> src/pkg/bad.py:1:8
+  |
+1 | import os
+  |        ^^
+help: Remove unused import: `os`
+  |
+  - import os
+1 |
+  |
+
+F401 [*] `os` imported but unused
+ --> src/pkg/second_unused.py:1:8
+  |
+1 | import os
+  |        ^^
+help: Remove unused import: `os`
+  |
+  - import os
+  |
+
+Found 2 errors.
+[*] 2 fixable with the `--fix` option.

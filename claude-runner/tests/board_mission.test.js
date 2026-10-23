@@ -465,10 +465,57 @@ async function s7() {
   if (!/<input type="number" class="frow" name="attempts_per_task"[^>]* step="1"/.test(numRow)) throw new Error("number field lost type or step: " + numRow);
 }
 
+// --- 8d. the QA panel: the verdict list renders only when verdicts exist ---
+async function s8d() {
+  const renderCalls = [];
+  globalThis.BoardQa = {
+    render: async (c, id) => { renderCalls.push([c, id]); },
+    panelHtml: (verdicts) => verdicts.length ? '<div class="qa-panel"></div>' : "",
+  };
+  const qaCase = async (qaBody, status) => {
+    const qaStub = { innerHTML: "stale" };
+    const qaDoc = {
+      getElementById(id) {
+        if (id === "boardmission") return { innerHTML: "", querySelectorAll: () => [] };
+        if (id === "board") return { appendChild() {} };
+        if (id === "boardstate") return { textContent: "", className: "" };
+        if (id === "boardqa") return qaStub;
+        return null;
+      },
+      createElement: () => ({ addEventListener() {} }),
+    };
+    const fetchFn = async (url) => {
+      if (String(url) !== "/api/board/missions/m1/qa") return s7fetch(url);
+      fetchCalls.push(String(url));
+      return { ok: status === 200, status, json: async () => qaBody };
+    };
+    renderCalls.length = 0;
+    await withStubs(qaDoc, fetchFn, () => BM.BoardMission("m1"));
+    await new Promise((r) => setImmediate(r));
+    return { qaStub };
+  };
+  try {
+    const pass = await qaCase({ verdicts: [{ verdict: "pass", scenario: "s" }] }, 200);
+    check("QA route fetched", fetchCalls.indexOf("/api/board/missions/m1/qa") !== -1);
+    check("QA verdict list rendered", pass.qaStub.innerHTML !== "stale");
+
+    const missing = await qaCase({ error: { message: "not found" } }, 404);
+    check("missing verdict file renders nothing",
+      renderCalls.length === 0 && missing.qaStub.innerHTML === "");
+
+    const empty = await qaCase({ verdict: null, verdicts: [] }, 200);
+    check("empty verdict renders nothing",
+      renderCalls.length === 0 && empty.qaStub.innerHTML === "");
+  } finally {
+    delete globalThis.BoardQa;
+  }
+}
+
 (async () => {
   await s8b();
   await s8c();
   await s7();
+  await s8d();
   console.log("all ok");
 })().catch((e) => {
   console.error(e && e.stack || e);

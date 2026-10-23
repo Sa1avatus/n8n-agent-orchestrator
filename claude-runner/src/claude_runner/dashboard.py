@@ -25,6 +25,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from importlib import resources
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -33,7 +34,9 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from . import board_api, export
+from .board_ops_store import InMemoryOpsStore
 from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
+from .board_pg import DSN_ENV
 from .board_stats import _mission_run_ids
 from .guard_heartbeat import HeartbeatSettings, HostHeartbeatGuard
 from .guard_queue import IdleGuard, MissionNoticeGuard, SeenStore
@@ -47,10 +50,12 @@ from .guards import (
     Notifier,
 )
 from .guards_history import WINDOWS_S, GuardHistory
+from .qa_fixture import board_store_from_rows, load_fixture
 from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
 
 logger = logging.getLogger("claude_runner.dashboard")
+QA_FIXTURE_ENV = "DASHBOARD_QA_FIXTURE"
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,7 @@ def create_dashboard_app(
     settings: DashboardSettings | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastAPI:
     settings = settings or DashboardSettings.from_env()
+    qa_fixture = _qa_fixture_path(dict(os.environ))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -147,6 +153,8 @@ def create_dashboard_app(
         return await call_next(request)
 
     app.middleware("http")(board_header_guard)
+    if qa_fixture is not None:
+        app.state.board_store = board_store_from_rows(load_fixture(qa_fixture))
     board_api.add_board_routes(app, settings)
     if getattr(app.state, "manager", None) is None:
         # the board statistics read runs through a RunManager-like object; the dashboard has no
@@ -239,7 +247,7 @@ def create_dashboard_app(
         # repeated values of one field are matched with OR; fields combine with AND
         mission_runs: set[str] | None = None
         if mission:
-            store = request.app.state.board_store
+            store = board_api.live_store(request.app)
             refuse = board_api._unavailable(store)
             if refuse is not None:
                 return JSONResponse(refuse, status_code=503)
@@ -554,11 +562,25 @@ def _heartbeat_entries(
     return []
 
 
+def _qa_fixture_path(env: dict[str, str]) -> Path | None:
+    value = env.get(QA_FIXTURE_ENV, "").strip()
+    if not value:
+        return None
+    if env.get(DSN_ENV, "").strip():
+        raise RuntimeError(
+            f"{QA_FIXTURE_ENV} and {DSN_ENV} cannot both be set: "
+            "a QA fixture must never run against a database"
+        )
+    return Path(value)
+
+
 def _ops_store(env: dict[str, str]) -> Any:
     """The ops store for the guard sources: the Pg ops store when the DSN is
     set and connectable, ``None`` otherwise (the guards stay registered but
     inert).  A driver import failure or a refused connection both leave the
     store unset: the guards read unknown state and never fail their check."""
+    if env.get(QA_FIXTURE_ENV, "").strip():
+        return InMemoryOpsStore()
     dsn = env.get("DASHBOARD_BOARD_PG_DSN", "").strip()
     if not dsn:
         return None

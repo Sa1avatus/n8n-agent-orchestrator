@@ -1,0 +1,18 @@
+# The QA verdict panel (board_qa.js) is mounted on the mission page
+# (board_mission.js: renderQaSection -> BoardQa.panelHtml).  The default
+# fixture seeds two verdict files for mission m01 (sk_m01) through the
+# qa_verdicts key of qa/fixtures/default.json, written into the stack's
+# runs dir by qa_stack._seed_verdict_files.  Both verdicts have layer
+# regression: one fail (new failure tests/test_x.py::test_y) and one
+# skipped (no QA profile), so the panel shows the regression group with
+# the failed step reason and the skipped reason.
+name: the qa panel shows the regression group with a fail and a skipped verdict
+tags: [ui]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/m01
+    expect:
+      text_visible: ["regression", "new failure tests/test_x.py::test_y", "no QA profile", "skipped"]
+      request_2xx: [/api/board/missions/m01/qa]
+      no_console_error: true

@@ -3,7 +3,67 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.9.0** (claude-runner `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.10.0** (claude-runner `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-23 (0.10.0)
+
+New functions of the missions that ran since 0.9.0: the workflow features as one JSON setting, all of QA
+(a request queue that works, its own container, three layers, a smoke crawl), the Worker model by attempt
+with an escalation block, and fixes found by the QA scenarios and the operator. Every new switch defaults
+to off; with the switches off behaviour is unchanged. The release also takes the two missions that were
+planned as 0.11.0 (the QA container and the QA layers): their code is in, their activation steps are the
+operator's (see the reports in `reports/`).
+
+- **Features config** (mission ahawr-features-config). `features_json` in `hermes_config` and the optional
+  `mission_features_json` hold the workflow features (adaptive split, plan without truncation, run hygiene)
+  as one JSON setting, validated by `features_config.py` and `board_features.js`; a Features section in
+  the launch settings window (a row per feature plus the free JSON); the split patches are anchored
+  edits; Telegram notices show the position of the task and of the part. `claude-runner/docs/features-config.md`.
+- **QA gate** (mission ahawr-qa-gate). QA runs on the host through a request queue in the runner
+  (`qa_requests.py`, `/v1/qa/requests`, claim and result) served by the host worker `qa_worker.py`; the
+  workflow asks and waits with QA nodes; a failing QA sends the mission back at most twice, a blocked
+  QA never rejects (fail-open or fail-closed by setting). The runner port is published on 127.0.0.1 only.
+  Mode per `roles_json` (`qa.options.mode`: off, final, ui_tasks, nightly).
+- **QA container** (mission ahawr-qa-container). `claude-runner/qa/Dockerfile.qa` (Chromium, pytest, ruff,
+  mypy, node; non-root; no Docker socket) and `qa/compose-qa.patch` (service `ahawr-qa`, read-only root,
+  tmpfs, `qa-runs` volume); the stack mode `inprocess` for the UI and API layers
+  (`qa --stack docker|inprocess`); the dashboard fixture `DASHBOARD_QA_FIXTURE`; the worker moves into
+  the package (`claude_runner.qa_worker`). Not built or started by the mission: `docs/qa-container.md`.
+- **QA layers** (mission ahawr-qa-layers). One request runs up to three layers: `regression` (pytest, node,
+  ruff, mypy against a per-project baseline), `api` and `ui`; each layer has its own verdict, a failing layer
+  does not skip the others; opt in with `layers` in the `qa` options (default `["ui"]`). The QA panel on
+  the mission page reads the verdicts grouped by layer. `docs/qa-layers.md`.
+- **QA smoke crawl** (mission ahawr-qa-smoke). `python -m claude_runner.qa smoke`: opens the board, follows
+  its links and the first three missions, clicks each control once within bounds (40 pages, 25 clicks per
+  page, 10 minutes), never clicks the destructive list of `qa/smoke_seeds.yaml`, refuses hosts other than
+  127.0.0.1, localhost and `qa-` containers. Detectors: console and page errors, responses >= 400, null or
+  undefined in URLs, a mutation without the dashboard header, bad text, hidden messages, overflow, raw
+  i18n keys, no-effect clicks. Off by default (`qa.options.smoke`). Known gap: a click crawl does not
+  reproduce the three replayed bugs (a drag and a forced 409 are needed); the proposal is in the report.
+- **Worker model by attempt and escalation.** `roles_json` sets the model per attempt (Haiku, then the
+  local model, then Sonnet); the new key `worker_escalate` (`model`, `above_steps`, `below_score`) moves a
+  task to a stronger model after a heavy task: a retry after more than `above_steps` steps with a score
+  below `below_score`, or a whole split part whose split came from that many steps (the split writes
+  `split_steps`). Validated in `roles_config.py` and `board_roles.js`. `docs/roles-config.md`.
+- **Board store reconnects.** The dashboard rebuilds an unavailable board store (the database that starts
+  after it) at most every 5 seconds, a lost connection counts as unavailable, and the board shows a loading
+  note and retries a 503 for about 20 seconds instead of a permanent offline message.
+- **Kanban.** An interrupted mission that stays in the queue waits in Queued instead of Running
+  (`RUNNING_STALE_HOURS`); the board queue is synchronised with the queue shell.
+- **Telegram relay in the dashboard container**; the host relay is retired.
+
+Fixed bugs:
+
+- Saving the Features section of the launch settings failed with 409: the `hermes_config` version was sent
+  with a `Z` suffix and compared with `+00:00`.
+- `PUT /api/board/features` and `PUT /api/board/roles` answered 500: the changelog audit could not
+  serialize the timestamps of the `hermes_config` row (`board_pg._audit`).
+- The QA runner step `type` with `replace` called a Playwright method that does not exist.
+- The Features textareas had no accessible name (`aria-label`), so scenarios could not find them.
+- The QA fixture schema lacked the `features_json` column.
+- The smoke crawl waited 30 seconds for a control that a re-rendering page had removed (all controls are
+  now read in one call) and never visited mission pages.
+- A QA scenario clicked Next on the Review page, where the button reads Save changes.
 
 ## 2026-10-21 (0.9.0)
 

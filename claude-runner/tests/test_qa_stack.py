@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import pathlib
 import subprocess
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 
-from claude_runner import qa_stack
+from claude_runner import board_api, qa_stack
 from claude_runner.qa_stack import (
     HEALTH_MAX_POLLS,
     QaStack,
@@ -16,6 +17,7 @@ from claude_runner.qa_stack import (
     build_qa_dsn,
     new_qa_password,
     stack_down,
+    stack_from_id,
     stack_up,
 )
 
@@ -146,7 +148,8 @@ def test_stack_down_removes_only_the_listed_qa_objects(docker: FakeDocker) -> No
         networks=["qa-abc-net"],
     )
     stack_down(stack)
-    assert docker.calls == [
+    removals = [call for call in docker.calls if call[0] != "inspect"]
+    assert removals == [
         ["rm", "-f", "qa-abc"],
         ["rm", "-f", "qa-abc-dashboard"],
         ["volume", "rm", "qa-abc-data"],
@@ -172,7 +175,9 @@ def test_stack_down_after_stack_up_touches_only_qa_objects(docker: FakeDocker) -
     stack = stack_up()
     calls_before_down = len(docker.calls)
     stack_down(stack)
-    removals = docker.calls[calls_before_down:]
+    removals = [
+        call for call in docker.calls[calls_before_down:] if call[0] != "inspect"
+    ]
     assert len(removals) == 5
     assert all(call[-1].startswith("qa-") for call in removals)
 
@@ -182,8 +187,9 @@ def test_unhealthy_postgres_is_bounded_then_cleaned_up(docker: FakeDocker) -> No
     with pytest.raises(QaStackError, match="postgres is not healthy"):
         stack_up()
     assert len(docker.sleeps) == HEALTH_MAX_POLLS
-    assert [call[0] for call in docker.calls[-4:]] == ["rm", "volume", "network", "rmi"]
-    assert docker.calls[-4][-1].startswith("qa-")
+    removals = [call for call in docker.calls if call[0] != "inspect"]
+    assert [call[0] for call in removals[-4:]] == ["rm", "volume", "network", "rmi"]
+    assert removals[-4][-1].startswith("qa-")
 
 
 def test_failed_container_removal_still_removes_volume_and_network(docker: FakeDocker) -> None:
@@ -223,7 +229,8 @@ def test_stack_down_removes_image_with_qa_name(docker: FakeDocker) -> None:
         images=["qa-dashboard:abc"],
     )
     stack_down(stack)
-    assert docker.calls == [["rmi", "-f", "qa-dashboard:abc"]]
+    removals = [call for call in docker.calls if call[0] != "inspect"]
+    assert removals == [["rmi", "-f", "qa-dashboard:abc"]]
 
 
 def test_unhealthy_dashboard_raises_qa_stack_error(
@@ -251,6 +258,46 @@ def test_stack_repr_hides_dsn() -> None:
 
 def test_sql_literal_escapes_quotes() -> None:
     assert qa_stack._sql_literal("O'Brien") == "'O''Brien'"
+
+
+def test_seeded_verdicts_match_board_api_glob(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setattr(qa_stack, "QA_RUNS_DIR", tmp_path)
+    monkeypatch.setattr(
+        board_api, "NIGHTLY_VERDICT_PATH", tmp_path / "no-such-file.json"
+    )
+    qa_stack._seed_verdict_files("abcd1234", "default")
+    for index in (0, 1):
+        run_dir = tmp_path / f"qa-abcd1234-{index}"
+        assert (run_dir / "verdict.json").is_file()
+    monkeypatch.setattr(board_api, "RUNS_DIR", tmp_path)
+    matches = board_api._qa_matches({"qa panel regression fail and skipped verdicts"})
+    assert len(matches) == 2
+    verdicts = [verdict for _, verdict in matches]
+    assert verdicts[0]["verdict"] == "fail"
+    assert verdicts[0]["failed_step"] == 0
+    assert verdicts[0]["failed_reason"] == "new failure tests/test_x.py::test_y"
+    assert verdicts[1]["verdict"] == "skipped"
+    assert verdicts[1]["reason"] == "no QA profile"
+
+
+def test_stack_down_removes_seeded_run_dirs_and_keeps_others(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.setattr(qa_stack, "QA_RUNS_DIR", tmp_path)
+    qa_stack._seed_verdict_files("abcd1234", "default")
+    (tmp_path / "qa-other-9999").mkdir()
+    stack = QaStack(
+        run_id="abcd1234",
+        host="qa-abcd1234",
+        database="qa_abcd1234",
+        dsn="postgresql://qa:x@qa-abcd1234:5432/qa_abcd1234",
+    )
+    stack_down(stack)
+    assert not (tmp_path / "qa-abcd1234-0").exists()
+    assert not (tmp_path / "qa-abcd1234-1").exists()
+    assert (tmp_path / "qa-other-9999").is_dir()
 
 
 @pytest.mark.parametrize(
@@ -311,3 +358,57 @@ def test_new_qa_password_is_fresh_on_each_call() -> None:
     second = new_qa_password()
     assert first != second
     assert len(first) >= 32
+
+
+def test_stack_from_id_builds_the_objects_named_by_the_id() -> None:
+    stack = stack_from_id("0a1b2c3d")
+    assert stack.run_id == "0a1b2c3d"
+    assert stack.containers == ["qa-0a1b2c3d", "qa-0a1b2c3d-dashboard"]
+    assert stack.volumes == ["qa-0a1b2c3d-data"]
+    assert stack.networks == ["qa-0a1b2c3d-net"]
+    assert stack.images == ["qa-dashboard:0a1b2c3d"]
+
+
+@pytest.mark.parametrize("bad_id", ["0a1b2c3", "0A1B2C3D", "../x"])
+def test_stack_from_id_rejects_a_malformed_id(bad_id: str) -> None:
+    with pytest.raises(ValueError, match="not 8 lowercase hex digits"):
+        stack_from_id(bad_id)
+
+
+def test_stack_down_skips_objects_that_are_gone(docker: FakeDocker) -> None:
+    stack = QaStack(
+        run_id="abc",
+        host="qa-abc",
+        database="qa_abc",
+        dsn="postgresql://qa:x@qa-abc:5432/qa_abc",
+        containers=["qa-abc", "qa-abc-dashboard"],
+        volumes=["qa-abc-data"],
+        networks=["qa-abc-net"],
+        images=["qa-dashboard:abc"],
+    )
+    docker.fail_when = lambda args: args[0] == "inspect"
+    stack_down(stack)
+    removals = [call for call in docker.calls if call[0] != "inspect"]
+    assert removals == []
+
+
+def test_stack_down_still_removes_objects_that_remain(docker: FakeDocker) -> None:
+    stack = QaStack(
+        run_id="abc",
+        host="qa-abc",
+        database="qa_abc",
+        dsn="postgresql://qa:x@qa-abc:5432/qa_abc",
+        containers=["qa-abc", "qa-abc-dashboard"],
+        volumes=["qa-abc-data"],
+        networks=["qa-abc-net"],
+        images=["qa-dashboard:abc"],
+    )
+    docker.fail_when = lambda args: args == ["inspect", "qa-abc"]
+    stack_down(stack)
+    removals = [call for call in docker.calls if call[0] != "inspect"]
+    assert removals == [
+        ["rm", "-f", "qa-abc-dashboard"],
+        ["volume", "rm", "qa-abc-data"],
+        ["network", "rm", "qa-abc-net"],
+        ["rmi", "-f", "qa-dashboard:abc"],
+    ]

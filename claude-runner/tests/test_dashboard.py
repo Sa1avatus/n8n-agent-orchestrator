@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from claude_runner.api import create_app
+from claude_runner.board import InMemoryBoardStore
 from claude_runner.config import Settings
 from claude_runner.dashboard import DashboardSettings, create_dashboard_app
 from claude_runner.events import EventLog, StepTracker, entries_from
@@ -1136,3 +1137,19 @@ def test_guards_tab_on_serves_history_and_rejects_a_bad_window(
         assert token not in history.text
         assert dash.get("/api/guards/history?window=9y").status_code == 422
     assert (tmp_path / "guards_history.json").exists()
+
+
+def test_qa_fixture_refused_together_with_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DASHBOARD_QA_FIXTURE", "qa/fixtures/default.json")
+    monkeypatch.setenv("DASHBOARD_BOARD_PG_DSN", "postgresql://user:pw@db/board")
+    with pytest.raises(RuntimeError, match="DASHBOARD_QA_FIXTURE and DASHBOARD_BOARD_PG_DSN"):
+        create_dashboard_app(DashboardSettings())
+
+
+def test_qa_fixture_seeds_board_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = Path(__file__).resolve().parents[1] / "qa" / "fixtures" / "default.json"
+    monkeypatch.setenv("DASHBOARD_QA_FIXTURE", str(fixture))
+    monkeypatch.delenv("DASHBOARD_BOARD_PG_DSN", raising=False)
+    app = create_dashboard_app(DashboardSettings())
+    assert isinstance(app.state.board_store, InMemoryBoardStore)
+    assert app.state.board_store.get_mission("m01") is not None

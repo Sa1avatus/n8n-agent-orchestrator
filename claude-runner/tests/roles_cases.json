@@ -1,6 +1,13 @@
 {
   "description": "Shared cases for the Python and JS roles_json resolvers; all values are made up. validation.input is raw JSON text so duplicate and out-of-order keys survive parsing. Each expected error or warning must appear in the actual list (matched by code, role and element); a case with no expected errors or warnings must produce none. resolve.expect lists only the fields to check; null means the value must be unset. Top-level think and fresh in expect are the resolved values: fresh is the resolved boolean (start a fresh runner session or not) and think is the resolved option, null when unset.",
-  "providers": ["anthropic", "local", "openrouter", "A", "B", "C"],
+  "providers": [
+    "anthropic",
+    "local",
+    "openrouter",
+    "A",
+    "B",
+    "C"
+  ],
   "validation": [
     {
       "name": "valid_string_role",
@@ -21,6 +28,60 @@
       "warnings": []
     },
     {
+      "name": "valid_qa_layers",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": [\"regression\", \"api\", \"ui\"]}}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "valid_qa_empty_layers",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": []}}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "valid_qa_without_layers",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"mode\": \"off\"}}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "qa_unknown_layer",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": [\"regression\", \"smoke\"]}}}",
+      "errors": [
+        {
+          "code": "unknown_layer",
+          "role": "qa",
+          "element": "options.layers"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "qa_repeated_layer",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": [\"ui\", \"ui\"]}}}",
+      "errors": [
+        {
+          "code": "repeated_layer",
+          "role": "qa",
+          "element": "options.layers"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "qa_layers_not_a_list",
+      "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": \"ui\"}}}",
+      "errors": [
+        {
+          "code": "layers_not_list",
+          "role": "qa",
+          "element": "options.layers"
+        }
+      ],
+      "warnings": []
+    },
+    {
       "name": "valid_ten_keys",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"2\": \"anthropic/haiku\", \"3\": \"anthropic/haiku\", \"4\": \"anthropic/haiku\", \"5\": \"anthropic/haiku\", \"6\": \"anthropic/haiku\", \"7\": \"anthropic/haiku\", \"8\": \"anthropic/haiku\", \"9\": \"anthropic/haiku\", \"options\": {\"think\": \"off\"}}}",
       "errors": [],
@@ -29,86 +90,170 @@
     {
       "name": "first_key_not_one",
       "input": "{\"worker\": {\"2\": \"anthropic/haiku\"}}",
-      "errors": [{"code": "first_key", "role": "worker", "element": "2"}],
+      "errors": [
+        {
+          "code": "first_key",
+          "role": "worker",
+          "element": "2"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "keys_out_of_order",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"3\": \"anthropic/sonnet\", \"2\": \"anthropic/haiku\"}}",
-      "errors": [{"code": "key_order", "role": "worker", "element": "2"}],
+      "errors": [
+        {
+          "code": "key_order",
+          "role": "worker",
+          "element": "2"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "key_zero",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"0\": \"anthropic/sonnet\"}}",
-      "errors": [{"code": "bad_key", "role": "worker", "element": "0"}],
+      "errors": [
+        {
+          "code": "bad_key",
+          "role": "worker",
+          "element": "0"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "key_range_1_2",
       "input": "{\"worker\": {\"1-2\": \"anthropic/haiku\"}}",
-      "errors": [{"code": "bad_key", "role": "worker", "element": "1-2"}],
+      "errors": [
+        {
+          "code": "bad_key",
+          "role": "worker",
+          "element": "1-2"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "key_4_plus",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"4+\": \"anthropic/sonnet\"}}",
-      "errors": [{"code": "bad_key", "role": "worker", "element": "4+"}],
+      "errors": [
+        {
+          "code": "bad_key",
+          "role": "worker",
+          "element": "4+"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "duplicate_key_raw_text",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"1\": \"anthropic/sonnet\"}}",
-      "errors": [{"code": "duplicate_key", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "duplicate_key",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "array_as_role_value",
       "input": "{\"worker\": [\"anthropic/haiku\"]}",
-      "errors": [{"code": "bad_role_value", "role": "worker", "element": "worker"}],
+      "errors": [
+        {
+          "code": "bad_role_value",
+          "role": "worker",
+          "element": "worker"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "array_as_model",
       "input": "{\"worker\": {\"1\": [\"anthropic/haiku\"]}}",
-      "errors": [{"code": "array_model", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "array_model",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "object_as_model",
       "input": "{\"worker\": {\"1\": {\"provider\": \"anthropic\", \"model\": \"haiku\"}}}",
-      "errors": [{"code": "object_model", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "object_model",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "unknown_provider",
       "input": "{\"worker\": {\"1\": \"nope/haiku\"}}",
-      "errors": [{"code": "unknown_provider", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "unknown_provider",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "empty_model_after_slash",
       "input": "{\"worker\": {\"1\": \"anthropic/\"}}",
-      "errors": [{"code": "empty_model", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "empty_model",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "empty_value",
       "input": "{\"worker\": {\"1\": \"\"}}",
-      "errors": [{"code": "empty_value", "role": "worker", "element": "1"}],
+      "errors": [
+        {
+          "code": "empty_value",
+          "role": "worker",
+          "element": "1"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "too_many_keys_eleven",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"2\": \"anthropic/haiku\", \"3\": \"anthropic/haiku\", \"4\": \"anthropic/haiku\", \"5\": \"anthropic/haiku\", \"6\": \"anthropic/haiku\", \"7\": \"anthropic/haiku\", \"8\": \"anthropic/haiku\", \"9\": \"anthropic/haiku\", \"10\": \"anthropic/haiku\", \"11\": \"anthropic/haiku\"}}",
-      "errors": [{"code": "too_many_keys", "role": "worker", "element": "worker"}],
+      "errors": [
+        {
+          "code": "too_many_keys",
+          "role": "worker",
+          "element": "worker"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "nine_distinct_models_warning",
       "input": "{\"worker\": {\"1\": \"anthropic/m1\", \"2\": \"anthropic/m2\", \"3\": \"anthropic/m3\", \"4\": \"anthropic/m4\", \"5\": \"anthropic/m5\", \"6\": \"anthropic/m6\", \"7\": \"anthropic/m7\", \"8\": \"anthropic/m8\", \"9\": \"anthropic/m9\"}}",
       "errors": [],
-      "warnings": [{"code": "too_many_models", "role": "worker", "element": "9"}]
+      "warnings": [
+        {
+          "code": "too_many_models",
+          "role": "worker",
+          "element": "9"
+        }
+      ]
     },
     {
       "name": "eight_distinct_models_no_warning",
@@ -119,319 +264,932 @@
     {
       "name": "unknown_option",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"options\": {\"bogus\": 1}}}",
-      "errors": [{"code": "unknown_option", "role": "worker", "element": "options.bogus"}],
+      "errors": [
+        {
+          "code": "unknown_option",
+          "role": "worker",
+          "element": "options.bogus"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "qa_only_option_on_worker",
       "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"options\": {\"mode\": \"fast\"}}}",
-      "errors": [{"code": "unknown_option", "role": "worker", "element": "options.mode"}],
+      "errors": [
+        {
+          "code": "unknown_option",
+          "role": "worker",
+          "element": "options.mode"
+        }
+      ],
       "warnings": []
     },
     {
       "name": "unknown_role_warning",
       "input": "{\"workr\": \"anthropic/haiku\"}",
       "errors": [],
-      "warnings": [{"code": "unknown_role", "role": "workr", "element": "workr"}]
+      "warnings": [
+        {
+          "code": "unknown_role",
+          "role": "workr",
+          "element": "workr"
+        }
+      ]
+    },
+    {
+      "name": "valid_escalate_block",
+      "input": "{\"worker\": {\"1\": \"anthropic/claude-haiku-5-5\", \"2\": \"local/qwen\", \"4\": \"anthropic/sonnet\"}, \"worker_escalate\": {\"model\": \"anthropic/sonnet\", \"above_steps\": 100, \"below_score\": 50}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "escalate_steps_not_a_number",
+      "input": "{\"worker\": {\"1\": \"anthropic/claude-haiku-5-5\", \"2\": \"local/qwen\", \"4\": \"anthropic/sonnet\"}, \"worker_escalate\": {\"model\": \"anthropic/sonnet\", \"above_steps\": \"many\", \"below_score\": 50}}",
+      "errors": [
+        {
+          "code": "bad_escalate",
+          "role": "worker_escalate",
+          "element": "above_steps"
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "escalate_unknown_provider",
+      "input": "{\"worker\": {\"1\": \"anthropic/claude-haiku-5-5\", \"2\": \"local/qwen\", \"4\": \"anthropic/sonnet\"}, \"worker_escalate\": {\"model\": \"nowhere/x\", \"above_steps\": 100, \"below_score\": 50}}",
+      "errors": [
+        {
+          "code": "unknown_provider",
+          "role": "worker_escalate",
+          "element": "model"
+        }
+      ],
+      "warnings": []
     }
   ],
   "resolve": [
     {
       "name": "mission_example_keys_1_3_4_attempt_1",
-      "global": {"worker": {"1": "A/x", "3": "B/y", "4": "C/z"}},
+      "global": {
+        "worker": {
+          "1": "A/x",
+          "3": "B/y",
+          "4": "C/z"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "A", "model": "x"}
+      "expect": {
+        "provider": "A",
+        "model": "x"
+      }
     },
     {
       "name": "mission_example_keys_1_3_4_attempt_2",
-      "global": {"worker": {"1": "A/x", "3": "B/y", "4": "C/z"}},
+      "global": {
+        "worker": {
+          "1": "A/x",
+          "3": "B/y",
+          "4": "C/z"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "A", "model": "x"}
+      "expect": {
+        "provider": "A",
+        "model": "x"
+      }
     },
     {
       "name": "mission_example_keys_1_3_4_attempt_3",
-      "global": {"worker": {"1": "A/x", "3": "B/y", "4": "C/z"}},
+      "global": {
+        "worker": {
+          "1": "A/x",
+          "3": "B/y",
+          "4": "C/z"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "B", "model": "y"}
+      "expect": {
+        "provider": "B",
+        "model": "y"
+      }
     },
     {
       "name": "mission_example_keys_1_3_4_attempt_4",
-      "global": {"worker": {"1": "A/x", "3": "B/y", "4": "C/z"}},
+      "global": {
+        "worker": {
+          "1": "A/x",
+          "3": "B/y",
+          "4": "C/z"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 4,
-      "expect": {"provider": "C", "model": "z"}
+      "expect": {
+        "provider": "C",
+        "model": "z"
+      }
     },
     {
       "name": "mission_example_keys_1_3_4_attempt_7_last_key_holds",
-      "global": {"worker": {"1": "A/x", "3": "B/y", "4": "C/z"}},
+      "global": {
+        "worker": {
+          "1": "A/x",
+          "3": "B/y",
+          "4": "C/z"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 7,
-      "expect": {"provider": "C", "model": "z"}
+      "expect": {
+        "provider": "C",
+        "model": "z"
+      }
     },
     {
       "name": "mission_example_worker_openrouter_slash_attempt_3",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "3": "openrouter/deepseek/deepseek-chat", "4": "anthropic/sonnet"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "3": "openrouter/deepseek/deepseek-chat",
+          "4": "anthropic/sonnet"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "openrouter", "model": "deepseek/deepseek-chat"}
+      "expect": {
+        "provider": "openrouter",
+        "model": "deepseek/deepseek-chat"
+      }
     },
     {
       "name": "mission_example_worker_local_attempt_2",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "3": "openrouter/deepseek/deepseek-chat", "4": "anthropic/sonnet"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "3": "openrouter/deepseek/deepseek-chat",
+          "4": "anthropic/sonnet"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"
+      }
     },
     {
       "name": "mission_example_worker_sonnet_attempt_4",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "3": "openrouter/deepseek/deepseek-chat", "4": "anthropic/sonnet"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "3": "openrouter/deepseek/deepseek-chat",
+          "4": "anthropic/sonnet"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 4,
-      "expect": {"provider": "anthropic", "model": "sonnet"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     },
     {
       "name": "cloud_first_attempt_1",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku"
+      }
     },
     {
       "name": "cloud_first_attempt_5_local",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 5,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"
+      }
     },
     {
       "name": "mission_example_report_attempt_2",
-      "global": {"report": {"1": "anthropic/haiku", "3": "anthropic/sonnet"}},
+      "global": {
+        "report": {
+          "1": "anthropic/haiku",
+          "3": "anthropic/sonnet"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "report",
       "attempt": 2,
-      "expect": {"provider": "anthropic", "model": "haiku"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku"
+      }
     },
     {
       "name": "mission_example_report_attempt_3",
-      "global": {"report": {"1": "anthropic/haiku", "3": "anthropic/sonnet"}},
+      "global": {
+        "report": {
+          "1": "anthropic/haiku",
+          "3": "anthropic/sonnet"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "report",
       "attempt": 3,
-      "expect": {"provider": "anthropic", "model": "sonnet"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     },
     {
       "name": "mission_example_reviewer_string_attempt_4",
-      "global": {"reviewer": "anthropic/sonnet"},
+      "global": {
+        "reviewer": "anthropic/sonnet"
+      },
       "mission": null,
       "legacy": {},
       "role": "reviewer",
       "attempt": 4,
-      "expect": {"provider": "anthropic", "model": "sonnet"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     },
     {
       "name": "full_role_object_attempt_2_options_kept_apart",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"fresh": "auto", "think": "off"}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "options": {
+            "fresh": "auto",
+            "think": "off"
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"fresh": "auto", "think": "off"}}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "options": {
+          "fresh": "auto",
+          "think": "off"
+        }
+      }
     },
     {
       "name": "full_role_object_attempt_3_last_attempt_key_still_holds",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"fresh": "auto", "think": "off"}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "options": {
+            "fresh": "auto",
+            "think": "off"
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"think": "off"}}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "options": {
+          "think": "off"
+        }
+      }
     },
     {
       "name": "options_fresh_false_kept_apart_from_attempts",
-      "global": {"worker": {"1": "anthropic/haiku", "options": {"fresh": false}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "options": {
+            "fresh": false
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "anthropic", "model": "haiku", "options": {"fresh": false}}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku",
+        "options": {
+          "fresh": false
+        }
+      }
     },
     {
       "name": "qa_falls_back_to_reviewer",
-      "global": {"reviewer": "anthropic/sonnet"},
+      "global": {
+        "reviewer": "anthropic/sonnet"
+      },
       "mission": null,
       "legacy": {},
       "role": "qa",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "sonnet"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     },
     {
       "name": "qa_own_role_wins_over_reviewer",
-      "global": {"reviewer": "anthropic/sonnet", "qa": "anthropic/haiku"},
+      "global": {
+        "reviewer": "anthropic/sonnet",
+        "qa": "anthropic/haiku"
+      },
       "mission": null,
       "legacy": {},
       "role": "qa",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku"
+      }
     },
     {
       "name": "report_falls_back_to_worker",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "report",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp"
+      }
     },
     {
       "name": "legacy_fallback_worker_with_options",
       "global": null,
       "mission": null,
-      "legacy": {"worker_provider": "anthropic", "worker_model": "sonnet", "worker_max_polls": 7, "worker_poll_seconds": 20, "worker_max_retries": 2},
+      "legacy": {
+        "worker_provider": "anthropic",
+        "worker_model": "sonnet",
+        "worker_max_polls": 7,
+        "worker_poll_seconds": 20,
+        "worker_max_retries": 2
+      },
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "anthropic", "model": "sonnet", "options": {"max_polls": 7, "poll_seconds": 20, "max_retries": 2, "think": null, "fresh": "auto"}}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet",
+        "options": {
+          "max_polls": 7,
+          "poll_seconds": 20,
+          "max_retries": 2,
+          "think": null,
+          "fresh": "auto"
+        }
+      }
     },
     {
       "name": "legacy_fallback_qa_uses_reviewer_columns",
       "global": null,
       "mission": null,
-      "legacy": {"reviewer_provider": "openrouter", "reviewer_model": "x/y"},
+      "legacy": {
+        "reviewer_provider": "openrouter",
+        "reviewer_model": "x/y"
+      },
       "role": "qa",
       "attempt": 1,
-      "expect": {"provider": "openrouter", "model": "x/y"}
+      "expect": {
+        "provider": "openrouter",
+        "model": "x/y"
+      }
     },
     {
       "name": "empty_global_falls_back_to_legacy",
       "global": {},
       "mission": null,
-      "legacy": {"worker_provider": "anthropic", "worker_model": "haiku"},
+      "legacy": {
+        "worker_provider": "anthropic",
+        "worker_model": "haiku"
+      },
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku"
+      }
     },
     {
       "name": "global_wins_over_legacy",
-      "global": {"worker": "anthropic/haiku"},
+      "global": {
+        "worker": "anthropic/haiku"
+      },
       "mission": null,
-      "legacy": {"worker_provider": "local", "worker_model": "m"},
+      "legacy": {
+        "worker_provider": "local",
+        "worker_model": "m"
+      },
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku"
+      }
     },
     {
       "name": "options_from_roles_json_and_legacy_per_option",
-      "global": {"worker": {"1": "anthropic/haiku", "options": {"max_polls": 4}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "options": {
+            "max_polls": 4
+          }
+        }
+      },
       "mission": null,
-      "legacy": {"worker_max_polls": 9, "worker_poll_seconds": 20},
+      "legacy": {
+        "worker_max_polls": 9,
+        "worker_poll_seconds": 20
+      },
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku", "options": {"max_polls": 4, "poll_seconds": 20}}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku",
+        "options": {
+          "max_polls": 4,
+          "poll_seconds": 20
+        }
+      }
     },
     {
       "name": "mission_replaces_role_without_merging_keys",
-      "global": {"worker": {"1": "anthropic/haiku", "options": {"think": "off"}}},
-      "mission": {"worker": {"1": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "options": {
+            "think": "off"
+          }
+        }
+      },
+      "mission": {
+        "worker": {
+          "1": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "legacy": {},
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"think": null}}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "options": {
+          "think": null
+        }
+      }
     },
     {
       "name": "mission_leaves_other_roles_to_global",
-      "global": {"reviewer": "anthropic/sonnet"},
-      "mission": {"worker": {"1": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "reviewer": "anthropic/sonnet"
+      },
+      "mission": {
+        "worker": {
+          "1": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "legacy": {},
       "role": "reviewer",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "sonnet"}
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     },
     {
       "name": "session_auto_attempt_1_no_previous",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 1,
-      "expect": {"provider": "anthropic", "model": "haiku", "fresh": false}
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku",
+        "fresh": false
+      }
     },
     {
       "name": "session_auto_attempt_2_model_changed",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "fresh": true}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "fresh": true
+      }
     },
     {
       "name": "session_auto_attempt_3_same_model",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "fresh": false}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "fresh": false
+      }
     },
     {
       "name": "session_fresh_false_option_attempt_2",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"fresh": false}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "options": {
+            "fresh": false
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "fresh": false}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "fresh": false
+      }
     },
     {
       "name": "session_fresh_true_option_attempt_3",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"fresh": true}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "options": {
+            "fresh": true
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 3,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "fresh": true}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "fresh": true
+      }
     },
     {
       "name": "option_think_off_resolves_to_off",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp", "options": {"think": "off"}}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp",
+          "options": {
+            "think": "off"
+          }
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "think": "off"}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "think": "off"
+      }
     },
     {
       "name": "option_think_unset_resolves_to_null",
-      "global": {"worker": {"1": "anthropic/haiku", "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"}},
+      "global": {
+        "worker": {
+          "1": "anthropic/haiku",
+          "2": "local/qwen3.8-27b-gsq-rco-iq2-s-mtp"
+        }
+      },
       "mission": null,
       "legacy": {},
       "role": "worker",
       "attempt": 2,
-      "expect": {"provider": "local", "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp", "think": null}
+      "expect": {
+        "provider": "local",
+        "model": "qwen3.8-27b-gsq-rco-iq2-s-mtp",
+        "think": null
+      }
+    },
+    {
+      "name": "escalate_no_facts_uses_the_chain",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 2,
+      "facts": null,
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "escalate_retry_many_steps_low_score",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "steps": 110,
+        "score": 40
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet",
+        "fresh": true
+      }
+    },
+    {
+      "name": "escalate_retry_many_steps_good_score",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "steps": 110,
+        "score": 70
+      },
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "escalate_retry_few_steps_low_score",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "steps": 60,
+        "score": 10
+      },
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "escalate_retry_without_score",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "steps": 110,
+        "score": null
+      },
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "escalate_split_part_first_attempt",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 1,
+      "facts": {
+        "split_steps": 150
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "escalate_split_part_later_attempt",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 2,
+      "facts": {
+        "split_steps": 150
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet",
+        "fresh": false
+      }
+    },
+    {
+      "name": "escalate_split_below_the_limit",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100,
+          "below_score": 50
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 1,
+      "facts": {
+        "split_steps": 90
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "claude-haiku-5-5"
+      }
+    },
+    {
+      "name": "escalate_without_below_score_uses_steps_only",
+      "global": {
+        "worker": {
+          "1": "anthropic/claude-haiku-5-5",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 100
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "steps": 120,
+        "score": 90
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet",
+        "fresh": true
+      }
     }
   ]
 }

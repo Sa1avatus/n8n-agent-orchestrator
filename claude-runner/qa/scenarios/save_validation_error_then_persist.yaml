@@ -1,0 +1,81 @@
+# Save is a POST (board_mission_save.js postJson) to /api/board/missions/<id> or .../config,
+# with X-AHAWR-Dashboard: 1. The save confirm is accepted by the runner's dialog handler.
+# A made-up (non-JSON) value in worker_think_policy blocks the save (board_edit_win.js
+# problems()); the last step must be the persistence check because reload_persistence
+# rechecks only the LAST step's text_visible/order (qa_runner.py _recheck_after_reload).
+name: mission save blocks a bad JSON policy, then a valid model change persists
+tags: [ui, settings]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/m01
+    expect:
+      text_visible: ["Edit launch settings"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Execution, Roles]
+      no_console_error: true
+  # A valid value into the model field: this is the change that will persist.
+  - type:
+      into: worker_model
+      text: claude-sonnet-check
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  # A made-up value (a non-JSON string) into the thinking policy field.
+  - type:
+      into: worker_think_policy
+      text: not-valid-json
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  # Trigger the validation error: Save changes on the Review page runs the check and returns to Execution.
+  - click: "Save changes"
+    expect:
+      text_visible: ["The thinking policy is not valid JSON."]
+      no_console_error: true
+      no_mutation_without_header: true
+  # Clear the bad policy value so the save can proceed (re-focus, select all, delete).
+  - type:
+      into: worker_think_policy
+      text: x
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - press: "Control+A"
+    expect:
+      no_console_error: true
+  - press: "Backspace"
+    expect:
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  # Save: the model change persists (the policy is now empty, so validation passes).
+  - click: "Save changes"
+    expect:
+      text_visible: [claude-sonnet-check]
+      request_2xx: [/api/board/missions/]
+      no_console_error: true
+      no_mutation_without_header: true
+reload_persistence: true

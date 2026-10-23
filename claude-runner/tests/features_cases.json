@@ -1,0 +1,99 @@
+{
+  "description": "Shared cases for board_features.js. parseFeatures(features_json, mission_features_json) returns {features, errors}; flatten(features) returns the legacy constants.",
+  "legacy_constants": {
+    "plan_no_truncate": 0,
+    "max_tasks": 15,
+    "max_tasks_hard": 30,
+    "adaptive_split": 0,
+    "split_steps": 150,
+    "max_splits": 6,
+    "max_total_tasks": 40,
+    "run_hygiene": 0
+  },
+  "parse": [
+    {
+      "name": "empty",
+      "features_json": "",
+      "mission_features_json": "",
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "missing",
+      "features_json": null,
+      "mission_features_json": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "operator_value",
+      "features_json": "{\"adaptive_split\":{\"enabled\":true,\"split_steps\":200}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors": [],
+        "flatten_partial": { "adaptive_split": 1, "split_steps": 200, "max_splits": 6 }
+      }
+    },
+    {
+      "name": "override_merge",
+      "features_json": "{\"plan_no_truncate\":{\"enabled\":true,\"max_tasks\":20}}",
+      "mission_features_json": "{\"plan_no_truncate\":{\"max_tasks\":25}}",
+      "expect": {
+        "errors": [],
+        "flatten_partial": { "plan_no_truncate": 1, "max_tasks": 25, "max_tasks_hard": 30 }
+      }
+    },
+    {
+      "name": "unknown_feature",
+      "features_json": "{\"warp_drive\":{\"enabled\":true}}",
+      "mission_features_json": "",
+      "expect": { "errors_contain": ["features_json: unknown feature \"warp_drive\""] }
+    },
+    {
+      "name": "unknown_parameter",
+      "features_json": "{\"adaptive_split\":{\"enabled\":true,\"split_speed\":3}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors_contain": [
+          "features_json: unknown parameter \"split_speed\" in feature \"adaptive_split\""
+        ]
+      }
+    },
+    {
+      "name": "out_of_range_numbers",
+      "features_json": "{\"adaptive_split\":{\"split_steps\":0,\"max_splits\":-1},\"plan_no_truncate\":{\"max_tasks\":2.5}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors_contain": [
+          "features_json: adaptive_split.split_steps must be an integer >= 1, got 0",
+          "features_json: adaptive_split.max_splits must be an integer >= 0, got -1",
+          "features_json: plan_no_truncate.max_tasks must be an integer >= 1, got 2.5"
+        ]
+      }
+    },
+    {
+      "name": "max_tasks_hard_below_max_tasks",
+      "features_json": "{\"plan_no_truncate\":{\"max_tasks\":40,\"max_tasks_hard\":30}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors_contain": [
+          "plan_no_truncate.max_tasks_hard must be at least plan_no_truncate.max_tasks (40), got 30"
+        ]
+      }
+    },
+    {
+      "name": "non_boolean_enabled",
+      "features_json": "{\"run_hygiene\":{\"enabled\":\"yes\"}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors_contain": [
+          "features_json: run_hygiene.enabled must be true or false, got \"yes\""
+        ]
+      }
+    },
+    {
+      "name": "golden",
+      "features_json": "",
+      "mission_features_json": "",
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    }
+  ]
+}

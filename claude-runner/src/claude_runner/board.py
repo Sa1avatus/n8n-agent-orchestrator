@@ -81,6 +81,11 @@ class Mission(BaseModel):
     updated_at: str | None = None
 
 
+# An 'active' Live State row that nobody has written for this long belongs to an interrupted mission
+# (the queue was restarted, n8n stopped), not to a running one; the board lists it as not completed.
+RUNNING_STALE_HOURS = 6.0
+
+
 class LiveState(BaseModel):
     """One row of the Live State table: the current execution state of a mission."""
 
@@ -102,6 +107,21 @@ class LiveState(BaseModel):
     architect_run_id: str | None = None
     architect_status: str | None = None
     architect_session_id: str | None = None
+
+
+def is_stale_active(live: LiveState, now: datetime | None = None) -> bool:
+    """True when an ``active`` row was last written more than ``RUNNING_STALE_HOURS`` ago.
+    A missing or unreadable ``updated_at`` is not stale (the status is trusted)."""
+    if live.status != "active" or not live.updated_at:
+        return False
+    try:
+        written = datetime.fromisoformat(live.updated_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if written.tzinfo is None:
+        written = written.replace(tzinfo=UTC)
+    age_hours = ((now or datetime.now(UTC)) - written).total_seconds() / 3600
+    return age_hours > RUNNING_STALE_HOURS
 
 
 class TaskView(BaseModel):
@@ -227,12 +247,13 @@ class BoardStore(ABC):
 
     # ---- derived views ------------------------------------------------------
     def running_missions(self) -> list[Mission]:
-        """Missions whose Live State ``status`` is ``active``."""
+        """Missions whose Live State ``status`` is ``active`` and was written recently."""
         return [
             mission
             for mission in self.list_missions()
             if (live := self.get_live_state(mission.state_namespace)) is not None
             and live.status == "active"
+            and not is_stale_active(live)
         ]
 
     def mission_groups(self) -> dict[str, list[str]]:
@@ -250,17 +271,21 @@ class BoardStore(ABC):
             "not_completed": [],
             "disabled": [],
         }
+        queued_ids = {entry.mission_id for entry in self.queue()}
         for mission in self.list_missions():
             if not mission.enabled:
                 groups["disabled"].append(mission.mission_id)
                 continue
             live = self.get_live_state(mission.state_namespace)
             status = live.status if live is not None else None
-            if status == "active":
+            if status == "active" and live is not None and not is_stale_active(live):
                 groups["running"].append(mission.mission_id)
+            elif status == "active" and mission.mission_id in queued_ids:
+                # interrupted but still in the queue: the queue resumes it, so it waits
+                groups["queued"].append(mission.mission_id)
             elif status == "completed":
                 groups["completed"].append(mission.mission_id)
-            elif status in ("failed", "stopped"):
+            elif status in ("failed", "stopped", "active"):
                 groups["not_completed"].append(mission.mission_id)
             else:
                 groups["queued"].append(mission.mission_id)

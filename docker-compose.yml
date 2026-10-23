@@ -115,7 +115,7 @@ services:
   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
   # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
   # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
-  # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published.
+  # n8n reaches it at http://claude-runner:8700 over the stack network; the port is published on 127.0.0.1 only, for the host QA worker.
   claude-runner:
     build:
       context: ./claude-runner
@@ -126,6 +126,9 @@ services:
 
     container_name: claude-runner
     restart: unless-stopped
+    # the host QA worker (data-tables/ops/qa_worker.py) polls the QA request queue here; bound to the loopback only, the API key still applies
+    ports:
+      - "127.0.0.1:8700:8700"
     # 2026-10-15: there was no limit; Worker python scripts that read the 9 GB GGUF into RAM (anon-rss 7-9 GB, six times in a night) made the kernel of the
     # Docker VM kill processes VM-wide and finally restart the VM. With a cap only the offending process dies inside this container.
     mem_limit: 6g

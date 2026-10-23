@@ -253,6 +253,13 @@ class TestPlanWriteContract:
         audits = [sql for sql, _ in conn.executed if sql.startswith("INSERT INTO changelog")]
         assert len(audits) == 1
 
+    def test_audit_serializes_timestamps_of_a_config_row(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        store._audit("hermes_config update", before={"updatedAt": self.STAMP}, after=None)
+        sql_params = [p for sql, p in conn.executed if sql.startswith("INSERT INTO changelog")]
+        assert len(sql_params) == 1
+        assert json.loads(sql_params[0][4]) == {"updatedAt": str(self.STAMP)}
+
     def test_stale_version_conflicts_without_update_or_audit(self, monkeypatch):
         store, conn = _make_store(monkeypatch)
         conn.set_response("updatedAt", [{"updatedAt": self.STAMP}])
@@ -440,3 +447,20 @@ class TestHermesRolesJson:
         sql, params = updates[0]
         assert "roles_json = %s" in sql
         assert "[]" in params
+
+
+class TestHermesFeaturesJson:
+    def test_settings_read_without_features_json_column(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT * FROM", [{"worker_model": "qwen"}])
+        assert "features_json" not in store.hermes_config()
+
+    def test_update_hermes_config_writes_features_json(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": datetime(2026, 1, 1, tzinfo=UTC)}])
+        store.update_hermes_config(None, features_json="{}")
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert "features_json = %s" in sql
+        assert "{}" in params

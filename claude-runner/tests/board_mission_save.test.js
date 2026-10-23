@@ -20,7 +20,10 @@
 //      изменения" alongside), and a successful save re-fetches and forces
 //      a clean re-render so formDirty() is false right after it;
 //   8. renderClean() re-attaches the controls after wiping the form: the
-//      saveReady attach guard is reset, so the savebar comes back.
+//      saveReady attach guard is reset, so the savebar comes back;
+//   9. featuresState() gives an empty state for absent payloads, and
+//      featuresSavePlan() diffs and PUTs only the changed features texts,
+//      each with its read version; the PUTs carry X-AHAWR-Dashboard: 1.
 
 "use strict";
 const path = require("path");
@@ -140,6 +143,33 @@ check("diffHtml escapes <", MS.diffHtml(d, { a: "A" }).indexOf("x&lt;b") !== -1)
 check("diffHtml no raw <", MS.diffHtml(d, { a: "A" }).indexOf("x<b") === -1);
 check("diffHtml none message",
   MS.diffHtml([], {}).indexOf("No changes.") !== -1);
+
+// --- features state and save plan ---
+const emptyState = MS.featuresState(undefined, null);
+check("absent features payloads give an empty state",
+  JSON.stringify(emptyState) === JSON.stringify({ features_json: "", features_version: null,
+    mission_features_json: "", mission_features_version: null }));
+const featState = MS.featuresState({ features_json: '{"run_hygiene":{}}', version: "fv1" },
+  { mission_features_json: "", version: "mv1" });
+check("features state carries texts and versions",
+  featState.features_json === '{"run_hygiene":{}}' && featState.features_version === "fv1" &&
+  featState.mission_features_json === "" && featState.mission_features_version === "mv1");
+const unchanged = MS.featuresSavePlan(featState, "m1",
+  { features_json: '{"run_hygiene":{}}', mission_features_json: "" });
+check("unchanged features plan nothing", unchanged.diff.length === 0 && unchanged.requests.length === 0);
+const missionOnly = MS.featuresSavePlan(featState, "m1",
+  { features_json: '{"run_hygiene":{}}', mission_features_json: '{"max_splits":2}' });
+check("mission features change: one diff row and one PUT with its version",
+  missionOnly.diff.length === 1 && missionOnly.diff[0].field === "mission_features_json" &&
+  missionOnly.requests.length === 1 &&
+  missionOnly.requests[0].url === "/api/board/missions/m1/features" &&
+  missionOnly.requests[0].method === "PUT" &&
+  missionOnly.requests[0].body.expected_version === "mv1");
+const profileOnly = MS.featuresSavePlan(featState, "m1",
+  { features_json: "", mission_features_json: "" });
+check("profile features change: PUT to the profile route with its version",
+  profileOnly.requests.length === 1 && profileOnly.requests[0].url === "/api/board/features" &&
+  profileOnly.requests[0].body.expected_version === "fv1");
 
 // mergeServerIntoForm keeps local edits, takes server version, flags drift
 const form = { version: "qv1", queue: [{ position: 0, mission_id: "m1" }],
@@ -273,6 +303,26 @@ postErr = { error: { message: "план изменился, обновите" } 
   MS.renderClean(rcBox(), data);
   check("renderClean re-attaches controls", rcBox().querySelector(".savebar") != null);
   delete globalThis.BoardMissionView;
+
+  // features saves send the dashboard header and the version read at load
+  const savedFetch = globalThis.fetch;
+  const sent = [];
+  globalThis.fetch = (url, options) => {
+    sent.push({ url, options });
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+  };
+  const plan = MS.featuresSavePlan(
+    MS.featuresState({ features_json: "", version: "fv1" }, { mission_features_json: "", version: "mv1" }),
+    "m1",
+    { features_json: '{"run_hygiene":{"enabled":true}}', mission_features_json: '{"max_splits":2}' });
+  for (const r of plan.requests) await MS.postJson(r.url, r.body, r.method);
+  globalThis.fetch = savedFetch;
+  check("features saves: two PUTs", sent.length === 2 && sent.every((s) => s.options.method === "PUT"));
+  check("features saves carry the dashboard header",
+    sent.every((s) => s.options.headers["X-AHAWR-Dashboard"] === "1"));
+  check("features saves carry expected_version",
+    JSON.parse(sent[0].options.body).expected_version === "fv1" &&
+    JSON.parse(sent[1].options.body).expected_version === "mv1");
 
   delete globalThis.fetch;
   delete globalThis.document;

@@ -5,8 +5,9 @@
  * BoardQa.render(container, missionId) reads
  * GET /api/board/missions/{mission_id}/qa and shows the last QA verdict: the
  * verdict, the scenario, the failed step with its reason, the blocked reason,
- * the console and network errors, and the screenshots as links.  There is no
- * rerun control.  No verdict shows the empty state.
+ * the skipped reason, the console and network errors, and the screenshots as
+ * links.  Verdicts are grouped by layer (regression, api, ui; no layer is ui).
+ * There is no rerun control.  No verdict renders nothing.
  *
  * Every value from the server flows through esc().
  */
@@ -39,11 +40,36 @@ const VERDICT_LABELS = {
   pass: ["qa.panel.v.pass", "passed"],
   fail: ["qa.panel.v.fail", "failed"],
   blocked: ["qa.panel.v.blocked", "blocked"],
+  skipped: ["qa.panel.v.skipped", "skipped"],
+};
+
+const LAYER_ORDER = ["regression", "api", "ui"];
+const LAYER_LABELS = {
+  regression: ["qa.panel.layer.regression", "regression"],
+  api: ["qa.panel.layer.api", "api"],
+  ui: ["qa.panel.layer.ui", "ui"],
 };
 
 function verdictLabel(verdict) {
   const [key, en] = VERDICT_LABELS[verdict] || ["qa.panel.v.unknown", "unknown"];
   return L(key, en);
+}
+
+function layerLabel(layer) {
+  const entry = LAYER_LABELS[layer];
+  return entry ? L(entry[0], entry[1]) : layer;
+}
+
+// a verdict without a layer is a ui verdict (the output of older runs)
+function groupByLayer(verdicts) {
+  const groups = new Map();
+  for (const qa of verdicts) {
+    const layer = qa.layer || "ui";
+    if (!groups.has(layer)) groups.set(layer, []);
+    groups.get(layer).push(qa);
+  }
+  const order = [...new Set([...LAYER_ORDER, ...groups.keys()])];
+  return order.filter((layer) => groups.has(layer)).map((layer) => [layer, groups.get(layer)]);
 }
 
 function rowHtml(label, value) {
@@ -72,6 +98,9 @@ function verdictBodyHtml(qa) {
   if (qa.blocked_reason) {
     rows.push(rowHtml(L("qa.panel.blocked_reason", "blocked reason"), esc(qa.blocked_reason)));
   }
+  if (qa.verdict === "skipped" && qa.reason) {
+    rows.push(rowHtml(L("qa.panel.reason", "reason"), esc(qa.reason)));
+  }
   const errors = [...(qa.console_errors || []), ...(qa.network_errors || [])];
   if (errors.length) rows.push(rowHtml(L("qa.panel.errors", "console and network errors"), listHtml(errors)));
   if (qa.screenshots && qa.screenshots.length) {
@@ -80,12 +109,16 @@ function verdictBodyHtml(qa) {
   return rows.join("");
 }
 
-function panelHtml(qa) {
+function layerHtml(layer, verdicts) {
+  const heading = `<div class="qa-layer-title">${esc(layerLabel(layer))}</div>`;
+  return '<div class="qa-layer">' + heading + verdicts.map(verdictBodyHtml).join("") + "</div>";
+}
+
+function panelHtml(verdicts) {
+  if (!verdicts.length) return "";
   const title = `<div class="qa-title">${esc(L("qa.panel.title", "QA verdict"))}</div>`;
   const note = `<div class="qa-note">${esc(L("qa.panel.note", "Read-only: the verdict of the last QA run."))}</div>`;
-  const body = qa
-    ? verdictBodyHtml(qa)
-    : `<div class="qa-empty">${esc(L("qa.panel.empty", "No QA verdict for this mission yet."))}</div>`;
+  const body = groupByLayer(verdicts).map(([layer, items]) => layerHtml(layer, items)).join("");
   return '<div class="qa-panel">' + title + note + body + "</div>";
 }
 
@@ -94,7 +127,7 @@ async function render(container, missionId) {
     { cache: "no-store" });
   if (!res.ok) throw new Error(L("qa.panel.loadfail", "Could not load the QA verdict."));
   const body = await res.json();
-  container.innerHTML = panelHtml(body.verdict);
+  container.innerHTML = panelHtml(body.verdict ? [body.verdict] : []);
 }
 
 // === export (browser global + CommonJS module.exports) ===

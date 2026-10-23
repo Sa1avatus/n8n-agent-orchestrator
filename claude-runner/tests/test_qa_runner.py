@@ -280,6 +280,44 @@ def test_module_imports_without_playwright(monkeypatch: pytest.MonkeyPatch) -> N
 BASE_URL = "http://127.0.0.1:8123"
 
 
+def test_type_without_replace_appends_text() -> None:
+    page = _FakePage()
+    step = qa_runner.Step("type", ("Search", "alpha"), qa_runner.Expect())
+
+    qa_runner._perform(page, step, BASE_URL)
+
+    assert page.typed == [("Search", "alpha")]
+    assert page.select_all_calls == 0
+
+
+def test_type_with_replace_clears_before_typing() -> None:
+    page = _FakePage()
+    step = qa_runner.Step("type", ("Search", "alpha"), qa_runner.Expect(), replace=True)
+
+    qa_runner._perform(page, step, BASE_URL)
+
+    assert page.select_all_calls == 1
+    assert page.typed == [("Search", "alpha")]
+
+
+def test_type_rejects_unknown_fields() -> None:
+    text = (
+        "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+        'steps: [{type: {into: Search, text: alpha, bogus: 1}}]\n'
+    )
+    with pytest.raises(ScenarioError, match="unknown field"):
+        parse_scenario(text)
+
+
+def test_type_replace_rejects_non_bool() -> None:
+    text = (
+        "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+        'steps: [{type: {into: Search, text: alpha, replace: yes_please}}]\n'
+    )
+    with pytest.raises(ScenarioError, match="expected true or false"):
+        parse_scenario(text)
+
+
 def test_api_post_sends_dashboard_header_to_the_stack_only() -> None:
     page = _FakePage()
     step = qa_runner.Step(
@@ -379,6 +417,16 @@ class _Locator:
     def drag_to(self, target: _Locator, target_position: dict[str, float] | None = None) -> None:
         self._page.drags.append((self._text, target._text, target._scope, target_position))
 
+    def or_(self, other: _Locator) -> _Locator:
+        return self
+
+    def fill(self, text: str) -> None:
+        assert text == ""
+        self._page.select_all_calls += 1
+
+    def press_sequentially(self, text: str) -> None:
+        self._page.typed.append((self._text, text))
+
 
 class _PlaceholderLocator:
     def __init__(self, found: int) -> None:
@@ -416,6 +464,8 @@ class _FakePage:
         self.reloads = 0
         self.shots: list[str] = []
         self.visited = ""
+        self.typed: list[tuple[str, str]] = []
+        self.select_all_calls = 0
 
     def on(self, event: str, handler: Any) -> None:
         self.handlers[event] = handler
@@ -425,6 +475,9 @@ class _FakePage:
 
     def get_by_text(self, text: str, exact: bool = False) -> _Locator:
         return _Locator(self, text)
+
+    def get_by_role(self, role: str, name: str) -> _Locator:
+        return _Locator(self, name)
 
     def locator(self, selector: str) -> _PlaceholderLocator:
         matches = [p for p in self.placeholders if f'placeholder="{p}"' in selector]
@@ -463,7 +516,7 @@ def test_stack_start_failure_is_blocked(monkeypatch: pytest.MonkeyPatch, tmp_pat
     monkeypatch.setitem(sys.modules, "playwright", playwright)
     monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
 
-    def failing_up(fixture: str = "default") -> qa_stack.QaStack:
+    def failing_up(fixture: str = "default", mode: str = "docker") -> qa_stack.QaStack:
         raise qa_stack.QaStackError("docker build failed")
 
     monkeypatch.setattr(qa_stack, "stack_up", failing_up)
@@ -475,6 +528,37 @@ def test_stack_start_failure_is_blocked(monkeypatch: pytest.MonkeyPatch, tmp_pat
     run_dirs = [path.name for path in tmp_path.iterdir()]
     assert len(run_dirs) == 1 and run_dirs[0].startswith("qa-")
     assert json.loads((tmp_path / run_dirs[0] / "verdict.json").read_text())["verdict"] == "blocked"
+
+
+def test_run_prints_the_stack_id_before_tearing_it_down(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capfd: pytest.CaptureFixture
+) -> None:
+    playwright = ModuleType("playwright")
+    sync_api = ModuleType("playwright.sync_api")
+    vars(sync_api)["sync_playwright"] = lambda: None
+    monkeypatch.setitem(sys.modules, "playwright", playwright)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+
+    stack = qa_stack.QaStack(
+        run_id="0a1b2c3d",
+        host="qa-0a1b2c3d",
+        database="qa_0a1b2c3d",
+        dsn="",
+        dashboard_url="http://127.0.0.1:1",
+    )
+    monkeypatch.setattr(qa_stack, "stack_up", lambda fixture="default", mode="docker": stack)
+    monkeypatch.setattr(qa_stack, "stack_down", lambda _stack: None)
+
+    def drive(*_args: object) -> tuple[Any, Any]:
+        return qa_runner._Progress(blocked_reason="browser not launched"), qa_runner._Recorder()
+
+    monkeypatch.setattr(qa_runner, "_drive", drive)
+
+    verdict = qa_runner.run_browser_scenario(parse_scenario(SCENARIO_TEXT), runs_dir=tmp_path)
+
+    assert "stack id: 0a1b2c3d" in capfd.readouterr().err
+    assert "postgresql://" not in capfd.readouterr().err
+    assert verdict["verdict"] == "blocked"
 
 
 def test_reload_recheck_fails_when_text_is_gone_after_reload(tmp_path: Path) -> None:
@@ -647,7 +731,7 @@ def test_select_scenarios_rejects_no_match() -> None:
         qa_runner.select_scenarios(scenarios, tag="nightly")
 
 
-def _stack_must_not_start(fixture: str = "default") -> qa_stack.QaStack:
+def _stack_must_not_start(fixture: str = "default", mode: str = "docker") -> qa_stack.QaStack:
     raise AssertionError("the QA stack must not start without Playwright")
 
 

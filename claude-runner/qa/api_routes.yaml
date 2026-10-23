@@ -1,0 +1,154 @@
+# Routes the QA scenarios reach. Paths in scenario_refs are relative to claude-runner/qa/scenarios.
+# Route lines are relative to claude-runner/src/claude_runner/.
+#
+# Matching: qa_runner._is_2xx checks `path in url`, so a scenario that names /api/board is
+# satisfied by any 2xx under /api/board. The GET entries below name the concrete routes the
+# board loads (board_actions.js:66-67 fetches /api/board/missions and /api/board/queue).
+#
+# non_empty applies to the default fixture. The views_open_empty_database scenarios only
+# require a 2xx on the same paths.
+#
+# url_fields: none of the GET routes below returns a url field. The one url field in the
+# API (board_api.py:535, screenshot url) belongs to GET /api/board/missions/{mission_id}/qa,
+# which no scenario reaches (board-qa-panel.yaml:6-7).
+#
+# GET /api/board/missions/{mission_id} is not listed: its only scenario reference is the save
+# (POST, see settings_launch_window.yaml:1-2 and save_validation_error_then_persist.yaml:78).
+#
+# Mutations: every POST/PUT/DELETE under /api/board needs the X-AHAWR-Dashboard header.
+# dashboard.py:143-152 (board_header_guard) returns 403 before routing, so the 403 expectation
+# holds for any placeholder value.
+
+fixture_ids:
+  mission_id: "m01"
+  state_key: "sk_m01"
+  task_key: "T001"
+  flag_key: "queue_paused"
+  changelog_id: 1
+  template_name: "qa-template"
+  lang: "en"
+  i18n_key: "qa-key"
+  run_id: "qa-run"
+
+get_routes:
+  - method: GET
+    path: "/api/board/missions"
+    route: "board_api.py:579"
+    fixture: default
+    allowed_statuses: [200]
+    non_empty: true
+    url_fields: []
+    scenario_refs:
+      - "board-qa-panel.yaml:17"
+      - "board-qa-panel.yaml:22"
+      - "board_features_rows.yaml:15"
+      - "board_features_rows.yaml:20"
+      - "save_validation_error_then_persist.yaml:14"
+      - "save_validation_error_then_persist.yaml:19"
+      - "settings_launch_window.yaml:11"
+      - "settings_launch_window.yaml:16"
+
+  - method: GET
+    path: "/api/board/queue"
+    route: "board_api.py:1046"
+    fixture: default
+    allowed_statuses: [200]
+    non_empty: true
+    url_fields: []
+    scenario_refs:
+      - "grid_sort_columns.yaml:17"
+      - "grid_sort_columns.yaml:70"
+      - "i18n_language_switch_en_ru_en.yaml:9"
+      - "kanban_conflict.yaml:12"
+      - "kanban_move_to_end.yaml:10"
+      - "kanban_open_order.yaml:10"
+      - "lanes_drag_rejected.yaml:10"
+      - "views_open_default_fixture.yaml:9"
+      - "views_open_default_fixture.yaml:14"
+      - "views_open_default_fixture.yaml:19"
+      - "views_open_default_fixture.yaml:24"
+      - "views_open_default_fixture.yaml:29"
+      - "views_open_empty_database.yaml:9"
+      - "views_open_empty_database.yaml:14"
+      - "views_open_empty_database.yaml:19"
+      - "views_open_empty_database.yaml:24"
+      - "views_open_empty_database.yaml:29"
+
+  - method: GET
+    path: "/static/board.html"
+    route: "dashboard.py:181"
+    fixture: default
+    allowed_statuses: [200]
+    non_empty: true
+    url_fields: []
+    views:
+      - "#board/view/proj (views_open_default_fixture.yaml:6)"
+      - "#board/view/kan (kanban_*.yaml:6, views_open_default_fixture.yaml:11)"
+      - "#board/view/lane (lanes_drag_rejected.yaml:6, views_open_default_fixture.yaml:16)"
+      - "#board/view/spr (views_open_default_fixture.yaml:21)"
+      - "#board/view/grid (grid_sort_columns.yaml:14, views_open_default_fixture.yaml:26)"
+      - "#board/m01 (board-qa-panel.yaml:14, board_features_rows.yaml:12, settings_launch_window.yaml:8, save_validation_error_then_persist.yaml:11)"
+      - "#board/m02 (board-qa-panel.yaml:19)"
+    scenario_refs:
+      - "views_open_default_fixture.yaml:6"
+      - "views_open_empty_database.yaml:6"
+      - "kanban_conflict.yaml:8"
+      - "kanban_open_order.yaml:6"
+      - "kanban_persistence.yaml:6"
+      - "lanes_drag_rejected.yaml:6"
+      - "i18n_language_switch_en_ru_en.yaml:6"
+      - "grid_sort_columns.yaml:14"
+      - "board-qa-panel.yaml:14"
+      - "board_features_rows.yaml:12"
+      - "settings_launch_window.yaml:8"
+      - "save_validation_error_then_persist.yaml:11"
+
+board_mutations:
+  - {method: POST, path: "/api/board/missions/create", line: 625}
+  - {method: POST, path: "/api/board/missions/{mission_id}", line: 641, scenario_refs: ["settings_launch_window.yaml:41", "save_validation_error_then_persist.yaml:78"]}
+  - {method: DELETE, path: "/api/board/missions/{mission_id}", line: 654}
+  - {method: POST, path: "/api/board/live-states/{state_key}", line: 701}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/reorder", line: 725}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}/dependencies", line: 764}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}", line: 809}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks", line: 840}
+  - {method: DELETE, path: "/api/board/missions/{mission_id}/tasks/{task_key}", line: 859}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}/move", line: 878}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}/duplicate", line: 895}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}/hint", line: 913}
+  - {method: POST, path: "/api/board/missions/{mission_id}/tasks/{task_key}/retry", line: 940}
+  - {method: POST, path: "/api/board/missions/{mission_id}/start", line: 980}
+  - {method: POST, path: "/api/board/missions/{mission_id}/stop", line: 992}
+  - {method: POST, path: "/api/board/missions/{mission_id}/disable", line: 1006}
+  - {method: POST, path: "/api/board/changelog/{changelog_id}/rollback", line: 1018}
+  - {method: POST, path: "/api/board/templates/{name}", line: 1029}
+  - {method: DELETE, path: "/api/board/templates/{name}", line: 1037}
+  - {method: POST, path: "/api/board/queue", line: 1051}
+  - {method: POST, path: "/api/board/queue/add", line: 1059}
+  - {method: DELETE, path: "/api/board/queue/{mission_id}", line: 1074}
+  - {method: POST, path: "/api/board/queue/move", line: 1086, scenario_refs: ["kanban_conflict.yaml:14", "kanban_move_down.yaml:15", "kanban_move_to_end.yaml:17", "kanban_move_up.yaml:14", "kanban_move_to_top.yaml:14", "kanban_persistence.yaml:14", "mutations_send_dashboard_header.yaml:14", "mutations_send_dashboard_header.yaml:22"]}
+  - {method: POST, path: "/api/board/queue/set-enabled", line: 1093}
+  - {method: POST, path: "/api/board/queue/reorder", line: 1111}
+  - {method: POST, path: "/api/board/queue/first", line: 1128}
+  - {method: POST, path: "/api/board/queue/last", line: 1135}
+  - {method: POST, path: "/api/board/queue/retry-not-completed", line: 1144}
+  - {method: POST, path: "/api/board/missions/{mission_id}/config", line: 1179, scenario_refs: ["settings_launch_window.yaml:1"]}
+  - {method: POST, path: "/api/board/flags/{key}", line: 1221}
+  - {method: DELETE, path: "/api/board/flags/{key}", line: 1229}
+  - {method: POST, path: "/api/board/missions/{mission_id}/preflight", line: 1242}
+  - {method: PUT, path: "/api/board/missions/{mission_id}/claudemd", line: 1274}
+  - {method: POST, path: "/api/board/thinking/policy", line: 1406}
+  - {method: POST, path: "/api/board/thinking/variant", line: 1411}
+  - {method: POST, path: "/api/board/thinking/layout", line: 1416}
+  - {method: POST, path: "/api/board/thinking/stats", line: 1421}
+  - {method: POST, path: "/api/board/thinking/thompson", line: 1427}
+  - {method: PUT, path: "/api/board/project-rules", line: 1439}
+  - {method: PUT, path: "/api/board/roles", line: 1459}
+  - {method: PUT, path: "/api/board/missions/{mission_id}/roles", line: 1479}
+  - {method: PUT, path: "/api/board/features", line: 1501, scenario_refs: ["board_features_rows.yaml:66"]}
+  - {method: PUT, path: "/api/board/missions/{mission_id}/features", line: 1524}
+  - {method: POST, path: "/api/board/i18n/languages", line: 1550}
+  - {method: PUT, path: "/api/board/i18n/{lang}/{key}", line: 1563}
+
+dashboard_mutations:
+  - {method: POST, path: "/api/runs/{run_id}/cancel", line: 369, header_check_line: 371}

@@ -1,0 +1,69 @@
+# The launch settings window moves the form rows into pages (board_edit_win.js); the
+# Features section is on the Execution page: one row per feature plus the free-text
+# global JSON textarea.  A made-up JSON key fails the window's validation (problems())
+# before any save; a valid enabled value is PUT to /api/board/features with
+# X-AHAWR-Dashboard: 1 and must survive the reload (reload_persistence rechecks only
+# the last step's text_visible, which is the mission page showing the changed value).
+name: launch settings Features rows validate a bad JSON key, then a valid switch persists
+tags: [ui, settings]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/m01
+    expect:
+      text_visible: ["Edit launch settings"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Execution, Roles, "Plan without truncation", "Adaptive split", "Run hygiene"]
+      no_console_error: true
+  # A valid JSON into the global textarea: switches run_hygiene on (the change that will persist).
+  - type:
+      into: "Global JSON"
+      text: '{"bogus":{"enabled":true}}'
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  # The validation runs when the window is saved: the made-up key sends it back to the Execution page.
+  - click: "Save changes"
+    expect:
+      text_visible: ['Features: features_json: unknown feature "bogus"', Execution]
+      no_console_error: true
+      no_mutation_without_header: true
+  - type:
+      into: "Global JSON"
+      text: '{"run_hygiene":{"enabled":true}}'
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  - click: "Save changes"
+    expect:
+      text_visible: ["Parser rewrite", "Edit launch settings"]
+      request_2xx: [/api/board/features]
+      no_console_error: true
+      no_mutation_without_header: true
+reload_persistence: true

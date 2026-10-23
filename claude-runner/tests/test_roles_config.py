@@ -9,6 +9,7 @@ import pytest
 from claude_runner.roles_config import (
     legacy_role,
     merge,
+    qa_layers,
     resolve,
     split_model,
     validate_roles,
@@ -35,6 +36,10 @@ MESSAGE_FRAGMENTS = {
     "too_many_models": "distinct models",
     "unknown_option": "unknown option",
     "unknown_role": "is not a known role",
+    "bad_escalate": "must be a whole number",
+    "unknown_layer": "unknown layer",
+    "repeated_layer": "repeats layer",
+    "layers_not_list": "must be a list of layer names",
 }
 
 
@@ -60,7 +65,7 @@ def test_shared_validation_case(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", CASES["resolve"], ids=lambda case: case["name"])
 def test_shared_resolve_case(case: dict[str, Any]) -> None:
     roles = merge(case["global"], case["mission"])
-    resolved = resolve(roles, case["role"], case["attempt"], case["legacy"])
+    resolved = resolve(roles, case["role"], case["attempt"], case["legacy"], case.get("facts"))
     expect = case["expect"]
     assert resolved.provider == expect["provider"]
     assert resolved.model == expect["model"]
@@ -144,6 +149,49 @@ def test_qa_validation_rejects_bad_mode_or_limit_with_reason(options: dict[str, 
     assert len(report.errors) == 1
     assert "role 'qa'" in report.errors[0]
     assert "option" in report.errors[0]
+
+
+def test_qa_without_layers_resolves_to_exact_options() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final"}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert resolve(roles, "qa", 1, {}).options == {
+        "fresh": "auto",
+        "mode": "final",
+        "max_minutes": 20,
+        "max_cost_usd": 1,
+    }
+
+
+def test_qa_layers_missing_or_empty_means_ui() -> None:
+    assert qa_layers({}) == ["ui"]
+    assert qa_layers({"layers": []}) == ["ui"]
+    assert qa_layers({"layers": ["regression", "api"]}) == ["regression", "api"]
+
+
+def test_qa_smoke_missing_is_false_and_absent_from_resolved_options() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final"}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert "smoke" not in resolve(roles, "qa", 1, {}).options
+    assert resolve(roles, "qa", 1, {}).options.get("smoke") is not True
+
+
+def test_qa_smoke_without_options_object_is_false() -> None:
+    roles = {"qa": {"1": "anthropic/haiku"}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert resolve(roles, "qa", 1, {}).options.get("smoke") is not True
+
+
+def test_qa_smoke_true_is_read_as_true() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final", "smoke": True}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert resolve(roles, "qa", 1, {}).options["smoke"] is True
+
+
+@pytest.mark.parametrize("smoke", ["yes", "true", 1, 0, None])
+def test_qa_smoke_non_bool_is_rejected_with_reason(smoke: Any) -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"smoke": smoke}}}
+    report = validate_roles(roles, PROVIDERS)
+    assert report.errors == ("role 'qa': option 'smoke' must be true or false",)
 
 
 def test_qa_only_options_are_unknown_for_other_roles() -> None:

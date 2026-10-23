@@ -5,27 +5,27 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.9.0 · October 21, 2026",
-    "tag": "QA role, guards moved into the dashboard with their own tab, worker attempt chains — next 0.10.0",
+    "date": "0.10.0 · October 23, 2026",
+    "tag": "Host actions, the queue from the board, providers and report tasks come next in 0.11.0",
     "stats": [
       [
         "Current version",
-        "0.9.0"
+        "0.10.0"
       ],
       [
         "Missions completed",
-        "14"
+        "20"
       ],
       [
         "Missions in the queue",
-        "13"
+        "23"
       ],
       [
         "Next milestone",
-        "0.10.0 · 1.0.0"
+        "0.11.0 · 0.12.0 · 1.0.0"
       ]
     ],
-    "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. The guards that watch the runner move into the dashboard next."
+    "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next."
   },
   "phases": [
     {
@@ -171,8 +171,8 @@
       "v": "0.5.0 · 0.5.100",
       "d": "The queue and the missions as cards",
       "m": [
-        5,
-        5
+        6,
+        6
       ],
       "items": [
         [
@@ -194,19 +194,19 @@
         [
           "ok",
           "Run page scroll and polling fixes"
+        ],
+        [
+          "ok",
+          "Roadmap page (GitHub Pages), ROADMAP.md and the new README (0.5.200 – 0.5.300)"
         ]
       ]
     },
     {
       "s": "done",
       "when": "October 18 – 19",
-      "t": "Board 0.6 – 0.7: views, tasks, operations, settings window",
-      "v": "0.7.0",
-      "d": "Board views in the agreed style, task cards, operations control, mission settings in a step-by-step window",
-      "m": [
-        8,
-        8
-      ],
+      "t": "Board 0.6: views, task cards, operations control",
+      "v": "0.6.0 · 0.6.100",
+      "d": "Four board missions in one release: operations control, task cards, views and translations",
       "items": [
         [
           "ok",
@@ -226,37 +226,50 @@
         ],
         [
           "ok",
-          "Roadmap page (GitHub Pages), ROADMAP.md and the new README (0.5.200 – 0.5.300)"
-        ],
-        [
-          "ok",
-          "Releases 0.6.0, 0.6.100 and 0.7.0: tests and browser checks"
-        ],
+          "Releases 0.6.0 and 0.6.100: tests and browser checks"
+        ]
+      ],
+      "m": [
+        5,
+        5
+      ]
+    },
+    {
+      "s": "done",
+      "when": "October 19",
+      "t": "Board 0.7: settings window and board fixes",
+      "v": "0.7.0 · 0.7.100 – 0.7.400",
+      "d": "Mission settings in a step-by-step window; fixes of statuses, languages and Kanban drag-and-drop",
+      "items": [
         [
           "ok",
           "Launch settings window with steps, Review table and expand (0.7.0); data tables no longer bloat"
         ],
         [
           "ok",
+          "Fixes 0.7.100 – 0.7.400: launch settings fields, task statuses, board languages, Kanban drag-and-drop and the queue"
+        ],
+        [
+          "ok",
           "Documentation cleaned: mission run notes and reports removed from docs/"
+        ],
+        [
+          "ok",
+          "Releases 0.7.0 – 0.7.400: tests and browser checks"
         ]
+      ],
+      "m": [
+        4,
+        4
       ]
     },
     {
-      "s": "next",
-      "when": "Q4 2026",
-      "t": "Reliability and control",
-      "v": "0.8.0 and up",
-      "d": "Guards, adaptive split and the executor settings",
-      "m": [
-        3,
-        13
-      ],
+      "s": "done",
+      "when": "October 21",
+      "t": "0.8.0: guards in the dashboard, cloud thinking, adaptive split",
+      "v": "0.8.0",
+      "d": "Guard supervisor, thinking control for cloud runs, plan size gate with automatic split, the agent guide",
       "items": [
-        [
-          "todo",
-          "0.10.0: rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause"
-        ],
         [
           "ok",
           "ahawr-guards-in-dashboard: all watchers inside the dashboard container (0.8.0; the migration of the host watchers is ahawr-guards-migration)"
@@ -265,6 +278,27 @@
           "ok",
           "ahawr-cloud-thinking-control: thinking policy for cloud Workers (0.8.0)"
         ],
+        [
+          "ok",
+          "ahawr-adaptive-split: plan size gate and automatic split (0.8.0; files and patch, not yet applied to the live workflow)"
+        ],
+        [
+          "ok",
+          "CLAUDE.md: the agent guide for the Worker, Reviewer and Architect"
+        ]
+      ],
+      "m": [
+        4,
+        4
+      ]
+    },
+    {
+      "s": "done",
+      "when": "October 21 – 22",
+      "t": "0.9.0: QA, guards migration and the Guards tab",
+      "v": "0.9.0",
+      "d": "QA role and runner, guards moved into the dashboard container with their own tab, attempt chains",
+      "items": [
         [
           "ok",
           "ahawr-worker-attempt-chain: provider and model per attempt as a setting (0.9.0)"
@@ -282,12 +316,132 @@
           "Guards tab in the dashboard: cards, flow and timelines with a history of checks (0.9.0)"
         ],
         [
-          "todo",
-          "ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite"
+          "ok",
+          "Logo: the Result gear is replaced by a QA gear"
+        ]
+      ],
+      "m": [
+        5,
+        5
+      ]
+    },
+    {
+      "s": "done",
+      "when": "October 22 – 23",
+      "t": "0.10.0: features config and all of QA",
+      "v": "0.10.0",
+      "d": "Workflow features as one JSON setting with a live adaptive split, and all of QA in one version: a request queue, its own container, regression, API and UI layers, and a smoke crawl",
+      "m": [
+        8,
+        8
+      ],
+      "items": [
+        [
+          "ok",
+          "ahawr-features-config: features_json for the workflow features, surgical split patch, Features section in the launch settings, Telegram progress numbers; the live proof of the split is an operator step"
         ],
         [
           "ok",
-          "ahawr-adaptive-split: plan size gate and automatic split (0.8.0; files and patch, not yet applied to the live workflow)"
+          "ahawr-qa-gate: QA runs on the host through a request queue in the runner, the workflow asks and waits; a fail sends the mission back at most twice, a blocked QA never rejects (switched on 2026-10-22, the first live mission with UI changes is still to come)"
+        ],
+        [
+          "ok",
+          "Kanban: an interrupted mission that stays in the queue waits in Queued instead of Running; the board queue is synchronised with the queue shell"
+        ],
+        [
+          "ok",
+          "Telegram relay runs in the dashboard container; the host relay is retired"
+        ],
+        [
+          "ok",
+          "ahawr-qa-container: QA in its own Linux container (Playwright, pytest, ruff, mypy, node), read-only mounts, no Docker socket, a light in-process stack for the UI and API layers (the code is in; the image, the parity check, retiring the host worker and closing the runner port are operator steps)"
+        ],
+        [
+          "ok",
+          "ahawr-qa-layers: regression (pytest, node, ruff, mypy against a baseline), API routes, UI scenarios with smoke, nightly run; the QA panel mounted on the mission page"
+        ],
+        [
+          "ok",
+          "ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios (the crawl does not yet reproduce the three replayed bugs: a drag and a forced 409 are the next step)"
+        ],
+        [
+          "ok",
+          "0.10.0 release: changelog, version, roadmap. Operator steps of QA still to do: build the QA image, compare the verdicts of both stack modes on the host, take the regression baseline in the container, retire the host worker, close the runner port"
+        ]
+      ]
+    },
+    {
+      "s": "next",
+      "when": "Q4 2026",
+      "t": "0.11.0: host actions, the queue from the board, providers and report tasks",
+      "v": "0.11.0",
+      "d": "Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review",
+      "m": [
+        0,
+        5
+      ],
+      "items": [
+        [
+          "todo",
+          "ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)"
+        ],
+        [
+          "todo",
+          "ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list"
+        ],
+        [
+          "todo",
+          "ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI"
+        ],
+        [
+          "todo",
+          "ahawr-report-pack: a generated facts pack, a cloud Worker for the report, a Reviewer rubric, an escalation instead of five failed attempts"
+        ],
+        [
+          "todo",
+          "0.11.0 release: changelog, version, roadmap"
+        ]
+      ]
+    },
+    {
+      "s": "next",
+      "when": "Q1 2027",
+      "t": "0.12.0: configuration columns to JSON and the rename to ahawr-runner",
+      "v": "0.12.0",
+      "d": "hermes_config from 41 to 10 columns, one JSON setting per concern; claude-runner becomes ahawr-runner at a queue pause",
+      "m": [
+        0,
+        3
+      ],
+      "items": [
+        [
+          "todo",
+          "Configuration columns to JSON (docs/config-columns-plan.md): roles_json, thinking_json, retrieval_json, engine_json, missions overrides_json; the legacy columns are removed one release after the JSON works"
+        ],
+        [
+          "todo",
+          "Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works"
+        ],
+        [
+          "todo",
+          "0.12.0 release: changelog, version, roadmap"
+        ]
+      ]
+    },
+    {
+      "s": "next",
+      "when": "Q4 2026 – Q1 2027",
+      "t": "Quality and reach (no version fixed)",
+      "v": "after 0.11.0",
+      "d": "Reviewer calibration, retrieval quality and the dashboard on the local network",
+      "m": [
+        0,
+        3
+      ],
+      "items": [
+        [
+          "todo",
+          "ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite"
         ],
         [
           "todo",
@@ -296,22 +450,6 @@
         [
           "todo",
           "Dashboard over the local network and on mobile"
-        ],
-        [
-          "todo",
-          "Configuration columns to JSON (docs/config-columns-plan.md): hermes_config from 41 to 10 columns through roles_json, thinking_json, retrieval_json, engine_json; missions overrides_json; legacy columns removed one release after the JSON works"
-        ],
-        [
-          "todo",
-          "ahawr-features-config: features_json for the workflow features, surgical split patch, Features section in the launch settings, live proof of the split"
-        ],
-        [
-          "todo",
-          "ahawr-providers-ui: providers, models, prices and write-only API keys in the web UI"
-        ],
-        [
-          "todo",
-          "ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios"
         ]
       ]
     },
@@ -377,7 +515,18 @@
   "open": [
     "Haiku 5.5 vs local Qwen: first attempt on Haiku, retries on the local model is running on the board missions; a full A/B is on hold.",
     "RAG precision stays at 8.6%: the quality mission is queued.",
-    "Executors for 1.0: Hermes and Claude Code already work; Codex comes first as the third, DeepSeek Harness is evaluated before it becomes an engine of a provider block."
+    "Executors for 1.0: Hermes and Claude Code already work; Codex comes first as the third, DeepSeek Harness is evaluated before it becomes an engine of a provider block.",
+    "Problem: The agent shell of a Worker has no docker and no Playwright: tasks that need them are done by the operator on the host (a fresh workflow export, QA runs).",
+    "Problem: The local Worker loops on hard tasks (T010B ran 160+ steps): adaptive split is not live yet, so wide tasks are not cut automatically.",
+    "Problem: A Worker ran git stash against the rule and hid uncommitted work; restored from the stash. Missions now forbid stash; a technical guard is open.",
+    "Problem: The notice guards (mission_notice, idle) cannot leave the host until a host publisher fills board.queue_log; queue_watch.py stays on the host until then.",
+    "Problem: The tg_relay guard reports ok while the relay logs HTTP 409; relay errors are not yet part of the guard status.",
+    "Problem: The QA nodes of the workflow are proven only on a copy of the export: the first live mission with UI changes is the real test; the board QA panel is not mounted yet (ahawr-qa-layers).",
+    "Problem: The mission queue exists twice (real_queue.sh and board.queue): synchronised by hand until ahawr-queue-from-board.",
+    "Problem: gpu_power_governor is not running since 2026-10-19 (the operator decides); llamacpp-prefill-kernels failed earlier and waits for a decision.",
+    "Problem: Telegram token and database password rotation are pending; the runner API key is empty (no bearer check) and the runner port is published on the loopback only.",
+    "Problem: Reviewers sometimes accept a task that was not run, or reject for a missing file the agent shell cannot create: calibration is in ahawr-improvements.",
+    "Problem: QA is executed by a host process with the operator's rights, and the Windows host fails about 100 tests for POSIX reasons (the regression baseline would be dirty): ahawr-qa-container moves QA into a Linux container without the Docker socket."
   ],
   "footer": "Generated by scripts/make_roadmap.py from docs/roadmap.json · AHAWR",
   "readme": {
@@ -386,15 +535,15 @@
     "status": [
       [
         "✅ **Done**",
-        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8)"
+        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10)"
       ],
       [
         "🔄 **Now**",
-        "Features config, QA smoke, providers in the web UI and report pack; the runner is renamed to `ahawr-runner` in **0.10.0**"
+        "Host actions, the queue from the board, providers and report tasks → **0.11.0**"
       ],
       [
         "➡️ **Next**",
-        "Worker attempt chains · report pack · **1.0.0: Codex as the third executor**"
+        "Configuration columns to JSON and the runner rename to `ahawr-runner` (**0.12.0**) · code review and refactoring · **1.0.0: Codex as the third executor**"
       ]
     ]
   },

@@ -130,6 +130,7 @@ Design only; no script, compose file or queue is changed by this section. Source
 - Preferred: the board store (`BoardStore`, `DASHBOARD_BOARD_PG_DSN`): `events` (review text), `get_queue_log()` (queue lines), `list_live_states()` (mission tag). No file is read when a store method covers the duty.
 - Runner API through `RunnerClient`: runs, processes (new route), terminate (new route), health.
 - Host files only through a read-only bind mount of `data-tables/ops` into `ahawr-dashboard`: `docker_watchdog.log`, `docker_vm.csv` and the host watcher heartbeats (`data-tables/ops/heartbeat/`). The container never writes to this mount.
+- The QA worker (`qa_worker.py`, planned, see `claude-runner/docs/qa-gate.md`) is a host watcher too: it writes `data-tables/ops/heartbeat/qa_worker.json` in the same one-line format, and it is not in the migration table above.
 - The container gets no Docker socket, no host shell, no privileged mode and no elevated rights. The Docker socket is root on the host, so it is not mounted under any circumstances. Host process control stays in HL and HB.
 - The write paths from the container to the host are exactly two dedicated read-write mounts: the request directory (see below), named by `DASHBOARD_GUARDS_QUEUE_REQUEST_DIR`, and the state directory, named by `DASHBOARD_GUARDS_STATE_DIR`, which holds `DASHBOARD_GUARDS_TG_OFFSET_PATH` (the relay's `tg_relay.offset`). Each holds nothing else.
 

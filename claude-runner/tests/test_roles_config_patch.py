@@ -26,7 +26,14 @@ const $ = (name) => {
     last: () => ({ json: node.json }),
   };
 };
-process.stdout.write(JSON.stringify(new Function('$', input.code)($)));
+const helpers = { httpRequest: async ({ url }) => {
+  const run = (input.runs || {})[url.split('/').pop()];
+  if (run === undefined) throw new Error('no stub for run ' + url);
+  return run;
+} };
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+new AsyncFunction('$', input.code).call({ helpers }, $)
+  .then((out) => process.stdout.write(JSON.stringify(out)));
 """
 
 CONSTANTS = "Constants"
@@ -195,8 +202,10 @@ def code_of(w: dict[str, Any], name: str) -> str:
     return str(params["jsCode"] if "jsCode" in params else params["text"])
 
 
-def run_node(code: str, nodes: dict[str, dict[str, Any]]) -> Any:
-    payload = json.dumps({"code": code, "nodes": nodes})
+def run_node(
+    code: str, nodes: dict[str, dict[str, Any]], runs: dict[str, dict[str, Any]] | None = None
+) -> Any:
+    payload = json.dumps({"code": code, "nodes": nodes, "runs": runs or {}})
     done = subprocess.run(
         ["node", "-e", HARNESS],
         input=payload,
@@ -395,3 +404,41 @@ def test_marker_legacy_resolves_defined_worker_model() -> None:
     assert out == [{"json": {
         "session_id": "sess-1", "input": "full", "model": "haiku", "provider": "anthropic",
     }}]
+
+
+ESCALATE_CONFIG = {
+    **LEGACY_CONFIG,
+    "runner_url": "http://runner:8700/",
+    "roles_json": json.dumps({
+        "worker": {"1": "anthropic/haiku", "2": "local/qwen", "4": "anthropic/sonnet"},
+        "worker_escalate": {"model": "anthropic/sonnet", "above_steps": 100, "below_score": 50},
+    }),
+}
+
+
+@pytest.mark.skipif(not NODE_AVAILABLE, reason="node is not on PATH")
+@pytest.mark.parametrize(
+    ("attempt", "score", "turns", "split_steps", "model"),
+    [
+        (3, 40, 110, None, "sonnet"),
+        (3, 70, 110, None, "qwen"),
+        (3, 40, 60, None, "qwen"),
+        (3, "", 110, None, "qwen"),
+        (3, 40, None, None, "qwen"),
+        (1, None, None, 150, "sonnet"),
+        (2, 90, 20, 150, "sonnet"),
+    ],
+)
+def test_escalate_block_reads_score_steps_and_split(
+    attempt: int, score: Any, turns: int | None, split_steps: int | None, model: str
+) -> None:
+    w = make_workflow()
+    patcher.patch(w)
+    nodes = stubs(ESCALATE_CONFIG, attempt)
+    nodes["Trigger"]["json"].update(
+        {"last_review_score": score, "worker_run_id": "run-1",
+         "task_index": 0, "tasks": [{"id": "T1", "split_steps": split_steps}]}
+    )
+    runs = {} if turns is None else {"run-1": {"num_turns": turns}}
+    out = run_node(code_of(w, WORKER), nodes, runs)
+    assert out[0]["json"]["model"] == model

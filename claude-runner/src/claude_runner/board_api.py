@@ -31,7 +31,15 @@ from typing import Any
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from . import board_order, board_plan, board_ready, board_stats, board_think, roles_config
+from . import (
+    board_order,
+    board_plan,
+    board_ready,
+    board_stats,
+    board_think,
+    features_config,
+    roles_config,
+)
 from .board import (
     BoardStore,
     ConflictError,
@@ -82,10 +90,28 @@ def _unavailable(store: BoardStore) -> dict[str, Any] | None:
     return None
 
 
+STORE_RETRY_SECONDS = 5.0
+
+
+def live_store(app: Any) -> BoardStore:
+    """The board store of the app; an unavailable one is rebuilt at most once per
+    ``STORE_RETRY_SECONDS``, so a database that starts after the dashboard is picked up
+    without a restart (the first requests answer 503 meanwhile)."""
+    store: BoardStore = app.state.board_store
+    if _unavailable(store) is None:
+        return store
+    now = time.monotonic()
+    if now - getattr(app.state, "board_store_tried", float("-inf")) < STORE_RETRY_SECONDS:
+        return store
+    app.state.board_store_tried = now
+    app.state.board_store = get_board_store()
+    return app.state.board_store  # type: ignore[no-any-return]
+
+
 def _store_guard(request: Request) -> BoardStore:
     """The board store, with a 503 when it is unavailable (the runner's
     error shape, so a client sees one consistent envelope)."""
-    store = request.app.state.board_store
+    store = live_store(request.app)
     refuse = _unavailable(store)
     if refuse is not None:
         raise RuntimeError(refuse["reason"])
@@ -110,6 +136,13 @@ def _roles_text(request: Request, body: dict[str, Any]) -> str:
     report = roles_config.validate_roles_json(text, list(providers))
     if report.errors:
         raise ValueError("; ".join(report.errors))
+    return text
+
+
+def _features_text(body: dict[str, Any], key: str) -> str:
+    text = body.get(key, "")
+    if not isinstance(text, str):
+        raise ValueError(f"{key} must be a string holding the JSON text")
     return text
 
 
@@ -223,6 +256,12 @@ def _reordered_plan(
             for t in tasks
         ],
     }
+
+
+def _stamp(value: Any) -> Any:
+    """A timestamp as the store compares it (isoformat), not as the JSON
+    encoder writes it (``Z``)."""
+    return value.isoformat() if hasattr(value, "isoformat") else value
 
 
 def _config_version(store: BoardStore, mission_id: str) -> str | None:
@@ -495,12 +534,17 @@ def _qa_matches(scenarios: set[str]) -> list[tuple[float, dict[str, Any]]]:
                 matches.append((path.stat().st_mtime, verdict))
     if NIGHTLY_VERDICT_PATH.is_file():
         nightly = _read_qa_json(NIGHTLY_VERDICT_PATH)
-        if isinstance(nightly, list):
+        items: list[dict[str, Any]] = []
+        if isinstance(nightly, dict):
+            items = nightly.get("scenarios", [])
+            if not isinstance(items, list):
+                items = []
+        elif isinstance(nightly, list):
+            items = [item for item in nightly if isinstance(item, dict)]
+        if items:
             mtime = NIGHTLY_VERDICT_PATH.stat().st_mtime
             matches.extend(
-                (mtime, item)
-                for item in nightly
-                if isinstance(item, dict) and item.get("scenario") in scenarios
+                (mtime, item) for item in items if item.get("scenario") in scenarios
             )
     return matches
 
@@ -518,9 +562,11 @@ def _qa_view(verdict: dict[str, Any]) -> dict[str, Any]:
     return {
         "scenario": scrub(str(verdict.get("scenario", ""))),
         "verdict": str(verdict.get("verdict", "")),
+        "layer": str(verdict.get("layer", "")) if verdict.get("layer") else None,
         "blocked_reason": _scrubbed_or_none(verdict.get("blocked_reason")),
         "failed_step": failed_step if isinstance(failed_step, int) else None,
         "failed_reason": scrub(str(verdict.get("failed_reason") or "")),
+        "reason": _scrubbed_or_none(verdict.get("reason")),
         "console_errors": _scrubbed_list(verdict.get("console_errors")),
         "network_errors": _scrubbed_list(verdict.get("network_errors")),
         "screenshots": links,
@@ -548,7 +594,7 @@ def _build_router() -> APIRouter:
     # ------------------------------------------------------------------ status
     @router.get("/status", response_model=None)
     def status(request: Request) -> dict[str, Any] | JSONResponse:
-        store = request.app.state.board_store
+        store = live_store(request.app)
         refuse = _unavailable(store)
         if refuse is not None:
             return JSONResponse(status_code=503, content=refuse)
@@ -586,9 +632,10 @@ def _build_router() -> APIRouter:
         scenarios = set(plan_qa.get("scenarios") or []) if isinstance(plan_qa, dict) else set()
         matches = _qa_matches(scenarios) if scenarios else []
         if not matches:
-            return {"verdict": None}
-        _, latest = max(matches, key=lambda match: match[0])
-        return {"verdict": _qa_view(latest)}
+            return {"verdict": None, "verdicts": []}
+        latest = max(matches, key=lambda match: match[0])[1]
+        verdicts = [_qa_view(item) for _, item in sorted(matches, key=lambda match: match[0])]
+        return {"verdict": _qa_view(latest), "verdicts": verdicts}
 
     @router.get("/qa/screenshots/{run_name}/{file_name}")
     def qa_screenshot(run_name: str, file_name: str) -> FileResponse:
@@ -1433,7 +1480,7 @@ def _build_router() -> APIRouter:
     @router.get("/roles")
     def get_roles(request: Request) -> dict[str, Any]:
         row = _store_guard(request).hermes_config() or {}
-        return {"roles_json": row.get("roles_json") or "", "version": row.get("updatedAt")}
+        return {"roles_json": row.get("roles_json") or "", "version": _stamp(row.get("updatedAt"))}
 
     @router.put("/roles")
     def put_roles(request: Request, body: dict[str, Any]) -> dict[str, Any]:
@@ -1441,7 +1488,8 @@ def _build_router() -> APIRouter:
         store = _store_guard(request)
         text = _roles_text(request, body)
         store.update_hermes_config(body.get("expected_version"), roles_json=text)
-        return {"roles_json": text, "version": (store.hermes_config() or {}).get("updatedAt")}
+        return {"roles_json": text, "version": _stamp(
+            (store.hermes_config() or {}).get("updatedAt"))}
 
     @router.get("/missions/{mission_id}/roles")
     def get_mission_roles(request: Request, mission_id: str) -> dict[str, Any]:
@@ -1469,6 +1517,55 @@ def _build_router() -> APIRouter:
             expected_version=body.get("expected_version"), who=body.get("who", ""),
         )
         return {"roles_json": text, "version": _config_version(store, mission_id)}
+
+    @router.get("/features")
+    def get_features(request: Request) -> dict[str, Any]:
+        row = _store_guard(request).hermes_config() or {}
+        return {"features_json": row.get("features_json") or "", "version": _stamp(
+            row.get("updatedAt"))}
+
+    @router.put("/features")
+    def put_features(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        text = _features_text(body, "features_json")
+        errors = features_config.validate_features_json(text, None)
+        if errors:
+            raise ValueError("; ".join(errors))
+        store.update_hermes_config(body.get("expected_version"), features_json=text)
+        return {"features_json": text, "version": _stamp(
+            (store.hermes_config() or {}).get("updatedAt"))}
+
+    @router.get("/missions/{mission_id}/features")
+    def get_mission_features(request: Request, mission_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        if store.get_mission(mission_id) is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        config = store.mission_config(mission_id) or {}
+        return {
+            "mission_features_json": config.get("mission_features_json") or "",
+            "version": _config_version(store, mission_id),
+        }
+
+    @router.put("/missions/{mission_id}/features")
+    def put_mission_features(
+        request: Request, mission_id: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        if store.get_mission(mission_id) is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        text = _features_text(body, "mission_features_json")
+        global_text = (store.hermes_config() or {}).get("features_json") or ""
+        errors = features_config.validate_features_json(global_text, text)
+        if errors:
+            raise ValueError("; ".join(errors))
+        config = store.mission_config(mission_id) or {}
+        store.set_mission_config(
+            mission_id, {**config, "mission_features_json": text},
+            expected_version=body.get("expected_version"), who=body.get("who", ""),
+        )
+        return {"mission_features_json": text, "version": _config_version(store, mission_id)}
 
     @router.get("/i18n")
     def get_i18n(request: Request) -> dict[str, Any]:

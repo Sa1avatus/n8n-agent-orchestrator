@@ -1,18 +1,34 @@
 from __future__ import annotations
 
-import copy
+import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import subprocess
+import sys
+from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
 
-TESTS_DIR = Path(__file__).resolve().parent
-PATCH_PATH = Path(__file__).resolve().parents[2] / "data-tables" / "ops" / "qa_workflow_patch.py"
+OPS_DIR = Path(__file__).resolve().parents[2] / "data-tables" / "ops"
+PATCH_PATH = OPS_DIR / "qa_workflow_patch.py"
+LIVE_EXPORT = OPS_DIR / "_scratch" / "live_export.json"
+needs_live_export = pytest.mark.skipif(
+    not LIVE_EXPORT.is_file(), reason=f"live export not found: {LIVE_EXPORT}"
+)
+EXECUTE_COMMAND = "n8n-nodes-base.executeCommand"
+LAYERS_JSON = '["regression", "api", "ui"]'
+GOLDEN_REQUEST_BODY = (
+    "={{ JSON.stringify({ mission_id: $('Mission').first().json.mission_id, "
+    "working_directory: $('Mission').first().json.working_directory, "
+    'mode: "final", '
+    "nonce: $execution.id + '-' + $runIndex }) }}"
+)
 PLANNING_PROMPT = """You are the lead architect.
 
 LANGUAGE:
@@ -47,9 +63,74 @@ def qwp() -> ModuleType:
     return module
 
 
+@pytest.fixture
+def live_copy(tmp_path: Path) -> Iterator[Path]:
+    source_sha256 = _sha256(LIVE_EXPORT)
+    copy = tmp_path / "live_export.json"
+    shutil.copyfile(LIVE_EXPORT, copy)
+    yield copy
+    assert _sha256(LIVE_EXPORT) == source_sha256
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _insert_point(text: str, anchor: str) -> tuple[str, str]:
     head, tail = text.split(anchor, 1)
     return head, anchor + tail
+
+
+def _live_workflow(path: Path) -> dict[str, Any]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    workflow: dict[str, Any] = raw[0] if isinstance(raw, list) else raw
+    return workflow
+
+
+def _run_main(
+    qwp: ModuleType, monkeypatch: pytest.MonkeyPatch, path: Path, mode: str, *extra: str
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["qa_workflow_patch.py", mode, str(path), *extra])
+    qwp.main()
+
+
+def _request_body(workflow: dict[str, Any], qwp: ModuleType) -> str:
+    node = next(n for n in workflow["nodes"] if n["name"] == qwp.QA_REQUEST)
+    body: str = node["parameters"]["jsonBody"]
+    return body
+
+
+def _branch(name: str) -> list[dict[str, Any]]:
+    return [{"node": name, "type": "main", "index": 0}]
+
+
+def _node(name: str, node_type: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "type": node_type,
+        "typeVersion": 1,
+        "position": [0, 0],
+        "parameters": {},
+    }
+
+
+def _add_old_qa_nodes(workflow: dict[str, Any]) -> None:
+    workflow["nodes"].extend(
+        [
+            _node("QA Changed Files", EXECUTE_COMMAND),
+            _node("QA Gate", "n8n-nodes-base.code"),
+            _node("QA Run?", "n8n-nodes-base.if"),
+            _node("QA Run", EXECUTE_COMMAND),
+            _node("QA Review?", "n8n-nodes-base.if"),
+        ]
+    )
+    connections = workflow["connections"]
+    connections["All Tasks Completed?"]["main"][0] = _branch("QA Changed Files")
+    connections["QA Changed Files"] = {"main": [_branch("QA Gate")]}
+    connections["QA Gate"] = {"main": [_branch("QA Run?")]}
+    connections["QA Run?"] = {"main": [_branch("QA Run"), _branch("Approved Result")]}
+    connections["QA Run"] = {"main": [_branch("QA Review?")]}
+    connections["QA Review?"] = {"main": [_branch("Approved Result"), _branch("Approved Result")]}
 
 
 def test_mode_off_renders_the_prompt_byte_for_byte(qwp: ModuleType) -> None:
@@ -124,200 +205,242 @@ def test_crlf_prompt_keeps_crlf_line_endings(qwp: ModuleType) -> None:
     assert qwp.render_planning_prompt(planning, "final") == planning
 
 
-def test_ui_check_cases_have_12_cases_split_6_and_6() -> None:
-    cases = json.loads((TESTS_DIR / "qa_ui_check_cases.json").read_text(encoding="utf-8"))
-    assert len(cases) == 12
-    assert len({case["id"] for case in cases}) == 12
-    for case in cases:
-        assert set(case) == {"id", "objective", "needed", "why"}
-        assert isinstance(case["objective"], str) and case["objective"].strip()
-        assert isinstance(case["needed"], bool)
-        assert isinstance(case["why"], str) and case["why"].strip() and "\n" not in case["why"]
-    assert sum(case["needed"] for case in cases) == 6
+@needs_live_export
+@pytest.mark.parametrize("mode", ["off", "nightly"])
+def test_mode_off_and_nightly_leave_the_export_byte_for_byte(
+    qwp: ModuleType,
+    mode: str,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    golden_sha256 = _sha256(LIVE_EXPORT)
+    _run_main(qwp, monkeypatch, live_copy, mode)
+    assert _sha256(live_copy) == golden_sha256
+    assert capsys.readouterr().out.endswith("no change\n")
 
 
-def _link(name: str) -> dict[str, Any]:
-    return {"node": name, "type": "main", "index": 0}
+@needs_live_export
+@pytest.mark.parametrize("mode", ["final", "ui_tasks"])
+def test_final_mode_inserts_each_qa_node_exactly_once(
+    qwp: ModuleType,
+    mode: str,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, mode)
+    assert capsys.readouterr().out.endswith("QA nodes patched\n")
+    workflow = _live_workflow(live_copy)
+    counts = Counter(node["name"] for node in workflow["nodes"])
+    for name in (qwp.QA_REQUEST, qwp.QA_WAIT, qwp.QA_REVIEW, qwp.QA_NOTICE):
+        assert counts[name] == 1, name
+    assert all(count == 1 for name, count in counts.items() if name.startswith("QA "))
+    assert workflow["connections"][qwp.FINAL_NODE]["main"][0] == _branch(qwp.QA_REQUEST)
+    retrieval = _branch("Worker Retrieval Enabled?")
+    assert workflow["connections"][qwp.FINAL_NODE]["main"][1] == retrieval
 
 
-def _workflow() -> dict[str, Any]:
-    def node(name: str) -> dict[str, Any]:
-        kind = "n8n-nodes-base.noOp"
-        return {"name": name, "type": kind, "position": [100, 200], "parameters": {}}
-
-    names = ["All Tasks Completed?", "Parse Review", "Parse Plan", "Approved Result", "Retry"]
-    return {
-        "nodes": [node(name) for name in names],
-        "connections": {
-            "All Tasks Completed?": {
-                "main": [[_link("Approved Result")], [_link("Retry")]],
-            },
-        },
-    }
+@needs_live_export
+def test_second_run_on_the_patched_export_changes_nothing(
+    qwp: ModuleType,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "final")
+    once_sha256 = _sha256(live_copy)
+    _run_main(qwp, monkeypatch, live_copy, "final")
+    assert _sha256(live_copy) == once_sha256
+    assert capsys.readouterr().out.endswith("no change\n")
 
 
-def _run_js(
-    code: str, json_in: dict[str, Any], tasks: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+@needs_live_export
+def test_patched_export_has_no_execute_command_node(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    assert qwp.patch_workflow(workflow, "final") is True
+    assert [n["name"] for n in workflow["nodes"] if n["type"] == EXECUTE_COMMAND] == []
+
+
+@needs_live_export
+def test_smoke_off_body_is_byte_for_byte_golden(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    assert qwp.patch_workflow(workflow, "final") is True
+    once_body = _request_body(workflow, qwp)
+    fresh = _live_workflow(live_copy)
+    assert qwp.patch_workflow(fresh, "final", None, False) is True
+    twice_body = _request_body(fresh, qwp)
+    assert once_body == GOLDEN_REQUEST_BODY
+    assert once_body == twice_body
+
+
+@needs_live_export
+def test_smoke_true_adds_smoke_to_the_request_body(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    assert qwp.patch_workflow(workflow, "final", None, True) is True
+    body = _request_body(workflow, qwp)
+    assert 'mode: "final", smoke: true, nonce: ' in body
+    assert "layers" not in body
+
+
+@needs_live_export
+def test_second_apply_with_smoke_true_changes_nothing(
+    qwp: ModuleType, live_copy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "final", LAYERS_JSON, "true")
+    once_sha256 = _sha256(live_copy)
+    _run_main(qwp, monkeypatch, live_copy, "final", LAYERS_JSON, "true")
+    assert _sha256(live_copy) == once_sha256
+
+
+@needs_live_export
+def test_missing_or_duplicated_anchor_node_raises(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    for name in workflow["nodes"]:
+        if name["name"] == "Approved Result":
+            del workflow["nodes"][workflow["nodes"].index(name)]
+            break
+    with pytest.raises(qwp.AnchorError, match="must occur once in the workflow, found 0"):
+        qwp.patch_workflow(workflow, "final", None, True)
+
+    fresh = _live_workflow(live_copy)
+    fresh["nodes"].append(_node("Approved Result", "n8n-nodes-base.noOp"))
+    with pytest.raises(qwp.AnchorError, match="must occur once in the workflow, found 2"):
+        qwp.patch_workflow(fresh, "final", None, True)
+
+
+@needs_live_export
+def test_pre_patched_old_node_set_is_removed(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    _add_old_qa_nodes(workflow)
+    assert qwp.patch_workflow(workflow, "final") is True
+    names = Counter(node["name"] for node in workflow["nodes"])
+    for old in qwp.OLD_NODES:
+        assert names[old] == 0, old
+    assert [n["name"] for n in workflow["nodes"] if n["type"] == EXECUTE_COMMAND] == []
+    assert names[qwp.QA_REVIEW] == 1
+    assert "QA Changed Files" not in workflow["connections"]
+    assert workflow["connections"][qwp.FINAL_NODE]["main"][0] == _branch(qwp.QA_REQUEST)
+
+
+@needs_live_export
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda w: w.__setitem__(
+                "nodes", [n for n in w["nodes"] if n["name"] != "All Tasks Completed?"]
+            ),
+            "'All Tasks Completed?' must occur once in the workflow, found 0",
+        ),
+        (
+            lambda w: w.__setitem__(
+                "nodes", [n for n in w["nodes"] if n["name"] != "Approved Result"]
+            ),
+            "'Approved Result' must occur once in the workflow, found 0",
+        ),
+        (
+            lambda w: w.__setitem__(
+                "nodes", [n for n in w["nodes"] if n["name"] != "Retry Current Task"]
+            ),
+            "'Retry Current Task' must occur once in the workflow, found 0",
+        ),
+        (
+            lambda w: w["connections"]["All Tasks Completed?"]["main"][0].__setitem__(
+                0, {"node": "Retry Current Task", "type": "main", "index": 0}
+            ),
+            "must lead to 'Approved Result'",
+        ),
+    ],
+)
+def test_missing_or_moved_anchor_in_the_export_aborts(
+    qwp: ModuleType, live_copy: Path, mutate: Any, message: str
+) -> None:
+    workflow = _live_workflow(live_copy)
+    mutate(workflow)
+    with pytest.raises(qwp.AnchorError, match=re.escape(message)):
+        qwp.patch_workflow(workflow, "final")
+
+
+@needs_live_export
+def test_constants_without_runner_settings_aborts(qwp: ModuleType, live_copy: Path) -> None:
+    workflow = _live_workflow(live_copy)
+    constants = next(n for n in workflow["nodes"] if n["name"] == "Constants")
+    constants["parameters"] = {}
+    constants.pop("assignments", None)
+    with pytest.raises(qwp.AnchorError, match="must define runner_url and runner_api_key"):
+        qwp.patch_workflow(workflow, "final")
+
+
+@needs_live_export
+def test_inserted_code_nodes_pass_node_check(
+    qwp: ModuleType, live_copy: Path, tmp_path: Path
+) -> None:
     if shutil.which("node") is None:
         pytest.skip("node is not installed")
-    script = (
-        "const $ = () => ({ first: () => ({ json: { tasks: "
-        + json.dumps(tasks or []) + " } }) });\n"
-        "const out = new Function('$json', '$', " + json.dumps(code) + ")("
-        + json.dumps(json_in) + ", $);\n"
-        "process.stdout.write(JSON.stringify(out[0].json));\n"
-    )
-    done = subprocess.run(
-        ["node", "-e", script], capture_output=True, text=True, check=True, timeout=30
-    )
-    out: dict[str, Any] = json.loads(done.stdout)
-    return out
+    workflow = _live_workflow(live_copy)
+    assert qwp.patch_workflow(workflow, "final") is True
+    code_nodes = [
+        n for n in workflow["nodes"] if n["type"] == qwp.CODE_NODE and n["name"].startswith("QA ")
+    ]
+    assert {n["name"] for n in code_nodes} == {qwp.QA_POLL_COUNT, qwp.QA_REVIEW}
+    for index, node in enumerate(code_nodes):
+        script = tmp_path / f"inserted_{index}.js"
+        script.write_text(node["parameters"]["jsCode"], encoding="utf-8")
+        subprocess.run(
+            ["node", "--check", str(script)], check=True, capture_output=True, timeout=30
+        )
 
 
-@pytest.mark.parametrize("mode", ["off", "nightly"])
-def test_workflow_mode_without_qa_run_keeps_nodes_and_connections_byte_for_byte(
-    qwp: ModuleType, mode: str
+@needs_live_export
+@pytest.mark.parametrize("extra", [(), ("[]",)])
+def test_missing_or_empty_layers_keep_the_request_body_as_before(
+    qwp: ModuleType, extra: tuple[str, ...], live_copy: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    workflow = _workflow()
-    before = json.dumps(workflow)
-    assert qwp.patch_workflow(workflow, mode) is False
-    assert json.dumps(workflow) == before
+    _run_main(qwp, monkeypatch, live_copy, "final", *extra)
+    assert _request_body(_live_workflow(live_copy), qwp) == GOLDEN_REQUEST_BODY
 
 
-@pytest.mark.parametrize("mode", ["final", "ui_tasks"])
-def test_workflow_mode_adds_the_qa_nodes_after_final_acceptance(qwp: ModuleType, mode: str) -> None:
-    workflow = _workflow()
-    assert qwp.patch_workflow(workflow, mode) is True
-    names = [node["name"] for node in workflow["nodes"]]
-    assert names[-6:] == [
-        "QA Changed Files", "QA Gate", "QA Run?", "QA Run", "QA Review", "QA Review?",
-    ]
-    connections = workflow["connections"]
-    assert connections["All Tasks Completed?"] == {
-        "main": [[_link("QA Changed Files")], [_link("Retry")]],
-    }
-    assert connections["QA Changed Files"]["main"] == [[_link("QA Gate")]]
-    assert connections["QA Gate"]["main"] == [[_link("QA Run?")]]
-    assert connections["QA Run?"]["main"] == [[_link("QA Run")], [_link("Approved Result")]]
-    assert connections["QA Review?"]["main"] == [
-        [_link("Parse Review")],
-        [_link("Approved Result")],
-    ]
+@needs_live_export
+def test_mode_off_ignores_layers(
+    qwp: ModuleType, live_copy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    golden_sha256 = _sha256(LIVE_EXPORT)
+    _run_main(qwp, monkeypatch, live_copy, "off", LAYERS_JSON)
+    assert _sha256(live_copy) == golden_sha256
 
 
-@pytest.mark.parametrize("mode", ["final", "ui_tasks"])
-def test_workflow_second_apply_changes_nothing(qwp: ModuleType, mode: str) -> None:
-    workflow = _workflow()
-    qwp.patch_workflow(workflow, mode)
-    once = json.dumps(workflow)
-    assert qwp.patch_workflow(workflow, mode) is False
-    assert json.dumps(workflow) == once
+@needs_live_export
+def test_layers_from_roles_json_appear_in_the_request_body(
+    qwp: ModuleType, live_copy: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "final", LAYERS_JSON)
+    body = _request_body(_live_workflow(live_copy), qwp)
+    assert 'mode: "final", layers: ["regression", "api", "ui"], nonce: ' in body
 
 
-def test_workflow_missing_final_node_aborts(qwp: ModuleType) -> None:
-    workflow = _workflow()
-    workflow["nodes"] = [n for n in workflow["nodes"] if n["name"] != "All Tasks Completed?"]
-    with pytest.raises(qwp.AnchorError, match="must occur once"):
-        qwp.patch_workflow(workflow, "final")
-
-
-def test_workflow_final_node_without_false_branch_aborts(qwp: ModuleType) -> None:
-    workflow = _workflow()
-    workflow["connections"]["All Tasks Completed?"] = {"main": [[_link("Approved Result")]]}
-    with pytest.raises(qwp.AnchorError, match="two main outputs"):
-        qwp.patch_workflow(workflow, "final")
-
-
-def test_workflow_duplicate_review_node_aborts(qwp: ModuleType) -> None:
-    workflow = _workflow()
-    workflow["nodes"].append(copy.deepcopy(workflow["nodes"][1]))
-    with pytest.raises(qwp.AnchorError, match="found 2"):
-        qwp.patch_workflow(workflow, "final")
+@needs_live_export
+def test_second_run_with_layers_changes_nothing(
+    qwp: ModuleType,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "final", LAYERS_JSON)
+    once_sha256 = _sha256(live_copy)
+    _run_main(qwp, monkeypatch, live_copy, "final", LAYERS_JSON)
+    assert _sha256(live_copy) == once_sha256
+    assert capsys.readouterr().out.endswith("no change\n")
 
 
 @pytest.mark.parametrize(
-    ("changed", "expected"),
+    ("layers", "message"),
     [
-        (["claude-runner/src/claude_runner/board.html"], True),
-        (["claude-runner/src/claude_runner/board_edit_win.js"], True),
-        (["claude-runner/src/claude_runner/board.css"], True),
-        (["claude-runner\\src\\claude_runner\\board_mission_save.js"], True),
-        (["claude-runner/src/claude_runner/board_api.py"], True),
-        (["claude-runner/src/claude_runner/dashboard.py"], True),
-        (["claude-runner/src/claude_runner/routes/roles.py"], True),
-        (["claude-runner/src/claude_runner/board_pg.py"], False),
-        (["claude-runner/src/claude_runner/qa.py"], False),
-        (["claude-runner/tests/test_board_api.py"], False),
-        (["claude-runner/docs/qa-acceptance.md"], False),
-        (["claude-runner/src/claude_runner/roles_config.py", "reports/x.txt"], False),
-        ([], False),
+        (["sql"], "layer 'sql' is not one of regression, api, ui"),
+        ("api", "layers must be a JSON list of layer names"),
+        ([1], "layers must be a JSON list of layer names"),
     ],
 )
-def test_qa_gate_runs_only_for_ui_file_lists(
-    qwp: ModuleType, changed: list[str], expected: bool
-) -> None:
-    out = _run_js(qwp.QA_GATE_JS, {"stdout": "\n".join(changed) + "\n"})
-    assert out["qa_run"] is expected
-    assert out["changed_files"] == changed
-
-
-def test_qa_changed_files_command_lists_tracked_and_untracked_files(qwp: ModuleType) -> None:
-    workflow = _workflow()
-    qwp.patch_workflow(workflow, "final")
-    node = next(n for n in workflow["nodes"] if n["name"] == "QA Changed Files")
-    command = node["parameters"]["command"]
-    assert node["type"] == "n8n-nodes-base.executeCommand"
-    assert "git diff --name-only HEAD" in command
-    assert "git ls-files --others --exclude-standard" in command
-    assert "onError" not in node
-
-
-def test_qa_review_pass_produces_no_review(qwp: ModuleType) -> None:
-    out = _run_js(qwp.QA_REVIEW_JS, {"stdout": json.dumps([{"verdict": "pass"}])})
-    assert out["qa_failed"] is False
-    assert out["qa_review"] is None
-
-
-def test_qa_review_fail_becomes_needs_changes_on_last_ui_task(qwp: ModuleType) -> None:
-    verdicts = [{"verdict": "fail", "failed_step": "click save", "failed_reason": "button missing"}]
-    tasks: list[dict[str, Any]] = [
-        {"id": "T1", "ui_check": {"needed": False}},
-        {"id": "T2", "ui_check": {"needed": True}},
-        {"id": "T3"},
-    ]
-    out = _run_js(qwp.QA_REVIEW_JS, {"stdout": json.dumps(verdicts)}, tasks)
-    assert out["qa_failed"] is True
-    assert out["task_id"] == "T2"
-    assert out["qa_review"]["status"] == "needs_changes"
-    assert "click save" in out["qa_review"]["next_task"]
-    assert "button missing" in out["qa_review"]["next_task"]
-
-
-def test_qa_review_blocked_becomes_needs_changes(qwp: ModuleType) -> None:
-    verdicts = [{"verdict": "blocked", "failed_reason": "no stack"}]
-    out = _run_js(qwp.QA_REVIEW_JS, {"stdout": json.dumps(verdicts)}, [{"id": "T1"}])
-    assert out["qa_failed"] is True
-    assert out["task_id"] == "T1"
-    assert out["qa_review"]["status"] == "needs_changes"
-    assert out["qa_review"]["next_task"].startswith("QA could not run")
-
-
-@pytest.mark.parametrize(
-    "json_in",
-    [
-        {"stdout": ""},
-        {"stdout": "not json", "stderr": "traceback"},
-        {"stdout": "[]"},
-        {"error": "boom"},
-    ],
-)
-def test_qa_review_without_a_verdict_becomes_blocked_needs_changes(
-    qwp: ModuleType, json_in: dict[str, Any]
-) -> None:
-    out = _run_js(qwp.QA_REVIEW_JS, json_in, [{"id": "T1"}])
-    assert out["qa_failed"] is True
-    assert out["task_id"] == "T1"
-    assert out["qa_review"]["status"] == "needs_changes"
-    assert out["qa_review"]["reason"] == "QA blocked"
-    assert out["qa_review"]["next_task"].startswith("QA could not run: QA produced no verdict")
+def test_bad_layers_are_rejected(qwp: ModuleType, layers: Any, message: str) -> None:
+    with pytest.raises(ValueError, match=re.escape(message)):
+        qwp.patch_workflow({"nodes": [], "connections": {}}, "final", layers)

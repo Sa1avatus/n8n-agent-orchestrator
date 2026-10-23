@@ -8,8 +8,14 @@ const MAX_ROLE_KEYS = 10;
 const MAX_DISTINCT_MODELS = 8;
 const KNOWN_ROLES = ["architect", "worker", "reviewer", "service", "qa", "report"];
 const COMMON_OPTION_KEYS = ["fresh", "think", "max_polls", "poll_seconds", "max_retries"];
-const QA_OPTION_KEYS = [...COMMON_OPTION_KEYS, "mode", "max_minutes", "max_cost_usd"];
+const QA_OPTION_KEYS = [...COMMON_OPTION_KEYS, "mode", "max_minutes", "max_cost_usd", "layers"];
+// Mirrors QA_LAYERS and QA_DEFAULT_LAYERS in roles_config.py.
+const QA_LAYERS = ["regression", "api", "ui"];
+const QA_DEFAULT_LAYERS = ["ui"];
 const ATTEMPT_KEY_PATTERN = /^[1-9][0-9]*$/;
+const ESCALATE_SUFFIX = "_escalate";
+const ESCALATE_KEYS = ["model", "above_steps", "below_score"];
+const MAX_SCORE = 100;
 const FRESH_KEY = "fresh";
 const FRESH_AUTO = "auto";
 const LEGACY_OPTION_KEYS = ["think", "max_polls", "poll_seconds", "max_retries"];
@@ -161,6 +167,11 @@ function validateRoles(roles, providers) {
   const warnings = [];
   const models = new Set();
   for (const [role, value] of asMap(roles)) {
+    if (role.endsWith(ESCALATE_SUFFIX) && KNOWN_ROLES.includes(role.slice(0, -ESCALATE_SUFFIX.length))) {
+      errors.push(...checkEscalate(role, value, providers));
+      if (isDict(value) && typeof asMap(value).get("model") === "string") models.add(asMap(value).get("model"));
+      continue;
+    }
     if (!KNOWN_ROLES.includes(role)) warnings.push(`role ${pyRepr(role)} is not a known role`);
     errors.push(...checkRole(role, value, providers));
     roleModels(value).forEach((model) => models.add(model));
@@ -171,6 +182,25 @@ function validateRoles(roles, providers) {
     );
   }
   return report(errors, warnings);
+}
+
+function checkEscalate(role, value, providers) {
+  const name = pyRepr(role);
+  if (!isDict(value)) return [`role ${name}: value must be an object with model and above_steps`];
+  const rule = asMap(value);
+  const errors = [...rule.keys()]
+    .filter((key) => !ESCALATE_KEYS.includes(key))
+    .map((key) => `role ${name}: unknown key ${pyRepr(key)}`);
+  errors.push(...checkModel(role, "model", rule.get("model"), providers));
+  const steps = rule.get("above_steps");
+  if (!Number.isInteger(steps) || steps < 1) {
+    errors.push(`role ${name}: 'above_steps' must be a whole number of at least 1`);
+  }
+  const below = rule.has("below_score") ? rule.get("below_score") : 1;
+  if (typeof below !== "number" || !(below > 0 && below <= MAX_SCORE)) {
+    errors.push(`role ${name}: 'below_score' must be above 0 and up to ${MAX_SCORE}`);
+  }
+  return errors;
 }
 
 function checkRole(role, value, providers) {
@@ -222,13 +252,35 @@ function checkModel(role, element, model, providers) {
   return [];
 }
 
+function checkLayers(name, layers) {
+  if (!Array.isArray(layers)) return [`role ${name}: option 'layers' must be a list of layer names`];
+  const errors = [];
+  const seen = new Set();
+  for (const layer of layers) {
+    if (typeof layer !== "string" || !QA_LAYERS.includes(layer)) {
+      errors.push(
+        `role ${name}: option 'layers' has unknown layer ${pyRepr(layer)}, use one of ${QA_LAYERS.join(", ")}`,
+      );
+    } else if (seen.has(layer)) {
+      errors.push(`role ${name}: option 'layers' repeats layer ${pyRepr(layer)}`);
+    } else {
+      seen.add(layer);
+    }
+  }
+  return errors;
+}
+
 function checkOptions(role, options) {
   const name = pyRepr(role);
   if (!isDict(options)) return [`role ${name}: ${pyRepr(OPTIONS_KEY)} must be an object`];
   const allowed = role === "qa" ? QA_OPTION_KEYS : COMMON_OPTION_KEYS;
-  return [...asMap(options).keys()]
+  const errors = [...asMap(options).keys()]
     .filter((key) => !allowed.includes(key))
     .map((key) => `role ${name}: unknown option ${pyRepr(key)}`);
+  if (role === "qa" && asMap(options).has("layers")) {
+    errors.push(...checkLayers(name, asMap(options).get("layers")));
+  }
+  return errors;
 }
 
 function roleModels(value) {
@@ -303,15 +355,36 @@ function pickOrThrow(roles, role, attempt, legacy) {
   return picked;
 }
 
-function resolveRole(roles, role, attempt, legacy) {
+// The escalation model when the task used more than above_steps steps and either it is a split
+// part (the split came from that many steps) or the last attempt scored too low.
+function escalatedModel(block, facts) {
+  if (!isDict(block) || !facts) return null;
+  const rule = asMap(block);
+  const limit = rule.get("above_steps");
+  if (facts.split_steps != null && facts.split_steps > limit) return rule.get("model");
+  if (facts.steps == null || facts.steps <= limit) return null;
+  const below = rule.get("below_score");
+  return below == null || (facts.score != null && facts.score < below) ? rule.get("model") : null;
+}
+
+function chosenModel(roles, role, attempt, legacy, facts) {
   const picked = pickOrThrow(roles, role, attempt, legacy);
+  const escalated = escalatedModel(asMap(roles).get(role + ESCALATE_SUFFIX), facts);
+  return escalated === null ? picked : { ...picked, model: escalated };
+}
+
+// facts: score, steps and split_steps of the task, read only by the <role>_escalate block.
+function resolveRole(roles, role, attempt, legacy, facts = null) {
+  const picked = chosenModel(roles, role, attempt, legacy, facts);
   const options = { [FRESH_KEY]: FRESH_AUTO, ...picked.options };
   const [provider, name] = splitModel(picked.model);
   const freshOption = options[FRESH_KEY];
   let fresh;
   if (freshOption === FRESH_AUTO) {
     fresh =
-      attempt > 1 && pickOrThrow(roles, role, attempt - 1, legacy).model !== picked.model;
+      attempt > 1 &&
+      // the previous attempt ran escalated only when the whole task was (a split part)
+      chosenModel(roles, role, attempt - 1, legacy, { split_steps: facts?.split_steps }).model !== picked.model;
   } else if (typeof freshOption === "boolean") {
     fresh = freshOption;
   } else {
@@ -344,7 +417,7 @@ function previewChain(roles, role) {
     })
     .join(", ");
 }
-const QA_SETTABLE_OPTIONS = ["mode", "max_minutes", "max_cost_usd"];
+const QA_SETTABLE_OPTIONS = ["mode", "max_minutes", "max_cost_usd", "smoke"];
 
 function qaOptionsFrom(values) {
   const options = {};
@@ -353,6 +426,10 @@ function qaOptionsFrom(values) {
     if (raw === undefined || raw === null || raw === "") continue;
     if (key === "mode") {
       options[key] = String(raw);
+      continue;
+    }
+    if (key === "smoke") {
+      if (raw === true || raw === "true") options[key] = true;
       continue;
     }
     const number = Number(raw);
@@ -365,6 +442,11 @@ function qaOptionsFrom(values) {
 // Mirrors QA_DEFAULT_OPTIONS in roles_config.py: the placeholders of the QA controls.
 const QA_DEFAULT_OPTIONS = { mode: "off", max_minutes: 20, max_cost_usd: 1 };
 const QA_MODES = ["off", "final", "ui_tasks", "nightly"];
+
+function qaLayers(options) {
+  const layers = asMap(options).get("layers");
+  return Array.isArray(layers) && layers.length > 0 ? [...layers] : [...QA_DEFAULT_LAYERS];
+}
 
 function qaPlaceholders() {
   return Object.fromEntries(Object.entries(QA_DEFAULT_OPTIONS).map(([k, v]) => [k, String(v)]));
@@ -414,7 +496,7 @@ function qaValuesOf(text) {
   const model = typeof qa[FIRST_ATTEMPT_KEY] === "string" ? qa[FIRST_ATTEMPT_KEY] : "";
   const [provider, name] = model === "" ? ["", ""] : splitModel(model);
   const options = qa[OPTIONS_KEY] ?? {};
-  const values = { provider, model: name, mode: "", max_minutes: "", max_cost_usd: "" };
+  const values = { provider, model: name, mode: "", max_minutes: "", max_cost_usd: "", smoke: "" };
   for (const key of QA_SETTABLE_OPTIONS) {
     if (options[key] !== undefined && options[key] !== null) values[key] = String(options[key]);
   }
@@ -463,6 +545,7 @@ const BoardRoles = {
   withQaOptions,
   QA_MODES,
   qaPlaceholders,
+  qaLayers,
   qaValuesOf,
   qaRolesText,
   qaDiffRows,

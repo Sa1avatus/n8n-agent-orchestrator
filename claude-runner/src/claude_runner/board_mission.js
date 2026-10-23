@@ -330,6 +330,11 @@ async function BoardMission(missionId) {
         (e) => container("boardhistory").innerHTML =
           `<div class="chresult">${esc(e.message || e)}</div>`);
     }
+    if (typeof BoardQa !== "undefined") {
+      renderQaSection(container("boardqa"), data.mission.mission_id).catch(
+        (e) => container("boardqa").innerHTML =
+          `<div class="terror">${esc(e.message || e)}</div>`);
+    }
   }
   if (box && typeof BoardMissionSave !== "undefined" && BoardMissionSave.attachToBox) {
     BoardMissionSave.attachToBox(box, data);
@@ -677,6 +682,23 @@ async function renderTaskSection(container, missionId) {
   }
   tasksView.container = container;
   await refreshTasksView();
+}
+
+// A missing verdict file (404) or an empty one shows nothing; the panel is
+// read once per mission view, so there is no timer to clear.  BoardQa.panelHtml
+// is used directly here (not BoardQa.render, which fetches the same route again).
+async function renderQaSection(container, missionId) {
+  const qaPath = "/api/board/missions/" + encodeURIComponent(missionId) + "/qa";
+  const body = await fetchJson(qaPath).catch((e) => {
+    if (e.status === 404) return null;
+    throw e;
+  });
+  const verdicts = Array.isArray(body && body.verdicts) ? body.verdicts : (body && body.verdict ? [body.verdict] : []);
+  if (!verdicts.length) {
+    container.innerHTML = "";
+    return;
+  }
+  container.innerHTML = BoardQa.panelHtml(verdicts);
 }
 
 // One same-origin GET helper (the board API only).

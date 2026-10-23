@@ -6,11 +6,14 @@
 //   2. a failing verdict marks the failed step (one-based) with its reason
 //      and links each screenshot to its server URL in a new tab;
 //   3. a blocked verdict shows the blocked reason;
-//   4. no verdict renders the empty state;
+//   4. no verdict renders nothing;
 //   5. no output contains a button (the panel has no rerun control);
 //   6. a hostile value is escaped in every field;
 //   7. render() fetches the mission's QA route and fills the container;
-//      a failed response rejects with the load-failure message.
+//      a failed response rejects with the load-failure message;
+//   8. verdicts are grouped by layer in the order regression, api, ui,
+//      and a verdict without a layer is a ui verdict;
+//   9. a skipped verdict shows the skipped label and its reason.
 "use strict";
 const path = require("path");
 const test = require("node:test");
@@ -40,65 +43,93 @@ function blockedVerdict() {
 }
 
 test("a passing verdict shows the passed label and the scenario", () => {
-  const html = BoardQa.panelHtml(passVerdict());
+  const html = BoardQa.panelHtml([passVerdict()]);
   assert.match(html, /qa-verdict qa-pass/);
   assert.match(html, />passed</);
   assert.ok(html.includes(SCENARIO));
 });
 
 test("a failing verdict marks the one-based failed step with its reason", () => {
-  const html = BoardQa.panelHtml(failVerdict());
+  const html = BoardQa.panelHtml([failVerdict()]);
   assert.match(html, /qa-step-failed/);
   assert.ok(html.includes("failed step 3: refresh message missing"));
   assert.ok(html.includes("TypeError: x is undefined"));
 });
 
 test("screenshots are links to the server route in a new tab", () => {
-  const html = BoardQa.panelHtml(failVerdict());
+  const html = BoardQa.panelHtml([failVerdict()]);
   assert.ok(html.includes('href="/api/board/qa/screenshots/qa-ab12/step-2.png"'));
   assert.ok(html.includes('target="_blank" rel="noopener"'));
 });
 
 test("a blocked verdict shows the blocked reason", () => {
-  const html = BoardQa.panelHtml(blockedVerdict());
+  const html = BoardQa.panelHtml([blockedVerdict()]);
   assert.match(html, /qa-verdict qa-blocked/);
   assert.ok(html.includes("no browser available"));
   assert.ok(!html.includes("qa-step-failed"));
 });
 
-test("no verdict renders the empty state", () => {
-  const html = BoardQa.panelHtml(null);
-  assert.match(html, /qa-empty/);
-  assert.ok(html.includes("No QA verdict for this mission yet."));
-  assert.ok(!html.includes("qa-verdict"));
+test("no verdict renders nothing", () => {
+  assert.equal(BoardQa.panelHtml([]), "");
 });
 
 test("the panel has no button in any state", () => {
-  for (const verdict of [passVerdict(), failVerdict(), blockedVerdict(), null]) {
-    assert.ok(!/<button/i.test(BoardQa.panelHtml(verdict)));
+  for (const verdicts of [[passVerdict()], [failVerdict()], [blockedVerdict()], []]) {
+    assert.ok(!/<button/i.test(BoardQa.panelHtml(verdicts)));
   }
 });
 
 test("a hostile value is escaped in every field", () => {
   const hostile = "<img src=x onerror=alert(1)>";
-  const html = BoardQa.panelHtml({
+  const html = BoardQa.panelHtml([{
     verdict: "fail",
     scenario: hostile,
     failed_step: 0,
     failed_reason: hostile,
     blocked_reason: hostile,
+    reason: hostile,
     screenshots: [{ name: hostile, url: `/x?"${hostile}` }],
     console_errors: [hostile],
     network_errors: [],
-  });
+  }]);
   assert.ok(!html.includes("<img"));
   assert.ok(html.includes("&lt;img src=x onerror=alert(1)&gt;"));
 });
 
 test("an unknown verdict value renders the unknown label", () => {
-  const html = BoardQa.panelHtml({ verdict: "<b>", scenario: SCENARIO, screenshots: [] });
+  const html = BoardQa.panelHtml([{ verdict: "<b>", scenario: SCENARIO, screenshots: [] }]);
   assert.ok(html.includes("unknown"));
   assert.ok(!html.includes("<b>"));
+});
+
+test("verdicts are grouped under a heading per layer in the order regression, api, ui", () => {
+  const html = BoardQa.panelHtml([
+    { ...passVerdict(), layer: "ui", scenario: "ui scenario" },
+    { ...passVerdict(), layer: "api", scenario: "api scenario" },
+    { ...failVerdict(), layer: "regression", scenario: "regression scenario" },
+  ]);
+  const headings = [...html.matchAll(/qa-layer-title">([^<]+)</g)].map((m) => m[1]);
+  assert.deepEqual(headings, ["regression", "api", "ui"]);
+  const regression = html.indexOf("regression scenario");
+  const api = html.indexOf("api scenario");
+  const ui = html.indexOf("ui scenario");
+  assert.ok(regression < api && api < ui);
+});
+
+test("a verdict without a layer is grouped under ui", () => {
+  const html = BoardQa.panelHtml([{ ...passVerdict(), layer: "api" }, passVerdict()]);
+  const headings = [...html.matchAll(/qa-layer-title">([^<]+)</g)].map((m) => m[1]);
+  assert.deepEqual(headings, ["api", "ui"]);
+  assert.equal(html.match(/qa-layer-title/g).length, 2);
+});
+
+test("a skipped verdict shows the skipped label and its reason", () => {
+  const html = BoardQa.panelHtml([{
+    verdict: "skipped", scenario: SCENARIO, reason: "no QA profile", screenshots: [],
+  }]);
+  assert.match(html, /qa-verdict qa-skipped/);
+  assert.match(html, />skipped</);
+  assert.ok(html.includes("no QA profile"));
 });
 
 test("render fetches the mission QA route and fills the container", async () => {
@@ -113,6 +144,18 @@ test("render fetches the mission QA route and fills the container", async () => 
     await BoardQa.render(container, "m 1");
     assert.equal(calls[0], "/api/board/missions/m%201/qa");
     assert.ok(container.innerHTML.includes("failed step 3"));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("render leaves the container empty when there is no verdict", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ verdict: null }) });
+  try {
+    const container = { innerHTML: "x" };
+    await BoardQa.render(container, "m1");
+    assert.equal(container.innerHTML, "");
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import secrets
+import sys
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -92,6 +93,7 @@ class Step:
     value: str | tuple[str, str]
     expect: Expect
     below: bool = False  # drag only: drop in the lower part of the target card
+    replace: bool = False  # type only: clear + retype (otherwise press_sequentially appends)
     body: dict[str, Any] = field(default_factory=dict)  # api_post only
 
 
@@ -235,6 +237,8 @@ def _step(value: object, field: str) -> Step:
         return _drag_step(body[action], detail, expect)
     if action == "api_post":
         return _api_post_step(body[action], detail, expect)
+    if action == "type":
+        return _type_step(body[action], detail, expect)
     return Step(action, _action_value(action, body[action], detail), expect)
 
 
@@ -266,6 +270,14 @@ def _action_value(action: str, value: object, field: str) -> str | tuple[str, st
             raise ScenarioError(f"{field}: unknown language {language!r}")
         return language
     return _text(value, field)
+
+
+def _type_step(value: object, field: str, expect: Expect) -> Step:
+    body = _mapping(value, field, frozenset({"into", "text", "replace"}))
+    into = _text(body.get("into"), f"{field}.into")
+    text = _text(body.get("text"), f"{field}.text")
+    replace = _bool(body.get("replace", False), f"{field}.replace")
+    return Step("type", (into, text), expect, replace=replace)
 
 
 def _expect(value: object, field: str) -> Expect:
@@ -346,7 +358,11 @@ def select_scenarios(
 
 
 def run_browser_scenario(
-    scenario: Scenario, *, max_minutes: float = DEFAULT_MAX_MINUTES, runs_dir: Path = RUNS_DIR
+    scenario: Scenario,
+    *,
+    max_minutes: float = DEFAULT_MAX_MINUTES,
+    runs_dir: Path = RUNS_DIR,
+    stack_mode: str = "docker",
 ) -> dict[str, Any]:
     try:
         from playwright.sync_api import sync_playwright
@@ -355,10 +371,11 @@ def run_browser_scenario(
     started = time.monotonic()
     run_dir = _new_run_dir(runs_dir)
     try:
-        stack = qa_stack.stack_up(scenario.fixture)
+        stack = qa_stack.stack_up(scenario.fixture, mode=stack_mode)
     except (qa_stack.QaStackError, ValueError) as error:
         progress = _Progress(blocked_reason=f"QA stack did not start: {_reason(error)}")
         return _settle(scenario, run_dir, started, progress, _Recorder())
+    print(f"stack id: {stack.run_id}", file=sys.stderr, flush=True)
     deadline = started + max_minutes * SECONDS_PER_MINUTE
     try:
         progress, recorder = _drive(scenario, stack, sync_playwright, run_dir, deadline)
@@ -526,7 +543,12 @@ def _perform(page: Any, step: Step, base_url: str) -> None:
         field_name, text = _as_pair(step.value)
         by_name = page.locator(f'[name="{field_name}"]')
         field = page.get_by_role("textbox", name=field_name).or_(by_name)
-        field.locator(VISIBLE_ONLY).first.press_sequentially(text)
+        field = field.locator(VISIBLE_ONLY).first
+        if step.replace:
+            field.fill("")
+            field.press_sequentially(text)
+        else:
+            field.press_sequentially(text)
     elif step.action == "press":
         page.keyboard.press(_as_text(step.value))
     elif step.action == "wait_for_text":

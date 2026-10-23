@@ -33,14 +33,43 @@ const ROLES = [
   ["ew.qa", "#5fd0c0", "qa_model", "qa_provider"],
 ];
 const LOCKED = ["working_directory", "retrieval_corpora"];
-const QA_LIMITS = [["mode", "qa_mode"], ["max_minutes", "qa_max_minutes"], ["max_cost_usd", "qa_max_cost_usd"]];
+const QA_LIMITS = [["mode", "qa_mode"], ["max_minutes", "qa_max_minutes"],
+  ["max_cost_usd", "qa_max_cost_usd"], ["smoke", "qa_smoke"]];
 const QA_LABEL_KEYS = {
   provider: "ew.provider", model: "ew.model", mode: "ew.qa.mode",
   max_minutes: "ew.qa.max_minutes", max_cost_usd: "ew.qa.max_cost_usd",
+  smoke: "ew.qa.smoke",
+};
+const QA_MODE_KEY = {
+  off: "ew.qa.mode.off",
+  final: "ew.qa.mode.final",
+  ui_tasks: "ew.qa.mode.ui_tasks",
+  nightly: "ew.qa.mode.nightly",
+};
+const FEATURE_ROWS = [
+  ["plan_no_truncate", ["max_tasks", "max_tasks_hard"]],
+  ["adaptive_split", ["split_steps", "max_splits", "max_total_tasks"]],
+  ["run_hygiene", []],
+];
+const FEAT_LABEL_KEYS = { features_json: "ew.feat.global", mission_features_json: "ew.feat.mission" };
+const FEAT_NAME_KEY = {
+  plan_no_truncate: "ew.feat.name.plan_no_truncate",
+  adaptive_split: "ew.feat.name.adaptive_split",
+  run_hygiene: "ew.feat.name.run_hygiene",
+};
+const FEAT_PARAM_KEY = {
+  max_tasks: "ew.feat.p.max_tasks",
+  max_tasks_hard: "ew.feat.p.max_tasks_hard",
+  split_steps: "ew.feat.p.split_steps",
+  max_splits: "ew.feat.p.max_splits",
+  max_total_tasks: "ew.feat.p.max_total_tasks",
 };
 // The QA role lives in roles_json (qa), not in the form: its controls are not data-key inputs.
 let qaFields = {};
 let qa = null;   // { text, version, initial } from GET /api/board/missions/<id>/roles
+// Features live in features_json (global) and mission_features_json; their controls are not data-key inputs.
+let featFields = {};
+let feat = null; // { state } from featuresState: the texts and versions read from the server
 
 function tr(key, params) {
   return typeof t === "function" ? t(key, params) : key;
@@ -128,6 +157,7 @@ function pageNode(id) {
 
 function labelled(caption, el) {
   const cell = mk("div", "ew-cell");
+  if (!el.ariaLabel) el.ariaLabel = caption;
   cell.append(mk("small", "", caption), el);
   return cell;
 }
@@ -143,14 +173,17 @@ function makeQaFields() {
       none.value = "";
       el.appendChild(none);
       for (const m of BoardRoles.QA_MODES) {
-        const o = mk("option", "", tr("ew.qa.mode." + m));
+        const o = mk("option", "", tr(QA_MODE_KEY[m]));
         o.value = m;
         el.appendChild(o);
       }
+    } else if (field === "smoke") {
+      el = mk("input", "");
+      el.type = "checkbox";
     } else {
       el = mk("input", "");
-      el.type = field.startsWith("max_") ? "number" : "text";
-      if (el.type === "number") el.placeholder = ph[field];
+      el.type = "number";
+      el.placeholder = ph[field];
     }
     el.dataset.extra = key;
     fields[key] = el;
@@ -161,14 +194,15 @@ function makeQaFields() {
 function qaCurrent() {
   const values = {};
   for (const [field, key] of [["provider", "qa_provider"], ["model", "qa_model"]].concat(QA_LIMITS)) {
-    values[field] = qaFields[key].value;
+    values[field] = field === "smoke" ? (qaFields[key].checked ? "true" : "") : qaFields[key].value;
   }
   return values;
 }
 
 function qaFill(values) {
   for (const [field, key] of [["provider", "qa_provider"], ["model", "qa_model"]].concat(QA_LIMITS)) {
-    qaFields[key].value = values[field];
+    if (field === "smoke") qaFields[key].checked = values[field] === "true";
+    else qaFields[key].value = values[field];
   }
 }
 
@@ -189,7 +223,7 @@ function qaProblem() {
 
 function isDirty(box) {
   const s = save();
-  return (s ? s.formDirty(box) : false) || qaRows().length > 0;
+  return (s ? s.formDirty(box) : false) || qaRows().length > 0 || featPlan().diff.length > 0;
 }
 
 // The mission id: the save state has it once the form is attached; a quick click can come
@@ -225,8 +259,137 @@ async function saveQa() {
     qaCurrent(), qa);
 }
 
+function featLib() {
+  return typeof BoardFeatures !== "undefined" ? BoardFeatures : null;
+}
+
+function isObj(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function plainObjectOrNull(text) {
+  if (!text.trim()) return {};
+  try {
+    const v = JSON.parse(text);
+    return isObj(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function makeFeatFields() {
+  const fields = { global: mk("textarea", ""), mission: mk("textarea", "") };
+  for (const [name, params] of FEATURE_ROWS) {
+    const on = mk("input", "");
+    on.type = "checkbox";
+    on.dataset.feat = name + ".enabled";
+    fields[name + ".enabled"] = on;
+    for (const p of params) {
+      const n = mk("input", "");
+      n.type = "number";
+      n.dataset.feat = name + "." + p;
+      fields[name + "." + p] = n;
+    }
+  }
+  for (const el of Object.values(fields)) el.disabled = true;
+  return fields;
+}
+
+function featRowsNode() {
+  const rows = mk("div", "");
+  for (const [name, params] of FEATURE_ROWS) {
+    const line = mk("div", "ew-feat-row");
+    line.appendChild(mk("b", "", tr(FEAT_NAME_KEY[name])));
+    line.appendChild(labelled(tr("ew.feat.enabled"), featFields[name + ".enabled"]));
+    for (const p of params) line.appendChild(labelled(tr(FEAT_PARAM_KEY[p]), featFields[name + "." + p]));
+    rows.appendChild(line);
+  }
+  rows.addEventListener("input", (event) => featRowChanged(event.target));
+  return rows;
+}
+
+// A row change rewrites the global JSON; text that is not an object is left for the validator.
+function featRowChanged(input) {
+  const [name, param] = input.dataset.feat.split(".");
+  const obj = plainObjectOrNull(featFields.global.value);
+  if (!obj || (name in obj && !isObj(obj[name]))) return;
+  const body = { ...obj[name] };
+  if (param === "enabled") body.enabled = input.checked;
+  else if (input.value === "") delete body[param];
+  else body[param] = Number(input.value);
+  obj[name] = body;
+  featFields.global.value = JSON.stringify(obj, null, 2);
+}
+
+// The rows show the values the validator resolves (the defaults when the JSON is absent).
+function featRowsFromText() {
+  const lib = featLib();
+  const parsed = lib ? lib.parseFeatures(featFields.global.value, "") : null;
+  if (!parsed || !parsed.features) return;
+  for (const [name, params] of FEATURE_ROWS) {
+    featFields[name + ".enabled"].checked = parsed.features[name].enabled;
+    for (const p of params) featFields[name + "." + p].value = parsed.features[name][p];
+  }
+}
+
+function featFill(state) {
+  featFields.global.value = state.features_json;
+  featFields.mission.value = state.mission_features_json;
+  featRowsFromText();
+}
+
+function setFeatEnabled(on, hasMission) {
+  for (const [key, el] of Object.entries(featFields)) {
+    el.disabled = !on || (key === "mission" && !hasMission);
+  }
+}
+
+async function loadFeatures() {
+  const s = save();
+  const lib = featLib();
+  const id = currentMissionId();
+  const note = document.getElementById("ew-feat-note");
+  if (!s || !lib) {
+    feat = null;
+    note.textContent = tr("ew.feat.nolib");
+    setFeatEnabled(false);
+    return;
+  }
+  try {
+    const profile = await s.fetchJson("/api/board/features");
+    const mission = id ? await s.fetchJson("/api/board/missions/" + encodeURIComponent(id) + "/features") : null;
+    feat = { state: s.featuresState(profile, mission) };
+    featFill(feat.state);
+    note.textContent = "";
+    setFeatEnabled(true, Boolean(id));
+  } catch (e) {
+    feat = null;
+    note.textContent = tr("ew.feat.loadfail");
+    setFeatEnabled(false);
+  }
+}
+
+// The mission text is not sent without a mission id: its PUT URL would carry "null".
+function featPlan() {
+  const s = save();
+  if (!feat || !s) return { diff: [], requests: [] };
+  const id = currentMissionId();
+  const current = {
+    features_json: featFields.global.value,
+    mission_features_json: id ? featFields.mission.value : feat.state.mission_features_json,
+  };
+  return s.featuresSavePlan(feat.state, id, current);
+}
+
+async function saveFeatures() {
+  const plan = featPlan();
+  for (const req of plan.requests) await save().postJson(req.url, req.body, req.method, req.headers);
+  if (plan.requests.length) await loadFeatures();
+}
+
 function fillPages(box, win) {
   qaFields = makeQaFields();
+  featFields = makeFeatFields();
   const lockedNote = (key) => {
     const row = rowOf(box, key);
     const cur = control(box, key);
@@ -286,6 +449,14 @@ function fillPages(box, win) {
     roles.appendChild(line);
   }
   r.appendChild(roles);
+  const fe = sec(tr("ew.sec.features"), tr("ew.hint.features"));
+  const feNote = mk("div", "ew-warn");
+  feNote.id = "ew-feat-note";
+  const feBox = mk("div", "ew-feat");
+  featFields.global.addEventListener("input", featRowsFromText);
+  feBox.append(feNote, featRowsNode(), labelled(tr("ew.feat.global"), featFields.global),
+    labelled(tr("ew.feat.mission"), featFields.mission));
+  fe.appendChild(feBox);
   const l = sec(tr("ew.sec.limits"));
   const two2 = mk("div", "ew-row2");
   move(two2, "max_tasks"); move(two2, "worker_think_policy_from_task");
@@ -299,7 +470,7 @@ function fillPages(box, win) {
   const qaRow = mk("div", "ew-row2");
   for (const [field, key] of QA_LIMITS) qaRow.appendChild(labelled(tr(QA_LABEL_KEYS[field]), qaFields[key]));
   q.append(qaNote, qaRow);
-  p2.append(a, r, q, l, th);
+  p2.append(a, r, fe, q, l, th);
 
   // page 3
   const p3 = pageNode("ctx");
@@ -311,14 +482,15 @@ function fillPages(box, win) {
 }
 
 function diffLabel(box, field) {
-  return field.startsWith("qa.") ? tr("ew.qa") + " · " + tr(QA_LABEL_KEYS[field.slice(3)]) : labelOf(box, field);
+  if (field.startsWith("qa.")) return tr("ew.qa") + " · " + tr(QA_LABEL_KEYS[field.slice(3)]);
+  return FEAT_LABEL_KEYS[field] ? tr(FEAT_LABEL_KEYS[field]) : labelOf(box, field);
 }
 
 function reviewHtml(box) {
   const page = pageNode("review");
   page.textContent = "";
   const s = save();
-  const diff = (s ? s.currentDiff(box) : []).concat(qaRows());
+  const diff = (s ? s.currentDiff(box) : []).concat(qaRows(), featPlan().diff);
   const sec = mk("div", "ew-sec");
   sec.appendChild(mk("h4", "", tr("ew.s4")));
   sec.appendChild(mk("p", "", diff.length ? tr("ew.changes", { n: diff.length }) : tr("ew.nochange")));
@@ -346,6 +518,10 @@ function problems(box) {
   if (!String(cur.name || "").trim() || !String(cur.objective || "").trim()) return { page: 0, text: tr("ew.invalid") };
   if (typeof cur.worker_think_policy === "string" && cur.worker_think_policy.trim() !== "") return { page: 1, text: tr("ew.badjson") };
   if (qaProblem()) return { page: 1, text: tr("ew.qa.invalid") };
+  if (feat) {
+    const checked = featLib().parseFeatures(featFields.global.value, featFields.mission.value);
+    if (checked.errors.length) return { page: 1, text: tr("ew.feat.invalid", { msg: checked.errors.join("; ") }) };
+  }
   return null;
 }
 
@@ -384,6 +560,7 @@ function closeWin(box, force) {
   if (!force && isDirty(box) && !window.confirm(tr("ew.discard"))) return;
   if (!force && s && s.formDirty(box)) s.onReset(box);
   if (!force && qa) qaFill(qa.initial);
+  if (!force && feat) featFill(feat.state);
   const scrim = document.getElementById("ew-scrim");
   if (scrim) scrim.classList.remove("open");
   document.body.dataset.editing = "";
@@ -405,6 +582,7 @@ async function onNext(box) {
   next.disabled = true;
   try {
     await saveQa();
+    await saveFeatures();
     await save().doSave(box);          // re-renders #boardmission: the observer builds the card again
   } catch (e) {
     document.getElementById("ew-err").textContent = e.message || tr("ew.qa.loadfail");
@@ -422,7 +600,7 @@ function openWin(box) {
   document.body.dataset.editing = "1";
   document.addEventListener("keydown", onKey);
   paint(box);
-  loadQa().then(() => paint(box));
+  Promise.all([loadQa(), loadFeatures()]).then(() => paint(box));
 }
 
 function buildWindow(box) {
@@ -525,7 +703,7 @@ function watch() {
   }).observe(root, { childList: true, subtree: true });
 }
 
-const BoardEditWin = { enhance, openWin, closeWin, PAGES, ROLES };
+const BoardEditWin = { enhance, openWin, closeWin, PAGES, ROLES, problems };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardEditWin;
 } else if (typeof document !== "undefined") {

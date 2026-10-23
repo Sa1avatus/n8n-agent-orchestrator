@@ -199,6 +199,43 @@ function diffHtml(diff, labels) {
   return `<div class="savediff">` + rows.join("") + `</div>`;
 }
 
+// Features state from the two GET payloads (GET /api/board/features and
+// GET /api/board/missions/{id}/features).  An absent payload gives empty texts
+// and null versions, so a board without features reads as an empty state.
+function featuresState(profile, mission) {
+  const p = profile || {};
+  const m = mission || {};
+  return {
+    features_json: p.features_json == null ? "" : String(p.features_json),
+    features_version: p.version == null ? null : p.version,
+    mission_features_json: m.mission_features_json == null ? "" : String(m.mission_features_json),
+    mission_features_version: m.version == null ? null : m.version,
+  };
+}
+
+// The save plan for the two features texts: the diff from the state (shown
+// before the confirm) and one PUT per changed text, each carrying the version
+// it was read at (expected_version, the server's optimistic lock).
+function featuresSavePlan(state, missionId, current) {
+  const fields = [
+    { key: "features_json", url: "/api/board/features", version: state.features_version },
+    { key: "mission_features_json",
+      url: "/api/board/missions/" + encodeURIComponent(missionId) + "/features",
+      version: state.mission_features_version },
+  ];
+  const diff = [];
+  const requests = [];
+  for (const f of fields) {
+    const next = current[f.key] == null ? "" : String(current[f.key]);
+    if (next === state[f.key]) continue;
+    diff.push({ field: f.key, old: state[f.key], new: next });
+    requests.push({ url: f.url, method: "PUT",
+      headers: { "X-AHAWR-Dashboard": "1" },
+      body: { [f.key]: next, expected_version: f.version } });
+  }
+  return { diff, requests };
+}
+
 // --- panel and banner ---
 
 // The panel (banner + diff + button bar) is created once, inside the confbox.
@@ -550,13 +587,14 @@ async function fetchJson(url) {
 // Send a JSON body to one endpoint (POST, or PUT for the roles save); a 409 raises the "план изменился"
 // message, like board_actions.js's postJson.  Board mutation routes require
 // the X-AHAWR-Dashboard header, so every mutation carries it.
-async function postJson(url, body, method = "POST") {
+async function postJson(url, body, method = "POST", headers = {}) {
   const res = await fetch(url, {
     method,
     cache: "no-store",
     headers: {
       "Content-Type": "application/json",
       "X-AHAWR-Dashboard": "1",
+      ...headers,
     },
     body: JSON.stringify(body),
   });
@@ -579,7 +617,7 @@ async function postJson(url, body, method = "POST") {
 // === export (browser global + CommonJS module.exports) ===
 const BoardMissionSave = {
   esc, SaveState, readForm, parseLines, initialValue,
-  captureInitial, formDirty, currentDiff, diffHtml,
+  captureInitial, formDirty, currentDiff, diffHtml, featuresState, featuresSavePlan,
   ensurePanel, showBanner, attachControls, attachToBox,
   onSave, onReset, onCopy, copyIntoForm, doSave,
   fetchServerData, renderClean, refresh, fetchJson, postJson,

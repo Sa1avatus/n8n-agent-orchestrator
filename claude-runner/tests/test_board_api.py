@@ -1687,14 +1687,14 @@ class TestMissionQa:
         await _plan_qa(board_client, [QA_SCENARIO])
         response = await board_client.get("/api/board/missions/m1/qa")
         assert response.status_code == 200
-        assert response.json() == {"verdict": None}
+        assert response.json() == {"verdict": None, "verdicts": []}
 
     async def test_plan_without_scenarios_gets_no_verdict(self, board_client, qa_dirs) -> None:
         runs, _ = qa_dirs
         _write_run(runs, "qa-ab12", build_verdict(scenario=QA_SCENARIO, failed_step=2))
         await _plan_qa(board_client, [])
         response = await board_client.get("/api/board/missions/m1/qa")
-        assert response.json() == {"verdict": None}
+        assert response.json() == {"verdict": None, "verdicts": []}
 
     async def test_failing_verdict_names_the_step_and_links_the_screenshot(
         self, board_client, qa_dirs
@@ -1724,6 +1724,18 @@ class TestMissionQa:
     async def test_nightly_file_is_read_when_no_run_matches(self, board_client, qa_dirs) -> None:
         _, nightly = qa_dirs
         nightly.write_text(json.dumps([build_verdict(scenario=QA_SCENARIO)]), encoding="utf-8")
+        await _plan_qa(board_client, [QA_SCENARIO])
+        verdict = (await board_client.get("/api/board/missions/m1/qa")).json()["verdict"]
+        assert verdict["verdict"] == "pass"
+
+    async def test_nightly_dict_file_is_read_from_scenarios_key(
+        self, board_client, qa_dirs
+    ) -> None:
+        _, nightly = qa_dirs
+        nightly.write_text(
+            json.dumps({"scenarios": [build_verdict(scenario=QA_SCENARIO)], "layers": []}),
+            encoding="utf-8",
+        )
         await _plan_qa(board_client, [QA_SCENARIO])
         verdict = (await board_client.get("/api/board/missions/m1/qa")).json()["verdict"]
         assert verdict["verdict"] == "pass"

@@ -495,6 +495,9 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 .ew-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .ew-cell { min-width: 0; }
 .ew-cell small { display: block; font-size: 11px; color: var(--faint); margin: 0 0 2px; }
+.ew-feat-row { display: grid; grid-template-columns: 150px 90px repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; margin-bottom: 10px; }
+.ew-feat textarea { width: 100%; min-height: 70px; font-family: var(--mono); font-size: 12px; box-sizing: border-box; }
+.ew-feat input[type="checkbox"] { width: auto; }
 .ew-diff { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ew-diff th, .ew-diff td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
 .ew-diff th { font-size: 11.5px; color: var(--mut); }

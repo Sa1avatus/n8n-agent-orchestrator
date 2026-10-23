@@ -187,7 +187,7 @@
       {
         "state_key": "sk_m01",
         "status": "active",
-        "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Map the parser\", \"objective\": \"List the entry points\", \"dependencies\": []}, {\"id\": \"T002\", \"title\": \"Rewrite the tokenizer\", \"objective\": \"Split the scanner\", \"dependencies\": [\"T001\"]}, {\"id\": \"T003\", \"title\": \"Write the tests\", \"objective\": \"Cover the tokenizer\", \"dependencies\": [\"T002\"]}, {\"id\": \"T004\", \"title\": \"Write the docs\", \"objective\": \"Describe the parser\", \"dependencies\": [\"T003\"]}]}",
+        "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Map the parser\", \"objective\": \"List the entry points\", \"dependencies\": []}, {\"id\": \"T002\", \"title\": \"Rewrite the tokenizer\", \"objective\": \"Split the scanner\", \"dependencies\": [\"T001\"]}, {\"id\": \"T003\", \"title\": \"Write the tests\", \"objective\": \"Cover the tokenizer\", \"dependencies\": [\"T002\"]}, {\"id\": \"T004\", \"title\": \"Write the docs\", \"objective\": \"Describe the parser\", \"dependencies\": [\"T003\"]}], \"qa\": {\"needed\": true, \"reasons\": [\"ui regression and api coverage are checked on each run\"], \"scenarios\": [\"qa panel regression fail and skipped verdicts\"]}}",
         "task_index": 1,
         "task_attempt": 2
       },
@@ -419,5 +419,20 @@
         "text": "Очередь пуста"
       }
     ]
-  }
+  },
+  "qa_verdicts": [
+    {
+      "scenario": "qa panel regression fail and skipped verdicts",
+      "layer": "regression",
+      "verdict": "fail",
+      "failed_step": 0,
+      "failed_reason": "new failure tests/test_x.py::test_y"
+    },
+    {
+      "scenario": "qa panel regression fail and skipped verdicts",
+      "layer": "regression",
+      "verdict": "skipped",
+      "reason": "no QA profile"
+    }
+  ]
 }

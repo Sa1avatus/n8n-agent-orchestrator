@@ -6,25 +6,67 @@ from __future__ import annotations
 import asyncio
 import hmac
 import shutil
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .board_api import add_board_routes
 from .claude_cli import child_env
 from .config import Settings
 from .handoff import session_digest
 from .mem_guard import MemGuard
+from .qa_requests import QaRequestStore, QaTransitionError
+from .roles_config import QA_LAYERS
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
 from .search import DEFAULT_LIMIT, MAX_LIMIT
 from .search import search as run_search
 from .think_switch import ThinkSwitch
+
+QaMode = Literal["final", "ui_tasks"]
+QaStatus = Literal["queued", "running", "done", "error", "timeout"]
+QaVerdict = Literal["pass", "fail", "skipped", "blocked"]
+
+
+QaLayer = Literal["regression", "api", "ui"]
+
+
+class QaRequestBody(BaseModel):
+    mission_id: str = Field(min_length=1)
+    working_directory: str = ""
+    mode: QaMode
+    nonce: str = Field(min_length=1)
+    layers: list[QaLayer] | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def check_layers(cls, values: dict[str, Any]) -> dict[str, Any]:
+        layers = values.get("layers")
+        if layers is not None and not all(name in QA_LAYERS for name in layers):
+            raise ValueError(f"unknown QA layer: {layers}")
+        return values
+
+
+class QaResultBody(BaseModel):
+    verdicts: list[QaVerdict] = Field(default_factory=list)
+    error: str = ""
+
+
+@contextmanager
+def _qa_refusals(request_id: str) -> Iterator[None]:
+    try:
+        yield
+    except KeyError:
+        raise RunnerError(
+            "qa_request_not_found", f"QA request {request_id} not found.", 404
+        ) from None
+    except QaTransitionError as exc:
+        raise RunnerError("qa_transition_refused", str(exc), 409) from None
 
 
 class RunBody(BaseModel):
@@ -86,6 +128,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         manager = RunManager(settings)
         app.state.manager = manager
+        app.state.qa_requests = QaRequestStore(str(settings.data_dir / "qa_requests.json"))
         # the board's stats routes read the run data through the manager, so
         # the board routes must be attached only once the manager exists
         add_board_routes(app, settings)
@@ -135,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 guard_task.cancel()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.9.0", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.10.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -149,6 +192,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def manager_of(application: FastAPI) -> RunManager:
         return application.state.manager  # type: ignore[no-any-return]
+
+    def qa_store(request: Request) -> QaRequestStore:
+        return request.app.state.qa_requests  # type: ignore[no-any-return]
 
     @app.exception_handler(RunnerError)
     async def runner_error(_: Request, exc: RunnerError) -> JSONResponse:
@@ -314,5 +360,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         body = body or CompactBody()
         return await manager(request).compact(session_id, body.mode, body.min_tokens, body.model)
+
+    @app.post("/v1/qa/requests", dependencies=[Depends(authorize)])
+    def create_qa_request(body: QaRequestBody, request: Request) -> dict[str, Any]:
+        layers: list[str] | None = list(body.layers) if body.layers else None
+        created = qa_store(request).create(
+            body.mission_id,
+            body.working_directory,
+            body.mode,
+            body.nonce,
+            layers,
+        )
+        return qa_store(request).request_dict(created)
+
+    @app.get("/v1/qa/requests", dependencies=[Depends(authorize)])
+    def list_qa_requests(request: Request, status: QaStatus | None = None) -> list[dict[str, Any]]:
+        store = qa_store(request)
+        return [store.request_dict(item) for item in store.list_requests(status)]
+
+    @app.get("/v1/qa/requests/{request_id}", dependencies=[Depends(authorize)])
+    def get_qa_request(request_id: str, request: Request) -> dict[str, Any]:
+        found = qa_store(request).get(request_id)
+        if found is None:
+            raise RunnerError("qa_request_not_found", f"QA request {request_id} not found.", 404)
+        return qa_store(request).request_dict(found)
+
+    @app.post("/v1/qa/requests/{request_id}/claim", dependencies=[Depends(authorize)])
+    def claim_qa_request(request_id: str, request: Request) -> dict[str, Any]:
+        with _qa_refusals(request_id):
+            return qa_store(request).request_dict(qa_store(request).claim(request_id))
+
+    @app.post("/v1/qa/requests/{request_id}/result", dependencies=[Depends(authorize)])
+    def finish_qa_request(
+        request_id: str, body: QaResultBody, request: Request
+    ) -> dict[str, Any]:
+        with _qa_refusals(request_id):
+            return qa_store(request).request_dict(
+                qa_store(request).finish(request_id, body.verdicts, body.error)
+            )
 
     return app

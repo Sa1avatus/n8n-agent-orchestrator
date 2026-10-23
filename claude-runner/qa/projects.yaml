@@ -1,0 +1,13 @@
+projects:
+  - name: claude-runner
+    working_directory: /d/n8n/claude-runner
+    regression:
+      - name: pytest
+        command: python -m pytest -q --no-cov -p no:cacheprovider -rf
+      - name: node
+        command: node --test tests/*.test.js
+      - name: ruff
+        command: ruff check src tests
+      - name: mypy
+        command: mypy src
+    baseline: qa/baselines/claude-runner.json

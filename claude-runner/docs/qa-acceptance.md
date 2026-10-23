@@ -1,9 +1,13 @@
-# QA acceptance: design
+# QA
 
-QA acceptance checks a finished mission the way a user would: it opens the dashboard in a
+QA checks a finished mission the way a user would: it opens the dashboard in a
 throwaway stack, clicks and types through the user-level scenarios, and gives a verdict. It
 is a separate step from the Reviewer, which judges each Worker attempt from the code and the
 output. This document is the design; the mission `ahawr-qa-acceptance` (ROADMAP.md) builds it.
+
+QA now has three layers: `regression`, `api` and `ui`. The layers, their verdicts and the
+operator setting are described in [qa-layers.md](qa-layers.md); this document covers the `ui`
+scenarios.
 
 ## Modes
 
@@ -16,6 +20,9 @@ QA has four modes, set by `mode` in the `qa` options of `roles_json` (see `roles
 
 The validator already accepts `mode`, `max_minutes` and `max_cost_usd` under `qa`; the
 meaning of the modes is set here and is not yet wired into the workflow.
+
+The smoke crawl, a scenario-less layer that checks the stack for generic failures, is designed in
+[qa-smoke.md](qa-smoke.md). It runs next to the scenarios described here and is off by default.
 
 ## Why QA does not run after every task
 

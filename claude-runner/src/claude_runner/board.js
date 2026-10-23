@@ -27,16 +27,32 @@ function localEsc(v) {
 }
 function escValue(v) { return typeof esc === "function" ? esc(v) : localEsc(v); }
 
+// The board store can be unavailable for a few seconds after a start (the database comes up later):
+// a 503 is retried here, with a loading note, before any view reports the board as offline.
+const LOADING_RETRIES = 8;
+const LOADING_DELAY_MS = 2500;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function getJSON(url) {
-  const res = await fetch(url, { cache: "no-store" });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  let waited = false;
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch(url, { cache: "no-store" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) {
+      if (waited) state("", "");
+      return body;
+    }
+    if (res.status === 503 && attempt < LOADING_RETRIES) {
+      waited = true;
+      state(t("board.loading"), "");
+      await pause(LOADING_DELAY_MS);
+      continue;
+    }
     const err = new Error(body.error || "HTTP " + res.status);
     err.status = res.status;
     err.body = body;
     throw err;
   }
-  return body;
 }
 
 function state(html, cls) {

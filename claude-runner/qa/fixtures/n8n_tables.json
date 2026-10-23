@@ -385,6 +385,10 @@
   [
    "roles_json",
    "text"
+  ],
+  [
+   "features_json",
+   "text"
   ]
  ]
 }

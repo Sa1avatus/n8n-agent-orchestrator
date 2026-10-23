@@ -1,0 +1,23 @@
+.F.F                                                                     [100%]
+=================================== FAILURES ===================================
+__________________________________ test_fails __________________________________
+
+    def test_fails():
+>       assert 1 == 2
+E       assert 1 == 2
+
+tests/test_sample.py:9: AssertionError
+________________________________ test_param[2] _________________________________
+
+value = 2
+
+    @pytest.mark.parametrize("value", [1, 2])
+    def test_param(value):
+>       assert value == 1
+E       assert 2 == 1
+
+tests/test_sample.py:14: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_sample.py::test_fails - assert 1 == 2
+FAILED tests/test_sample.py::test_param[2] - assert 2 == 1
+2 failed, 2 passed in 2.69s

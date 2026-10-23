@@ -1,0 +1,113 @@
+{
+  "cases": [
+    {
+      "name": "verdict pass",
+      "row": 1,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["pass"]},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0}
+    },
+    {
+      "name": "verdict fail at retry 0",
+      "row": 2,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["fail"], "failed_step": "Step 2", "failed_reason": "button missing"},
+      "retries": 0,
+      "expect": {"decision": "needs_changes", "next_task_contains": "Step 2", "notices": 1, "retries": 1}
+    },
+    {
+      "name": "verdict fail at retry 1",
+      "row": 2,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["fail"], "failed_step": "Step 3", "failed_reason": "wrong title"},
+      "retries": 1,
+      "expect": {"decision": "needs_changes", "next_task_contains": "Step 3", "notices": 1, "retries": 2}
+    },
+    {
+      "name": "verdict fail at retry 2 accepts with a warning",
+      "row": 3,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["fail"], "failed_step": "Step 3", "failed_reason": "wrong title"},
+      "retries": 2,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 2}
+    },
+    {
+      "name": "verdict skipped is silent",
+      "row": 4,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["skipped"]},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 0, "retries": 0}
+    },
+    {
+      "name": "verdict blocked",
+      "row": 5,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": ["blocked"], "failed_reason": "not a git repository"},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0},
+      "never_rejects": true
+    },
+    {
+      "name": "state error",
+      "row": 6,
+      "poll": {"status": "error", "claimed_at": "2026-10-21T10:00:00Z", "error": "worker crashed"},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0},
+      "never_rejects": true
+    },
+    {
+      "name": "timeout after claim",
+      "row": 7,
+      "poll": {"status": "timeout", "claimed_at": "2026-10-21T10:00:00Z"},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0},
+      "never_rejects": true
+    },
+    {
+      "name": "no claim within the wait",
+      "row": 8,
+      "poll": {"status": "timeout"},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0},
+      "never_rejects": true
+    },
+    {
+      "name": "runner unreachable",
+      "row": 9,
+      "poll": {},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0}
+    },
+    {
+      "name": "missing worker, request still queued",
+      "row": 10,
+      "poll": {"status": "queued"},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0}
+    },
+    {
+      "name": "regression fail names the layer",
+      "row": 2,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": [{"layer": "regression", "verdict": "fail", "failed_reason": "new failure tests/test_x.py::test_y"}]},
+      "retries": 0,
+      "expect": {"decision": "needs_changes", "next_task_contains": "QA regression failed: new failure tests/test_x.py::test_y", "notices": 1, "retries": 1}
+    },
+    {
+      "name": "api blocked does not reject",
+      "row": 5,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": [{"layer": "api", "verdict": "blocked", "failed_reason": "api server did not start"}]},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0}
+    },
+    {
+      "name": "ui pass with regression skipped passes",
+      "row": 1,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": [{"layer": "regression", "verdict": "skipped"}, {"layer": "ui", "verdict": "pass"}]},
+      "retries": 0,
+      "expect": {"decision": "accept", "next_task_contains": null, "notices": 1, "retries": 0}
+    },
+    {
+      "name": "two layers failing are both named",
+      "row": 2,
+      "poll": {"status": "done", "claimed_at": "2026-10-21T10:00:00Z", "verdicts": [{"layer": "regression", "verdict": "fail", "failed_reason": "new failure tests/test_x.py::test_y"}, {"layer": "ui", "verdict": "fail", "failed_step": 2, "failed_reason": "button missing"}]},
+      "retries": 0,
+      "expect": {"decision": "needs_changes", "next_task_contains": "QA regression failed: new failure tests/test_x.py::test_y; QA ui failed at 2: button missing", "notices": 1, "retries": 1}
+    }
+  ]
+}

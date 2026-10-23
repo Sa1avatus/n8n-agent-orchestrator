@@ -1,0 +1,4 @@
+src/pkg/types_bad.py:5: error: Argument 1 to "add" has incompatible type "str"; expected "int"  [arg-type]
+src/pkg/types_bad.py:6: error: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]
+src/pkg/bad.py:4: error: Function is missing a type annotation  [no-untyped-def]
+Found 3 errors in 2 files (checked 5 source files)

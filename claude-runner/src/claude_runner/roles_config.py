@@ -14,11 +14,16 @@ MAX_ROLE_KEYS = 10
 MAX_DISTINCT_MODELS = 8
 KNOWN_ROLES = frozenset({"architect", "worker", "reviewer", "service", "qa", "report"})
 COMMON_OPTION_KEYS = frozenset({"fresh", "think", "max_polls", "poll_seconds", "max_retries"})
-QA_OPTION_KEYS = COMMON_OPTION_KEYS | {"mode", "max_minutes", "max_cost_usd"}
+QA_OPTION_KEYS = COMMON_OPTION_KEYS | {"mode", "max_minutes", "max_cost_usd", "layers", "smoke"}
 QA_MODES = ("off", "final", "ui_tasks", "nightly")
 QA_DEFAULT_OPTIONS: dict[str, Any] = {"mode": "off", "max_minutes": 20, "max_cost_usd": 1}
 QA_LIMIT_KEYS = ("max_minutes", "max_cost_usd")
+QA_LAYERS = ("regression", "api", "ui")
+QA_DEFAULT_LAYERS = ("ui",)
 _ATTEMPT_KEY_PATTERN = re.compile(r"[1-9][0-9]*")
+ESCALATE_SUFFIX = "_escalate"
+ESCALATE_KEYS = frozenset({"model", "above_steps", "below_score"})
+MAX_SCORE = 100
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,11 @@ def validate_roles(roles: Any, providers: Collection[str]) -> RolesReport:
     warnings: list[str] = []
     models: set[str] = set()
     for role, value in roles.items():
+        if role.removesuffix(ESCALATE_SUFFIX) in KNOWN_ROLES and role.endswith(ESCALATE_SUFFIX):
+            errors.extend(_check_escalate(role, value, providers))
+            if isinstance(value, dict) and isinstance(value.get("model"), str):
+                models.add(value["model"])
+            continue
         if role not in KNOWN_ROLES:
             warnings.append(f"role {role!r} is not a known role")
         errors.extend(_check_role(role, value, providers))
@@ -71,6 +81,20 @@ def validate_roles(roles: Any, providers: Collection[str]) -> RolesReport:
             f"roles_json uses {len(models)} distinct models, more than {MAX_DISTINCT_MODELS}"
         )
     return RolesReport(errors=tuple(errors), warnings=tuple(warnings))
+
+
+def _check_escalate(role: str, value: Any, providers: Collection[str]) -> list[str]:
+    if not isinstance(value, dict):
+        return [f"role {role!r}: value must be an object with model and above_steps"]
+    errors = [f"role {role!r}: unknown key {key!r}" for key in value if key not in ESCALATE_KEYS]
+    errors.extend(_check_model(role, "model", value.get("model"), providers))
+    steps = value.get("above_steps")
+    if isinstance(steps, bool) or not isinstance(steps, int) or steps < 1:
+        errors.append(f"role {role!r}: 'above_steps' must be a whole number of at least 1")
+    below = value.get("below_score", 1)
+    if isinstance(below, bool) or not isinstance(below, int | float) or not 0 < below <= MAX_SCORE:
+        errors.append(f"role {role!r}: 'below_score' must be above 0 and up to {MAX_SCORE}")
+    return errors
 
 
 def _check_role(role: str, value: Any, providers: Collection[str]) -> list[str]:
@@ -137,7 +161,33 @@ def _check_qa_options(role: str, options: dict[str, Any]) -> list[str]:
     for key in QA_LIMIT_KEYS:
         if key in options and not _is_positive_number(options[key]):
             errors.append(f"role {role!r}: option {key!r} must be a positive number")
+    if "smoke" in options and not isinstance(options["smoke"], bool):
+        errors.append(f"role {role!r}: option 'smoke' must be true or false")
+    if "layers" in options:
+        errors.extend(_check_layers(role, options["layers"]))
     return errors
+
+
+def _check_layers(role: str, layers: Any) -> list[str]:
+    if not isinstance(layers, list):
+        return [f"role {role!r}: option 'layers' must be a list of layer names"]
+    errors: list[str] = []
+    seen: set[str] = set()
+    for layer in layers:
+        if not isinstance(layer, str) or layer not in QA_LAYERS:
+            errors.append(
+                f"role {role!r}: option 'layers' has unknown layer {layer!r}, "
+                f"use one of {', '.join(QA_LAYERS)}"
+            )
+        elif layer in seen:
+            errors.append(f"role {role!r}: option 'layers' repeats layer {layer!r}")
+        else:
+            seen.add(layer)
+    return errors
+
+
+def qa_layers(options: Mapping[str, Any]) -> list[str]:
+    return list(options.get("layers") or QA_DEFAULT_LAYERS)
 
 
 def _is_positive_number(value: Any) -> bool:
@@ -195,15 +245,22 @@ def legacy_role(columns: Mapping[str, Any], role: str) -> dict[str, Any]:
 
 
 def resolve(
-    roles: Mapping[str, Any], role: str, attempt: int, legacy: Mapping[str, Any]
+    roles: Mapping[str, Any],
+    role: str,
+    attempt: int,
+    legacy: Mapping[str, Any],
+    facts: Mapping[str, Any] | None = None,
 ) -> ResolvedRole:
-    model, picked = _pick(roles, role, attempt, legacy)
+    """``facts`` (score, steps, split_steps) are read only by the ``<role>_escalate`` block."""
+    model, picked = _chosen(roles, role, attempt, legacy, facts)
     defaults = QA_DEFAULT_OPTIONS if role == "qa" else {}
     options = {FRESH_KEY: FRESH_AUTO, **defaults, **picked}
     provider, name = split_model(model)
     fresh_option = options[FRESH_KEY]
     if fresh_option == FRESH_AUTO:
-        fresh = attempt > 1 and _pick(roles, role, attempt - 1, legacy)[0] != model
+        # the previous attempt ran escalated only when the whole task was (a split part)
+        previous = {"split_steps": (facts or {}).get("split_steps")}
+        fresh = attempt > 1 and _chosen(roles, role, attempt - 1, legacy, previous)[0] != model
     elif isinstance(fresh_option, bool):
         fresh = fresh_option
     else:
@@ -217,8 +274,37 @@ def resolve(
     )
 
 
+def _chosen(
+    roles: Mapping[str, Any],
+    role: str,
+    attempt: int,
+    legacy: Mapping[str, Any],
+    facts: Mapping[str, Any] | None,
+) -> tuple[str, dict[str, Any]]:
+    model, options = _pick(roles, role, attempt, legacy)
+    return _escalated(roles.get(f"{role}{ESCALATE_SUFFIX}"), facts) or model, options
+
+
+def _escalated(block: Any, facts: Mapping[str, Any] | None) -> str | None:
+    """The escalation model when the task used more than ``above_steps`` steps and either it is
+    a split part (the split came from that many steps) or the last attempt scored too low."""
+    if not isinstance(block, dict) or not facts:
+        return None
+    limit = block["above_steps"]
+    split_steps = facts.get("split_steps")
+    if split_steps is not None and split_steps > limit:
+        return str(block["model"])
+    steps, score, below = facts.get("steps"), facts.get("score"), block.get("below_score")
+    if steps is None or steps <= limit:
+        return None
+    return str(block["model"]) if below is None or (score is not None and score < below) else None
+
+
 def _pick(
-    roles: Mapping[str, Any], role: str, attempt: int, legacy: Mapping[str, Any]
+    roles: Mapping[str, Any],
+    role: str,
+    attempt: int,
+    legacy: Mapping[str, Any],
 ) -> tuple[str, dict[str, Any]]:
     chain = FALLBACK_ROLES.get(role, (role,))
     legacy_values = {name: legacy_role(legacy, name) for name in chain}

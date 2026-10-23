@@ -1,0 +1,78 @@
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -115,7 +115,7 @@
+   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
+   # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
+   # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
+-  # n8n reaches it at http://claude-runner:8700 over the stack network; the port is published on 127.0.0.1 only, for the host QA worker.
++  # n8n reaches it at http://claude-runner:8700 over the stack network; no port is published to the host.
+   claude-runner:
+     build:
+       context: ./claude-runner
+@@ -126,9 +126,7 @@
+ 
+     container_name: claude-runner
+     restart: unless-stopped
+-    # the host QA worker (data-tables/ops/qa_worker.py) polls the QA request queue here; bound to the loopback only, the API key still applies
+-    ports:
+-      - "127.0.0.1:8700:8700"
++    # no published port: the QA worker runs in ahawr-qa and reaches this runner over the stack network, so the host needs no port
+     # 2026-10-15: there was no limit; Worker python scripts that read the 9 GB GGUF into RAM (anon-rss 7-9 GB, six times in a night) made the kernel of the
+     # Docker VM kill processes VM-wide and finally restart the VM. With a cap only the offending process dies inside this container.
+     mem_limit: 6g
+@@ -203,6 +201,50 @@
+ 
+     stop_grace_period: 60s
+ 
++  # AHAWR QA worker: runs the QA scenarios in its own container (claude-runner/qa/Dockerfile.qa).
++  # It polls the runner over the stack network; it publishes no port and gets no host access beyond the mounts below.
++  ahawr-qa:
++    build:
++      context: ./claude-runner
++      dockerfile: qa/Dockerfile.qa
++
++    container_name: ahawr-qa
++    restart: unless-stopped
++    read_only: true
++    tmpfs:
++      - /tmp
++      - /home/node
++
++    # memory and CPU caps of the QA run; a runaway scenario is killed alone
++    mem_limit: ${AHAWR_QA_MEM_LIMIT:-4g}
++    memswap_limit: ${AHAWR_QA_MEM_LIMIT:-4g}
++    cpus: ${AHAWR_QA_CPUS:-2}
++
++    environment:
++      - CLAUDE_RUNNER_URL=http://claude-runner:8700
++      - CLAUDE_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
++      - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
++
++    volumes:
++      # the repository and the missions' working directories, read-only (the same mapping as claude-runner)
++      - type: bind
++        source: ${AHAWR_HOST_DRIVE:-D:\}
++        target: /d
++        read_only: true
++      - ${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}:/workspace:ro
++      # the QA worker heartbeat directory only; under /d so the default QA_WORKER_HEARTBEAT_PATH maps onto it
++      - type: bind
++        source: D:\n8n\data-tables\ops\heartbeat
++        target: /d/n8n/data-tables/ops/heartbeat
++        bind:
++          create_host_path: true
++      # verdicts, screenshots and logs of the QA runs
++      - qa-runs:/qa-runs
++
++    depends_on:
++      claude-runner:
++        condition: service_started
++
+   # AHAWR dashboard: http://localhost:8701 (127.0.0.1 only, read-only). Every agent run with its
+   # thinking, tool calls and results, steps, timings and tokens: Claude Code runs from
+   # claude-runner and Hermes sessions from the Hermes API server (HERMES_API_URL/HERMES_API_KEY).
+@@ -327,3 +369,4 @@
+   claude-runner-home:
+   claude-runner-data:
+   ahawr-guards-state:
++  qa-runs:
