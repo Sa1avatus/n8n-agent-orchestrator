@@ -33,7 +33,7 @@ from .host_actions import (
     host_actions_enabled,
 )
 from .mem_guard import MemGuard
-from .provider_registry import ProviderRegistry
+from .provider_registry import ProviderRegistry, env_provider_row
 from .provider_secrets import ProviderSecrets
 from .qa_requests import QaRequestStore, QaTransitionError
 from .report_facts import build_pack, collect_repo_facts, parse_digest
@@ -300,7 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.200", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.11.300", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -414,6 +414,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def list_providers(request: Request) -> dict[str, Any]:
         registry: ProviderRegistry = request.app.state.provider_registry
         return {"providers": list(registry.views().values())}
+
+    @app.get("/v1/providers/env-proposals", dependencies=[Depends(authorize)])
+    async def env_provider_proposals(request: Request) -> dict[str, Any]:
+        """The env provider blocks as import rows (name, base URL, key set or not); no key value."""
+        registry: ProviderRegistry = request.app.state.provider_registry
+        return {"providers": [env_provider_row(p) for p in registry.env_profiles().values()]}
 
     @app.post("/v1/providers/reload", dependencies=[Depends(authorize)])
     async def reload_providers(request: Request) -> dict[str, Any]:

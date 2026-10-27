@@ -220,7 +220,26 @@ def create_dashboard_app(
     board_api.add_board_routes(app, settings)
     if settings.providers_db:
         secrets = ProviderSecrets(settings.secrets_file or Path("provider-secrets.json"))
-        add_provider_routes(app, secrets)
+
+        def runner_env_providers() -> list[dict[str, Any]]:
+            """Ask the runner, which holds the env provider blocks, for the import rows."""
+            try:
+                response = httpx.get(
+                    settings.runner_url + "/v1/providers/env-proposals",
+                    headers=(
+                        {"Authorization": f"Bearer {settings.runner_api_key}"}
+                        if settings.runner_api_key
+                        else {}
+                    ),
+                    timeout=settings.timeout_seconds,
+                )
+                response.raise_for_status()
+                return list(response.json()["providers"])
+            except (httpx.HTTPError, ValueError, KeyError) as exc:
+                logger.warning("env provider list from the runner failed: %s", _describe_error(exc))
+                return []
+
+        add_provider_routes(app, secrets, env_source=runner_env_providers)
     if getattr(app.state, "manager", None) is None:
         # the board statistics read runs through a RunManager-like object; the dashboard has no
         # runner database, so it reads the runner over HTTP

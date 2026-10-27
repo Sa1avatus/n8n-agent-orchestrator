@@ -21,7 +21,7 @@ from fastapi import APIRouter, FastAPI, Query, Request
 
 from claude_runner.board import ConflictError, Mission
 from claude_runner.board_api import _require_dashboard_header, _store_guard
-from claude_runner.config import CREDENTIAL_VARS, ProviderProfile
+from claude_runner.config import ProviderProfile
 from claude_runner.provider_api_types import (
     CAPABILITY_KEYS,
     ApiType,
@@ -29,6 +29,7 @@ from claude_runner.provider_api_types import (
     load_templates,
     worker_warning,
 )
+from claude_runner.provider_registry import env_provider_row
 from claude_runner.provider_secrets import ProviderSecrets
 from claude_runner.roles_config import MODEL_SEPARATOR, split_model
 
@@ -47,7 +48,6 @@ PROBE_MAX_TOKENS = 16
 PROBE_PROMPT = "Reply with one word."
 PROBE_SYSTEM = "You are a terse assistant."
 PROBE_TOOL_NAME = "probe_ping"
-ENV_KEY_VARS = tuple(var for var in CREDENTIAL_VARS if var != "ANTHROPIC_BASE_URL")
 
 Validator = Callable[[str, Any], None]
 
@@ -348,18 +348,18 @@ def _probe_result(
     }
 
 
-def _env_proposal(profile: ProviderProfile, existing: set[str]) -> dict[str, Any]:
-    name = profile.name.lower().replace("_", "-")
+DEFAULT_ANTHROPIC_URL = "https://api.anthropic.com"
+
+
+def _env_proposal(row: Mapping[str, Any], existing: set[str]) -> dict[str, Any]:
+    name = str(row["name"]).lower().replace("_", "-")
+    # an env block without ANTHROPIC_BASE_URL talks to the vendor's own endpoint
     fields = {
         "label": name,
         "api_type": "anthropic",
-        "base_url": profile.env.get("ANTHROPIC_BASE_URL", ""),
+        "base_url": row["base_url"] or DEFAULT_ANTHROPIC_URL,
     }
-    row = {
-        "name": name,
-        "has_key": any(profile.env.get(var, "").strip() for var in ENV_KEY_VARS),
-        "exists": name in existing,
-    }
+    row = {"name": name, "has_key": bool(row["has_key"]), "exists": name in existing}
     try:
         _check_fields(fields, PROVIDER_CHECKS, PROVIDER_NON_NULL, PROVIDER_REQUIRED)
         _name(name, _PROVIDER_NAME_RE, "name")
@@ -391,7 +391,11 @@ def _build_router() -> APIRouter:
         store, _ = _deps(request)
         existing = {view["name"] for view in store.list_providers()}
         profiles: dict[str, ProviderProfile] = request.app.state.provider_profiles
-        proposals = [_env_proposal(profile, existing) for profile in profiles.values()]
+        rows = [env_provider_row(profile) for profile in profiles.values()]
+        source = getattr(request.app.state, "provider_env_source", None)
+        if not rows and source is not None:
+            rows = source()
+        proposals = [_env_proposal(row, existing) for row in rows]
         return {"dry_run": True, "proposals": proposals}
 
     @router.get("/templates")
@@ -531,9 +535,11 @@ def add_provider_routes(
     *,
     providers: Mapping[str, ProviderProfile] | None = None,
     post: PostFn = _httpx_post,
+    env_source: Callable[[], list[dict[str, Any]]] | None = None,
 ) -> None:
     """Attach the provider routes; ``add_board_routes`` must already have set the error handlers."""
     app.state.provider_secrets = secrets
     app.state.provider_profiles = dict(providers or {})
     app.state.provider_post = post
+    app.state.provider_env_source = env_source
     app.include_router(_build_router())

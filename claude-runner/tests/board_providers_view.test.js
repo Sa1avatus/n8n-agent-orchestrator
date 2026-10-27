@@ -135,7 +135,9 @@ async function main() {
     const text = allText(board);
     check("name and base URL rendered", text.includes("alpha") && text.includes("https://a.example"));
     check("key set_at rendered", text.includes("2026-10-01T00:00:00Z"));
-    check("model count rendered", allNodes(board).some((n) => n.textContent === "2"));
+    check("the first provider is selected and its form is open", text.includes("Provider alpha"));
+    check("its models are listed", text.includes("m1") && text.includes("m2"));
+    check("the board shows only the providers page", board.className === "provopen");
     check("import proposal rendered", text.includes("https://b.example"));
     check("key value never rendered", !text.includes(SECRET));
   }
@@ -153,7 +155,8 @@ async function main() {
   {
     const { view, board, calls, env } = load();
     await view.open();
-    const select = allNodes(board).find((n) => n.tag === "select");
+    const checks = allNodes(board).find((n) => n.className === "bvprov-checks");
+    const select = allNodes(checks).find((n) => n.tag === "select");
     select.value = "m2";
     env.answer = false;
     await buttons(board, "Test")[0].handlers.click();
@@ -169,12 +172,29 @@ async function main() {
     const { view, board, calls, env, notices } = load();
     env.answer = true;
     await view.open();
-    await buttons(board, "Edit")[0].handlers.click();
     await buttons(board, "Save")[0].handlers.click();
     check("conflict reaches showNotice", notices.length === 1 && notices[0].includes("Version conflict"));
     check("the conflict is in the page notice line", allText(board).includes("Version conflict"));
     check("no confirmed write after the conflict",
       !calls.some((c) => c.method === "PUT" && c.body && !c.body.dry_run));
+  }
+  {
+    const { view, board } = load();
+    await view.open();
+    await buttons(board, "New provider")[0].handlers.click();
+    const text = allText(board);
+    check("a new provider offers the template select", text.includes("Add from template"));
+    check("a new provider has no Test button", buttons(board, "Test").length === 0);
+  }
+
+  {
+    const { view, board } = load();
+    await view.open();
+    const item = allNodes(board).find((n) => n.tag === "button" && String(n.className).startsWith("bvprov-item"));
+    check("the provider list item shows the key state", allText(item).includes("key set"));
+    const back = buttons(board, "Back to missions")[0];
+    back.handlers.click();
+    check("closing the page shows the board again", board.className === "");
   }
   console.log("board_providers_view tests passed");
 }

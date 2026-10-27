@@ -342,6 +342,10 @@ function templateRow(ui, inputs, typeNotes) {
   const apply = ui.el("button", { type: "button", textContent: ui.L("prov.form.template_apply", "Apply") }, []);
   apply.addEventListener("click", applyTemplate);
   select.addEventListener("change", applyTemplate);
+  if (ui.template) {
+    select.value = ui.template;
+    applyTemplate();
+  }
   return ui.el("div", {}, [
     ui.el("label", {}, [ui.el("span", { textContent: ui.L("prov.form.template", "Add from template") }, []), select]),
     apply,

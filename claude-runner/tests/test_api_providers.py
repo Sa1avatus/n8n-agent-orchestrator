@@ -212,3 +212,10 @@ def test_flag_on_failing_store_starts_with_the_env_list(
     response = client.get("/v1/providers")
     assert response.status_code == 200
     assert response.json() == GOLDEN_FLAG_OFF
+
+
+def test_env_proposals_list_the_env_blocks_without_key_values(flag_off: TestClient) -> None:
+    rows = flag_off.get("/v1/providers/env-proposals").json()["providers"]
+    assert rows
+    assert all(set(row) == {"name", "base_url", "has_key"} for row in rows)
+    assert "sk-made-up-env" not in str(rows)

@@ -11,7 +11,12 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from claude_runner.config import PROVIDERS_RELOAD_POLL_SECONDS, ProviderProfile, provider_key
+from claude_runner.config import (
+    CREDENTIAL_VARS,
+    PROVIDERS_RELOAD_POLL_SECONDS,
+    ProviderProfile,
+    provider_key,
+)
 from claude_runner.provider_api_types import route_for
 from claude_runner.provider_secrets import ProviderSecrets
 
@@ -77,6 +82,18 @@ def _entry_from_row(row: dict[str, Any], api_key: str | None) -> ProviderEntry:
     )
 
 
+ENV_KEY_VARS = tuple(var for var in CREDENTIAL_VARS if var != "ANTHROPIC_BASE_URL")
+
+
+def env_provider_row(profile: ProviderProfile) -> dict[str, Any]:
+    """What an import proposal needs of an env block: name, base URL and whether a key is set."""
+    return {
+        "name": profile.name,
+        "base_url": profile.env.get("ANTHROPIC_BASE_URL", ""),
+        "has_key": any(profile.env.get(var, "").strip() for var in ENV_KEY_VARS),
+    }
+
+
 class ProviderRegistry:
     def __init__(
         self,
@@ -108,6 +125,9 @@ class ProviderRegistry:
                         for name, profile in self._env_profiles.items()
                     }
                     self._stamp = ""
+
+    def env_profiles(self) -> dict[str, ProviderProfile]:
+        return dict(self._env_profiles)
 
     def __repr__(self) -> str:
         with self._lock:

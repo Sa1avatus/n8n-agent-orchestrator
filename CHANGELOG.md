@@ -3,7 +3,20 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.200** (claude-runner `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.11.300** (claude-runner `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-27 (0.11.300)
+
+Small change: the Providers page and the import from the environment.
+
+- **Providers page as master and detail** (`board_providers_view.js`, `board_providers_form.js`, `board.css`): the providers on the left
+  (key state), New provider and the import rows under them; the form of the selected provider, its models and Test/Probe on the right;
+  with nothing selected the templates (a template fills in name, API type and base URL). The rest of the board is hidden while the page
+  is open; Back to missions closes it. Seven new texts in both languages.
+- **Import from the environment works in the dashboard.** The dashboard does not hold the provider blocks of `.env`; the runner lists
+  them at `GET /v1/providers/env-proposals` (name, base URL, key set or not; no key value) and the dashboard reads that list. An env block
+  without `ANTHROPIC_BASE_URL` is proposed with `https://api.anthropic.com`.
+- Tests: `board_providers_view.test.js`, `test_board_providers_api.py`, `test_api_providers.py`.
 
 ## 2026-10-27 (0.11.200, lessons library)
 

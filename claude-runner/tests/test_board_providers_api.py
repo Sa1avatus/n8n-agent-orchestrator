@@ -626,3 +626,19 @@ def test_no_route_response_or_changelog_carries_the_secret(
     assert all(SECRET not in response.text for response in responses)
     assert SECRET not in caplog.text
     assert SECRET not in str(store.changelog())
+
+
+def test_import_from_env_asks_the_env_source_when_the_dashboard_has_no_blocks(
+    tmp_path: Path, fake_post: FakePost
+) -> None:
+    client, _, _ = _make_board(tmp_path, fake_post)
+    client.app.state.provider_env_source = lambda: [  # type: ignore[attr-defined]
+        {"name": "LOCAL", "base_url": "http://litellm:4000", "has_key": True}
+    ]
+    body = client.get(f"{PREFIX}/import-from-env").json()
+    assert body["proposals"] == [{
+        "name": "local",
+        "has_key": True,
+        "exists": False,
+        "fields": {"label": "local", "api_type": "anthropic", "base_url": "http://litellm:4000"},
+    }]
