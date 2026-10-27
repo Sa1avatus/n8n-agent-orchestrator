@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.0 · October 27, 2026** — Host actions, the queue from the board and providers in the web UI are in 0.11.0; report tasks and the JSON configuration come next
+**0.11.0 · October 27, 2026** — Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next
 
-Current version: **0.11.0** · Missions completed: **25** · Missions in the queue: **27** · Next milestone: **0.11.x · 0.12.0 · 1.0.0**
+Current version: **0.11.0** · Missions completed: **25** · Missions in the queue: **27** · Next milestone: **0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -121,15 +121,15 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios (the crawl does not yet reproduce the three replayed bugs: a drag and a forced 409 are the next step)
 - [x] 0.10.0 release: changelog, version, roadmap. Open QA steps: make the in-process UI stack pass all 17 scenarios, take the regression baseline, retire the host worker, close the runner port (not before that)
 
-### 0.11.0: host actions, the queue from the board, providers and report tasks — In progress (October 24 – 27)
+### 0.11.0: host actions, the queue from the board, providers and report tasks — Done (October 24 – 27)
 
-0.11.0 · Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review · 4/5 milestones, 80%
+0.11.0 · Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review · 5/5 milestones, 100%
 
 - [x] ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)
 - [x] ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list
 - [x] ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI
-- [ ] ahawr-report-pack: a generated facts pack, a cloud Worker for the report, a Reviewer rubric, an escalation instead of five failed attempts
-- [x] 0.11.0 release: changelog, version, roadmap (committed, not pushed). ahawr-report-pack has not run yet: its facts script and workflow patch are in the commit behind the flag report_pack (off)
+- [x] ahawr-report-pack: a generated facts pack (report_facts.py), a Reviewer rubric and a Telegram notice after two failed report attempts, as a workflow patch behind the flag report_pack (off by default; the patch is imported into the live workflow, the flag is not turned on and the cloud Worker for reports is not set yet)
+- [x] 0.11.0 release: changelog, version, roadmap (committed, not pushed)
 
 ### 0.12.0: configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
 

@@ -6,7 +6,7 @@
   "hero": {
     "title": "Mission Board Is Live",
     "date": "0.11.0 · October 27, 2026",
-    "tag": "Host actions, the queue from the board and providers in the web UI are in 0.11.0; report tasks and the JSON configuration come next",
+    "tag": "Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next",
     "stats": [
       [
         "Current version",
@@ -22,7 +22,7 @@
       ],
       [
         "Next milestone",
-        "0.11.x · 0.12.0 · 1.0.0"
+        "0.12.0 · 1.0.0"
       ]
     ],
     "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next."
@@ -371,13 +371,13 @@
       ]
     },
     {
-      "s": "cur",
+      "s": "done",
       "when": "October 24 – 27",
       "t": "0.11.0: host actions, the queue from the board, providers and report tasks",
       "v": "0.11.0",
       "d": "Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review",
       "m": [
-        4,
+        5,
         5
       ],
       "items": [
@@ -394,12 +394,12 @@
           "ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI"
         ],
         [
-          "todo",
-          "ahawr-report-pack: a generated facts pack, a cloud Worker for the report, a Reviewer rubric, an escalation instead of five failed attempts"
+          "ok",
+          "ahawr-report-pack: a generated facts pack (report_facts.py), a Reviewer rubric and a Telegram notice after two failed report attempts, as a workflow patch behind the flag report_pack (off by default; the patch is imported into the live workflow, the flag is not turned on and the cloud Worker for reports is not set yet)"
         ],
         [
           "ok",
-          "0.11.0 release: changelog, version, roadmap (committed, not pushed). ahawr-report-pack has not run yet: its facts script and workflow patch are in the commit behind the flag report_pack (off)"
+          "0.11.0 release: changelog, version, roadmap (committed, not pushed)"
         ]
       ]
     },

@@ -20,9 +20,10 @@ New functions. Every one is behind a flag that is off by default; with the flag 
   compatibility), models, prices and write-only API keys on a Providers tab; `/api/board/providers`, the provider
   registry in the runner, a secrets file (mode 0600, Fernet encryption when `cryptography` and a key are present)
   and LiteLLM route sync. Keys are never stored in the database or returned by the API.
-- **Report facts** (`report_facts.py`, `GET /v1/report-facts`, `report_pack_patch.py`, flag `report_pack`): the
-  facts pack for mission report tasks and the workflow patch (parts 1 and 2 of `ahawr-report-pack`; the mission
-  itself has not run yet).
+- **Report pack** (`ahawr-report-pack`, `report_facts.py`, `GET /v1/report-facts`, `report_pack_patch.py`, flag
+  `report_pack`, off): a generated facts pack for mission report tasks, a Reviewer rubric with a threshold, and a
+  Telegram notice after two failed report attempts. The patch is in the live workflow; the flag is off and the
+  cloud Worker for reports is not configured yet.
 - **Telegram task position**: notices read `Task 27 of 29 (T027)` and, for a split plan, the part numbers
   (`telegram_progress_patch.py`, imported into the live workflow together with the report-pack patch).
 - QA: the Postgres stack mode, the provider scenarios, DELETE with the version in the query, a secrets file
