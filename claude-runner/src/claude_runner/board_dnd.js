@@ -381,6 +381,7 @@ const BoardDnd = {
   loadBoardData,
   DndState,
   esc,
+  showNotice,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardDnd;

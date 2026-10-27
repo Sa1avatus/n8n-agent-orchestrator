@@ -122,7 +122,33 @@ function flowModel(model, now) {
   };
 }
 
-const BoardGuardsView = { WINDOWS_S, STRIP_LENGTH, FLOW, statusClass, statusShape, normalise, strip, lanes, flowModel, activeSources };
+// the host-actions panel: Confirm for a pending CONFIRM-tier request, Reject for a pending or confirmed one;
+// AUTO and not-whitelisted rows get no buttons
+function hostActionsModel({ enabled, requests, now }, L) {
+  if (!enabled) return { visible: false, rows: [] };
+  const rows = (requests || []).map((r) => {
+    const operatorTier = r.tier === "CONFIRM";
+    return {
+      id: r.id,
+      state: r.state,
+      service: r.service,
+      action: r.action,
+      reason: r.reason,
+      age_s: Math.max(0, Math.round(now - Date.parse(r.created_at) / 1000)),
+      confirm: operatorTier && r.state === "pending",
+      reject: operatorTier && (r.state === "pending" || r.state === "confirmed"),
+    };
+  });
+  return {
+    visible: true,
+    title: L("host.title", "Host actions"),
+    confirm: L("host.confirm", "Confirm"),
+    reject: L("host.reject", "Reject"),
+    rows,
+  };
+}
+
+const BoardGuardsView = { WINDOWS_S, STRIP_LENGTH, FLOW, statusClass, statusShape, normalise, strip, lanes, flowModel, activeSources, hostActionsModel };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardGuardsView;
 } else if (typeof document !== "undefined") {

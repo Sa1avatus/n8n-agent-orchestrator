@@ -1,0 +1,19 @@
+/* Control tab of the dashboard (board_control.js); colours come from the dashboard variables */
+#controlpane { flex: 1; overflow: auto; padding: 12px 16px; }
+#controlpane[hidden] { display: none; }
+.ct-strip { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: var(--panel); margin-bottom: 12px; }
+.ct-row { display: flex; gap: 12px; align-items: baseline; font-size: 13px; padding: 3px 0; min-width: 0; overflow-wrap: anywhere; }
+.ct-label { width: 110px; flex: none; font-size: 12px; color: var(--muted); }
+.ct-st { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ct-st.ok { color: var(--ok); } .ct-st.error { color: var(--err); } .ct-st.off { color: var(--muted); }
+.ct-st.failed, .ct-st.rejected { color: var(--err); } .ct-st.done { color: var(--ok); } .ct-st.running { color: var(--retry); }
+.ct-banner { font-size: 12px; color: var(--retry); margin: 8px 0; overflow-wrap: anywhere; }
+.ct-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.ct-buttons button { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); cursor: pointer; padding: 3px 12px; font-size: 12px; }
+.ct-buttons button:hover:not(:disabled) { background: var(--hover); }
+.ct-buttons button:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
+.ct-confirm { border: 1px solid var(--retry); border-radius: 10px; padding: 10px 12px; background: var(--panel); margin: 10px 0; min-width: 0; }
+.ct-name { font-size: 13px; overflow-wrap: anywhere; }
+.ct-sub { font-size: 12px; color: var(--muted); margin-top: 3px; overflow-wrap: anywhere; }
+.ct-preview { font-size: 12px; background: var(--code); border-radius: 6px; padding: 6px 8px; margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ct-sec { font-size: 13px; margin: 16px 0 8px; color: var(--muted); font-weight: 600; }

@@ -27,6 +27,8 @@ const COLUMNS = ["run", "q", "ok", "bad"];
 const DONE_STATUSES = ["accepted", "accepted_retry"];
 
 let loadingQueue = false;
+// The cards of the latest render: a render that lands while the queue loads replaces the nodes.
+let pendingCards = [];
 let queueFailed = false;
 let refreshHandler = null;
 let newButton = null;
@@ -243,13 +245,14 @@ function sortCards(queue, cards) {
 
 function loadQueueData(controls, cards, ctx) {
   const dnd = controls.dnd;
+  pendingCards = cards;
   if (loadingQueue) return;
   loadingQueue = true;
   dnd.loadBoardData()
     .then((data) => {
       dnd.DndState.data = data;
-      sortCards(data.queue || [], cards);
-      attachQueuedCards(controls, cards);
+      sortCards(data.queue || [], pendingCards);
+      attachQueuedCards(controls, pendingCards);
     })
     .catch(() => {
       queueFailed = true;

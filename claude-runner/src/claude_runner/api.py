@@ -5,22 +5,38 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import logging
 import shutil
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .board_api import add_board_routes
+from .board_ops_redact import scrub
 from .claude_cli import child_env
 from .config import Settings
+from .guards import Notifier
 from .handoff import session_digest
+from .host_actions import (
+    TIER_CONFIRM,
+    HostActionRequest,
+    HostActionStore,
+    HostActionStoreFullError,
+    HostActionTransitionError,
+    WhitelistError,
+    host_actions_enabled,
+)
 from .mem_guard import MemGuard
+from .provider_registry import ProviderRegistry
+from .provider_secrets import ProviderSecrets
 from .qa_requests import QaRequestStore, QaTransitionError
+from .report_facts import build_pack, collect_repo_facts, parse_digest
 from .roles_config import QA_LAYERS
 from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
@@ -28,12 +44,20 @@ from .search import DEFAULT_LIMIT, MAX_LIMIT
 from .search import search as run_search
 from .think_switch import ThinkSwitch
 
+logger = logging.getLogger("claude_runner.api")
+
 QaMode = Literal["final", "ui_tasks"]
 QaStatus = Literal["queued", "running", "done", "error", "timeout"]
 QaVerdict = Literal["pass", "fail", "skipped", "blocked"]
+QA_VERDICT_TEXT_MAX_CHARS = 2000
+QA_VERDICTS_MAX = 100
 
 
 QaLayer = Literal["regression", "api", "ui"]
+HostActionState = Literal[
+    "pending", "confirmed", "running", "done", "failed", "rejected", "expired"
+]
+_BodyT = TypeVar("_BodyT", bound=BaseModel)
 
 
 class QaRequestBody(BaseModel):
@@ -52,9 +76,42 @@ class QaRequestBody(BaseModel):
         return values
 
 
+class QaVerdictEntry(BaseModel):
+    """A layer verdict: the verdict word plus the layer and the reason the workflow shows."""
+
+    model_config = ConfigDict(extra="allow")
+
+    verdict: QaVerdict
+    layer: QaLayer | None = None
+
+    @model_validator(mode="after")
+    def check_size(self) -> QaVerdictEntry:
+        for key, value in (self.model_extra or {}).items():
+            if isinstance(value, str) and len(value) > QA_VERDICT_TEXT_MAX_CHARS:
+                raise ValueError(f"verdict field {key!r} exceeds {QA_VERDICT_TEXT_MAX_CHARS}")
+        return self
+
+
 class QaResultBody(BaseModel):
-    verdicts: list[QaVerdict] = Field(default_factory=list)
+    verdicts: list[QaVerdict | QaVerdictEntry] = Field(
+        default_factory=list, max_length=QA_VERDICTS_MAX
+    )
     error: str = ""
+
+
+class HostActionBody(BaseModel):
+    action: str = Field(min_length=1)
+    service: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class HostActionResultBody(BaseModel):
+    ok: bool
+    message: str = ""
+
+
+class HostActionOperatorBody(BaseModel):
+    approved: bool
 
 
 @contextmanager
@@ -67,6 +124,27 @@ def _qa_refusals(request_id: str) -> Iterator[None]:
         ) from None
     except QaTransitionError as exc:
         raise RunnerError("qa_transition_refused", str(exc), 409) from None
+
+
+@contextmanager
+def _host_action_refusals(action_id: str) -> Iterator[None]:
+    try:
+        yield
+    except KeyError:
+        raise RunnerError(
+            "host_action_not_found", f"host action {action_id} not found.", 404
+        ) from None
+    except HostActionTransitionError as exc:
+        raise RunnerError("host_action_transition_refused", str(exc), 409) from None
+
+
+async def _json_body(request: Request, model: type[_BodyT]) -> _BodyT:
+    try:
+        return model.model_validate(await request.json())
+    except ValueError:
+        raise RunnerError(
+            "bad_body", f"Body is not valid JSON or misses a field of {model.__name__}.", 400
+        ) from None
 
 
 class RunBody(BaseModel):
@@ -88,6 +166,12 @@ class CompactBody(BaseModel):
     mode: str = Field(default="", pattern="^(|auto|always|off)$")
     min_tokens: int | None = Field(default=None, ge=0)
     model: str = ""
+
+
+class ReportFactsBody(BaseModel):
+    digest: dict[str, Any]
+    workdir: str = Field(min_length=1)
+    since_ref: str = Field(min_length=1)
 
 
 async def _cli_version(settings: Settings) -> str:
@@ -121,17 +205,51 @@ def _auth_mode() -> str:
     return "stored_login_or_none"
 
 
+logger = logging.getLogger("claude_runner.api")
+
+
+async def _send_confirm_notice(notifier: Notifier, created: HostActionRequest) -> None:
+    text = (
+        f"Host action {created.id} needs confirmation: service {created.service}, "
+        f"action {created.action}, reason: {scrub(created.reason)}"
+    )
+    try:
+        delivered = await notifier.send(text)
+    except Exception:
+        logger.exception("host action %s: confirm notice failed", created.id)
+        return
+    if not delivered:
+        logger.warning("host action %s: confirm notice not delivered", created.id)
+
+
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    host_actions_on = host_actions_enabled()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         manager = RunManager(settings)
         app.state.manager = manager
         app.state.qa_requests = QaRequestStore(str(settings.data_dir / "qa_requests.json"))
+        if host_actions_on:
+            app.state.host_actions = HostActionStore(str(settings.data_dir / "host_actions.json"))
         # the board's stats routes read the run data through the manager, so
         # the board routes must be attached only once the manager exists
         add_board_routes(app, settings)
+        # a failing store at startup must not stop the app: keep the env blocks
+        secrets = ProviderSecrets(
+            settings.secrets_file or settings.data_dir / "provider-secrets.json"
+        )
+        registry = ProviderRegistry(
+            settings.providers,
+            providers_db=settings.providers_db,
+            store=app.state.board_store,
+            secrets=secrets,
+        )  # type: ignore[arg-type]
+        app.state.provider_registry = registry
+        app.state.provider_poll_stop = registry.start_polling()
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
         switch_task = None
@@ -176,9 +294,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 switch_task.cancel()
             if guard_task is not None:
                 guard_task.cancel()
+            if app.state.provider_poll_stop is not None:
+                app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.10.100", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.11.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -195,6 +315,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def qa_store(request: Request) -> QaRequestStore:
         return request.app.state.qa_requests  # type: ignore[no-any-return]
+
+    def host_store(request: Request) -> HostActionStore:
+        return request.app.state.host_actions  # type: ignore[no-any-return]
+
+    def authorize_operator(authorization: str = Header(default="")) -> None:
+        # dashboard-only secret: the operator route refuses the shared Worker key
+        if not settings.host_actions_operator_key:
+            raise RunnerError("unauthorized", "Missing or invalid bearer token.", 401)
+        token = authorization.removeprefix("Bearer ").strip()
+        if not hmac.compare_digest(token.encode(), settings.host_actions_operator_key.encode()):
+            raise RunnerError("unauthorized", "Missing or invalid bearer token.", 401)
 
     @app.exception_handler(RunnerError)
     async def runner_error(_: Request, exc: RunnerError) -> JSONResponse:
@@ -276,6 +407,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/runs/{run_id}/cancel", dependencies=[Depends(authorize)])
     async def cancel_run(run_id: str, request: Request) -> dict[str, Any]:
         return await manager(request).cancel(run_id)
+
+    @app.get("/v1/providers", dependencies=[Depends(authorize)])
+    async def list_providers(request: Request) -> dict[str, Any]:
+        registry: ProviderRegistry = request.app.state.provider_registry
+        return {"providers": list(registry.views().values())}
+
+    @app.post("/v1/providers/reload", dependencies=[Depends(authorize)])
+    async def reload_providers(request: Request) -> dict[str, Any]:
+        registry: ProviderRegistry = request.app.state.provider_registry
+        registry.reload()
+        return {"providers": list(registry.views().values())}
 
     @app.get("/v1/processes", dependencies=[Depends(authorize)])
     async def list_processes(request: Request) -> list[dict[str, Any]]:
@@ -396,7 +538,84 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, Any]:
         with _qa_refusals(request_id):
             return qa_store(request).request_dict(
-                qa_store(request).finish(request_id, body.verdicts, body.error)
+                qa_store(request).finish(
+                    request_id,
+                    [
+                        v if isinstance(v, str) else v.model_dump(exclude_none=True)
+                        for v in body.verdicts
+                    ],
+                    body.error,
+                )
             )
+
+    @app.post("/v1/report-facts", dependencies=[Depends(authorize)])
+    def report_facts(body: ReportFactsBody, request: Request) -> dict[str, str]:
+        workdir = manager(request).resolve_cwd(body.workdir)
+        try:
+            digest = parse_digest(body.digest)
+            repo_facts = collect_repo_facts(workdir, body.since_ref)
+            markdown = build_pack(digest, repo_facts)
+        except ValueError as exc:
+            raise RunnerError("invalid_report_facts", str(exc)) from exc
+        return {"markdown": markdown}
+    if host_actions_on:
+        host_notifier = Notifier()
+
+        @app.post("/v1/host-actions", dependencies=[Depends(authorize)])
+        async def create_host_action(request: Request) -> dict[str, Any]:
+            body = await _json_body(request, HostActionBody)
+            try:
+                created = host_store(request).create(
+                    body.action, body.service, body.reason, "worker"
+                )
+            except WhitelistError as exc:
+                raise RunnerError("host_action_refused", str(exc), 400) from None
+            except HostActionStoreFullError as exc:
+                raise RunnerError("host_action_store_full", str(exc), 409) from None
+            if created.tier == TIER_CONFIRM:
+                await _send_confirm_notice(host_notifier, created)
+            return asdict(created)
+
+        @app.get("/v1/host-actions", dependencies=[Depends(authorize)])
+        def list_host_actions(
+            request: Request, status: HostActionState | None = None
+        ) -> list[dict[str, Any]]:
+            return [asdict(item) for item in host_store(request).list_requests(status)]
+
+        @app.get("/v1/host-actions/{action_id}", dependencies=[Depends(authorize)])
+        def get_host_action(action_id: str, request: Request) -> dict[str, Any]:
+            found = host_store(request).get(action_id)
+            if found is None:
+                raise RunnerError(
+                    "host_action_not_found", f"host action {action_id} not found.", 404
+                )
+            return asdict(found)
+
+        @app.post("/v1/host-actions/claim", dependencies=[Depends(authorize)])
+        def claim_host_action(request: Request) -> dict[str, Any]:
+            claimed = host_store(request).claim()
+            if claimed is None:
+                raise RunnerError(
+                    "host_action_none_ready", "No confirmed host action to claim.", 409
+                )
+            return asdict(claimed)
+
+        @app.post("/v1/host-actions/{action_id}/result", dependencies=[Depends(authorize)])
+        async def finish_host_action(action_id: str, request: Request) -> dict[str, Any]:
+            body = await _json_body(request, HostActionResultBody)
+            with _host_action_refusals(action_id):
+                return asdict(host_store(request).report(action_id, body.ok, body.message))
+
+        @app.post(
+            "/v1/host-actions/{action_id}/operator", dependencies=[Depends(authorize_operator)]
+        )
+        async def operator_host_action(
+            action_id: str, request: Request
+        ) -> dict[str, Any]:
+            body = await _json_body(request, HostActionOperatorBody)
+            with _host_action_refusals(action_id):
+                if body.approved:
+                    return asdict(host_store(request).confirm(action_id))
+                return asdict(host_store(request).reject(action_id))
 
     return app

@@ -1,0 +1,66 @@
+{
+  "now": "2026-10-25T12:00:30Z",
+  "agent_stale_seconds": 30,
+  "control": [
+    {
+      "name": "alive, queue running, mission and task shown",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T12:00:20Z"}, "process_panel": {"queue": {"alive": true, "mission": "M12", "task": "T003"}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "alive", "heartbeat_age_s": 10, "banner": false, "queue_running": true, "mission": "M12", "task": "T003", "enabled": {"resume": false, "pause_at_boundary": true, "stop_mission": true, "restart_queue": true}, "history": []}
+    },
+    {
+      "name": "alive at exactly the threshold",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T12:00:00Z"}, "process_panel": {"queue": {"alive": true}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "alive", "heartbeat_age_s": 30, "banner": false, "queue_running": true, "mission": null, "task": null, "enabled": {"resume": false, "pause_at_boundary": true, "stop_mission": true, "restart_queue": true}, "history": []}
+    },
+    {
+      "name": "stale heartbeat disables every button",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T11:59:00Z"}, "process_panel": {"queue": {"alive": true, "mission": "M12", "task": "T003"}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "dead", "heartbeat_age_s": 90, "banner": true, "queue_running": true, "mission": "M12", "task": "T003", "enabled": {"resume": false, "pause_at_boundary": false, "stop_mission": false, "restart_queue": false}, "history": []}
+    },
+    {
+      "name": "missing heartbeat is not running",
+      "status": {"agent": {"heartbeat_at": null}, "process_panel": {"queue": {"alive": false}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "dead", "heartbeat_age_s": null, "banner": true, "queue_running": false, "mission": null, "task": null, "enabled": {"resume": false, "pause_at_boundary": false, "stop_mission": false, "restart_queue": false}, "history": []}
+    },
+    {
+      "name": "queue stopped with a live agent",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T12:00:25Z"}, "process_panel": {"queue": {"alive": false}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "alive", "heartbeat_age_s": 5, "banner": false, "queue_running": false, "mission": null, "task": null, "enabled": {"resume": true, "pause_at_boundary": false, "stop_mission": false, "restart_queue": true}, "history": []}
+    },
+    {
+      "name": "empty answers read as agent not running and queue stopped",
+      "status": null,
+      "history": null,
+      "expect": {"agent_status": "dead", "heartbeat_age_s": null, "banner": true, "queue_running": false, "mission": null, "task": null, "enabled": {"resume": false, "pause_at_boundary": false, "stop_mission": false, "restart_queue": false}, "history": []}
+    },
+    {
+      "name": "empty history",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T12:00:25Z"}, "process_panel": {"queue": {"alive": true}}},
+      "history": {"commands": []},
+      "expect": {"agent_status": "alive", "heartbeat_age_s": 5, "banner": false, "queue_running": true, "mission": null, "task": null, "enabled": {"resume": false, "pause_at_boundary": true, "stop_mission": true, "restart_queue": true}, "history": []}
+    },
+    {
+      "name": "mixed history statuses keep their order",
+      "status": {"agent": {"heartbeat_at": "2026-10-25T12:00:25Z"}, "process_panel": {"queue": {"alive": true}}},
+      "history": {"commands": [
+        {"action": "resume", "status": "done", "requested_at": "2026-10-25T11:50:00Z"},
+        {"action": "stop_mission", "status": "failed", "requested_at": "2026-10-25T11:40:00Z"},
+        {"action": "restart_queue", "status": "rejected", "requested_at": "2026-10-25T11:30:00Z"},
+        {"action": "pause_at_boundary", "status": "running", "requested_at": "2026-10-25T11:20:00Z"},
+        {"action": "resume", "status": "new", "requested_at": "2026-10-25T11:10:00Z"}
+      ]},
+      "expect": {"agent_status": "alive", "heartbeat_age_s": 5, "banner": false, "queue_running": true, "mission": null, "task": null, "enabled": {"resume": false, "pause_at_boundary": true, "stop_mission": true, "restart_queue": true}, "history": [
+        {"action": "resume", "status": "done"},
+        {"action": "stop_mission", "status": "failed"},
+        {"action": "restart_queue", "status": "rejected"},
+        {"action": "pause_at_boundary", "status": "running"},
+        {"action": "resume", "status": "new"}
+      ]}
+    }
+  ]
+}

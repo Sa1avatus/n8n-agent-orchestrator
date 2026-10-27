@@ -530,6 +530,17 @@ async function saveQaRoles(api, url, current, state) {
   const got = await api.postJson(url, body, "PUT");
   return { text: got.roles_json, version: got.version, initial: qaValuesOf(got.roles_json) };
 }
+// Suggestions for the provider and model inputs, from the rows of GET /api/board/providers.
+// Empty lists (registry off or unreachable) leave the inputs as plain free text.
+function providerChoices(providers) {
+  return providers.filter((p) => p.enabled !== false).map((p) => p.name);
+}
+
+function modelChoices(providers, provider) {
+  const row = providers.find((p) => p.name === provider);
+  return row ? row.models.map((m) => m.model) : [];
+}
+
 // === end pure roles core ===
 
 // === export (browser global + CommonJS module.exports) ===
@@ -551,6 +562,8 @@ const BoardRoles = {
   qaDiffRows,
   loadQaRoles,
   saveQaRoles,
+  providerChoices,
+  modelChoices,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardRoles;

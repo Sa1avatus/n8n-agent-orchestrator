@@ -282,7 +282,8 @@ def test_run_rejects_unknown_stack_env_before_running(
     monkeypatch.setattr(qa_runner, "run_browser_scenario", _unexpected_call)
     monkeypatch.setenv(qa.STACK_MODE_ENV, "kubernetes")
     assert qa.main(["run"]) == 1
-    assert "QA_STACK_MODE 'kubernetes' is not one of docker, inprocess" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "QA_STACK_MODE 'kubernetes' is not one of docker, inprocess, postgres" in err
 
 
 def test_run_without_scenario_files_exits_one(

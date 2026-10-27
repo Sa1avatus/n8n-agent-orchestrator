@@ -594,6 +594,23 @@ class TaskStatuses:
         return "running"
 
 
+# Only these columns are kept: a secret passed in is dropped here, so it never
+# reaches a provider row or the changelog.
+_PROVIDER_FIELDS = (
+    "label", "api_type", "base_url", "enabled", "context_tokens", "compact_pct",
+    "compact_min_pct", "max_output_tokens", "tools", "search_first",
+    "retry_fresh_session", "notes",
+)
+_PROVIDER_MODEL_FIELDS = (
+    "alias", "price_input_per_mtok_usd", "price_output_per_mtok_usd",
+    "supports_thinking", "api_type", "capability_overrides",
+)
+
+
+def _picked(fields: dict[str, Any], allowed: tuple[str, ...]) -> dict[str, Any]:
+    return {k: fields[k] for k in allowed if k in fields}
+
+
 class InMemoryBoardStore(BoardStore):
     """Thread-safe in-memory store for the board (tests and dry runs).
 
@@ -619,6 +636,9 @@ class InMemoryBoardStore(BoardStore):
         self._template_version: dict[str, str] = {}
         self._flags: dict[str, str] = {}
         self._flag_version: dict[str, str] = {}
+        self._providers: dict[str, dict[str, Any]] = {}
+        self._provider_models: dict[tuple[str, str], dict[str, Any]] = {}
+        self._providers_updated_at = ""
         self._project_rules: list[dict[str, Any]] = []
         self._project_rules_version = ""
         self._i18n_languages: dict[str, dict[str, Any]] = {}
@@ -1168,6 +1188,164 @@ class InMemoryBoardStore(BoardStore):
             }
             self._audit("preflight record", before=None, after=dict(row), mission_id=mission_id)
             self._preflight.setdefault(mission_id, []).insert(0, dict(row))
+
+    # ---- providers (board.providers and board.provider_models) ---------------
+    _PROVIDER_SECRET_FIELDS = frozenset({"api_key", "auth_token"})
+
+    def _provider_view(self, name: str) -> dict[str, Any]:
+        row = {
+            key: value
+            for key, value in self._providers[name].items()
+            if key not in self._PROVIDER_SECRET_FIELDS
+        }
+        row["models"] = [
+            dict(v)
+            for (pk, _), v in sorted(self._provider_models.items())
+            if pk == name
+        ]
+        return row
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        with self._lock:
+            return [self._provider_view(name) for name in sorted(self._providers)]
+
+    def get_provider(self, name: str) -> dict[str, Any] | None:
+        with self._lock:
+            if name not in self._providers:
+                return None
+            return self._provider_view(name)
+
+    def create_provider(self, name: str, fields: dict[str, Any]) -> None:
+        with self._lock:
+            if name in self._providers:
+                raise ConflictError(f"provider {name!r} already exists")
+            row: dict[str, Any] = {
+                "name": name,
+                "label": fields.get("label") or "",
+                "api_type": fields.get("api_type") or "",
+                "base_url": fields.get("base_url") or "",
+                "enabled": fields.get("enabled", True),
+                "context_tokens": fields.get("context_tokens"),
+                "compact_pct": fields.get("compact_pct"),
+                "compact_min_pct": fields.get("compact_min_pct"),
+                "max_output_tokens": fields.get("max_output_tokens"),
+                "tools": fields.get("tools") or "",
+                "search_first": fields.get("search_first", False),
+                "retry_fresh_session": fields.get("retry_fresh_session", False),
+                "notes": fields.get("notes") or "",
+                "version": now(),
+            }
+            secret = fields.get("api_key")
+            if secret:
+                row["api_key"] = str(secret)
+            self._providers[name] = row
+            self._audit(
+                "provider create", before=None, after=self._provider_view(name), mission_id=name
+            )
+            self._providers_updated_at = now()
+
+    def update_provider(
+        self, name: str, fields: dict[str, Any], expected_version: str | None
+    ) -> None:
+        with self._lock:
+            row = self._providers.get(name)
+            if row is None:
+                raise KeyError(f"provider {name!r} not found")
+            self._check_version("provider", name, expected_version, row["version"])
+            before = self._provider_view(name)
+            for key, value in fields.items():
+                if key in ("name", "version"):
+                    continue
+                row[key] = value
+            row["version"] = now()
+            self._audit(
+                "provider update", before=before, after=self._provider_view(name),
+                mission_id=name,
+            )
+            self._providers_updated_at = now()
+
+    def delete_provider(self, name: str, expected_version: str | None) -> None:
+        with self._lock:
+            row = self._providers.get(name)
+            if row is None:
+                raise KeyError(f"provider {name!r} not found")
+            self._check_version("provider", name, expected_version, row["version"])
+            self._audit(
+                "provider remove", before=self._provider_view(name), after=None, mission_id=name
+            )
+            del self._providers[name]
+            for key in [k for k in self._provider_models if k[0] == name]:
+                del self._provider_models[key]
+            self._providers_updated_at = now()
+
+    def add_model(self, provider: str, model: str, fields: dict[str, Any]) -> None:
+        with self._lock:
+            if provider not in self._providers:
+                raise KeyError(f"provider {provider!r} not found")
+            key = (provider, model)
+            if key in self._provider_models:
+                raise ConflictError(f"model {model!r} already exists on {provider!r}")
+            row: dict[str, Any] = {
+                "model": model,
+                "alias": fields.get("alias") or "",
+                "price_input_per_mtok_usd": fields.get("price_input_per_mtok_usd"),
+                "price_output_per_mtok_usd": fields.get("price_output_per_mtok_usd"),
+                "supports_thinking": fields.get("supports_thinking", False),
+                "api_type": fields.get("api_type"),
+                "capability_overrides": fields.get("capability_overrides"),
+                "probe_result": None,
+                "probed_at": None,
+                "version": now(),
+            }
+            self._audit("provider model add", before=None, after=dict(row), mission_id=provider)
+            self._provider_models[key] = row
+            self._providers_updated_at = now()
+
+    def update_model(
+        self, provider: str, model: str, fields: dict[str, Any], expected_version: str | None
+    ) -> None:
+        with self._lock:
+            key = (provider, model)
+            row = self._provider_models.get(key)
+            if row is None:
+                raise KeyError(f"model {model!r} not found on {provider!r}")
+            self._check_version("model", f"{provider}/{model}", expected_version, row["version"])
+            before = dict(row)
+            for k, v in fields.items():
+                if k in ("model", "version"):
+                    continue
+                row[k] = v
+            row["version"] = now()
+            self._audit(
+                "provider model update", before=before, after=dict(row), mission_id=provider
+            )
+            self._providers_updated_at = now()
+
+    def remove_model(self, provider: str, model: str, expected_version: str | None) -> None:
+        with self._lock:
+            key = (provider, model)
+            row = self._provider_models.get(key)
+            if row is None:
+                raise KeyError(f"model {model!r} not found on {provider!r}")
+            self._check_version("model", f"{provider}/{model}", expected_version, row["version"])
+            self._audit("provider model remove", before=dict(row), after=None, mission_id=provider)
+            del self._provider_models[key]
+            self._providers_updated_at = now()
+
+    def set_model_probe(self, provider: str, model: str, probe_result: dict[str, Any]) -> None:
+        with self._lock:
+            key = (provider, model)
+            row = self._provider_models.get(key)
+            if row is None:
+                raise KeyError(f"model {model!r} not found on {provider!r}")
+            row["probe_result"] = dict(probe_result)
+            row["probed_at"] = now()
+            self._audit("provider model probe", before=None, after=dict(row), mission_id=provider)
+            self._providers_updated_at = now()
+
+    def providers_updated_at(self) -> str:
+        with self._lock:
+            return self._providers_updated_at
 
     def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
         with self._lock:

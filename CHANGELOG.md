@@ -3,7 +3,34 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.10.100** (claude-runner `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.11.0** (claude-runner `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-27 (0.11.0)
+
+New functions. Every one is behind a flag that is off by default; with the flag off behaviour is unchanged.
+
+- **Host actions** (`HOST_ACTIONS`, `host_actions.py`, `docs/host-actions.md`): a task or the dashboard asks the
+  runner to recreate or restart a container (`POST /v1/host-actions`). A whitelist decides the service and the
+  tier: automatic for the dashboard and helper services, operator confirmation (Telegram notice and the dashboard
+  Control tab) for `claude-runner`, n8n and llama. No task runs `docker` or touches the Docker socket.
+- **Queue from the board** (`QUEUE_FROM_BOARD`, on by default, `0` turns it off): the queue shell reads the next
+  mission from `board.queue` through `queue_board.py` and falls back to the static list. A mission that never
+  ran (no Live State row yet) is taken from the board's queued group instead of being skipped.
+- **Providers in the web UI** (`providers_db`, `litellm_sync`, `docs/providers.md`): provider type (API
+  compatibility), models, prices and write-only API keys on a Providers tab; `/api/board/providers`, the provider
+  registry in the runner, a secrets file (mode 0600, Fernet encryption when `cryptography` and a key are present)
+  and LiteLLM route sync. Keys are never stored in the database or returned by the API.
+- **Report facts** (`report_facts.py`, `GET /v1/report-facts`, `report_pack_patch.py`, flag `report_pack`): the
+  facts pack for mission report tasks and the workflow patch (parts 1 and 2 of `ahawr-report-pack`; the mission
+  itself has not run yet).
+- **Telegram task position**: notices read `Task 27 of 29 (T027)` and, for a split plan, the part numbers
+  (`telegram_progress_patch.py`, imported into the live workflow together with the report-pack patch).
+- QA: the Postgres stack mode, the provider scenarios, DELETE with the version in the query, a secrets file
+  in a temporary folder for the throwaway dashboard.
+
+Known open items: 11 container tests fail for reasons outside this step (POSIX process groups, the static
+whitelist test, the guards route, the queue dry run); the LiteLLM sync was not run against a real LiteLLM; the
+design text of `docs/providers.md` sections 9, 10 and 15 still says "design only".
 
 ## 2026-10-23 (0.10.100)
 

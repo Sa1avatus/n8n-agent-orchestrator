@@ -35,6 +35,7 @@ from .qa_runner import (
 )
 from .qa_smoke_detect import (
     ERROR,
+    WARNING,
     ConsoleMessage,
     DomElement,
     FailedRequest,
@@ -114,6 +115,10 @@ class _Seen:
     pageerrors: int = 0
     requests: int = 0
     failures: int = 0
+    # validation answers whose console line has not been seen yet (it can land in a later step)
+    answers: int = 0
+    # urls of the writes seen so far: the answer can arrive in a later step than the request
+    write_urls: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -352,7 +357,7 @@ def _click_once(crawl: Crawl, url: str, index: int, control: _Control) -> str | 
     crawl.clicks += 1
     reason = _attempt(partial(_click, crawl.page, index))
     if reason is not None:
-        _record_findings(crawl, [_problem(crawl, "click-failed", control.label, reason)])
+        _record_findings(crawl, [_click_problem(crawl, control.label, reason)])
     else:
         _check(crawl, control.label)
         after = _dom_state(crawl.page)
@@ -364,7 +369,7 @@ def _click_once(crawl: Crawl, url: str, index: int, control: _Control) -> str | 
 
 
 def _click(page: Any, index: int) -> None:
-    page.locator(INTERACTIVE_SELECTOR).nth(index).click(timeout=STEP_TIMEOUT_MS)
+    page.locator(INTERACTIVE_SELECTOR).nth(index).click(timeout=CLICK_TIMEOUT_MS)
 
 
 def _restore(page: Any, url: str, baseline: list[DomElement]) -> None:
@@ -424,6 +429,36 @@ def _check(crawl: Crawl, element: str) -> None:
     _record_findings(crawl, _new_findings(crawl, _where(crawl, element)))
 
 
+# A write the crawl provoked (an empty form submitted) is answered 400 or 422 by the validation
+# of the server: that is the expected answer, not a defect.
+VALIDATION_STATUSES = frozenset({400, 422})
+LOAD_FAILED_TEXT = "Failed to load resource"
+COVERED_CLICK_TEXT = "intercepts pointer events"
+CLICK_TIMEOUT_MS = 3000
+
+
+def _without_validation_answers(
+    responses: list[tuple[str, int]], write_urls: set[str], console: list[str], owed: int = 0
+) -> tuple[list[tuple[str, int]], list[str], int]:
+    """Drop validation answers to writes and their console lines; unmatched ones are owed on."""
+    kept = [
+        (url, status)
+        for url, status in responses
+        if not (status in VALIDATION_STATUSES and url in write_urls)
+    ]
+    owed += len(responses) - len(kept)
+    texts: list[str] = []
+    for text in console:
+        is_answer = LOAD_FAILED_TEXT in text and any(
+            str(code) in text for code in VALIDATION_STATUSES
+        )
+        if is_answer and owed > 0:
+            owed -= 1
+            continue
+        texts.append(text)
+    return kept, texts, owed
+
+
 def _new_findings(crawl: Crawl, where: Where) -> list[Finding]:
     recorder, seen = crawl.recorder, crawl.seen
     console = recorder.console_errors[seen.console :]
@@ -436,6 +471,10 @@ def _new_findings(crawl: Crawl, where: Where) -> list[Finding]:
     seen.pageerrors = len(crawl.pageerrors)
     seen.requests = len(crawl.requests)
     seen.failures = len(crawl.failures)
+    seen.write_urls |= {request.url for request in requests if request.method != "GET"}
+    responses, console, seen.answers = _without_validation_answers(
+        list(responses), seen.write_urls, list(console), seen.answers
+    )
     return [
         *detect_console_errors([ConsoleMessage("error", text) for text in console], where),
         *detect_pageerrors(pageerrors, where),
@@ -472,6 +511,12 @@ def _screenshot(crawl: Crawl, name: str) -> str:
 
 def _where(crawl: Crawl, element: str) -> Where:
     return Where(url=crawl.page.url, element=element, step=crawl.clicks, screenshot="")
+
+
+def _click_problem(crawl: Crawl, element: str, reason: str) -> Finding:
+    """A click that timed out is a defect only when another element covers the control."""
+    severity = ERROR if COVERED_CLICK_TEXT in reason else WARNING
+    return Finding("click-failed", severity, crawl.page.url, element, crawl.clicks, "", reason)
 
 
 def _problem(crawl: Crawl, detector: str, element: str, reason: str) -> Finding:

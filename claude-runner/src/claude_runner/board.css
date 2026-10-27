@@ -38,6 +38,7 @@ button { font: inherit; color: inherit; }
 #boardbar h1 { font-size: 15px; font-weight: 650; margin: 0; }
 #boardbar a { color: var(--accent); text-decoration: none; font-size: 12px; }
 #boardbar a:hover { text-decoration: underline; }
+#boardbar #bvprov { margin-left: auto; font-size: 12px; color: var(--accent); background: none; border: 1px solid var(--line2); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
 
 /* view header (board_views.js) ------------------------------------- */
 #boardviews { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }

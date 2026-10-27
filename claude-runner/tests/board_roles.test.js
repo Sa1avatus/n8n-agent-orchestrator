@@ -206,6 +206,33 @@ test("board_edit_win.js (source check, not a DOM test): QA role row and placehol
   assert.ok(src.includes('"/roles"') && src.includes("BoardRoles.saveQaRoles("));
 });
 
+const REGISTRY = [
+  { name: "anthropic", enabled: true, models: [{ model: "sonnet" }, { model: "haiku" }] },
+  { name: "local", enabled: false, models: [{ model: "qwen" }] },
+];
+
+test("providerChoices: enabled providers only", () => {
+  assert.deepEqual(BoardRoles.providerChoices(REGISTRY), ["anthropic"]);
+});
+
+test("modelChoices: the models of the named provider, nothing for an unlisted one", () => {
+  assert.deepEqual(BoardRoles.modelChoices(REGISTRY, "anthropic"), ["sonnet", "haiku"]);
+  assert.deepEqual(BoardRoles.modelChoices(REGISTRY, "unlisted"), []);
+});
+
+test("providers off or unreachable: no suggestions, the inputs stay free text", () => {
+  assert.deepEqual(BoardRoles.providerChoices([]), []);
+  assert.deepEqual(BoardRoles.modelChoices([], "anthropic"), []);
+});
+
+test("board_edit_win.js (source check): roles and QA inputs take the registry suggestions", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "src", "claude_runner", "board_edit_win.js"), "utf8");
+  assert.ok(src.includes('fetch("/api/board/providers"'));
+  assert.ok(src.includes("BoardRoles.providerChoices(providerList)"));
+  assert.ok(src.includes("BoardRoles.modelChoices(providerList, provEl.value)"));
+  assert.ok(src.includes("choiceLists(provEl, modelEl, kp)"));
+});
+
 test("qaLayers: missing or empty layers mean ui, a list is kept", () => {
   assert.deepEqual(BoardRoles.qaLayers({}), ["ui"]);
   assert.deepEqual(BoardRoles.qaLayers({ layers: [] }), ["ui"]);

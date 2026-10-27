@@ -70,6 +70,8 @@ let qa = null;   // { text, version, initial } from GET /api/board/missions/<id>
 // Features live in features_json (global) and mission_features_json; their controls are not data-key inputs.
 let featFields = {};
 let feat = null; // { state } from featuresState: the texts and versions read from the server
+let providerList = []; // rows of GET /api/board/providers; empty keeps the role inputs free text
+let choiceRefreshers = [];
 
 function tr(key, params) {
   return typeof t === "function" ? t(key, params) : key;
@@ -180,6 +182,8 @@ function makeQaFields() {
     } else if (field === "smoke") {
       el = mk("input", "");
       el.type = "checkbox";
+    } else if (field === "provider" || field === "model") {
+      el = mk("input", "");
     } else {
       el = mk("input", "");
       el.type = "number";
@@ -189,6 +193,48 @@ function makeQaFields() {
     fields[key] = el;
   }
   return fields;
+}
+
+function fillList(list, values) {
+  list.textContent = "";
+  for (const v of values) {
+    const o = mk("option", "");
+    o.value = v;
+    list.appendChild(o);
+  }
+}
+
+// The inputs stay free text; the datalists only suggest the names of the registry.
+function choiceLists(provEl, modelEl, id) {
+  const provList = mk("datalist", "");
+  provList.id = "ew-prov-" + id;
+  const modelList = mk("datalist", "");
+  modelList.id = "ew-model-" + id;
+  provEl.setAttribute("list", provList.id);
+  modelEl.setAttribute("list", modelList.id);
+  const refresh = () => {
+    fillList(provList, BoardRoles.providerChoices(providerList));
+    fillList(modelList, BoardRoles.modelChoices(providerList, provEl.value));
+  };
+  provEl.addEventListener("input", refresh);
+  choiceRefreshers.push(refresh);
+  refresh();
+  return [provList, modelList];
+}
+
+async function loadProviders() {
+  try {
+    const res = await fetch("/api/board/providers", { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    providerList = Array.isArray(body.providers) ? body.providers : [];
+  } catch (e) {
+    console.warn("provider suggestions unavailable, free text kept", e);
+    providerList = [];
+  }
+  for (const refresh of choiceRefreshers) refresh();
+  const note = document.getElementById("ew-reg-note");
+  if (note) note.textContent = providerList.length ? tr("ew.reg.hint") : "";
 }
 
 function qaCurrent() {
@@ -389,6 +435,7 @@ async function saveFeatures() {
 
 function fillPages(box, win) {
   qaFields = makeQaFields();
+  choiceRefreshers = [];
   featFields = makeFeatFields();
   const lockedNote = (key) => {
     const row = rowOf(box, key);
@@ -437,6 +484,9 @@ function fillPages(box, win) {
     dot.style.background = color;
     name.append(dot, document.createTextNode(tr(labelKey)));
     line.appendChild(name);
+    const provEl = control(box, kp) || qaFields[kp];
+    const modelEl = control(box, km) || qaFields[km];
+    if (provEl && modelEl) line.append(...choiceLists(provEl, modelEl, kp));
     for (const [key, cap] of [[km, tr("ew.model")], [kp, tr("ew.provider")]]) {
       const cell = mk("div", "ew-cell");
       cell.appendChild(mk("small", "", cap));
@@ -448,7 +498,9 @@ function fillPages(box, win) {
     }
     roles.appendChild(line);
   }
-  r.appendChild(roles);
+  const regNote = mk("small", "");
+  regNote.id = "ew-reg-note";
+  r.append(roles, regNote);
   const fe = sec(tr("ew.sec.features"), tr("ew.hint.features"));
   const feNote = mk("div", "ew-warn");
   feNote.id = "ew-feat-note";
@@ -600,7 +652,7 @@ function openWin(box) {
   document.body.dataset.editing = "1";
   document.addEventListener("keydown", onKey);
   paint(box);
-  Promise.all([loadQa(), loadFeatures()]).then(() => paint(box));
+  Promise.all([loadQa(), loadFeatures(), loadProviders()]).then(() => paint(box));
 }
 
 function buildWindow(box) {

@@ -11,6 +11,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -29,9 +30,18 @@ PRODUCTION_HOST_NAMES = frozenset(
 PRODUCTION_DATABASE_NAMES = frozenset({"postgres", "n8n", "ahawr"})
 QA_POSTGRES_IMAGE = "postgres:16-alpine"
 QA_FIXTURES = ("default", "empty")
-STACK_MODES = ("docker", "inprocess")
+STACK_MODES = ("docker", "inprocess", "postgres")
 DASHBOARD_FIXTURE_ENV = "DASHBOARD_QA_FIXTURE"
 DASHBOARD_DSN_ENV = "DASHBOARD_BOARD_PG_DSN"
+# "postgres" mode: a throwaway Postgres server that already runs (the qa-postgres service of the
+# compose profile qa-container); each stack gets its own database there, no Docker access needed
+QA_PG_HOST_ENV = "QA_PG_HOST"
+QA_PG_PASSWORD_ENV = "QA_PG_PASSWORD"
+# the providers routes of the throwaway dashboard mount only in the throwaway stack
+PROVIDERS_DB_ENV = "CLAUDE_RUNNER_PROVIDERS_DB"
+SECRETS_FILE_ENV = "CLAUDE_RUNNER_SECRETS_FILE"
+QA_ADMIN_DATABASE = "qa_admin"
+PG_CONNECT_TIMEOUT_SECONDS = 10
 DASHBOARD_CONTAINER_PORT = 8701
 CLAUDE_RUNNER_DIR = Path(__file__).resolve().parents[2]
 DOCKERFILE_PATH = CLAUDE_RUNNER_DIR / "Dockerfile"
@@ -80,6 +90,7 @@ class QaStack:
     networks: list[str] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
     process: subprocess.Popen[bytes] | None = field(default=None, repr=False)
+    shared_server: bool = False
 
 
 def new_qa_password() -> str:
@@ -119,6 +130,8 @@ def stack_up(fixture: str = "default", mode: str = "docker") -> QaStack:
         stack = _inprocess_up(fixture)
         _seed_verdict_files(stack.run_id, fixture)
         return stack
+    if mode == "postgres":
+        return _postgres_up(fixture)
     sql = BOARD_SCHEMA_PATH.read_text(encoding="utf-8") + "\n" + _seed_sql(fixture)
     run_id = secrets.token_hex(_RUN_ID_BYTES)
     password = new_qa_password()
@@ -158,6 +171,8 @@ def stack_down(stack: QaStack) -> None:
     _remove_seeded_runs(stack.run_id)
     if stack.process is not None:
         _kill_tree(stack.process)
+        if stack.shared_server:
+            _drop_database(stack)
         return
     failures: list[str] = []
     for command in _teardown_commands(stack):
@@ -256,15 +271,71 @@ def _inprocess_up(fixture: str) -> QaStack:
     )
 
 
-def _spawn_dashboard(port: int, fixture_file: Path) -> subprocess.Popen[bytes]:
+def _postgres_up(fixture: str) -> QaStack:
+    host = os.environ.get(QA_PG_HOST_ENV, "")
+    password = os.environ.get(QA_PG_PASSWORD_ENV, "")
+    if not host or not password:
+        raise QaStackError(f"mode postgres needs {QA_PG_HOST_ENV} and {QA_PG_PASSWORD_ENV}")
+    run_id = secrets.token_hex(_RUN_ID_BYTES)
+    database = f"{QA_DATABASE_PREFIX}{run_id}"
+    dsn = build_qa_dsn(host, database, password)
+    admin_dsn = build_qa_dsn(host, QA_ADMIN_DATABASE, password)
+    sql = BOARD_SCHEMA_PATH.read_text(encoding="utf-8") + "\n" + _seed_sql(fixture)
+    stack = QaStack(run_id=run_id, host=host, database=database, dsn=dsn, shared_server=True)
+    try:
+        _run_sql(admin_dsn, f'CREATE DATABASE "{database}"')
+        _run_sql(dsn, sql)
+        port = _free_port()
+        stack.process = _spawn_dashboard(port, None, dsn)
+        _wait_until(lambda: _dashboard_healthy(port), "dashboard")
+        stack.dashboard_url = f"http://127.0.0.1:{port}"
+        _seed_verdict_files(run_id, fixture)
+    except Exception:
+        try:
+            stack_down(stack)
+        except (QaStackError, subprocess.SubprocessError):
+            log.exception("cleanup of failed QA stack %s is incomplete", run_id)
+        raise
+    return stack
+
+
+def _run_sql(dsn: str, sql: str) -> None:
+    import psycopg
+
+    try:
+        with psycopg.connect(
+            dsn, autocommit=True, connect_timeout=PG_CONNECT_TIMEOUT_SECONDS
+        ) as conn:
+            conn.execute(sql)
+    except psycopg.Error as error:
+        raise QaStackError(f"QA postgres: {_reason_text(error, dsn)}") from error
+
+
+def _reason_text(error: Exception, dsn: str) -> str:
+    return str(error).replace(dsn, "<dsn>")[:ERROR_TEXT_MAX_CHARS]
+
+
+def _drop_database(stack: QaStack) -> None:
+    password = os.environ.get(QA_PG_PASSWORD_ENV, "")
+    admin_dsn = build_qa_dsn(stack.host, QA_ADMIN_DATABASE, password)
+    _run_sql(admin_dsn, f'DROP DATABASE IF EXISTS "{stack.database}" WITH (FORCE)')
+
+
+def _spawn_dashboard(
+    port: int, fixture_file: Path | None, dsn: str | None = None
+) -> subprocess.Popen[bytes]:
     search_path = [str(CLAUDE_RUNNER_DIR / "src"), os.environ.get("PYTHONPATH", "")]
     env = {
         name: value for name, value in os.environ.items() if name != DASHBOARD_DSN_ENV
     }
-    env |= {
-        DASHBOARD_FIXTURE_ENV: str(fixture_file),
-        "PYTHONPATH": os.pathsep.join(entry for entry in search_path if entry),
-    }
+    env["PYTHONPATH"] = os.pathsep.join(entry for entry in search_path if entry)
+    if fixture_file is not None:
+        env[DASHBOARD_FIXTURE_ENV] = str(fixture_file)
+    if dsn is not None:
+        env[DASHBOARD_DSN_ENV] = dsn
+    env[PROVIDERS_DB_ENV] = "1"
+    # the made-up keys of a run go to a throwaway file: the repository mount is read-only
+    env[SECRETS_FILE_ENV] = str(Path(tempfile.gettempdir()) / f"qa-provider-secrets-{port}.json")
     return subprocess.Popen(
         [
             sys.executable, "-c",

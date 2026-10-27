@@ -1,0 +1,65 @@
+[
+  {
+    "name": "openrouter",
+    "base_url": "https://openrouter.ai/api/v1",
+    "api_type": "openai-chat",
+    "hint": "third-party aggregator; auth not checked",
+    "verified": false
+  },
+  {
+    "name": "deepseek",
+    "base_url": "https://api.deepseek.com/v1",
+    "api_type": "openai-chat",
+    "hint": "vendor OpenAI-compatible endpoint; auth not checked",
+    "verified": false
+  },
+  {
+    "name": "mistral",
+    "base_url": "https://api.mistral.ai/v1",
+    "api_type": "openai-chat",
+    "hint": "vendor OpenAI-compatible endpoint; auth not checked",
+    "verified": false
+  },
+  {
+    "name": "together",
+    "base_url": "https://api.together.ai/v1",
+    "api_type": "openai-chat",
+    "hint": "vendor OpenAI-compatible endpoint; auth not checked",
+    "verified": false
+  },
+  {
+    "name": "groq",
+    "base_url": "https://api.groq.com/openai/v1",
+    "api_type": "openai-chat",
+    "hint": "vendor OpenAI-compatible endpoint; auth not checked",
+    "verified": false
+  },
+  {
+    "name": "ollama",
+    "base_url": "",
+    "api_type": "openai-chat",
+    "hint": "local server; no public default, the operator sets the URL of their own instance (usually http://localhost:11434/v1)",
+    "verified": false
+  },
+  {
+    "name": "vllm",
+    "base_url": "",
+    "api_type": "openai-chat",
+    "hint": "local vLLM server; no public default, the operator sets the URL of their own instance (usually http://localhost:8000/v1)",
+    "verified": false
+  },
+  {
+    "name": "llamacpp",
+    "base_url": "",
+    "api_type": "openai-chat",
+    "hint": "local llama-server; no public default, the repo instance uses the operator's LLAMACPP_API_BASE (litellm/config.yaml)",
+    "verified": false
+  },
+  {
+    "name": "azure-openai",
+    "base_url": "",
+    "api_type": "openai-chat",
+    "hint": "not native Azure: the operator sets https://<resource>.openai.azure.com; the deployment path and api-version are added per model and are not encoded here",
+    "verified": false
+  }
+]

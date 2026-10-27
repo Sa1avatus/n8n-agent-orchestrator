@@ -120,3 +120,42 @@ CREATE TABLE IF NOT EXISTS board.i18n_strings (
     updated_by  text,
     PRIMARY KEY (lang, key)
 );
+
+-- Providers (claude-runner/docs/providers.md, section 9).  Holds no secret: the API key
+-- lives in the secrets file, keyed by name.  search_first / retry_fresh_session NULL = the
+-- CLAUDE_RUNNER_* default; tools is the TOOLS string as written in an env block.
+CREATE TABLE IF NOT EXISTS board.providers (
+    name                   text PRIMARY KEY CHECK (name ~ '^[a-z0-9][a-z0-9_-]*$'),
+    label                  text,
+    api_type               text,
+    base_url               text,
+    enabled                boolean NOT NULL DEFAULT true,
+    context_tokens         integer,
+    compact_pct            double precision,
+    compact_min_pct        double precision,
+    max_output_tokens      integer,
+    tools                  text,
+    search_first           boolean,
+    retry_fresh_session    boolean,
+    notes                  text,
+    created_at             timestamptz NOT NULL DEFAULT now(),
+    updated_at             timestamptz NOT NULL DEFAULT now()
+);
+
+-- Models of a provider (providers.md, section 1).  api_type NULL = the provider's api_type.
+-- capability_overrides / probe_result are JSON objects; price fields are USD per million tokens.
+CREATE TABLE IF NOT EXISTS board.provider_models (
+    id                       bigserial PRIMARY KEY,
+    provider                 text NOT NULL REFERENCES board.providers (name) ON DELETE CASCADE,
+    model                    text NOT NULL,
+    alias                    text,
+    price_input_per_mtok_usd  double precision,
+    price_output_per_mtok_usd double precision,
+    supports_thinking        boolean NOT NULL DEFAULT false,
+    api_type                 text,
+    capability_overrides     jsonb,
+    probe_result             jsonb,
+    probed_at                timestamptz,
+    updated_at               timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (provider, model)
+);

@@ -53,7 +53,7 @@ class QaRequest:
     created_at: str
     claimed_at: str | None = None
     finished_at: str | None = None
-    verdicts: list[str] = field(default_factory=list)
+    verdicts: list[str | dict[str, Any]] = field(default_factory=list)
     error: str = ""
     layers: list[str] | None = None
 
@@ -156,7 +156,9 @@ class QaRequestStore:
             self._save()
             return request
 
-    def finish(self, request_id: str, verdicts: Sequence[str], error: str) -> QaRequest:
+    def finish(
+        self, request_id: str, verdicts: Sequence[str | dict[str, Any]], error: str
+    ) -> QaRequest:
         with self._lock:
             at = self._clock()
             self._expire(at)

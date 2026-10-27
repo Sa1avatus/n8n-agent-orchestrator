@@ -1,0 +1,34 @@
+{
+  "now": 1000000,
+  "cases": [
+    {"name": "disabled hides the panel", "enabled": false,
+     "requests": [{"id": "r1", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "pending", "created_at": "1970-01-12T13:40:00Z"}],
+     "expect": {"visible": false, "rows": []}},
+    {"name": "no requests shows an empty panel", "enabled": true, "requests": [],
+     "expect": {"visible": true, "rows": []}},
+    {"name": "pending CONFIRM row can be confirmed or rejected", "enabled": true,
+     "requests": [{"id": "r1", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "pending", "created_at": "1970-01-12T13:40:00Z"}],
+     "expect": {"visible": true, "rows": [{"id": "r1", "state": "pending", "service": "n8n", "action": "restart", "reason": "stuck", "age_s": 400, "confirm": true, "reject": true}]}},
+    {"name": "confirmed CONFIRM row can only be rejected", "enabled": true,
+     "requests": [{"id": "r2", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "confirmed", "created_at": "1970-01-12T13:40:00Z"}],
+     "expect": {"visible": true, "rows": [{"id": "r2", "state": "confirmed", "service": "n8n", "action": "restart", "reason": "stuck", "age_s": 400, "confirm": false, "reject": true}]}},
+    {"name": "AUTO row has no buttons", "enabled": true,
+     "requests": [{"id": "r3", "action": "restart", "service": "ahawr-qa", "reason": "hung", "tier": "AUTO", "state": "pending", "created_at": "1970-01-12T13:40:00Z"}],
+     "expect": {"visible": true, "rows": [{"id": "r3", "state": "pending", "service": "ahawr-qa", "action": "restart", "reason": "hung", "age_s": 400, "confirm": false, "reject": false}]}},
+    {"name": "not whitelisted row has no buttons", "enabled": true,
+     "requests": [{"id": "r4", "action": "restart", "service": "ahawr-postgres", "reason": "hung", "tier": "NOT WHITELISTED", "state": "pending", "created_at": "1970-01-12T13:40:00Z"}],
+     "expect": {"visible": true, "rows": [{"id": "r4", "state": "pending", "service": "ahawr-postgres", "action": "restart", "reason": "hung", "age_s": 400, "confirm": false, "reject": false}]}},
+    {"name": "running and rejected rows have no buttons", "enabled": true,
+     "requests": [
+       {"id": "r5", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "running", "created_at": "1970-01-12T13:40:00Z"},
+       {"id": "r6", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "rejected", "created_at": "1970-01-12T13:40:00Z"}
+     ],
+     "expect": {"visible": true, "rows": [
+       {"id": "r5", "state": "running", "service": "n8n", "action": "restart", "reason": "stuck", "age_s": 400, "confirm": false, "reject": false},
+       {"id": "r6", "state": "rejected", "service": "n8n", "action": "restart", "reason": "stuck", "age_s": 400, "confirm": false, "reject": false}
+     ]}},
+    {"name": "a request stamped after now has age zero", "enabled": true,
+     "requests": [{"id": "r7", "action": "restart", "service": "n8n", "reason": "stuck", "tier": "CONFIRM", "state": "pending", "created_at": "1970-01-12T13:47:00Z"}],
+     "expect": {"visible": true, "rows": [{"id": "r7", "state": "pending", "service": "n8n", "action": "restart", "reason": "stuck", "age_s": 0, "confirm": true, "reject": true}]}}
+  ]
+}

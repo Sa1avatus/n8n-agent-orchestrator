@@ -69,6 +69,22 @@ How a mode is chosen (planned): the `--stack {docker,inprocess}` option of `pyth
 environment variable `QA_STACK` when the option is absent. The option wins over the variable. An unknown value is
 refused with an error, not defaulted. The variable name is a proposal until it is in code.
 
+## The postgres mode (2026-10-26, the mode of `ahawr-qa`)
+
+The `inprocess` mode seeds a light in-memory store: it has no event rows, so a mission has no started time, task
+statuses or attempts, and the queue has no version. Nine of the 17 UI scenarios failed on it for that reason (the rest
+of the failures were a real race in the Kanban view, fixed in `board_view_kanban.js`).
+
+The third mode, `postgres`, uses the same seed SQL as the `docker` mode on a throwaway server that already runs: the
+compose service `qa-postgres` (profile `qa-container`, no published port, data in memory, password `QA_PG_PASSWORD`
+from `.env`). Each stack creates its own database `qa_<id>` there, starts the dashboard as a child process of the QA
+worker and drops the database on teardown. The host name must pass `assert_qa_target` (`qa-` prefix, never a production
+name). No Docker access is needed. `ahawr-qa` sets `QA_STACK_MODE=postgres`, `QA_PG_HOST=qa-postgres`.
+
+Result in the container (2026-10-26): 17 of 17 UI scenarios, 49 of 49 API checks, the smoke crawl passes, a real
+request through the runner is answered. The regression baseline (`qa/baselines/claude-runner.json`, taken inside the
+container) lists 19 known pytest failures; only new failures fail the regression layer.
+
 ## Dashboard QA fixture setting
 
 `DASHBOARD_QA_FIXTURE` (planned) selects a seeded fixture for the dashboard. It is OFF by default: when unset or
@@ -95,14 +111,12 @@ Each step is NOT RUN. Run them in this order on the host, and record the output 
 
 ## Not done
 
-- No file of the design exists yet: `claude-runner/qa/Dockerfile.qa`, `claude-runner/qa/compose-qa.patch`, the
-  `ahawr-qa` service, `--stack`, `QA_STACK`, the `inprocess` stack, `DASHBOARD_QA_FIXTURE`, the retire script and the
-  rollback script.
-- No image was built, no container started, no parity run was made, no port was closed.
-- Real Postgres and n8n in the QA container: not done, needs the isolated docker-in-docker design above and approval.
-- Regression baseline inside the container: not taken.
-- Nightly run inside the container: not wired.
-- The host worker `data-tables/ops/qa_worker.py` is unchanged.
+- The runner port 8700 stays published on 127.0.0.1: the operator scripts and the host-actions executor on the host
+  call it. Closing it needs those moved first.
+- The nightly run inside the container is not wired.
+- The 19 baseline pytest failures are not fixed (environment ones: tests that need the process-group rules of the
+  Windows host, a writable repository; old ones: the escaping check of `board_guards.js`, the static whitelist test).
+- The host worker is retired (stopped); `qa_worker.py` and `_start_qa_worker.ps1` stay as the rollback.
 
 ## First run (2026-10-23)
 

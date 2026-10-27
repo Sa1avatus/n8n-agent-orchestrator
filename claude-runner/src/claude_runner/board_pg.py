@@ -21,12 +21,15 @@ import threading
 from typing import Any
 
 from .board import (
+    _PROVIDER_FIELDS,
+    _PROVIDER_MODEL_FIELDS,
     BoardStore,
     ChangelogEntry,
     ConflictError,
     LiveState,
     Mission,
     QueueEntry,
+    _picked,
     now,
 )
 
@@ -59,6 +62,14 @@ _PROJECT_RULES_TABLE = "project_rules"
 _PROJECT_RULES_LOCK = 7340201
 _I18N_LANGUAGES_TABLE = "i18n_languages"
 _I18N_STRINGS_TABLE = "i18n_strings"
+_PROVIDERS_TABLE = "providers"
+_PROVIDER_MODELS_TABLE = "provider_models"
+_PROVIDERS_LOCK = 7340202
+_PROVIDER_SELECT = ", ".join(("name", *_PROVIDER_FIELDS, "updated_at"))
+_MODEL_SELECT = ", ".join(
+    ("provider", "model", "probe_result", "probed_at", *_PROVIDER_MODEL_FIELDS, "updated_at")
+)
+_MODEL_JSON_COLUMNS = ("capability_overrides", "probe_result")
 
 _DDL = [
     "CREATE SCHEMA IF NOT EXISTS board",
@@ -1314,6 +1325,193 @@ class PgBoardStore(BoardStore):
                     (key,),
                 )
 
+    # ---- providers (board.providers, board.provider_models) ----------------------
+    def providers_updated_at(self) -> str:
+        row = self._conn.execute(
+            f"SELECT max(at) FROM {_CHANGELOG_TABLE} WHERE left(action, 9) = 'provider '"
+        ).fetchone()
+        return _iso(row["max"]) or ""
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            f"SELECT {_PROVIDER_SELECT} FROM {_PROVIDERS_TABLE} ORDER BY name COLLATE \"C\""
+        ).fetchall()
+        models = self._conn.execute(
+            f"SELECT {_MODEL_SELECT} FROM {_PROVIDER_MODELS_TABLE} "
+            'ORDER BY provider COLLATE "C", model COLLATE "C"'
+        ).fetchall()
+        by_provider: dict[str, list[dict[str, Any]]] = {}
+        for model in models:
+            by_provider.setdefault(model["provider"], []).append(_model_dict(model))
+        return [_provider_dict(r, by_provider.get(r["name"], [])) for r in rows]
+
+    def get_provider(self, name: str) -> dict[str, Any] | None:
+        return self._provider_view(name)
+
+    def _provider_view(self, name: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            f"SELECT {_PROVIDER_SELECT} FROM {_PROVIDERS_TABLE} WHERE name = %s", (name,)
+        ).fetchone()
+        if row is None:
+            return None
+        models = self._conn.execute(
+            f"SELECT {_MODEL_SELECT} FROM {_PROVIDER_MODELS_TABLE} "
+            'WHERE provider = %s ORDER BY model COLLATE "C"',
+            (name,),
+        ).fetchall()
+        return _provider_dict(row, [_model_dict(m) for m in models])
+
+    def _require_provider(self, name: str) -> dict[str, Any]:
+        view = self._provider_view(name)
+        if view is None:
+            raise KeyError(f"provider {name!r} not found")
+        return view
+
+    def _model_view(self, provider: str, model: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            f"SELECT {_MODEL_SELECT} FROM {_PROVIDER_MODELS_TABLE} "
+            "WHERE provider = %s AND model = %s",
+            (provider, model),
+        ).fetchone()
+        return _model_dict(row) if row is not None else None
+
+    def _require_model(self, provider: str, model: str) -> dict[str, Any]:
+        view = self._model_view(provider, model)
+        if view is None:
+            raise KeyError(f"model {provider!r}/{model!r} not found")
+        return view
+
+    def _lock_providers(self) -> None:
+        self._conn.execute("SELECT pg_advisory_xact_lock(%s)", (_PROVIDERS_LOCK,))
+
+    def _check_version(self, kind: str, key: str, expected: str | None, stored: str) -> None:
+        if expected is not None and expected != stored:
+            self._conflict(kind, key, expected, stored)
+
+    def _insert(self, table: str, row: dict[str, Any]) -> None:
+        self._conn.execute(
+            f"INSERT INTO {table} ({', '.join(row)}) VALUES ({', '.join(['%s'] * len(row))})",
+            list(row.values()),
+        )
+
+    def _update(
+        self, table: str, values: dict[str, Any], where: str, params: tuple[Any, ...]
+    ) -> None:
+        sets = ", ".join(f"{column} = %s" for column in values)
+        self._conn.execute(
+            f"UPDATE {table} SET {sets} WHERE {where}", [*values.values(), *params]
+        )
+
+    def create_provider(self, name: str, fields: dict[str, Any]) -> None:
+        row = {"name": name, "enabled": True, **_picked(fields, _PROVIDER_FIELDS)}
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            if self._provider_view(name) is not None:
+                raise ConflictError(f"provider {name!r} already exists")
+            self._audit("provider create", before=None, after=dict(row))
+            self._insert(_PROVIDERS_TABLE, {**row, "updated_at": now()})
+
+    def update_provider(
+        self, name: str, fields: dict[str, Any], expected_version: str | None
+    ) -> None:
+        picked = _picked(fields, _PROVIDER_FIELDS)
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            previous = self._require_provider(name)
+            self._check_version("provider", name, expected_version, previous["version"])
+            before = _columns_of(previous)
+            self._audit("provider update", before=before, after={**before, **picked})
+            self._update(
+                _PROVIDERS_TABLE, {**picked, "updated_at": now()}, "name = %s", (name,)
+            )
+
+    def delete_provider(self, name: str, expected_version: str | None) -> None:
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            previous = self._require_provider(name)
+            self._check_version("provider", name, expected_version, previous["version"])
+            self._audit("provider remove", before=previous, after=None)
+            self._conn.execute(f"DELETE FROM {_PROVIDERS_TABLE} WHERE name = %s", (name,))
+
+    def add_model(self, provider: str, model: str, fields: dict[str, Any]) -> None:
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            self._require_provider(provider)
+            if self._model_view(provider, model) is not None:
+                raise ConflictError(f"model {provider!r}/{model!r} already exists")
+            row = {
+                "provider": provider,
+                "model": model,
+                "supports_thinking": False,
+                **_picked(fields, _PROVIDER_MODEL_FIELDS),
+                "probe_result": None,
+                "probed_at": None,
+            }
+            self._audit("provider model add", before=None, after=dict(row))
+            self._insert(_PROVIDER_MODELS_TABLE, {**_model_db(row), "updated_at": now()})
+
+    def update_model(
+        self,
+        provider: str,
+        model: str,
+        fields: dict[str, Any],
+        expected_version: str | None,
+    ) -> None:
+        picked = _picked(fields, _PROVIDER_MODEL_FIELDS)
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            previous = self._require_model(provider, model)
+            self._check_version(
+                "provider model", f"{provider}/{model}", expected_version,
+                previous["version"],
+            )
+            before = _columns_of(previous)
+            self._audit(
+                "provider model update", before=before, after={**before, **picked}
+            )
+            self._update(
+                _PROVIDER_MODELS_TABLE,
+                _model_db({**picked, "updated_at": now()}),
+                "provider = %s AND model = %s",
+                (provider, model),
+            )
+
+    def remove_model(self, provider: str, model: str, expected_version: str | None) -> None:
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            previous = self._require_model(provider, model)
+            self._check_version(
+                "provider model", f"{provider}/{model}", expected_version,
+                previous["version"],
+            )
+            before = _columns_of(previous)
+            self._audit("provider model remove", before=before, after=None)
+            self._conn.execute(
+                f"DELETE FROM {_PROVIDER_MODELS_TABLE} WHERE provider = %s AND model = %s",
+                (provider, model),
+            )
+
+    def set_model_probe(self, provider: str, model: str, probe_result: dict[str, Any]) -> None:
+        with self._lock, self._conn.transaction():
+            self._lock_providers()
+            before = _columns_of(self._require_model(provider, model))
+            probed_at = now()
+            self._audit(
+                "provider model probe",
+                before=before,
+                after={**before, "probe_result": probe_result, "probed_at": probed_at},
+            )
+            self._update(
+                _PROVIDER_MODELS_TABLE,
+                _model_db({
+                    "probe_result": probe_result,
+                    "probed_at": probed_at,
+                    "updated_at": probed_at,
+                }),
+                "provider = %s AND model = %s",
+                (provider, model),
+            )
+
     def record_preflight(self, mission_id: str, items: list[dict[str, Any]]) -> None:
         with self._lock:
             with self._conn.transaction():
@@ -1497,6 +1695,37 @@ def _iso(value: Any) -> str | None:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _columns_of(view: dict[str, Any]) -> dict[str, Any]:
+    """A provider or model view without its version and models: the stored columns."""
+    return {k: v for k, v in view.items() if k not in ("version", "models")}
+
+
+def _provider_dict(row: dict[str, Any], models: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        **{k: row[k] for k in ("name", *_PROVIDER_FIELDS)},
+        "version": _iso(row["updated_at"]) or "",
+        "models": models,
+    }
+
+
+def _model_dict(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider": row["provider"],
+        "model": row["model"],
+        "probe_result": _read_json(row["probe_result"]),
+        "probed_at": _iso(row["probed_at"]),
+        **{k: row[k] for k in _PROVIDER_MODEL_FIELDS},
+        "version": _iso(row["updated_at"]) or "",
+    }
+
+
+def _model_db(values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: json.dumps(v) if k in _MODEL_JSON_COLUMNS and v is not None else v
+        for k, v in values.items()
+    }
 
 
 def _unavailable(reason: str) -> UnavailableBoardStore:

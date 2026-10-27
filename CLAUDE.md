@@ -64,6 +64,10 @@ git diff --check
   live export, and are written as files: you do not import them into n8n.
 - Columns of an n8n data table are added in the n8n interface, never with raw SQL.
 - A new function ships behind a flag that is OFF by default; with the flag off behaviour is byte-for-byte unchanged.
+- A task that needs a container recreated or restarted asks for it with `POST /v1/host-actions` on the runner
+  (`{action, service, reason}`); the runner's whitelist decides the service and the tier, and no task runs `docker`
+  or touches the Docker socket. The task reads the outcome in a later run with `GET /v1/host-actions/<id>` and
+  never waits for the operator.
 
 ## Quality bar (what a reviewer will check)
 

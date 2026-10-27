@@ -267,3 +267,38 @@ def test_no_secret_in_any_qa_response(qa: TestClient) -> None:
     for text in bodies:
         assert SECRET not in text
         assert WRONG_BEARER not in text
+
+
+def test_result_accepts_layer_verdict_objects(qa: TestClient) -> None:
+    request_id = _create(qa)
+    qa.post(CLAIM.format(request_id=request_id), headers=AUTH)
+
+    response = qa.post(
+        RESULT.format(request_id=request_id),
+        json={
+            "verdicts": [
+                {"verdict": "fail", "layer": "api", "failed_reason": "GET /x answered 500"},
+                "pass",
+            ]
+        },
+        headers=AUTH,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["verdicts"] == [
+        {"verdict": "fail", "layer": "api", "failed_reason": "GET /x answered 500"},
+        "pass",
+    ]
+
+
+def test_result_refuses_an_unknown_verdict_object(qa: TestClient) -> None:
+    request_id = _create(qa)
+    qa.post(CLAIM.format(request_id=request_id), headers=AUTH)
+
+    response = qa.post(
+        RESULT.format(request_id=request_id),
+        json={"verdicts": [{"verdict": "great", "layer": "api"}]},
+        headers=AUTH,
+    )
+
+    assert response.status_code == 422

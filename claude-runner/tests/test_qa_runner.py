@@ -280,11 +280,15 @@ def test_module_imports_without_playwright(monkeypatch: pytest.MonkeyPatch) -> N
 BASE_URL = "http://127.0.0.1:8123"
 
 
+def _perform(page, step) -> None:
+    qa_runner._perform(page, step, BASE_URL, qa_runner._Recorder())
+
+
 def test_type_without_replace_appends_text() -> None:
     page = _FakePage()
     step = qa_runner.Step("type", ("Search", "alpha"), qa_runner.Expect())
 
-    qa_runner._perform(page, step, BASE_URL)
+    _perform(page, step)
 
     assert page.typed == [("Search", "alpha")]
     assert page.select_all_calls == 0
@@ -294,7 +298,7 @@ def test_type_with_replace_clears_before_typing() -> None:
     page = _FakePage()
     step = qa_runner.Step("type", ("Search", "alpha"), qa_runner.Expect(), replace=True)
 
-    qa_runner._perform(page, step, BASE_URL)
+    _perform(page, step)
 
     assert page.select_all_calls == 1
     assert page.typed == [("Search", "alpha")]
@@ -327,7 +331,7 @@ def test_api_post_sends_dashboard_header_to_the_stack_only() -> None:
         body={"mission_id": "m03", "to_position": 0},
     )
 
-    qa_runner._perform(page, step, BASE_URL)
+    _perform(page, step)
 
     assert page.request.posts == [
         (
@@ -343,14 +347,70 @@ def test_api_post_error_status_fails_the_step() -> None:
     step = qa_runner.Step("api_post", "/api/board/queue/move", qa_runner.Expect())
 
     with pytest.raises(qa_runner.StepFailed, match="answered 409"):
-        qa_runner._perform(page, step, BASE_URL)
+        _perform(page, step)
+
+
+def test_api_get_extract_stores_the_last_path_segment() -> None:
+    page = _FakePage(json_payload={"provider": {"version": "v1"}})
+    step = qa_runner.Step(
+        "api_get",
+        "/api/board/providers/qa-edit",
+        qa_runner.Expect(),
+        extract="provider.version",
+    )
+    recorder = qa_runner._Recorder()
+
+    qa_runner._perform(page, step, BASE_URL, recorder)
+
+    assert recorder.vars == {"version": "v1"}
+    assert qa_runner._resolve_body({"expected_version": "$version"}, recorder.vars) == {
+        "expected_version": "v1"
+    }
+def test_api_put_sends_dashboard_header_and_json_body() -> None:
+    page = _FakePage()
+    step = qa_runner.Step(
+        "api_put",
+        "/api/board/providers/qa-edit",
+        qa_runner.Expect(),
+        body={"label": "QA edit renamed", "expected_version": "1"},
+    )
+
+    _perform(page, step)
+
+    assert page.request.puts == [
+        (
+            BASE_URL + "/api/board/providers/qa-edit",
+            {"X-AHAWR-Dashboard": "1", "Content-Type": "application/json"},
+            '{"label": "QA edit renamed", "expected_version": "1"}',
+        )
+    ]
+
+
+def test_api_delete_sends_query_params_without_json_body() -> None:
+    page = _FakePage()
+    step = qa_runner.Step(
+        "api_delete",
+        "/api/board/providers/qa-edit",
+        qa_runner.Expect(),
+        body={"expected_version": "1"},
+    )
+
+    _perform(page, step)
+
+    assert page.request.deletes == [
+        (
+            BASE_URL + "/api/board/providers/qa-edit?expected_version=1",
+            {"X-AHAWR-Dashboard": "1"},
+            None,
+        )
+    ]
 
 
 def test_drag_without_below_drops_on_the_target_name() -> None:
     page = _FakePage()
     step = qa_runner.Step("drag", ("Cache layer", "Parser rewrite"), qa_runner.Expect())
 
-    qa_runner._perform(page, step, BASE_URL)
+    _perform(page, step)
 
     assert page.drags == [("Cache layer", "Parser rewrite", qa_runner.VISIBLE_ONLY, None)]
 
@@ -361,7 +421,7 @@ def test_drag_below_drops_on_the_lower_part_of_the_target_card() -> None:
         "drag", ("Parser rewrite", "Metrics"), qa_runner.Expect(), below=True
     )
 
-    qa_runner._perform(page, step, BASE_URL)
+    _perform(page, step)
 
     source, target, scope, position = page.drags[0]
     assert (source, target, scope) == ("Parser rewrite", "Metrics", qa_runner.CARD_ANCESTOR)
@@ -378,7 +438,7 @@ def test_drag_below_fails_when_the_target_card_is_not_on_the_page() -> None:
     )
 
     with pytest.raises(qa_runner.StepFailed, match="Metrics"):
-        qa_runner._perform(page, step, BASE_URL)
+        _perform(page, step)
     assert page.drags == []
 
 
@@ -398,6 +458,9 @@ class _Locator:
     @property
     def first(self) -> _Locator:
         return self
+
+    def count(self) -> int:
+        return 1 if self._text in self._page.hidden else 0
 
     def locator(self, selector: str) -> _Locator:
         return _Locator(self._page, self._text, scope=selector)
@@ -437,30 +500,54 @@ class _PlaceholderLocator:
 
 
 class _FakeApiResponse:
-    def __init__(self, status: int) -> None:
+    def __init__(self, status: int, json_payload: dict[str, Any] | None = None) -> None:
         self.status = status
         self.ok = 200 <= status < 300
+        self.json_payload = json_payload
+
+    def json(self) -> dict[str, Any]:
+        return self.json_payload or {}
 
 
 class _FakeRequestContext:
-    def __init__(self, status: int) -> None:
+    def __init__(self, status: int, json_payload: dict[str, Any] | None = None) -> None:
         self.status = status
+        self.json_payload = json_payload
         self.posts: list[tuple[str, dict[str, str], str]] = []
+        self.gets: list[tuple[str, dict[str, str]]] = []
+        self.puts: list[tuple[str, dict[str, str], str]] = []
+        self.deletes: list[tuple[str, dict[str, str], str]] = []
 
     def post(self, url: str, headers: dict[str, str], data: str) -> _FakeApiResponse:
         self.posts.append((url, headers, data))
         return _FakeApiResponse(self.status)
 
+    def get(self, url: str, *, headers: dict[str, str], data: str | None) -> _FakeApiResponse:
+        self.gets.append((url, headers))
+        return _FakeApiResponse(self.status, self.json_payload)
+    def put(self, url: str, headers: dict[str, str], data: str | None) -> _FakeApiResponse:
+        self.puts.append((url, headers, data))
+        return _FakeApiResponse(self.status)
+
+    def delete(self, url: str, headers: dict[str, str], data: str | None) -> _FakeApiResponse:
+        self.deletes.append((url, headers, data))
+        return _FakeApiResponse(self.status)
+
 
 class _FakePage:
-    def __init__(self, hidden_after_reload: set[str] | None = None, api_status: int = 200) -> None:
+    def __init__(
+        self,
+        hidden_after_reload: set[str] | None = None,
+        api_status: int = 200,
+        json_payload: dict[str, Any] | None = None,
+    ) -> None:
         self.hidden: set[str] = set()
         self.hidden_after_reload = set(hidden_after_reload or ())
         self.clicks: list[str] = []
         self.drags: list[tuple[str, str, str, dict[str, float] | None]] = []
         self.handlers: dict[str, Any] = {}
         self.placeholders: set[str] = set()
-        self.request = _FakeRequestContext(api_status)
+        self.request = _FakeRequestContext(api_status, json_payload)
         self.reloads = 0
         self.shots: list[str] = []
         self.visited = ""
@@ -477,6 +564,9 @@ class _FakePage:
         return _Locator(self, text)
 
     def get_by_role(self, role: str, name: str) -> _Locator:
+        return _Locator(self, name)
+
+    def get_by_label(self, name: str) -> _Locator:
         return _Locator(self, name)
 
     def locator(self, selector: str) -> _PlaceholderLocator:
@@ -630,6 +720,27 @@ def test_no_mutation_without_header_expectation_fails_on_new_violation() -> None
 
     with pytest.raises(qa_runner.StepFailed, match="DELETE /api/board/task"):
         qa_runner._check(_FakePage(), expect, recorder, mark)
+
+
+def test_text_absent_passes_when_the_text_is_not_on_the_page() -> None:
+    expect = qa_runner.Expect(text_absent=("sk-qa-marker-5c1e9a7d2b40",))
+
+    qa_runner._check(_FakePage(), expect, qa_runner._Recorder(), qa_runner._mark(qa_runner._Recorder()))
+
+
+def test_text_absent_fails_when_the_text_is_on_the_page() -> None:
+    page = _FakePage()
+    page.hidden.add("sk-qa-marker-5c1e9a7d2b40")
+    expect = qa_runner.Expect(text_absent=("sk-qa-marker-5c1e9a7d2b40",))
+
+    with pytest.raises(qa_runner.StepFailed, match="sk-qa-marker-5c1e9a7d2b40"):
+        qa_runner._check(page, expect, qa_runner._Recorder(), qa_runner._mark(qa_runner._Recorder()))
+
+
+def test_text_absent_is_parsed_from_the_step() -> None:
+    expect = qa_runner._expect({"text_absent": ["sk-qa-marker-5c1e9a7d2b40"]}, "steps[0].expect")
+
+    assert expect.text_absent == ("sk-qa-marker-5c1e9a7d2b40",)
 
 
 def test_screenshots_are_written_only_to_the_run_dir(tmp_path: Path) -> None:

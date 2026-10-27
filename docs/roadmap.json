@@ -5,24 +5,24 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.10.100 · October 23, 2026",
-    "tag": "Host actions, the queue from the board, providers and report tasks come next in 0.11.0",
+    "date": "0.11.0 · October 27, 2026",
+    "tag": "Host actions, the queue from the board and providers in the web UI are in 0.11.0; report tasks and the JSON configuration come next",
     "stats": [
       [
         "Current version",
-        "0.10.100"
+        "0.11.0"
       ],
       [
         "Missions completed",
-        "20"
+        "25"
       ],
       [
         "Missions in the queue",
-        "23"
+        "27"
       ],
       [
         "Next milestone",
-        "0.11.0 · 0.12.0 · 1.0.0"
+        "0.11.x · 0.12.0 · 1.0.0"
       ]
     ],
     "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next."
@@ -371,26 +371,26 @@
       ]
     },
     {
-      "s": "next",
-      "when": "Q4 2026",
+      "s": "cur",
+      "when": "October 24 – 27",
       "t": "0.11.0: host actions, the queue from the board, providers and report tasks",
       "v": "0.11.0",
       "d": "Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review",
       "m": [
-        0,
+        4,
         5
       ],
       "items": [
         [
-          "todo",
+          "ok",
           "ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)"
         ],
         [
-          "todo",
+          "ok",
           "ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list"
         ],
         [
-          "todo",
+          "ok",
           "ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI"
         ],
         [
@@ -398,8 +398,8 @@
           "ahawr-report-pack: a generated facts pack, a cloud Worker for the report, a Reviewer rubric, an escalation instead of five failed attempts"
         ],
         [
-          "todo",
-          "0.11.0 release: changelog, version, roadmap"
+          "ok",
+          "0.11.0 release: changelog, version, roadmap (committed, not pushed). ahawr-report-pack has not run yet: its facts script and workflow patch are in the commit behind the flag report_pack (off)"
         ]
       ]
     },

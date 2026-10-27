@@ -108,7 +108,7 @@ def _store_guard(request: Request) -> OpsStore:
     refuse = _unavailable(store)
     if refuse is not None:
         raise RuntimeError(refuse["reason"])
-    return store
+    return store  # type: ignore[no-any-return]
 
 
 def _latest_snapshot(store: OpsStore) -> dict[str, Any] | None:
@@ -132,7 +132,7 @@ def _panel_now(store: OpsStore, snapshot: dict[str, Any] | None) -> str:
     present, else the store clock (``now()``; the Pg store's ``board.now`` is
     the connection's ``now()``)."""
     if isinstance(snapshot, dict) and snapshot.get("at"):
-        return snapshot["at"]
+        return snapshot["at"]  # type: ignore[no-any-return]
     return now()
 
 
@@ -330,7 +330,7 @@ def _build_router() -> APIRouter:
         # shows its default (the value GET /settings reported for it), so the
         # diff's "old" matches what the caller saw.
         old = {
-            key: (store.get_setting(key).value_json if store.get_setting(key)
+            key: (row.value_json if (row := store.get_setting(key))
                   else board_ops_settings.defaults()[key])
             for key in changes
         }
@@ -455,7 +455,11 @@ def _build_router() -> APIRouter:
         _check_rate_limit(store)
         check_can_enqueue(store, action, args)
         command = store.insert_command(action, args, who or None, confirm_token=token)
-        return sanitize_result({"command": _command_dict(command)})
+        # The confirm response keeps the masked token as the audit trail
+        # (the client already holds the real token from prepare).
+        command_dict = _command_dict(command)
+        command_dict["confirm_token"] = "***"
+        return sanitize_result({"command": command_dict})
 
     # ------------------------------------------------------------ commands: journal
     @router.get("/commands")
@@ -594,8 +598,10 @@ def _verified_pairs(store: OpsStore) -> list[dict[str, Any]] | None:
 
 
 def _command_dict(command: Command) -> dict[str, Any]:
-    """The command row as a dict (who, when, what, status, sanitized result)."""
-    return command.model_dump()
+    """The command row as a dict (who, when, what, status, sanitized result).
+    The ``confirm_token`` is omitted: the client holds it and it must never
+    appear in any read route."""
+    return command.model_dump(exclude={"confirm_token"})
 
 
 def _check_rate_limit(store: OpsStore) -> None:

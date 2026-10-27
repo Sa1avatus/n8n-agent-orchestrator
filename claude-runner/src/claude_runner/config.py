@@ -175,6 +175,7 @@ AUTO_COMPACT_WINDOW = 65_536
 AUTO_COMPACT_TOOL_RESERVE = 20_000
 DEFAULT_MAX_OUTPUT_TOKENS = 8_192
 QA_MAX_MINUTES = 20
+PROVIDERS_RELOAD_POLL_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -394,6 +395,7 @@ class Settings:
     allowed_roots: tuple[str, ...] = ("/workspace",)
     path_map: tuple[tuple[str, str], ...] = ()
     api_key: str = ""
+    host_actions_operator_key: str = ""
     max_concurrent: int = 2
     max_run_seconds: int = 3600
     default_model: str = ""
@@ -459,6 +461,14 @@ class Settings:
     # Cloud (Anthropic) runs: apply the local thinking policy per attempt (cloud_think.py);
     # off by default, then the CLI's default thinking behaviour is used for the chosen model.
     cloud_think: bool = False
+    # Providers in the board database (board.providers / board.provider_models): off by
+    # default, the env blocks are the only source; on, the database overrides env blocks.
+    providers_db: bool = False
+    # Provider API keys live in this file (docs/providers.md, section 10); unset
+    # means data_dir/provider-secrets.json, created lazily by the secrets store.
+    secrets_file: Path | None = None
+    # Writes the LiteLLM route entries from the provider database (docs/providers.md, section 13).
+    litellm_sync: bool = False
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -500,6 +510,9 @@ class Settings:
             allowed_roots=tuple(roots),
             path_map=tuple(_path_map(env.get("CLAUDE_RUNNER_PATH_MAP", ""))),
             api_key=env.get("CLAUDE_RUNNER_API_KEY", "").strip(),
+            host_actions_operator_key=env.get(
+                "CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY", ""
+            ).strip(),
             max_concurrent=_int(env, "CLAUDE_RUNNER_MAX_CONCURRENT", 2, minimum=1),
             max_run_seconds=_int(env, "CLAUDE_RUNNER_MAX_RUN_SECONDS", 3600, minimum=1),
             default_model=env.get("CLAUDE_RUNNER_DEFAULT_MODEL", "").strip(),
@@ -545,6 +558,11 @@ class Settings:
             local_tool_output_limits=_bool(env, "CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS", False),
             local_shared_prefix=_bool(env, "CLAUDE_RUNNER_LOCAL_SHARED_PREFIX", True),
             cloud_think=_bool(env, "CLAUDE_RUNNER_CLOUD_THINK", False),
+            providers_db=_bool(env, "CLAUDE_RUNNER_PROVIDERS_DB", False),
+            secrets_file=Path(env["CLAUDE_RUNNER_SECRETS_FILE"])
+            if env.get("CLAUDE_RUNNER_SECRETS_FILE", "").strip()
+            else None,
+            litellm_sync=_bool(env, "CLAUDE_RUNNER_LITELLM_SYNC", False),
         )
 
     def profile(self, role: str) -> RoleProfile:

@@ -51,7 +51,7 @@ def _stale_app() -> tuple[FastAPI, InMemoryOpsStore]:
 # prepare: the dangerous confirmation flow
 # ---------------------------------------------------------------------------
 
-def test_prepare_dangerous_returns_token_and_writes_no_row():
+def test_prepare_dangerous_returns_token_and_writes_no_row() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.post("/api/board/ops/commands/prepare", json={"action": "restart_queue", "who": "alice"})
@@ -64,7 +64,7 @@ def test_prepare_dangerous_returns_token_and_writes_no_row():
     assert app.state.board_ops_store.list_commands(action="restart_queue") == []
 
 
-def test_prepare_safe_enqueues_directly():
+def test_prepare_safe_enqueues_directly() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.post("/api/board/ops/commands/prepare", json={"action": "resume", "who": "alice"})
@@ -79,7 +79,7 @@ def test_prepare_safe_enqueues_directly():
 # confirm: the client-held credential
 # ---------------------------------------------------------------------------
 
-def test_confirm_without_token_is_400():
+def test_confirm_without_token_is_400() -> None:
     app = _app_with()
     client = TestClient(app)
     client.post("/api/board/ops/commands/prepare", json={"action": "restart_queue", "who": "alice"})
@@ -87,7 +87,7 @@ def test_confirm_without_token_is_400():
     assert r.status_code == 400 and r.json()["code"] == "token", r.text
 
 
-def test_confirm_with_wrong_token_is_400():
+def test_confirm_with_wrong_token_is_400() -> None:
     app = _app_with()
     client = TestClient(app)
     prep = client.post(
@@ -107,7 +107,7 @@ def test_confirm_with_wrong_token_is_400():
     assert r.status_code == 400 and r.json()["code"] == "token", r.text
 
 
-def test_confirm_with_valid_token_inserts_row():
+def test_confirm_with_valid_token_inserts_row() -> None:
     app = _app_with()
     client = TestClient(app)
     prep = client.post(
@@ -124,7 +124,7 @@ def test_confirm_with_valid_token_inserts_row():
     assert row["confirm_token"] == "***"
 
 
-def test_token_replay_is_400():
+def test_token_replay_is_400() -> None:
     app = _app_with()
     client = TestClient(app)
     prep = client.post(
@@ -141,7 +141,7 @@ def test_token_replay_is_400():
     assert r.status_code == 400 and r.json()["code"] == "token", r.text
 
 
-def test_expired_token_is_400():
+def test_expired_token_is_400() -> None:
     app = _app_with()
     clock = {"now": NOW}
     app.state.board_ops_confirm_tokens = ConfirmTokens(now_fn=lambda: clock["now"])
@@ -163,7 +163,7 @@ def test_expired_token_is_400():
 # the stale agent: 503 on prepare, confirm and repeat
 # ---------------------------------------------------------------------------
 
-def test_stale_heartbeat_is_503_on_prepare_confirm_and_repeat():
+def test_stale_heartbeat_is_503_on_prepare_confirm_and_repeat() -> None:
     app, store = _stale_app()
     client = TestClient(app)
     r = client.post("/api/board/ops/commands/prepare", json={"action": "resume", "who": "alice"})
@@ -181,7 +181,7 @@ def test_stale_heartbeat_is_503_on_prepare_confirm_and_repeat():
 # the journal: who, when, what, status and a sanitized result
 # ---------------------------------------------------------------------------
 
-def test_journal_shows_who_when_what_status_and_sanitized_result():
+def test_journal_shows_who_when_what_status_and_sanitized_result() -> None:
     app = _app_with()
     store = app.state.board_ops_store
     client = TestClient(app)
@@ -213,10 +213,27 @@ def test_journal_shows_who_when_what_status_and_sanitized_result():
     assert resume["status"] == "done"
     assert resume["result_json"] == {"note": "***", "hex": "***"}
     assert restart["status"] == "new"
-    assert restart["confirm_token"] == "***"
+    # the one-time confirmation token is never in the read route
+    assert "confirm_token" not in restart
 
 
-def test_stale_command_is_reaped_on_read():
+def test_journal_rows_never_contain_the_confirm_token() -> None:
+    app = _app_with()
+    client = TestClient(app)
+    prep = client.post(
+        "/api/board/ops/commands/prepare", json={"action": "restart_queue", "who": "alice"}
+    ).json()
+    client.post(
+        "/api/board/ops/commands/confirm",
+        json={"action": "restart_queue", "token": prep["confirm_token"], "who": "alice"},
+    )
+    r = client.get("/api/board/ops/commands")
+    assert r.status_code == 200, r.text
+    for entry in r.json()["commands"]:
+        assert "confirm_token" not in entry, entry
+
+
+def test_stale_command_is_reaped_on_read() -> None:
     app = _app_with()
     store = app.state.board_ops_store
     client = TestClient(app)
@@ -233,7 +250,7 @@ def test_stale_command_is_reaped_on_read():
 # repeat: only repeatable safe actions
 # ---------------------------------------------------------------------------
 
-def test_repeat_dangerous_action_is_422():
+def test_repeat_dangerous_action_is_422() -> None:
     app = _app_with()
     store = app.state.board_ops_store
     client = TestClient(app)
@@ -250,9 +267,8 @@ def test_repeat_dangerous_action_is_422():
     assert "dangerous" in r.json()["error"]["message"]
 
 
-def test_repeat_repeatable_safe_action_creates_a_new_row():
+def test_repeat_repeatable_safe_action_creates_a_new_row() -> None:
     app = _app_with()
-    store = app.state.board_ops_store
     client = TestClient(app)
     first = client.post(
         "/api/board/ops/commands/prepare", json={"action": "send_test_notification", "who": "carol"}
@@ -263,7 +279,7 @@ def test_repeat_repeatable_safe_action_creates_a_new_row():
     assert second["id"] != first["id"] and second["action"] == "send_test_notification"
 
 
-def test_repeat_unknown_command_id_is_404():
+def test_repeat_unknown_command_id_is_404() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.post("/api/board/ops/commands/9999/repeat")
@@ -274,7 +290,7 @@ def test_repeat_unknown_command_id_is_404():
 # the rate limit
 # ---------------------------------------------------------------------------
 
-def test_rate_limit_is_429_after_the_limit_is_reached():
+def test_rate_limit_is_429_after_the_limit_is_reached() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.put("/api/board/ops/settings", json={"ops_rate_limit_per_min": 3, "who": "admin"})
@@ -294,7 +310,7 @@ def test_rate_limit_is_429_after_the_limit_is_reached():
 # live-state flags
 # ---------------------------------------------------------------------------
 
-def test_livestate_get_and_put_flags():
+def test_livestate_get_and_put_flags() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.get("/api/board/ops/livestate/m1/flags")
@@ -313,7 +329,7 @@ def test_livestate_get_and_put_flags():
     assert r.status_code == 200 and r.json()["flags"]["paused"] is False, r.text
 
 
-def test_livestate_put_with_stale_version_is_409():
+def test_livestate_put_with_stale_version_is_409() -> None:
     app = _app_with()
     client = TestClient(app)
     created = client.put(
@@ -327,7 +343,7 @@ def test_livestate_put_with_stale_version_is_409():
     assert created["version"] in r.json()["error"]["message"]
 
 
-def test_livestate_unknown_flag_is_400():
+def test_livestate_unknown_flag_is_400() -> None:
     app = _app_with()
     client = TestClient(app)
     r = client.put(

@@ -1,0 +1,112 @@
+{
+  "table": [
+    {
+      "id": "anthropic",
+      "label": "Anthropic Messages",
+      "endpoint_path": "/v1/messages",
+      "auth_style": "x-api-key",
+      "needs_translator": false,
+      "litellm_prefix": "anthropic/",
+      "extra_fields": ["anthropic-version"],
+      "capabilities": {
+        "tools": null,
+        "parallel_tools": null,
+        "streaming": null,
+        "system_message_position": "top-level system",
+        "prompt_caching": null,
+        "reasoning_or_thinking": null,
+        "max_tokens_field": "max_tokens",
+        "usage_in_stream": null,
+        "known_quirks": "anthropic-version header; fetched summary called it optional"
+      },
+      "verified": true
+    },
+    {
+      "id": "openai-chat",
+      "label": "OpenAI Chat Completions",
+      "endpoint_path": "/chat/completions",
+      "auth_style": "bearer",
+      "needs_translator": true,
+      "litellm_prefix": "openai/",
+      "extra_fields": [],
+      "capabilities": {
+        "tools": null,
+        "parallel_tools": null,
+        "streaming": null,
+        "system_message_position": null,
+        "prompt_caching": null,
+        "reasoning_or_thinking": null,
+        "max_tokens_field": "max_tokens",
+        "usage_in_stream": null,
+        "known_quirks": "many local servers implement only part of the spec; LiteLLM drops unsupported fields"
+      },
+      "verified": true
+    },
+    {
+      "id": "openai-responses",
+      "label": "OpenAI Responses",
+      "endpoint_path": "/responses",
+      "auth_style": "bearer",
+      "needs_translator": true,
+      "litellm_prefix": "openai/",
+      "extra_fields": [],
+      "capabilities": {
+        "tools": null,
+        "parallel_tools": null,
+        "streaming": null,
+        "system_message_position": null,
+        "prompt_caching": null,
+        "reasoning_or_thinking": null,
+        "max_tokens_field": null,
+        "usage_in_stream": null,
+        "known_quirks": "off by default"
+      },
+      "verified": false
+    }
+  ],
+  "route_cases": [
+    {"api_type": "anthropic", "expected": "direct"},
+    {"api_type": "openai-chat", "expected": "litellm"},
+    {"api_type": "openai-responses", "expected": "litellm"}
+  ],
+  "effective_api_type_cases": [
+    {
+      "provider": {"api_type": "anthropic", "models": {}},
+      "model": "opus",
+      "expected": "anthropic"
+    },
+    {
+      "provider": {
+        "api_type": "anthropic",
+        "models": {"chat-only-model": {"api_type": "openai-chat"}}
+      },
+      "model": "chat-only-model",
+      "expected": "openai-chat"
+    },
+    {
+      "provider": {
+        "api_type": "anthropic",
+        "models": {"chat-only-model": {"api_type": "openai-chat"}}
+      },
+      "model": "claude-like-model",
+      "expected": "anthropic"
+    }
+  ],
+  "effective_capabilities_cases": [
+    {
+      "api_type": "openai-chat",
+      "model_overrides": {"parallel_tools": false},
+      "expected": {"parallel_tools": false, "max_tokens_field": "max_tokens"}
+    },
+    {
+      "api_type": "openai-chat",
+      "model_overrides": null,
+      "expected": {"parallel_tools": null, "max_tokens_field": "max_tokens"}
+    }
+  ],
+  "worker_warning_cases": [
+    {"capabilities": {"tools": false}, "expected": "no_tools"},
+    {"capabilities": {"tools": true}, "expected": null},
+    {"capabilities": {"tools": null}, "expected": null}
+  ]
+}

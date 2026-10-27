@@ -9,6 +9,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -373,3 +374,57 @@ def test_mission_urls_are_empty_when_the_list_cannot_be_read(
     monkeypatch.undo()
     monkeypatch.setattr(urllib.request, "urlopen", refuse)
     assert qa_smoke._mission_urls(_seeds(), "http://x") == []
+
+
+def test_validation_answer_to_a_provoked_write_is_not_a_finding() -> None:
+    base = "http://127.0.0.1:8701"
+    write = qa_smoke.HttpRequest("POST", f"{base}/api/board/missions/create", {})
+    read = qa_smoke.HttpRequest("GET", f"{base}/api/board/queue", {})
+    responses = [(write.url, 400), (read.url, 400)]
+    load_failed = "Failed to load resource: the server responded with a status of 400"
+    console = [load_failed] * 2
+
+    kept, texts, owed = qa_smoke._without_validation_answers(responses, {write.url}, console)
+
+    assert kept == [(read.url, 400)]
+    assert len(texts) == 1
+    assert owed == 0
+
+
+def test_a_server_error_to_a_write_stays_a_finding() -> None:
+    write = qa_smoke.HttpRequest("POST", "http://127.0.0.1:8701/api/board/queue/move", {})
+
+    kept, texts, _owed = qa_smoke._without_validation_answers(
+        [(write.url, 500)], {write.url}, ["Failed to load resource: 500"]
+    )
+
+    assert kept == [(write.url, 500)]
+    assert texts == ["Failed to load resource: 500"]
+
+
+def test_a_console_line_that_lands_in_a_later_step_is_still_matched() -> None:
+    write = qa_smoke.HttpRequest("POST", "http://127.0.0.1:8701/api/board/missions/create", {})
+    load_failed = "Failed to load resource: the server responded with a status of 400"
+
+    _kept, first_texts, owed = qa_smoke._without_validation_answers(
+        [(write.url, 400)], {write.url}, []
+    )
+    _kept, later_texts, owed = qa_smoke._without_validation_answers([], set(), [load_failed], owed)
+
+    assert first_texts == [] and later_texts == [] and owed == 0
+
+
+class _PageAt:
+    url = "http://127.0.0.1:8701/static/board.html#board/m01"
+
+
+def test_a_click_timeout_is_a_warning_unless_another_element_covers_the_control() -> None:
+    crawl = SimpleNamespace(page=_PageAt(), clicks=3)
+
+    hidden = qa_smoke._click_problem(crawl, "toggle", "Timeout 15000ms exceeded: not visible")
+    covered = qa_smoke._click_problem(
+        crawl, "save", "<div class='modal'> intercepts pointer events"
+    )
+
+    assert (hidden.detector, hidden.severity) == ("click-failed", "warning")
+    assert (covered.detector, covered.severity) == ("click-failed", "error")

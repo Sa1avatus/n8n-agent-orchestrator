@@ -6,7 +6,11 @@ from typing import Any
 
 import pytest
 
+from claude_runner.config import _providers
+from claude_runner.provider_registry import ProviderRegistry
+from claude_runner.provider_secrets import ProviderSecrets
 from claude_runner.roles_config import (
+    RolesReport,
     legacy_role,
     merge,
     qa_layers,
@@ -198,3 +202,102 @@ def test_qa_only_options_are_unknown_for_other_roles() -> None:
     roles = {"worker": {"1": "anthropic/haiku", "options": {"mode": "off"}}}
     report = validate_roles(roles, PROVIDERS)
     assert report.errors == ("role 'worker': unknown option 'mode'",)
+
+
+REGISTRY_ENV = {
+    "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_BASE_URL": "http://litellm:4000",
+    "CLAUDE_RUNNER_PROVIDER_OTHER__ANTHROPIC_BASE_URL": "http://other:4000",
+}
+
+GOLDEN_FLAG_OFF: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
+    ('{"worker": "LOCAL/qwen"}', (), ()),
+    (
+        '{"worker": "local/qwen"}',
+        ("role 'worker', model: unknown provider 'local'",),
+        (),
+    ),
+    ('{"qa": {"1": "LOCAL/sonnet", "options": {"mode": "final", "smoke": true}}}', (), ()),
+    (
+        '{"qa": {"1": "LOCAL/sonnet", "options": {"mode": "always"}}}',
+        ("role 'qa': option 'mode' 'always' must be one of off, final, ui_tasks, nightly",),
+        (),
+    ),
+    (
+        '{"qa": {"1": "LOCAL/x", "options": {"layers": ["api", "api"]}}}',
+        ("role 'qa': option 'layers' repeats layer 'api'",),
+        (),
+    ),
+    ('{"qa": {"1": "NOPE/x"}}', ("role 'qa', attempt '1': unknown provider 'NOPE'",), ()),
+    ('{"worker": {"1": "LOCAL/a", "2": "OTHER/b"}, "reviewer": "LOCAL/c"}', (), ()),
+    (
+        '{"architect": "LOCAL/a", "bogus": "LOCAL/b"}',
+        (),
+        ("role 'bogus' is not a known role",),
+    ),
+    (
+        '{"worker": "LOCAL/a", "worker_escalate": {"model": "OTHER/b", "above_steps": 0}}',
+        ("role 'worker_escalate': 'above_steps' must be a whole number of at least 1",),
+        (),
+    ),
+    ("[]", ("roles_json must be a JSON object",), ()),
+    (
+        '{"worker": "LOCAL/a", "worker": "LOCAL/b"}',
+        ("roles_json has a duplicate key 'worker'",),
+        (),
+    ),
+]
+
+
+class _ProviderRows:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def providers_updated_at(self) -> str:
+        return "2026-10-26T10:00:00+00:00"
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        return [dict(row) for row in self._rows]
+
+
+def _db_row(name: str, enabled: bool = True) -> dict[str, Any]:
+    return {
+        "name": name,
+        "enabled": enabled,
+        "base_url": f"http://{name}:4000",
+        "tools": "",
+        "compact_pct": None,
+        "compact_min_pct": None,
+        "max_output_tokens": None,
+        "search_first": None,
+        "retry_fresh_session": None,
+    }
+
+
+@pytest.mark.parametrize(("text", "errors", "warnings"), GOLDEN_FLAG_OFF)
+def test_flag_off_validation_matches_golden(
+    tmp_path: Path, text: str, errors: tuple[str, ...], warnings: tuple[str, ...]
+) -> None:
+    registry = ProviderRegistry(
+        _providers(REGISTRY_ENV),
+        providers_db=False,
+        store=_ProviderRows([]),
+        secrets=ProviderSecrets(tmp_path / "secrets.json"),
+    )
+    report = validate_roles_json(text, list(registry.profiles()))
+    assert report == RolesReport(errors=errors, warnings=warnings)
+
+
+def test_flag_on_accepts_database_provider_and_rejects_disabled_one(tmp_path: Path) -> None:
+    store = _ProviderRows([_db_row("acme"), _db_row("beta", enabled=False)])
+    registry = ProviderRegistry(
+        _providers(REGISTRY_ENV),
+        providers_db=True,
+        store=store,
+        secrets=ProviderSecrets(tmp_path / "secrets.json"),
+    )
+    names = list(registry.profiles())
+    roles = '{"worker": "ACME/gpt", "qa": {"1": "ACME/sonnet", "options": {"mode": "final"}}}'
+    assert validate_roles_json(roles, names).errors == ()
+    assert validate_roles_json('{"worker": "BETA/gpt"}', names).errors == (
+        "role 'worker', model: unknown provider 'BETA'",
+    )

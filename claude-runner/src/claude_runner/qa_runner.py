@@ -17,18 +17,31 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from . import qa_stack
 from .board_ops_redact import scrub
 
 TAGS = frozenset({"ui", "queue", "settings", "i18n", "nightly"})
 ACTIONS = frozenset(
-    {"open", "click", "drag", "type", "press", "wait_for_text", "switch_language", "api_post"}
+    {
+        "open",
+        "click",
+        "drag",
+        "type",
+        "press",
+        "wait_for_text",
+        "switch_language",
+        "api_post",
+        "api_put",
+        "api_delete",
+        "api_get",
+    }
 )
 EXPECTATIONS = frozenset(
     {
         "text_visible",
+        "text_absent",
         "order",
         "placeholder_visible",
         "request_2xx",
@@ -79,6 +92,7 @@ class ScenarioError(ValueError):
 @dataclass(frozen=True)
 class Expect:
     text_visible: tuple[str, ...] = ()
+    text_absent: tuple[str, ...] = ()
     order: tuple[str, ...] = ()
     placeholder_visible: tuple[str, ...] = ()
     request_2xx: tuple[str, ...] = ()
@@ -94,7 +108,8 @@ class Step:
     expect: Expect
     below: bool = False  # drag only: drop in the lower part of the target card
     replace: bool = False  # type only: clear + retype (otherwise press_sequentially appends)
-    body: dict[str, Any] = field(default_factory=dict)  # api_post only
+    body: dict[str, Any] = field(default_factory=dict)  # api_post and api_put
+    extract: str = ""  # api_get only: dotted path into the JSON response
 
 
 @dataclass(frozen=True)
@@ -235,8 +250,12 @@ def _step(value: object, field: str) -> Step:
     detail = f"{field}.{action}"
     if action == "drag":
         return _drag_step(body[action], detail, expect)
-    if action == "api_post":
-        return _api_post_step(body[action], detail, expect)
+    if action == "api_post" or action == "api_put":
+        return _api_step(action, body[action], detail, expect)
+    if action == "api_delete":
+        return _api_delete_step(body[action], detail, expect)
+    if action == "api_get":
+        return _api_get_step(body[action], detail, expect)
     if action == "type":
         return _type_step(body[action], detail, expect)
     return Step(action, _action_value(action, body[action], detail), expect)
@@ -249,7 +268,7 @@ def _drag_step(value: object, field: str, expect: Expect) -> Step:
     return Step("drag", pair, expect, below=below)
 
 
-def _api_post_step(value: object, field: str, expect: Expect) -> Step:
+def _api_step(action: str, value: object, field: str, expect: Expect) -> Step:
     body = _mapping(value, field, frozenset({"path", "body"}))
     path = _text(body.get("path"), f"{field}.path")
     if not path.startswith(API_PREFIX) or "://" in path:
@@ -257,7 +276,33 @@ def _api_post_step(value: object, field: str, expect: Expect) -> Step:
     payload = body.get("body", {})
     if not isinstance(payload, dict):
         raise ScenarioError(f"{field}.body: expected a mapping, got {type(payload).__name__}")
-    return Step("api_post", path, expect, body=payload)
+    return Step(action, path, expect, body=payload)
+
+
+def _api_delete_step(value: object, field: str, expect: Expect) -> Step:
+    body = _mapping(value, field, frozenset({"path", "body"}))
+    path = _text(body.get("path"), f"{field}.path")
+    if not path.startswith(API_PREFIX) or "://" in path:
+        raise ScenarioError(f"{field}.path: {path!r} must be a path under {API_PREFIX}")
+    payload = body.get("body", {})
+    if not isinstance(payload, dict):
+        raise ScenarioError(f"{field}.body: expected a mapping, got {type(payload).__name__}")
+    for key, param in payload.items():
+        if not isinstance(param, str | int | float | bool) or param is None:
+            raise ScenarioError(f"{field}.body: query parameter {key!r} must be a plain value")
+    return Step("api_delete", path, expect, body=payload)
+
+
+def _api_get_step(value: object, field: str, expect: Expect) -> Step:
+    body = _mapping(value, field, frozenset({"path", "body", "extract"}))
+    path = _text(body.get("path"), f"{field}.path")
+    if not path.startswith(API_PREFIX) or "://" in path:
+        raise ScenarioError(f"{field}.path: {path!r} must be a path under {API_PREFIX}")
+    payload = body.get("body", {})
+    if not isinstance(payload, dict):
+        raise ScenarioError(f"{field}.body: expected a mapping, got {type(payload).__name__}")
+    extract = _text(body.get("extract", ""), f"{field}.extract")
+    return Step("api_get", path, expect, body=payload, extract=extract)
 
 
 def _action_value(action: str, value: object, field: str) -> str | tuple[str, str]:
@@ -286,6 +331,7 @@ def _expect(value: object, field: str) -> Expect:
     body = _mapping(value, field, EXPECTATIONS)
     return Expect(
         text_visible=_optional_strings(body, "text_visible", field),
+        text_absent=_optional_strings(body, "text_absent", field),
         order=_optional_strings(body, "order", field),
         placeholder_visible=_placeholders(body, field),
         request_2xx=_optional_strings(body, "request_2xx", field),
@@ -320,6 +366,7 @@ class _Recorder:
     network_errors: list[str] = field(default_factory=list)
     responses: list[tuple[str, int]] = field(default_factory=list)
     allowed_statuses: tuple[int, ...] = ()
+    vars: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -450,7 +497,7 @@ def _execute(
 
 def _run_step(page: Any, step: Step, recorder: _Recorder, base_url: str) -> str | None:
     mark = _mark(recorder)
-    return _attempt(partial(_perform, page, step, base_url)) or _attempt(
+    return _attempt(partial(_perform, page, step, base_url, recorder)) or _attempt(
         partial(_check, page, step.expect, recorder, mark)
     )
 
@@ -463,13 +510,17 @@ def _recheck_after_reload(page: Any, scenario: Scenario, recorder: _Recorder) ->
         (
             step.expect
             for step in reversed(scenario.steps)
-            if step.expect.text_visible or step.expect.order
+            if step.expect.text_visible or step.expect.order or step.expect.text_absent
         ),
         None,
     )
     if final is None:
         return None
-    expect = Expect(text_visible=final.text_visible, order=final.order)
+    expect = Expect(
+        text_visible=final.text_visible,
+        text_absent=final.text_absent,
+        order=final.order,
+    )
     return _attempt(partial(_check, page, expect, recorder, _mark(recorder)))
 
 
@@ -529,7 +580,7 @@ def _record_response(base_url: str, recorder: _Recorder, response: Any) -> None:
         recorder.network_errors.append(f"{response.status} {urlsplit(response.url).path}")
 
 
-def _perform(page: Any, step: Step, base_url: str) -> None:
+def _perform(page: Any, step: Step, base_url: str, recorder: _Recorder) -> None:
     if step.action == "open":
         page.goto(base_url + _as_text(step.value))
     elif step.action == "click":
@@ -538,11 +589,19 @@ def _perform(page: Any, step: Step, base_url: str) -> None:
         source, target = _as_pair(step.value)
         _drag(page, source, target, step.below)
     elif step.action == "api_post":
-        _post_api(page, base_url, step)
+        _post_api(page, base_url, step, recorder)
+    elif step.action == "api_put":
+        _put_api(page, base_url, step, recorder)
+    elif step.action == "api_delete":
+        _delete_api(page, base_url, step, recorder)
+    elif step.action == "api_get":
+        _get_api(page, base_url, step, recorder)
     elif step.action == "type":
         field_name, text = _as_pair(step.value)
         by_name = page.locator(f'[name="{field_name}"]')
         field = page.get_by_role("textbox", name=field_name).or_(by_name)
+        # labelled input without a name (the password key field): target by its label text
+        field = page.get_by_label(field_name).or_(field)
         field = field.locator(VISIBLE_ONLY).first
         if step.replace:
             field.fill("")
@@ -570,15 +629,59 @@ def _drag(page: Any, source: str, target: str, below: bool) -> None:
     _locate(page, source).drag_to(card, target_position=position)
 
 
-def _post_api(page: Any, base_url: str, step: Step) -> None:
-    path = _as_text(step.value)
-    response = page.request.post(
-        base_url + path,
-        headers={DASHBOARD_HEADER: DASHBOARD_HEADER_VALUE, "Content-Type": "application/json"},
-        data=json.dumps(step.body),
-    )
+def _resolve_body(body: dict[str, Any], vars_: dict[str, str]) -> dict[str, Any]:
+    resolved: dict[str, Any] = {}
+    for key, value in body.items():
+        if isinstance(value, str) and value.startswith("$"):
+            resolved[key] = vars_.get(value[1:], value)
+        else:
+            resolved[key] = value
+    return resolved
+
+
+def _api_request(
+    page: Any, method: str, base_url: str, path: str, body: dict[str, Any]
+) -> Any:
+    headers = {DASHBOARD_HEADER: DASHBOARD_HEADER_VALUE}
+    data: str | None = None
+    if method != "DELETE":
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body)
+    url = base_url + path
+    if method == "DELETE" and body:
+        # a delete carries its parameters in the query, e.g. expected_version
+        url += "?" + urlencode(body)
+    response = getattr(page.request, method.lower())(url, headers=headers, data=data)
     if not response.ok:
         raise StepFailed(f"{path} answered {response.status}")
+    return response
+
+
+def _post_api(page: Any, base_url: str, step: Step, recorder: _Recorder) -> None:
+    body = _resolve_body(step.body, recorder.vars)
+    _api_request(page, "POST", base_url, _as_text(step.value), body)
+
+
+def _put_api(page: Any, base_url: str, step: Step, recorder: _Recorder) -> None:
+    body = _resolve_body(step.body, recorder.vars)
+    _api_request(page, "PUT", base_url, _as_text(step.value), body)
+
+
+def _delete_api(page: Any, base_url: str, step: Step, recorder: _Recorder) -> None:
+    body = _resolve_body(step.body, recorder.vars)
+    _api_request(page, "DELETE", base_url, _as_text(step.value), body)
+
+
+def _get_api(page: Any, base_url: str, step: Step, recorder: _Recorder) -> None:
+    body = _resolve_body(step.body, recorder.vars)
+    response = _api_request(page, "GET", base_url, _as_text(step.value), body)
+    if step.extract:
+        data = response.json()
+        for part in step.extract.split("."):
+            if not isinstance(data, dict) or part not in data:
+                raise StepFailed(f"extract path {step.extract!r} not found in response")
+            data = data[part]
+        recorder.vars[step.extract.split(".")[-1]] = str(data)
 
 
 def _as_text(value: str | tuple[str, str]) -> str:
@@ -602,6 +705,9 @@ def _check(page: Any, expect: Expect, recorder: _Recorder, mark: _Mark) -> None:
         page.get_by_text(text).locator(VISIBLE_ONLY).first.wait_for(
             state="visible", timeout=STEP_TIMEOUT_MS
         )
+    for text in expect.text_absent:
+        if page.get_by_text(text, exact=True).locator(VISIBLE_ONLY).count():
+            raise StepFailed(f"text visible but should be absent: {text!r}")
     if expect.order:
         _check_order(page, expect.order)
     for value in expect.placeholder_visible:

@@ -1,0 +1,65 @@
+# The Providers page (board_providers_view.js / board_providers_form.js, opened from #bvprov).
+# A made-up provider is created through the form (POST /api/board/providers), then the made-up
+# key marker is typed into the edit form's "New key" field and saved (PUT .../key). The list
+# then shows the key state "key set, since ..." and the raw key is never rendered.
+# Requires the provider routes mounted in the throwaway dashboard (providers_db on).
+name: providers page adds a made-up provider and stores its key without showing it
+tags: [ui, settings]
+preconditions:
+  fixture: default
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: ["Providers"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "Providers"
+    expect:
+      text_visible: ["Add provider", "No providers yet."]
+      request_2xx: [/api/board/providers]
+      no_console_error: true
+  - click: "Add provider"
+    expect:
+      text_visible: ["New provider", "Base URL"]
+      no_console_error: true
+  - type:
+      into: Name
+      text: qa-made-up
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - type:
+      into: Base URL
+      text: https://made-up.example/v1
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Save"
+    expect:
+      text_visible: ["Provider qa-made-up saved.", "API key"]
+      request_2xx: [/api/board/providers]
+      no_console_error: true
+      no_mutation_without_header: true
+  # The made-up key: a unique marker, so a leak into any page text is easy to spot.
+  - type:
+      into: New key
+      text: sk-qa-marker-5c1e9a7d2b40
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Save key"
+    expect:
+      text_visible: ["Key of qa-made-up saved. The value is not shown again."]
+      request_2xx: [/api/board/providers/qa-made-up/key]
+      no_console_error: true
+      no_mutation_without_header: true
+      text_absent: [sk-qa-marker-5c1e9a7d2b40]
+  # A fresh page load reads the list from the database: the row is there and shows no key.
+  - open: /static/board.html#board/view/kan
+  - click: "Providers"
+    expect:
+      text_visible: ["qa-made-up"]
+      request_2xx: [/api/board/providers]
+      no_console_error: true
+      text_absent: [sk-qa-marker-5c1e9a7d2b40]
+reload_persistence: false

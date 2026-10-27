@@ -1,0 +1,94 @@
+# Edit of a provider on the Providers page: the provider is seeded with a POST (api_post,
+# which sends X-AHAWR-Dashboard), then its label is changed in the edit form. Save runs
+# the dry-run diff and the confirm dialog (accepted by the runner), then PUT
+# /api/board/providers/<name> with expected_version. A second client then PUTs the fresh
+# version, so the still-open form holds a stale version: its next Save from the form
+# answers 409 and the page reloads with the conflict notice. The delete is done
+# the same way and follows the fresh version read after the reload.
+# Requires the provider routes mounted in the throwaway dashboard (providers_db on).
+name: providers edit saves a changed label
+tags: [ui, settings]
+allow_http_status: [409]
+preconditions:
+  fixture: default
+steps:
+  - api_post:
+      path: /api/board/providers
+      body:
+        name: qa-edit
+        label: QA edit
+        api_type: openai-chat
+        base_url: https://made-up.example/v1
+    expect:
+      no_mutation_without_header: true
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: ["Providers"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "Providers"
+    expect:
+      text_visible: ["qa-edit"]
+      request_2xx: [/api/board/providers]
+      no_console_error: true
+  # The row's own name opens the edit form, so one click targets one row unambiguously.
+  - click: "qa-edit"
+    expect:
+      text_visible: ["Provider qa-edit", "Label"]
+      no_console_error: true
+  - type:
+      into: Label
+      text: QA edit renamed
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Save"
+    expect:
+      text_visible: ["Provider qa-edit saved."]
+      request_2xx: [/api/board/providers/qa-edit]
+      no_console_error: true
+      no_mutation_without_header: true
+  # The form still holds the version of the first save. A second client PUTs the
+  # fresh version, so the form becomes stale.
+  - api_get:
+      path: /api/board/providers/qa-edit
+      extract: provider.version
+  - api_put:
+      path: /api/board/providers/qa-edit
+      body:
+        label: QA edit other client
+        expected_version: "$version"
+  # The form's own Save: its dry-run PUT answers 409 and the page reloads with the
+  # conflict notice.
+  - type:
+      into: Label
+      text: QA edit second try
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Save"
+    expect:
+      text_visible: ["Version conflict"]
+      no_console_error: true
+      no_mutation_without_header: true
+  # Read the fresh version again, then delete with it so the delete succeeds.
+  - api_get:
+      path: /api/board/providers/qa-edit
+      extract: provider.version
+  - api_delete:
+      path: /api/board/providers/qa-edit
+      body:
+        expected_version: "$version"
+    expect:
+      no_console_error: true
+  # The page still shows the old provider until re-read: a direct API delete does not
+  # change it, so re-open the page and read the fresh list.
+  - open: /static/board.html#board/view/kan
+  - click: "Providers"
+    expect:
+      text_visible: ["No providers yet."]
+      text_absent: [qa-edit]
+      no_console_error: true
+reload_persistence: false

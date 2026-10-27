@@ -1304,5 +1304,65 @@ window.addEventListener("hashchange", fromHash);
   setInterval(loadRuns, 3000);
 })();
 </script>
+<!--ops-tab-->
+<link rel="stylesheet" href="/static/board_control.css">
+<script>
+(async function () {
+  // The page's esc/setHTML come from the shell above; fetchJson is defined here
+  // (the shape of board_actions.js, which is not loaded on this page).
+  async function fetchJson(url, options) {
+    const res = await fetch(url, Object.assign({ cache: "no-store" }, options || {}));
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(body && body.error && body.error.message
+        ? body.error.message : "HTTP " + res.status);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+  const pane = document.createElement("div");
+  pane.id = "controlpane";
+  pane.hidden = true;
+  document.getElementById("boardpane").insertAdjacentElement("afterend", pane);
+  const btn = document.createElement("button");
+  btn.id = "tabcontrol";
+  btn.type = "button";
+  btn.textContent = guardT("control.tab", "Control");
+  document.getElementById("viewtabs").appendChild(btn);
+  let mounted = false;
+  function showControl(on) {
+    btn.classList.toggle("on", on);
+    pane.hidden = !on;
+    if (on) {
+      document.getElementById("main").hidden = true;
+      document.getElementById("boardpane").hidden = true;
+      document.getElementById("tabruns").classList.remove("on");
+      document.getElementById("tabboard").classList.remove("on");
+    }
+    if (on && !mounted && globalThis.BoardControl) {
+      mounted = true;
+      BoardControl.mount(pane, { t: guardT, esc, setHTML, fetchJson });
+    } else if (!on && mounted) {
+      mounted = false;
+      BoardControl.unmount();
+    }
+  }
+  btn.addEventListener("click", () => { location.hash = "#control"; });
+  document.getElementById("tabruns").addEventListener("click", () => showControl(false));
+  document.getElementById("tabboard").addEventListener("click", () => showControl(false));
+  try {
+    await loadScript("/static/board_control_view.js");
+    await loadScript("/static/board_control.js");
+  } catch (e) {
+    console.error("Control tab scripts did not load", e);
+    return;
+  }
+  globalThis.addEventListener("hashchange", () => showControl(location.hash === "#control"));
+  showControl(location.hash === "#control");
+})();
+</script>
+<!--/ops-tab-->
 </body>
 </html>

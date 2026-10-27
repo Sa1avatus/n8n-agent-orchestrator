@@ -426,6 +426,18 @@ test("queued cards are controlled only after the queue data loads", async () => 
   assert.equal(byClass(first, "qmove").length, 1);
 });
 
+test("a render that lands while the queue loads gets the controls too", async () => {
+  resetDom();
+  stubFetch(queueHandler);
+  const views = freshKanban();
+  renderWith(views, { data: {}, missions: MISSIONS });
+  const { body } = renderWith(views, { data: {}, missions: MISSIONS });
+  await flush();
+  const first = byClass(body, "kcard").find((c) => c.dataset.id === "q1");
+  assert.equal(first.dataset.dndReady, "1");
+  assert.equal(first.getAttribute("draggable"), "true");
+});
+
 test("a failed queue load leaves the columns rendered without controls", async () => {
   resetDom();
   stubFetch(() => ({ status: 503, body: { error: "down" } }));

@@ -14,7 +14,7 @@ const PREFS_KEY = "guards.prefs";
 
 let ctx = null;
 let timer = null;
-let state = { view: "cards", window: "24h", model: null };
+let state = { view: "cards", window: "24h", model: null, host: null };
 let root = null;
 
 function loadPrefs() {
@@ -30,7 +30,7 @@ function savePrefs() {
 
 function badge(status) {
   const cls = V.statusClass(status);
-  return `<span class="gt-st ${ctx.esc(cls)}"><span aria-hidden="true">${V.statusShape(status)}</span> ${ctx.esc(ctx.t(status === "off" ? "tab.disabled" : status, status))}</span>`;
+  return `<span class="gt-st ${ctx.esc(cls)}"><span aria-hidden="true">${ctx.esc(V.statusShape(status))}</span> ${ctx.esc(ctx.t(status === "off" ? "tab.disabled" : status, status))}</span>`;
 }
 function dash(v) { return ctx.esc(v ? v : ctx.t("none", "—")); }
 function dryMark(entry) { return entry.dry_run ? ` <span class="gt-mark">${ctx.esc(ctx.t("dry", "dry run"))}</span>` : ""; }
@@ -111,31 +111,63 @@ function viewHtml(model, now) {
   return cardsView(model, now);
 }
 
+function hostButton(id, decision, label) {
+  return `<button type="button" data-host="${ctx.esc(id)}" data-decision="${decision}">${ctx.esc(label)}</button>`;
+}
+function hostHtml(host) {
+  if (!host || !host.visible) return "";
+  const rows = host.rows.map((r) => {
+    const buttons = (r.confirm ? hostButton(r.id, "confirm", host.confirm) : "") + (r.reject ? hostButton(r.id, "reject", host.reject) : "");
+    return `<div class="gt-card"><div class="gt-name"><b>${ctx.esc(r.service)}</b> ${ctx.esc(r.action)} · ${ctx.esc(r.state)}</div>` +
+      `<div class="gt-sub">${dash(r.reason)} · ${ctx.esc(ago(r.age_s))} ${ctx.esc(ctx.t("tab.ago", "ago"))}</div><div class="gt-sub">${buttons}</div></div>`;
+  }).join("");
+  return `<h3 class="gt-sec">${ctx.esc(host.title)}</h3><div class="gt-grid">${rows || dash("")}</div>`;
+}
+
 function render() {
   if (!root || !state.model) return;
   const now = Date.now() / 1000;
   const tabs = VIEWS.map((v) => `<button type="button" data-view="${v}" class="${v === state.view ? "on" : ""}">${ctx.esc(ctx.t("tab.view." + v, v))}</button>`).join("");
-  ctx.setHTML(root, `${header(state.model)}<div class="gt-views" role="group">${tabs}</div>${viewHtml(state.model, now)}`);
+  ctx.setHTML(root, `${header(state.model)}<div class="gt-views" role="group">${tabs}</div>${viewHtml(state.model, now)}${hostHtml(state.host)}`);
 }
 
 async function refresh() {
   try {
-    const [g, h] = await Promise.all([
+    const [g, h, a] = await Promise.all([
       fetch("/api/guards", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
       fetch("/api/guards/history?window=" + encodeURIComponent(state.window), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/host-actions", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     ]);
     state.model = V.normalise(g, h);
+    state.host = V.hostActionsModel({ enabled: Boolean(a && a.enabled), requests: a && a.requests, now: Date.now() / 1000 }, (k, en) => ctx.t(k, en));
     render();
   } catch (e) {
     if (root) ctx.setHTML(root, `<div class="gt-head">${ctx.esc(ctx.t("tab.error", "Could not load the guards."))}</div>`);
   }
 }
 
+async function hostDecision(id, decision) {
+  const ask = decision === "confirm" ? ctx.t("host.ask.confirm", "Run this host action?") : ctx.t("host.ask.reject", "Reject this host action?");
+  if (!window.confirm(ask)) return;
+  try {
+    const res = await fetch(`/api/host-actions/${encodeURIComponent(id)}/${decision}`, {
+      method: "POST",
+      headers: { "X-AHAWR-Dashboard": "1" },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+  } catch (e) {
+    window.alert(ctx.t("host.failed", "Host action failed") + ": " + e.message);
+  }
+  refresh();
+}
+
 function onClick(e) {
   const v = e.target.closest("[data-view]");
   const w = e.target.closest("[data-window]");
+  const d = e.target.closest("[data-host]");
   if (v) { state.view = v.dataset.view; savePrefs(); render(); }
   if (w) { state.window = w.dataset.window; savePrefs(); refresh(); }
+  if (d) hostDecision(d.dataset.host, d.dataset.decision);
 }
 
 function mount(el, helpers) {

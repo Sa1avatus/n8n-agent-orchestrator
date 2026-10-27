@@ -885,6 +885,19 @@ def test_dashboard_settings_and_host_guard() -> None:
         assert dash.get("/api/runs").status_code == 400
 
 
+def test_dashboard_providers_route_mounted_when_flag_on(tmp_path: Path) -> None:
+    settings = DashboardSettings(
+        runner_url="",
+        hermes_url="",
+        providers_db=True,
+        secrets_file=tmp_path / "provider-secrets.json",
+    )
+    app = create_dashboard_app(settings)
+    app.state.board_store = InMemoryBoardStore()
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/board/providers").status_code == 200
+
+
 def test_dashboard_main_runs_uvicorn(monkeypatch: Any) -> None:
     import uvicorn
 

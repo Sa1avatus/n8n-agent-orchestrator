@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -309,9 +310,12 @@ def test_local_tool_output_limits_apply_only_to_the_local_worker() -> None:
 def test_child_env_hides_runner_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLAUDE_RUNNER_API_KEY", "x")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    monkeypatch.setenv("CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY", "op")
     env = child_env()
     assert "CLAUDE_RUNNER_API_KEY" not in env and env["ANTHROPIC_API_KEY"] == "k"
     assert env["DISABLE_AUTOUPDATER"] == "1"
+    # The operator secret is a CLAUDE_RUNNER_* key, so it never reaches a Worker run.
+    assert "CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY" not in env
 
 
 def test_classify_edge_cases() -> None:
@@ -539,3 +543,51 @@ def test_child_env_local_runs_get_a_task_independent_prompt_start() -> None:
     assert "CLAUDE_CODE_DISABLE_AUTO_MEMORY" not in child_env(local)
     off = Settings.from_env({"CLAUDE_RUNNER_LOCAL_SHARED_PREFIX": "0"})
     assert off.local_shared_prefix is False
+
+
+def test_provider_list_golden_with_registry_flags_off(tmp_path: Path) -> None:
+    fake_env = {
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_BASE_URL": "http://litellm:4000",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__ANTHROPIC_AUTH_TOKEN": "sk-fake",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__TOOLS": "Bash Read",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_MIN_TOKENS": "90000",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__COMPACT_PCT": "70",
+        "CLAUDE_RUNNER_PROVIDER_LOCAL__SEARCH_FIRST": "1",
+    }
+    s = Settings.from_env({**fake_env, "CLAUDE_RUNNER_DATA_DIR": str(tmp_path)})
+    assert s.providers_db is False
+    assert s.litellm_sync is False
+    assert s.secrets_file is None
+    assert {name: asdict(p) for name, p in s.providers.items()} == {
+        "LOCAL": {
+            "name": "LOCAL",
+            "env": {
+                "ANTHROPIC_BASE_URL": "http://litellm:4000",
+                "ANTHROPIC_AUTH_TOKEN": "sk-fake",
+                "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "8192",
+            },
+            "tools": "Bash Read",
+            "compact_min_tokens": 90000,
+            "autocompact_threshold": None,
+            "max_output_tokens": 8192,
+            "context_probe_url": "",
+            "context_probe_key": "",
+            "compact_pct": 70.0,
+            "compact_min_pct": None,
+            "search_first": True,
+            "retry_fresh_session": None,
+        }
+    }
+
+
+def test_registry_flags_and_secrets_file_read_from_env() -> None:
+    on = Settings.from_env(
+        {
+            "CLAUDE_RUNNER_PROVIDERS_DB": "1",
+            "CLAUDE_RUNNER_LITELLM_SYNC": "1",
+            "CLAUDE_RUNNER_SECRETS_FILE": "/run/secrets/providers.json",
+        }
+    )
+    assert on.providers_db is True and on.litellm_sync is True
+    assert on.secrets_file == Path("/run/secrets/providers.json")

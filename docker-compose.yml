@@ -141,6 +141,8 @@ services:
 
     environment:
       - CLAUDE_RUNNER_WORKSPACE=/workspace
+      - HOST_ACTIONS=${HOST_ACTIONS:-}
+      - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
       - CLAUDE_RUNNER_ALLOWED_ROOTS=/workspace,/d
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
@@ -211,12 +213,13 @@ services:
       dockerfile: qa/Dockerfile.qa
 
     container_name: ahawr-qa
-    # not started by a plain `up`: the in-process UI layer is not at parity with the Docker stack yet (docs/qa-container.md), the host worker runs QA
+    # not started by a plain `up`: switch the QA over from the host worker first (docs/qa-container.md)
     profiles: ["qa-container"]
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp
+      # exec: the regression tests write small wrapper scripts into their temp folder and run them
+      - /tmp:exec
       - /home/node
 
     # memory and CPU caps of the QA run; a runaway scenario is killed alone
@@ -231,6 +234,14 @@ services:
       # not from the installed copy in the image (its qa/ folder is not there), so the checked tree is the one that is tested
       - PYTHONPATH=/d/n8n/claude-runner/src
       - QA_RUNS_DIR=/qa-runs
+      # the repository is mounted read-only: tool caches and bytecode go to /tmp
+      - PYTHONDONTWRITEBYTECODE=1
+      - MYPY_CACHE_DIR=/tmp/mypy_cache
+      - RUFF_CACHE_DIR=/tmp/ruff_cache
+      # every QA stack gets its own database on the throwaway server qa-postgres: no Docker access needed
+      - QA_STACK_MODE=postgres
+      - QA_PG_HOST=qa-postgres
+      - QA_PG_PASSWORD=${QA_PG_PASSWORD:?set QA_PG_PASSWORD in .env for the qa-container profile}
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
 
     volumes:
@@ -246,12 +257,40 @@ services:
         target: /d/n8n/data-tables/ops/heartbeat
         bind:
           create_host_path: true
+      # the regression baselines are written here, the only writable place of the repository
+      - type: bind
+        source: ./claude-runner/qa/baselines
+        target: /d/n8n/claude-runner/qa/baselines
+        bind:
+          create_host_path: true
       # verdicts, screenshots and logs of the QA runs
       - qa-runs:/qa-runs
 
     depends_on:
       claude-runner:
         condition: service_started
+      qa-postgres:
+        condition: service_healthy
+
+  # Throwaway Postgres for the QA stacks (databases qa_<id> are created and dropped by the QA worker).
+  # No port is published, no volume: its data lives in memory and is gone with the container.
+  qa-postgres:
+    image: postgres:16-alpine
+    container_name: qa-postgres
+    profiles: ["qa-container"]
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      - POSTGRES_USER=qa
+      - POSTGRES_PASSWORD=${QA_PG_PASSWORD:?set QA_PG_PASSWORD in .env for the qa-container profile}
+      - POSTGRES_DB=qa_admin
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U qa -d qa_admin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # AHAWR dashboard: http://localhost:8701 (127.0.0.1 only, read-only). Every agent run with its
   # thinking, tool calls and results, steps, timings and tokens: Claude Code runs from
@@ -277,6 +316,7 @@ services:
       - DASHBOARD_RUNNER_URL=http://claude-runner:8700
       - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
       - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
+      - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
       # Empty HERMES_API_URL= turns the Hermes source off.
       - DASHBOARD_HERMES_URL=${HERMES_API_URL-http://host.docker.internal:8642}
       - DASHBOARD_HERMES_API_KEY=${HERMES_API_KEY:-}

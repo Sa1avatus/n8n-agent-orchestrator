@@ -37,7 +37,9 @@ from . import board_api, export
 from .board_ops_store import InMemoryOpsStore
 from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
 from .board_pg import DSN_ENV
+from .board_providers_api import add_provider_routes
 from .board_stats import _mission_run_ids
+from .config import _bool
 from .guard_heartbeat import HeartbeatSettings, HostHeartbeatGuard
 from .guard_queue import IdleGuard, MissionNoticeGuard, SeenStore
 from .guard_relay import TelegramRelay
@@ -50,6 +52,8 @@ from .guards import (
     Notifier,
 )
 from .guards_history import WINDOWS_S, GuardHistory
+from .host_actions import host_actions_enabled
+from .provider_secrets import ProviderSecrets
 from .qa_fixture import board_store_from_rows, load_fixture
 from .remote_manager import RemoteRunManager
 from .sources import HERMES_PREFIX, HermesSource, RunnerSource, SourceError
@@ -62,11 +66,14 @@ QA_FIXTURE_ENV = "DASHBOARD_QA_FIXTURE"
 class DashboardSettings:
     runner_url: str = "http://claude-runner:8700"
     runner_api_key: str = ""
+    host_actions_operator_key: str = ""
     hermes_url: str = ""
     hermes_api_key: str = ""
     hermes_session_source: str = ""
     hosts: tuple[str, ...] = ("localhost", "127.0.0.1")
     timeout_seconds: float = 15.0
+    providers_db: bool = False
+    secrets_file: Path | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> DashboardSettings:
@@ -75,11 +82,62 @@ class DashboardSettings:
         return cls(
             runner_url=env.get("DASHBOARD_RUNNER_URL", cls.runner_url).strip(),
             runner_api_key=env.get("DASHBOARD_RUNNER_API_KEY", "").strip(),
+            host_actions_operator_key=env.get(
+                "CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY", ""
+            ).strip(),
             hermes_url=env.get("DASHBOARD_HERMES_URL", "").strip(),
             hermes_api_key=env.get("DASHBOARD_HERMES_API_KEY", "").strip(),
             hermes_session_source=env.get("DASHBOARD_HERMES_SOURCE", "").strip(),
             hosts=tuple(hosts) or cls.hosts,
+            providers_db=env.get("CLAUDE_RUNNER_PROVIDERS_DB", "").strip() in ("1", "true"),
+            secrets_file=(
+                Path(env["CLAUDE_RUNNER_SECRETS_FILE"])
+                if env.get("CLAUDE_RUNNER_SECRETS_FILE")
+                else None
+            ),
         )
+
+
+_HOST_ACTION_ID = re.compile(r"[0-9a-f]{32}")
+
+
+async def runner_host_action(
+    settings: DashboardSettings,
+    method: str,
+    path: str,
+    key: str,
+    *,
+    params: dict[str, str] | None = None,
+    body: dict[str, Any] | None = None,
+) -> tuple[int, Any]:
+    try:
+        async with httpx.AsyncClient(timeout=settings.timeout_seconds) as client:
+            response = await client.request(
+                method,
+                settings.runner_url + path,
+                params=params,
+                json=body,
+                headers={"Authorization": f"Bearer {key}"},
+            )
+    except httpx.HTTPError as exc:
+        return 502, {"error": _describe_error(exc)}
+    try:
+        return response.status_code, response.json()
+    except ValueError:
+        return response.status_code, {"error": "runner returned no JSON"}
+
+
+async def _host_action_decision(
+    settings: DashboardSettings, request_id: str, approved: bool
+) -> JSONResponse:
+    code, payload = await runner_host_action(
+        settings,
+        "POST",
+        f"/v1/host-actions/{request_id}/operator",
+        settings.host_actions_operator_key,
+        body={"approved": approved},
+    )
+    return JSONResponse(payload, status_code=code)
 
 
 def create_dashboard_app(
@@ -137,15 +195,19 @@ def create_dashboard_app(
     )
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.hosts))
     page = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
+    if _bool(dict(os.environ), "DASHBOARD_OPS_TAB", False):
+        page = re.sub(r"<!--/?ops-tab-->\n", "", page)
+    else:
+        page = re.sub(r"<!--ops-tab-->\n.*?<!--/ops-tab-->\n", "", page, flags=re.DOTALL)
 
-    # Board mutation routes (POST/PUT/DELETE under /api/board) require the same
-    # X-AHAWR-Dashboard header as cancel_run; read-only board routes are open.
+    # Mutation routes (POST/PUT/DELETE under /api/board and /api/host-actions) require the
+    # X-AHAWR-Dashboard header as cancel_run does; read-only routes are open.
     async def board_header_guard(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         path = request.url.path
         if (
-            path.startswith("/api/board/")
+            path.startswith(("/api/board/", "/api/host-actions/"))
             and request.method in ("POST", "PUT", "DELETE")
             and request.headers.get("x-ahawr-dashboard") != "1"
         ):
@@ -156,6 +218,9 @@ def create_dashboard_app(
     if qa_fixture is not None:
         app.state.board_store = board_store_from_rows(load_fixture(qa_fixture))
     board_api.add_board_routes(app, settings)
+    if settings.providers_db:
+        secrets = ProviderSecrets(settings.secrets_file or Path("provider-secrets.json"))
+        add_provider_routes(app, secrets)
     if getattr(app.state, "manager", None) is None:
         # the board statistics read runs through a RunManager-like object; the dashboard has no
         # runner database, so it reads the runner over HTTP
@@ -230,6 +295,45 @@ def create_dashboard_app(
         if window not in WINDOWS_S:
             raise HTTPException(status_code=422, detail="window must be 1h, 24h or 7d")
         return {"window": window, "guards": history.window(window)}
+
+    host_actions_on = host_actions_enabled()
+
+    @app.get("/api/host-actions")
+    async def api_host_actions(status: str = "") -> Any:
+        if not host_actions_on:
+            return {"enabled": False}
+        code, payload = await runner_host_action(
+            settings,
+            "GET",
+            "/v1/host-actions",
+            settings.runner_api_key,
+            params={"status": status} if status else None,
+        )
+        if code != 200:
+            return JSONResponse(payload, status_code=code)
+        return {"enabled": True, "requests": payload}
+
+    @app.post("/api/host-actions/{request_id}/confirm")
+    async def api_host_action_confirm(request_id: str) -> Any:
+        if not host_actions_on or _HOST_ACTION_ID.fullmatch(request_id) is None:
+            return JSONResponse({"error": "host action not found"}, status_code=404)
+        code, found = await runner_host_action(
+            settings, "GET", f"/v1/host-actions/{request_id}", settings.runner_api_key
+        )
+        if code != 200:
+            return JSONResponse(found, status_code=code)
+        if found.get("tier") != "CONFIRM" or found.get("state") != "pending":
+            return JSONResponse(
+                {"error": "only a pending CONFIRM-tier host action can be confirmed"},
+                status_code=409,
+            )
+        return await _host_action_decision(settings, request_id, approved=True)
+
+    @app.post("/api/host-actions/{request_id}/reject")
+    async def api_host_action_reject(request_id: str) -> Any:
+        if not host_actions_on or _HOST_ACTION_ID.fullmatch(request_id) is None:
+            return JSONResponse({"error": "host action not found"}, status_code=404)
+        return await _host_action_decision(settings, request_id, approved=False)
 
     @app.get("/api/runs")
     async def list_runs(

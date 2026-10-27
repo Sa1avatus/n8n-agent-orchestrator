@@ -132,7 +132,9 @@ def _roles_text(request: Request, body: dict[str, Any]) -> str:
         raise ValueError("roles_json must be a string holding the JSON text")
     if not text.strip():
         return ""
-    providers = getattr(request.app.state.settings, "providers", {})
+    registry = getattr(request.app.state, "provider_registry", None)
+    settings = request.app.state.settings
+    providers = registry.profiles() if registry else getattr(settings, "providers", {})
     report = roles_config.validate_roles_json(text, list(providers))
     if report.errors:
         raise ValueError("; ".join(report.errors))
