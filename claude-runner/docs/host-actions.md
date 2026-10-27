@@ -1,4 +1,7 @@
-# Host actions: design (part 1)
+# Host actions
+
+Status: implemented in 0.11.0 behind the flag `HOST_ACTIONS` (OFF by default). This document is the design and
+the contract of what ships; the activation steps are not run.
 
 ## Problem
 

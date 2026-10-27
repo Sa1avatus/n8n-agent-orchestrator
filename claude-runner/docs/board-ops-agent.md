@@ -295,9 +295,8 @@ board_ops_api.py:256) and the panels built from `_latest_snapshot`
 
 ## Agent loop
 
-`data-tables/ops/board_agent.py` does not exist yet (it is absent from
-`data-tables/ops/`; no `board_agent*.py` in the tree). The loop it must run,
-mirroring the guards tab pattern:
+`data-tables/ops/board_agent.py` (the host agent; the file is not in git, like the other operator scripts) runs this
+loop, mirroring the guards tab pattern. This note was written before the agent existed:
 
 - **Tick bound.** One poll every `POLL_SECONDS` = 10 s (named constant with its
   unit; the design note's heartbeat table, board-ops-agent.md "Heartbeat and

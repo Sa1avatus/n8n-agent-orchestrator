@@ -67,6 +67,10 @@ Then import the workflows, create the Data Tables and run the first mission: [st
 | [`ROADMAP.md`](ROADMAP.md) | milestones and the mission queue |
 | [`claude-runner/README.md`](claude-runner/README.md) | the runner, its API and settings |
 | [`claude-runner/docs/`](claude-runner/docs) | mission board design, data model, operations |
+| [`providers.md`](claude-runner/docs/providers.md) | providers, models, API types and keys in the web UI (flags `providers_db`, `litellm_sync`) |
+| [`host-actions.md`](claude-runner/docs/host-actions.md) | container restart and recreate by request, with operator confirmation (flag `HOST_ACTIONS`) |
+| [`queue-from-board.md`](claude-runner/docs/queue-from-board.md) | the mission queue read from `board.queue` (`QUEUE_FROM_BOARD`) |
+| [`report-pack.md`](claude-runner/docs/report-pack.md) | facts pack, rubric and escalation for report tasks (flag `report_pack`) |
 | [`docs/`](docs) | thinking control, cold prefill, compaction, Telegram, retrieval |
 
 ## About
@@ -731,7 +735,7 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
   - Architect and Reviewer: read-only.
 - Model access: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), or Bedrock/Vertex/Foundry.
 - Projects: `missions.working_directory` (e.g. `D:\OpenAIProjects\app`) is where Claude Code runs and what retrieval indexes for that mission. The drive is mounted into the containers (`AHAWR_HOST_DRIVE`, default `D:\`).
-- Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`.
+- Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`. With the flag `CLAUDE_RUNNER_PROVIDERS_DB=1` providers, models and write-only keys are also managed on the Providers tab of the board (`claude-runner/docs/providers.md`).
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
 - Dashboard at `http://localhost:8701` (container `ahawr-dashboard`; read-only, 127.0.0.1 only). It shows the runs of every role in both variants: Claude Code runs and Hermes sessions (`HERMES_API_URL`, `HERMES_API_KEY`). The layout follows DeepSeek Harness' Trajectory view: a timeline, a colored ledger with thinking, tool calls and their results, steps with TTFT, generation time, tokens and tok/s, and an inspector for each record.
 

@@ -1,7 +1,7 @@
 # Providers: model, api types, templates
 
-Status: design. None of the registry, model fields, templates or probe below exists in the code yet. Today a
-provider is a block of `CLAUDE_RUNNER_PROVIDER_<NAME>__<VAR>` variables (`config.py`, `_providers`; see
+Status: implemented in 0.11.0 behind the flags `providers_db` and `litellm_sync` (both OFF by default). The
+activation steps (sections 11-13) are not run. With the flags off a provider is a block of `CLAUDE_RUNNER_PROVIDER_<NAME>__<VAR>` variables (`config.py`, `_providers`; see
 `README.md` "Providers per role"), and a model is the string `provider/model` in `roles_json` (`roles-config.md`).
 The registry code ships behind a flag that is OFF by default; with the flag off, behaviour is byte-for-byte unchanged.
 
@@ -72,7 +72,7 @@ The verified cells are the ones [S1] and [S2] show; the rest is the design's ass
 
 ## 4. Vendor templates
 
-`claude-runner/src/claude_runner/provider_templates.json` (design; not created yet). It holds public endpoints only:
+`claude-runner/src/claude_runner/provider_templates.json` It holds public endpoints only:
 no keys, no operator hosts, no resource names. Each row has `status`; a value without a source is `unverified` and the
 row is OFF.
 
@@ -202,7 +202,7 @@ Prices are not sourced here; the operator sets them from the vendor price page.
 
 ## 9. Storage: where each value lives
 
-Design; none of these stores exists yet. Names only, no values.
+The stores exist in the code; the database ones are read only with `providers_db` on. Names only, no values.
 
 | Value | Where it lives | Holds | Written by |
 |---|---|---|---|
@@ -223,7 +223,7 @@ dependency is added here. The keys and tokens are therefore stored UNENCRYPTED i
 > operator decides on encryption, do not ship the secrets file, the database dump, or a backup of either, and do not
 > turn `providers_db` on with plaintext secrets in place.
 
-Decision put to the operator: **encrypt at rest** (a later mode that encrypts the file with a key from
+Decision put to the operator: **encrypt at rest** (implemented in `provider_secrets.py`; it needs the `cryptography` package and encrypts the file with a key from
 `CLAUDE_RUNNER_SECRETS_KEY`, which lives in the environment and never in the file or the database) **or keep
 plaintext** as described above. The operator records the choice in `docs/` before `providers_db` is turned on.
 
@@ -290,12 +290,12 @@ nothing extra.
 
 ## 15. What is NOT changed
 
-- No code, config, `.env.example`, `docker-compose.yml`, `litellm/config.yaml` or `provider_templates.json` is changed by
-  this section. It describes the design only.
-- No table, column or route is created. The n8n data tables and the `board` schema are not touched.
-- No secret is read, written or printed.
-- The env blocks and `roles_json` keep their current meaning.
-- No container is restarted or recreated.
+- With both flags off nothing changes: the env blocks and `roles_json` keep their current meaning and
+  `litellm/config.yaml` stays hand-edited.
+- The n8n data tables are not touched. The `board.providers` and `board.provider_models` tables live in the `board`
+  schema (`board-schema.sql`) and are created by the operator, not by the runner.
+- No secret is read, written or printed by the docs, the logs or the API; a secret is shown as set or unset.
+- No container is restarted or recreated by this feature.
 
 ## 16. Rollback
 
