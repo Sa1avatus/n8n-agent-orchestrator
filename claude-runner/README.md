@@ -362,6 +362,10 @@ What the local-provider settings do:
 ## Thinking of the local Worker: loop guard and a shared prompt start
 
 * **Loop guard.** The same tool call (name and arguments) four times in a row turns thinking on for that run and keeps it on for twelve more model calls (`CLAUDE_RUNNER_THINK_LOOP_REPEATS`, `CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS`; `0` turns it off). Without it a Worker in a "no thinking" phase of the pulse policy can repeat one command for ever (170 identical `grep -c` calls in 11 minutes were seen). The switch is written to the run log as a `thinking_switch` event with the reason `loop`. See `docs/thinking-control.md` for the policies.
+* **Stuck detector.** Two more triggers turn thinking on for the same hold (`loop_hold_steps`, twelve model calls) and are written with their own reasons:
+  * **No edit in N model steps:** after the first 6 model calls (the warm-up), `CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS` (default `12`) model calls in a row without an edit. An edit is an `Edit`, `Write` or `NotebookEdit` call, or a `Bash` command containing `>` or `sed -i`.
+  * **Same error K times:** `CLAUDE_RUNNER_THINK_STUCK_ERRORS` (default `3`) tool errors (among the last 16 errors of the run) that start with the same text (the first 160 characters of the output).
+  * `0` turns each trigger off (`CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS=0`, `CLAUDE_RUNNER_THINK_STUCK_ERRORS=0`). The variables are set in `.env.example`.
 * **Shared prompt start.** Runs on the local provider get `CLAUDE_CODE_ATTRIBUTION_HEADER=0` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (`AHAWR_LOCAL_SHARED_PREFIX`, default `1`). Without them the first request of every task began with a per-task hash (character 47) and a working-directory path (character ~2700), so no two tasks shared a prompt prefix; with them about 85% of the first request is the same for every task. Cloud roles are not changed.
 
 ## Memory limits for Worker scripts

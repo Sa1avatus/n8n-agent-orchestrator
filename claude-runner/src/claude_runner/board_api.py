@@ -49,10 +49,13 @@ from .board import (
     get_board_store,
     now,
 )
+from .board_lessons import InMemoryLessonStore
+from .board_lessons_extract import build_candidate, decide, render_lessons_block, select_lessons
 from .board_ops_redact import scrub
 from .board_pg import UnavailableBoardStore
 from .board_plan import update_mission_config
 from .board_ready import MissionIdError, create_mission, rollback, save_template, start_guard
+from .board_stats import lesson_block_shown, lessons_stats
 from .qa import NIGHTLY_VERDICT_PATH
 from .qa_runner import RUN_DIR_PREFIX, RUNS_DIR
 
@@ -139,6 +142,50 @@ def _roles_text(request: Request, body: dict[str, Any]) -> str:
     if report.errors:
         raise ValueError("; ".join(report.errors))
     return text
+
+
+def _lessons_store(request: Request) -> InMemoryLessonStore:
+    store: InMemoryLessonStore = request.app.state.lessons_store
+    return store
+
+
+def _lesson_text(body: dict[str, Any], key: str) -> str:
+    text = body.get(key)
+    if not isinstance(text, str):
+        raise ValueError(f"{key} must be a string")
+    return text
+
+
+def _lesson_version(body: dict[str, Any]) -> str | None:
+    version = body.get("expected_version")
+    if version is None or isinstance(version, str):
+        return version
+    raise ValueError("expected_version must be a string or null")
+
+
+def _lessons_int(body: dict[str, Any], key: str, minimum: int) -> int:
+    value = body.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ValueError(f"{key} must be a whole number of at least {minimum}")
+    return value
+
+
+def _lessons_texts(body: dict[str, Any], key: str) -> list[str]:
+    value = body.get(key, [])
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError(f"{key} must be a list of strings")
+    return value
+
+
+def _lessons_events(body: dict[str, Any]) -> list[dict[str, Any]]:
+    value = body.get("events")
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise ValueError("events must be a list of event objects")
+    return value
+
+
+def _lessons_enabled(request: Request) -> bool:
+    return _store_guard(request).hermes_config().get("lessons_enabled") is True
 
 
 def _features_text(body: dict[str, Any], key: str) -> str:
@@ -338,6 +385,9 @@ def add_board_routes(app: Any, settings: Any) -> None:
         store = get_board_store()
     app.state.board_store = store
     app.state.settings = settings
+    if getattr(app.state, "lessons_store", None) is None:
+        # shortcut: lessons live in memory, upgrade when PgLessonStore is wired to the board DB
+        app.state.lessons_store = InMemoryLessonStore()
 
     # exception handlers must live on the FastAPI app (APIRouter has none)
     app.add_exception_handler(ConflictError, _on_conflict)
@@ -1601,6 +1651,117 @@ def _build_router() -> APIRouter:
             raise KeyError(lang)
         store.put_i18n_string(lang, key, text, actor=body.get("who", ""))
         return {"lang": lang, "key": key, "text": text}
+
+    @router.get("/missions/{mission_id}/lessons")
+    def list_lessons(request: Request, mission_id: str) -> dict[str, Any]:
+        lessons = _lessons_store(request).list(mission_id)
+        return {"lessons": [lesson.model_dump() for lesson in lessons]}
+
+    @router.get("/missions/{mission_id}/lessons/stats")
+    def mission_lessons_stats(request: Request, mission_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        return lessons_stats(
+            store, _lessons_store(request), _state_key_of(store, mission_id), mission_id
+        )
+
+    @router.get("/missions/{mission_id}/tasks/{task_id}/lessons")
+    def task_lessons(request: Request, mission_id: str, task_id: str) -> dict[str, Any]:
+        store = _store_guard(request)
+        plan = _live_plan(store, _state_key_of(store, mission_id))
+        ids = [str(task.get("id") or task.get("task_id")) for task in plan.get("tasks") or []]
+        if task_id not in ids:
+            raise KeyError(f"task {task_id!r} not found in mission {mission_id!r}")
+        # lesson task_index is the 1-based position of the task in the plan
+        shown = _lessons_store(request).lessons_for_task(mission_id, ids.index(task_id) + 1)
+        return {"lessons": [lesson.model_dump() for lesson in shown]}
+
+    @router.get("/lessons/{lesson_id}")
+    def get_lesson(request: Request, lesson_id: int) -> dict[str, Any]:
+        lesson = _lessons_store(request).get(lesson_id)
+        if lesson is None:
+            raise KeyError(f"lesson {lesson_id} not found")
+        return {"lesson": lesson.model_dump()}
+
+    @router.put("/lessons/{lesson_id}")
+    def put_lesson(request: Request, lesson_id: int, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        lesson = _lessons_store(request).edit_text(
+            lesson_id, _lesson_text(body, "situation"), _lesson_text(body, "lesson"),
+            _lesson_version(body),
+        )
+        return {"lesson": lesson.model_dump()}
+
+    @router.post("/lessons/{lesson_id}/retire")
+    def retire_lesson(request: Request, lesson_id: int, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        lesson = _lessons_store(request).set_status(lesson_id, "retired", _lesson_version(body))
+        return {"lesson": lesson.model_dump()}
+
+    @router.post("/lessons/{lesson_id}/restore")
+    def restore_lesson(request: Request, lesson_id: int, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        lesson = _lessons_store(request).set_status(lesson_id, "active", _lesson_version(body))
+        return {"lesson": lesson.model_dump()}
+
+    @router.delete("/lessons/{lesson_id}")
+    def delete_lesson(request: Request, lesson_id: int,
+                      confirm: bool = Query(False)) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        _lessons_store(request).delete(lesson_id, confirm)
+        return {"deleted": lesson_id}
+
+    @router.post("/lessons/write")
+    def write_lesson(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        if not _lessons_enabled(request):
+            return {"result": "off"}
+        mission = _lesson_text(body, "mission")
+        candidate = build_candidate(
+            _lessons_events(body), mission, _lessons_int(body, "max_attempts", 1)
+        )
+        if candidate is None:
+            return {"result": "none"}
+        store = _lessons_store(request)
+        decision = decide(
+            candidate, store.list(mission, "active"), _lesson_text(body, "mission_text")
+        )
+        if isinstance(decision, tuple):
+            return {"result": "bump", "lesson": store.bump_duplicate(decision[1]).model_dump()}
+        if decision == "drop":
+            return {"result": "drop"}
+        return {"result": "add", "lesson": store.add(candidate).model_dump()}
+
+    @router.post("/lessons/select")
+    def select_lesson_block(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        if not _lessons_enabled(request):
+            return {"block": "", "lesson_ids": []}
+        mission = _lesson_text(body, "mission")
+        task_index = _lessons_int(body, "task_index", 1)
+        if not lesson_block_shown(_store_guard(request).hermes_config(), task_index):
+            return {"block": "", "lesson_ids": []}
+        store = _lessons_store(request)
+        chosen = select_lessons(
+            store.list(mission, "active"),
+            _lesson_text(body, "task_title"),
+            _lesson_text(body, "objective"),
+            _lessons_texts(body, "scope"),
+            _lessons_texts(body, "files"),
+        )
+        lesson_ids = [lesson.id for lesson in chosen]
+        if lesson_ids:
+            store.record_shown(mission, task_index, lesson_ids)
+        return {"block": render_lessons_block(chosen), "lesson_ids": lesson_ids}
+
+    @router.post("/lessons/outcome")
+    def record_lesson_outcome(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        if not _lessons_enabled(request):
+            return {"recorded": False}
+        passed = body.get("first_attempt_passed")
+        if not isinstance(passed, bool):
+            raise ValueError("first_attempt_passed must be true or false")
+        _lessons_store(request).record_outcome(
+            _lesson_text(body, "mission"), _lessons_int(body, "task_index", 1), passed
+        )
+        return {"recorded": True}
 
     return router
 

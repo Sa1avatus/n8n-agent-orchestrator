@@ -215,24 +215,26 @@ The database rows never hold a secret value. A provider row names the secret by 
 
 ## 10. Secrets handling
 
-Dependency check: `cryptography` is not in the dependencies of `claude-runner/pyproject.toml` (lines 10-16), so no
-dependency is added here. The keys and tokens are therefore stored UNENCRYPTED in the file at
-`CLAUDE_RUNNER_SECRETS_FILE` (mode 0600, atomic write).
+Decision (operator, 2026-10-27): **encrypt at rest**. `cryptography` is a runtime dependency of `claude-runner`
+(`pyproject.toml`). The keys and tokens are stored in the file at `CLAUDE_RUNNER_SECRETS_FILE`
+(`/secrets/provider-secrets.json` on the volume `ahawr-provider-secrets`, shared by `claude-runner` and
+`ahawr-dashboard`), encrypted with a Fernet master key from `CLAUDE_RUNNER_SECRETS_KEY` (mode 0600, atomic write).
+The mode is switched on by `crypto.txt` next to the file, which holds the word `encrypted`; without it the file would be
+plain JSON.
 
-> **WARNING: the secrets file is unencrypted on disk.** It relies on file mode 0600 and host access only. Until the
-> operator decides on encryption, do not ship the secrets file, the database dump, or a backup of either, and do not
-> turn `providers_db` on with plaintext secrets in place.
+> **Back up the master key.** It lives only in the host `.env` (`CLAUDE_RUNNER_SECRETS_KEY`). Without it the stored provider
+> keys cannot be read and must be entered again. The key is never written to the file, the database or the logs, and the
+> Worker's CLI environment drops every `CLAUDE_RUNNER_*` variable, so the Worker does not receive it.
 
-Decision put to the operator: **encrypt at rest** (implemented in `provider_secrets.py`; it needs the `cryptography` package and encrypts the file with a key from
-`CLAUDE_RUNNER_SECRETS_KEY`, which lives in the environment and never in the file or the database) **or keep
-plaintext** as described above. The operator records the choice in `docs/` before `providers_db` is turned on.
+Limit: the Worker runs in the same container as the runner, so a process of the same user could read the runner's
+environment. The env blocks of providers had the same limit before; it is not new.
 
 Handling rules:
 
 - `CLAUDE_RUNNER_SECRETS_FILE`: path of the secrets file. Mode 0600, owner the runner user. The runner refuses to read
   the file if the mode is wider.
-- `CLAUDE_RUNNER_SECRETS_KEY`: reserved for the later encrypted mode. Unused while the file is plaintext; when that
-  mode is in use it lives in the environment only, never written to disk by the runner, never shown in the UI.
+- `CLAUDE_RUNNER_SECRETS_KEY`: the Fernet master key of the encrypted file. It lives in the environment only, never
+  written to disk by the runner, never shown in the UI.
 - Atomic write: write a temp file in the same directory, flush and fsync it, set mode 0600, then rename it over the
   secrets file. A crash leaves the old file intact.
 - Redaction: the dashboard shows a secret as set or unset, never its value. Logs, the probe result (section 7), run
@@ -266,6 +268,18 @@ ON a database row overrides an env block of the same name. Each row starts with 
 passes. Variables whose name ends in `_AUTH_TOKEN` or `_API_KEY` are NOT copied: the operator enters them once in the
 dashboard, and they go to the secrets file. The migration never writes to `.env`, never prints a value, and is safe to run
 twice (it skips existing rows).
+
+## 12a. Activation steps done on 2026-10-27
+
+1. The two tables of `board-schema.sql` created in the n8n database, and `GRANT SELECT, INSERT, UPDATE, DELETE` on them plus
+   `GRANT USAGE, SELECT` on `board.provider_models_id_seq` to the role `board_operator` (the dashboard role; the schema
+   file has no GRANT lines, a new table needs them).
+2. `CLAUDE_RUNNER_PROVIDERS_DB=1` on `claude-runner` and `ahawr-dashboard` (`docker-compose.yml`); `litellm_sync` stays off.
+3. The master key generated into the host `.env`, `crypto.txt` written into the volume, an encrypted round trip checked
+   through the dashboard (a throwaway provider and a made-up key, deleted afterwards; no plaintext in the file).
+4. The env blocks were NOT copied into rows: the dashboard container has no env blocks, and a row without a key
+   would override the working block of the same name. Enter a provider in the Providers tab (the key goes to the
+   encrypted file) and then remove its env block.
 
 ## 13. LiteLLM operator steps for litellm_sync
 

@@ -3,7 +3,58 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.100** (claude-runner `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.13.0** (claude-runner `0.12.0` → `0.13.0`, 2026-10-27; `0.11.110` → `0.12.0`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-27 (0.13.0)
+
+New function, OFF by default. Nothing is applied to the database or the live workflow yet.
+
+- **Lessons library** (`claude-runner/docs/lessons.md`, `board_lessons*.py`, `board_lessons_ui.js`, `docs/board-lessons.sql`,
+  `data-tables/ops/lessons_patch.py`). When a task is accepted after a failed attempt, or stops at the attempt cap, the runner stores one
+  short lesson for the mission, checked against the Reviewer's reasons. The next Worker prompt of the same mission may get up to five of
+  them as data. Switches: `lessons_enabled` (hermes_config, OFF) and `lessons_holdout_enabled` (mission config, OFF; every second task is
+  the control). The activation steps and the measurement plan are in `claude-runner/docs/lessons.md`, "Activation (operator)".
+- **Lessons in the mission and task views.** Routes `GET /api/board/missions/{id}/lessons/stats` and `GET /api/board/missions/{id}/tasks/{task_id}/lessons`; the Lessons panel with the statistics and the alternation switch (with confirm) in the mission view, the lessons given in the task view; `board.html` loads `board_lessons_ui.js`.
+
+## 2026-10-27 (0.12.0)
+
+New functions. The stuck detector is on by default (`0` turns each trigger off); the review calibration ships
+with its flag OFF and is not applied to n8n.
+
+- **Review calibration: `task_type` and Reviewer text** (`docs/review-calibration.md`, `data-tables/ops/review_calibration_patch.py`,
+  not in git, not applied to the live workflow). An optional `task_type` on each task (`research`, `code`, `docs`,
+  `ops`; missing, empty or unknown means `code`). `research` and `docs` tasks get a Reviewer text that checks only
+  the acceptance criteria and the facts, not wording or style. `code` and `ops` keep the current Reviewer prompt
+  and the `pass` condition. The patch edits the Code nodes `Parse Plan`, `Restore Saved Task State`,
+  `Build Reviewer Run Input`, `Constants` and `Retry Current Task`, and is idempotent and anchor-checked.
+- **Escalation to the Architect after 3 rejections** (same patch, flag `review_escalation_enabled`, OFF by default).
+  Three consecutive stored `review_status` values that are not `pass` set the marker `escalation_to_architect`
+  before the retry limit stops the task; the Architect input then gets a short summary of the three attempts
+  (at most 300 characters of review feedback each). The routing of the Architect answer and the per-attempt
+  `review_status` history are operator steps in the n8n interface; the patch does not change them.
+- **Stuck detector for the local Worker** (`think_switch.py`, `config.py`, `api.py`, `claude-runner/README.md`,
+  `.env.example`). Two triggers join the loop guard and turn thinking on for `loop_hold_steps` model calls, each
+  with its own reason in the `thinking_switch` event:
+  - `no file edit in N model steps`: after the first 6 model calls, `CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS`
+    (default `12`) model calls without an `Edit`, `Write`, `NotebookEdit` or a `Bash` command with `>` or `sed -i`.
+  - `the same error K times in a row`: `CLAUDE_RUNNER_THINK_STUCK_ERRORS` (default `3`) tool errors with the same
+    first 160 characters, among the last 16 errors of the run.
+  - Shortcut: the edit check reads only the last 256 KB of the run log, so an edit older than that is not seen.
+- **Tests:** `claude-runner/tests/test_think_switch.py` (the no-edit, error and default-value cases), and
+  `claude-runner/tests/test_review_calibration_patch.py` (anchors, idempotency, a failing anchor writes nothing;
+  skipped when `data-tables/ops` or the export is missing).
+
+## 2026-10-27 (0.11.110)
+
+Small change: the providers in the web UI are switched on, with the provider keys encrypted.
+
+- `cryptography` is a runtime dependency of `claude-runner` (`pyproject.toml`).
+- `CLAUDE_RUNNER_PROVIDERS_DB=1` on `claude-runner` and `ahawr-dashboard` in `docker-compose.yml` (`litellm_sync` stays off).
+  The tables `board.providers` and `board.provider_models` exist in the n8n database and `board_operator` has the
+  grants on them.
+- The keys are stored in `/secrets/provider-secrets.json` on the new volume `ahawr-provider-secrets`, shared by both
+  containers, encrypted with a Fernet master key from `CLAUDE_RUNNER_SECRETS_KEY` (host `.env`, back it up).
+- `docs/providers.md` section 10 records the decision, section 12a the activation steps.
 
 ## 2026-10-27 (0.11.100)
 

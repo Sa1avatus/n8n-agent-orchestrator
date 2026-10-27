@@ -335,6 +335,11 @@ async function BoardMission(missionId) {
         (e) => container("boardqa").innerHTML =
           `<div class="terror">${esc(e.message || e)}</div>`);
     }
+    if (typeof BoardLessonsUI !== "undefined") {
+      renderLessonsSection(container("boardlessons"), data.mission.mission_id, data.config).catch(
+        (e) => container("boardlessons").innerHTML =
+          `<div class="terror">${esc(e.message || e)}</div>`);
+    }
   }
   if (box && typeof BoardMissionSave !== "undefined" && BoardMissionSave.attachToBox) {
     BoardMissionSave.attachToBox(box, data);
@@ -701,6 +706,139 @@ async function renderQaSection(container, missionId) {
   container.innerHTML = BoardQa.panelHtml(verdicts);
 }
 
+// One line of the lessons statistics: "label: value".  A missing figure is
+// a dash, as elsewhere in the view.
+function statsLine(label, value) {
+  return `<span>${esc(label)}: ` +
+    esc(value == null ? "—" : value) + `</span>`;
+}
+
+// The lessons statistics (T011): the tasks with and without a lesson block,
+// their first-attempt pass rates, and the mean attempts per task before and
+// after the first shown task.  The figures come from the lessons_stats
+// response; a missing route or a null figure renders a dash.
+function lessonsStatsHtml(stats) {
+  const withStats = (stats && stats.with_lessons) || {};
+  const withoutStats = (stats && stats.without_lessons) || {};
+  const attempts = (stats && stats.attempts_per_task) || {};
+  return `<div class="meta">` +
+    statsLine(tOr("lessons.stat.with_tasks", "tasks with a lesson block"), withStats.tasks) +
+    statsLine(tOr("lessons.stat.with_pass_rate", "first-attempt pass rate (with lessons)"), withStats.first_attempt_pass_rate) +
+    statsLine(tOr("lessons.stat.without_tasks", "tasks without a lesson block"), withoutStats.tasks) +
+    statsLine(tOr("lessons.stat.without_pass_rate", "first-attempt pass rate (without lessons)"), withoutStats.first_attempt_pass_rate) +
+    statsLine(tOr("lessons.stat.before", "mean attempts per task before the first lesson"), attempts.before_first_lesson) +
+    statsLine(tOr("lessons.stat.after", "mean attempts per task after the first lesson"), attempts.after_first_lesson) +
+    `</div>`;
+}
+
+// The alternation switch (T011): the lessons_holdout_enabled checkbox, shown
+// with the value from the mission config.  A change goes through the settings
+// confirm step (diff, confirm, expected_version) and is sent to
+// POST /missions/{id}/config with the X-AHAWR-Dashboard header; a 409 goes to
+// notify.  The store's config update accepts the field for a non-running
+// mission; running missions reject it with a guard reason.
+function lessonsHoldoutSwitchHtml(holdout) {
+  const on = holdout === true;
+  const label = tOr("lessons.holdout", "Alternation of the lessons block (holdout)");
+  return `<div class="lsholdout">` +
+    `<label><input type="checkbox" class="frow" name="lessons_holdout_enabled" ` +
+    `value="1"` + (on ? " checked" : "") + `> ` + esc(label) + `</label></div>`;
+}
+
+// The lessons panel (T013): the mission's lessons, mounted by BoardLessonsUI,
+// with the lesson statistics and the alternation switch.  Reload re-reads
+// only this list, so the run form keeps what the user typed.  config is the
+// mission config object (for the holdout flag) and configVersion the version
+// POST /missions/{id}/config expects; both may be null.
+async function renderLessonsSection(container, missionId, config, configVersion) {
+  const body = await fetchJson("/api/board/missions/" + encodeURIComponent(missionId) + "/lessons");
+  const lessons = body.lessons || [];
+  const cfg = config || {};
+  const on = cfg.lessons_holdout_enabled === true;
+  // The config version the optimistic lock expects; read it from the config
+  // route when the caller did not supply it (the mission GET carries no
+  // config version).
+  let version = configVersion == null ? null : configVersion;
+  if (version == null) {
+    try {
+      const cfgBody = await fetchJson("/api/board/missions/" + encodeURIComponent(missionId) + "/config");
+      version = cfgBody.version == null ? null : cfgBody.version;
+    } catch (e) {
+      version = null; // a failed read keeps the first-save path (no version)
+    }
+  }
+  const ui = {
+    L: (key, en, params) => t(key, params),
+    // Write with the dashboard header (BoardMissionSave.postJson sends it, and
+    // like fetchJson it rejects a non-OK answer with err.status, which the
+    // panel maps to notify/reload); the fetchJson fallback covers node tests
+    // where BoardMissionSave is not loaded.
+    write: (method, url, payload) =>
+      (typeof BoardMissionSave !== "undefined"
+        ? BoardMissionSave.postJson(url, payload, method)
+        : postJson(url, payload).then((res) => {
+          if (res.ok) return res.data;
+          const err = new Error("HTTP " + res.status);
+          err.status = res.status;
+          throw err;
+        })),
+    notify: (text) => {
+      const state = document.getElementById("boardstate");
+      if (!state) return;
+      state.textContent = text;
+      state.className = "";
+    },
+    reload: () => renderLessonsSection(container, missionId, config, configVersion)
+      .catch((e) => ui.notify(e.message)),
+  };
+  BoardLessonsUI.mount(container, lessons, ui);
+  const count = (status) => lessons.filter((lesson) => lesson.status === status).length;
+  container.insertAdjacentHTML("afterbegin",
+    `<div class="meta"><span>${esc(t("lessons.status.active"))}: ${count("active")}</span> ` +
+    `<span>${esc(t("lessons.status.retired"))}: ${count("retired")}</span></div>`);
+  // The statistics are not exposed by a route yet (lessons_stats is not
+  // wired); fetch the stats route and render the figures when it exists.
+  let stats = null;
+  try {
+    stats = await fetchJson("/api/board/missions/" + encodeURIComponent(missionId) + "/lessons/stats");
+  } catch (e) {
+    stats = null; // a missing route leaves the statistics at dashes
+  }
+  container.insertAdjacentHTML("beforeend", lessonsStatsHtml(stats));
+
+  // The alternation switch is wired to the config save; a toggle that does
+  // not change the value is reported with no write.
+  const saveUrl = "/api/board/missions/" + encodeURIComponent(missionId) + "/config";
+  const save = () => ui.write("POST", saveUrl,
+    { lessons_holdout_enabled: !on, expected_version: version == null ? null : version });
+  container.insertAdjacentHTML("beforeend", lessonsHoldoutSwitchHtml(on));
+  const input = container.querySelector(".lsholdout input");
+  if (input) {
+    input.addEventListener("change", () => {
+      if (input.checked === on) {
+        ui.notify(tOr("lessons.nothing", "No changes to save."));
+        return;
+      }
+      const question = tOr("lessons.confirm", "Apply these changes to lesson {id}?\n{diff}",
+        { id: "lessons_holdout_enabled",
+          diff: "lessons_holdout_enabled: " + JSON.stringify(on) + " -> " + JSON.stringify(!on) });
+      if (!globalThis.confirm(question)) {
+        input.checked = on;
+        return;
+      }
+      save().then(() => ui.notify(tOr("lessons.saved", "Lesson {id} saved.", { id: "config" })))
+        .catch((e) => {
+          if (e.status !== 409) {
+            ui.notify(e.message);
+            return;
+          }
+          ui.notify(ui.L("lessons.conflict", "Version conflict: the lesson was changed since it was read. The page is reloaded; check the values and try again."));
+          return ui.reload();
+        });
+    });
+  }
+}
+
 // One same-origin GET helper (the board API only).
 async function fetchJson(url) {
   const res = await fetch(url, { cache: "no-store" });
@@ -721,7 +859,7 @@ const BoardMissionView = {
   render, BoardMission, attachPresetButtons,
   MIDRUN_CONFIG_FIELDS, NON_EDITABLE_CONFIG_FIELDS, FORM_ROWS, esc,
   taskModel, depsMap, highlightSet, dependencyRefusal, warningFor,
-  taskRowHtml, renderTaskTable, statsText, bindTasksView,
+  taskRowHtml, renderTaskTable, statsText, bindTasksView, lessonsStatsHtml,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardMissionView;

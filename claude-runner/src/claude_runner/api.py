@@ -268,6 +268,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 default_policy=settings.think_policy,
                 loop_repeats=settings.think_loop_repeats,
                 loop_hold_steps=settings.think_loop_hold_steps,
+                noedit_steps=settings.think_stuck_noedit_steps,
+                error_repeats=settings.think_stuck_errors,
             )
             manager.on_run_start = (
                 switch.tick
@@ -298,7 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.100", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.13.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

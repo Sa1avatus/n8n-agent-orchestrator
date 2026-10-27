@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
 from .board import BoardStore
+from .board_lessons import InMemoryLessonStore, PgLessonStore
 from .board_order import task_sort_key
 from .board_ready import effective_roles
+from .board_think import variant_for_task
 from .local_pricing import FIELDS
 from .mission_stats import _minutes, _run_ids_with_compactions, stats_for_runs, token_totals
 from .roles_config import resolve
@@ -474,6 +477,90 @@ def task_stats(
         ],
         "last_review_score": view.review_score if view is not None else None,
         "last_review_reason": view.review_reason if view is not None else None,
+    }
+
+
+LESSON_VARIANT = "lessons"
+CONTROL_VARIANT = "off"
+
+
+def lesson_block_shown(config: dict[str, Any], task_index: int) -> bool:
+    """Whether task ``task_index`` (1-based) gets the lessons block.  With
+    ``lessons_holdout_enabled`` on, ``variant_for_task`` splits the tasks: odd ones
+    get the block, even ones the ``off`` control.  Off, every task gets it."""
+    if config.get("lessons_holdout_enabled") is not True:
+        return True
+    # shortcut: fixed period 2, lessons_holdout_every unread; add it when a period is needed
+    policy = {
+        "variants": [
+            {"name": LESSON_VARIANT, "weight": 1},
+            {"name": CONTROL_VARIANT, "weight": 1},
+        ]
+    }
+    return variant_for_task(policy, task_index) == LESSON_VARIANT
+
+
+def _attempts_and_verdicts(
+    board: BoardStore, state_key: str
+) -> tuple[dict[int, set[int]], dict[int, Any]]:
+    """Per task index: the attempt numbers seen, and the ``review_status`` of the
+    first attempt (its lowest ``task_attempt``) when a review was parsed."""
+    rows = [
+        e for e in board.events(state_key)
+        if e.get("task_index") is not None and e.get("task_attempt") is not None
+    ]
+    attempts: dict[int, set[int]] = {}
+    for e in rows:
+        attempts.setdefault(int(float(e["task_index"])), set()).add(int(float(e["task_attempt"])))
+    verdicts: dict[int, Any] = {}
+    for e in rows:
+        index = int(float(e["task_index"]))
+        if e.get("event_type") == "review_parsed" and int(float(e["task_attempt"])) == min(
+            attempts[index]
+        ):
+            verdicts[index] = e.get("review_status")
+    return attempts, verdicts
+
+
+def lessons_stats(
+    board: BoardStore,
+    lessons: InMemoryLessonStore | PgLessonStore,
+    state_key: str,
+    mission_id: str,
+) -> dict[str, Any]:
+    """The mission's lesson figures: the first-attempt pass rate and task count of the
+    tasks with and without a lesson block, the mean attempts per task before and after
+    the first task that got a block, and the lesson counts by status.  A task with no
+    block is one that ``lessons_for_task`` returns nothing for."""
+    attempts, verdicts = _attempts_and_verdicts(board, state_key)
+    shown = sorted(index for index in attempts if lessons.lessons_for_task(mission_id, index))
+    without = sorted(set(attempts) - set(shown))
+    first_shown = shown[0] if shown else None
+    before = [i for i in sorted(attempts) if first_shown is None or i < first_shown]
+    after = [i for i in sorted(attempts) if first_shown is not None and i >= first_shown]
+
+    def pass_rate(indexes: list[int]) -> float | None:
+        judged = [verdicts[i] for i in indexes if i in verdicts]
+        return sum(v == "pass" for v in judged) / len(judged) if judged else None
+
+    def mean_attempts(indexes: list[int]) -> float | None:
+        return sum(len(attempts[i]) for i in indexes) / len(indexes) if indexes else None
+
+    by_status = Counter(lesson.status for lesson in lessons.list(mission_id))
+    return {
+        "state_key": state_key,
+        "mission_id": mission_id,
+        "lessons": {"active": by_status["active"], "retired": by_status["retired"]},
+        "with_lessons": {
+            "tasks": len(shown), "first_attempt_pass_rate": pass_rate(shown),
+        },
+        "without_lessons": {
+            "tasks": len(without), "first_attempt_pass_rate": pass_rate(without),
+        },
+        "attempts_per_task": {
+            "before_first_lesson": mean_attempts(before),
+            "after_first_lesson": mean_attempts(after),
+        },
     }
 
 

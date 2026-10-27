@@ -73,13 +73,28 @@ function loadingHtml() {
   return `<div class="tloading">` + esc(L("tk.loading", "Loading…")) + `</div>`;
 }
 
+// The lessons given to this task: BoardLessonsUI.givenHtml when the module is
+// loaded, a plain list otherwise (the lesson texts are still esc()-wrapped).
+function givenLessonsHtml(lessons) {
+  const list = Array.isArray(lessons) ? lessons : [];
+  if (typeof BoardLessonsUI !== "undefined" && typeof BoardLessonsUI.givenHtml === "function") {
+    const ui = { L: (key, en, params) => L(key, en, params) };
+    return BoardLessonsUI.givenHtml(list, ui);
+  }
+  const items = list.map((l) => `<li>` + esc(l.situation) + ": " + esc(l.lesson) + `</li>`).join("");
+  return `<h4>` + esc(L("lessons.given.title", "Lessons given to this task")) + `</h4>` +
+    (items ? `<ul>` + items + `</ul>`
+      : `<p>` + esc(L("lessons.given.empty", "No lessons were given to this task.")) + `</p>`);
+}
+
 // Pure render: the task header (id, title, objective, status), then the
 // attempts with the Reviewer score and reason, then the runs of each
-// attempt.  view is the task's TaskView (the plan's tasks entry) and stats
-// its statistics object (null while it has not arrived yet); every figure
-// then renders "—".  Returns the escaped HTML string of the whole
-// #boardtask content; a task not in the plan renders the empty state.
-function renderTask(missionId, taskId, view, stats) {
+// attempt, then the lessons given to the task.  view is the task's TaskView
+// (the plan's tasks entry) and stats its statistics object (null while it has
+// not arrived yet); every figure then renders "—".  Returns the escaped HTML
+// string of the whole #boardtask content; a task not in the plan renders the
+// empty state.
+function renderTask(missionId, taskId, view, stats, lessons) {
   const t = view || {};
   const title = t.title == null ? "" : t.title;
   const objective = t.objective == null ? "" : t.objective;
@@ -108,7 +123,8 @@ function renderTask(missionId, taskId, view, stats) {
     `<h3>` + esc(L("tk.attempts.h", "Attempts")) + `</h3>` +
     (attempts.length
       ? attempts.map((d) => attemptHtml(d)).join("")
-      : `<div class="tempty">` + esc(L("tk.none", "No attempts yet.")) + `</div>`)
+      : `<div class="tempty">` + esc(L("tk.none", "No attempts yet.")) + `</div>`) +
+    givenLessonsHtml(lessons)
   );
 }
 
@@ -131,8 +147,8 @@ function resolveInto(container) {
 // Render into #boardtask, creating the container inside #board when the
 // page has no #boardtask yet; a successful render clears the shell's
 // #boardstate line (the shell sets it back on later errors).
-function render(container, missionId, taskId, view, stats) {
-  resolveInto(container).innerHTML = renderTask(missionId, taskId, view, stats);
+function render(container, missionId, taskId, view, stats, lessons) {
+  resolveInto(container).innerHTML = renderTask(missionId, taskId, view, stats, lessons);
   const state = document.getElementById("boardstate");
   if (state) {
     state.textContent = "";
@@ -155,7 +171,7 @@ function renderError(container, message) {
 // BoardTask(missionId, taskId): load the plan and the task's statistics,
 // render #boardtask.  Called by the shell's route() for the
 // #board/<mission_id>/<task_id> fragment.
-async function renderBoardTask(container, missionId, taskId) {
+async function renderBoardTask(container, missionId, taskId, lessons) {
   const planPath = "/api/board/missions/" + encodeURIComponent(missionId) + "/plan";
   const statsPath = "/api/board/missions/" + encodeURIComponent(missionId) +
     "/tasks/" + encodeURIComponent(taskId) + "/stats";
@@ -175,19 +191,30 @@ async function renderBoardTask(container, missionId, taskId) {
   } catch (e) {
     stats = null; // a failed stats load leaves the figures at dashes
   }
-  render(container, missionId, taskId, view, stats);
+  // The lessons given to this task: the caller's list, else the per-task route;
+  // a failed load leaves the empty state.
+  let given = lessons;
+  if (given === undefined) {
+    try {
+      given = (await getJSON("/api/board/missions/" + encodeURIComponent(missionId) +
+        "/tasks/" + encodeURIComponent(taskId) + "/lessons")).lessons;
+    } catch (e) {
+      given = [];
+    }
+  }
+  render(container, missionId, taskId, view, stats, given);
 }
 
 // BoardTask(missionId, taskId): the entry point the shell's route() calls
 // for the #board/<mission_id>/<task_id> fragment (board.js line 66); with
 // no container the view falls back to #boardtask, created inside #board.
-function BoardTask(missionId, taskId) {
-  return renderBoardTask(null, missionId, taskId);
+function BoardTask(missionId, taskId, lessons) {
+  return renderBoardTask(null, missionId, taskId, lessons);
 }
 
 // === export (browser global + CommonJS module.exports) ===
 const BoardTaskView = {
-  BoardTask, renderBoardTask, renderTask, render, renderError, esc,
+  BoardTask, renderBoardTask, renderTask, render, renderError, givenLessonsHtml, esc,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardTaskView;

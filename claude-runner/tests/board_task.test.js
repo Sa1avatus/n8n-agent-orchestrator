@@ -99,6 +99,9 @@ globalThis.getJSON = async (url) => {
   if (url === "/api/board/missions/m%20running/tasks/T002/stats") {
     return stats;
   }
+  if (url === "/api/board/missions/m%20running/tasks/T002/lessons") {
+    return { lessons: [{ situation: "empty lines dropped", lesson: "keep empty lines" }] };
+  }
   throw new Error("unexpected url: " + url);
 };
 
@@ -110,7 +113,11 @@ globalThis.getJSON = async (url) => {
     createElement: () => ({ innerHTML: "" }),
   };
   await BT.renderBoardTask(containerStub, "m running", "T002");
-  check("exactly two GETs and nothing else", fetched.length === 2);
+  check("exactly three GETs and nothing else", fetched.length === 3);
+  check("the lessons URL is exactly encoded",
+    fetched[2] === "/api/board/missions/m%20running/tasks/T002/lessons");
+  check("the lessons given to the task were rendered",
+    has(containerStub.innerHTML, "keep empty lines"));
   check("the plan URL is exactly encoded",
     fetched[0] === "/api/board/missions/m%20running/plan");
   check("the stats URL is exactly encoded",

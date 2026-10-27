@@ -147,6 +147,11 @@ services:
       # a restore point of the tracked changes before every Worker run (git_snapshot.py): refs/ahawr/snapshots/<run_id>
       - CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT=${CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT:-1}
       - CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP=${CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP:-100}
+      # provider keys (docs/providers.md, section 10): one encrypted file on a volume shared by the runner and the dashboard;
+      # the master key stays in the host .env and is not passed to the Worker (the CLI env drops CLAUDE_RUNNER_*)
+      - CLAUDE_RUNNER_PROVIDERS_DB=${CLAUDE_RUNNER_PROVIDERS_DB:-1}
+      - CLAUDE_RUNNER_SECRETS_FILE=/secrets/provider-secrets.json
+      - CLAUDE_RUNNER_SECRETS_KEY=${CLAUDE_RUNNER_SECRETS_KEY:-}
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
@@ -188,6 +193,7 @@ services:
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
       # the LiteLLM runtime switches (local_thinking): the runner writes it when a task runs too long
+      - ahawr-provider-secrets:/secrets
       - ./litellm/runtime:/app/runtime
       # the Worker's scratch folder (missions use /tmp/dcfr-work) survives container recreation
       - type: bind
@@ -319,6 +325,11 @@ services:
       - DASHBOARD_RUNNER_URL=http://claude-runner:8700
       - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
       - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
+      # provider keys (docs/providers.md, section 10): one encrypted file on a volume shared by the runner and the dashboard;
+      # the master key stays in the host .env and is not passed to the Worker (the CLI env drops CLAUDE_RUNNER_*)
+      - CLAUDE_RUNNER_PROVIDERS_DB=${CLAUDE_RUNNER_PROVIDERS_DB:-1}
+      - CLAUDE_RUNNER_SECRETS_FILE=/secrets/provider-secrets.json
+      - CLAUDE_RUNNER_SECRETS_KEY=${CLAUDE_RUNNER_SECRETS_KEY:-}
       - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
       # Empty HERMES_API_URL= turns the Hermes source off.
       - DASHBOARD_HERMES_URL=${HERMES_API_URL-http://host.docker.internal:8642}
@@ -360,6 +371,7 @@ services:
       # seen-state of the queue notices and the Telegram relay offset
       - ahawr-guards-state:/guards/state
     extra_hosts:
+      - ahawr-provider-secrets:/secrets
       # the Hermes API server on the Docker host
       - "host.docker.internal:host-gateway"
 
@@ -421,3 +433,4 @@ volumes:
   claude-runner-data:
   ahawr-guards-state:
   qa-runs:
+  ahawr-provider-secrets:

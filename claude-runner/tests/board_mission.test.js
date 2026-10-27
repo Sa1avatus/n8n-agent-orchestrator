@@ -516,6 +516,17 @@ async function s8d() {
   await s8c();
   await s7();
   await s8d();
+  // lessonsStatsHtml: each figure sits after its own label, a missing one is a dash
+  const lessonsHtml = BM.lessonsStatsHtml({
+    with_lessons: { tasks: 5, first_attempt_pass_rate: 0.5 },
+    without_lessons: { tasks: 2, first_attempt_pass_rate: null },
+    attempts_per_task: { before_first_lesson: 1.5, after_first_lesson: null },
+  });
+  check("lessons stats: tasks with a lesson block: 5", lessonsHtml.includes("tasks with a lesson block: 5"));
+  check("lessons stats: first-attempt pass rate (without lessons): —", lessonsHtml.includes("first-attempt pass rate (without lessons): —"));
+  check("lessons stats: mean attempts per task before the first lesson: 1.5", lessonsHtml.includes("mean attempts per task before the first lesson: 1.5"));
+  check("lessons stats: tasks with a lesson block: —", BM.lessonsStatsHtml(null).includes("tasks with a lesson block: —"));
+
   console.log("all ok");
 })().catch((e) => {
   console.error(e && e.stack || e);

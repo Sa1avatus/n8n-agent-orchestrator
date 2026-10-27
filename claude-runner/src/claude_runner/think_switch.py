@@ -26,6 +26,7 @@ import contextlib
 import json
 import logging
 import re
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,20 @@ log = logging.getLogger("claude_runner.think_switch")
 MARKER_SUFFIX = ".auto"
 
 DEFAULT_PULSE = (25, 10, 1)
+
+NOEDIT_WARMUP_STEPS = 6  # the reading and planning steps of a run, before the no-edit count applies
+EDIT_TOOLS = ("Edit", "Write", "NotebookEdit")
+ERROR_SIGNATURE_MAX_CHARS = 160  # the start of an error output that tells two errors apart
+RECENT_ERRORS_KEPT = 16  # error signatures kept per run; the oldest is forgotten first
+
+
+def _is_edit(name: str, tool_input: Any) -> bool:
+    if name in EDIT_TOOLS:
+        return True
+    if name == "Bash" and isinstance(tool_input, dict):
+        command = str(tool_input.get("command", ""))
+        return ">" in command or "sed -i" in command
+    return False
 
 
 def variants(policy: str) -> list[str]:
@@ -104,11 +119,18 @@ class ThinkSwitch:
         default_policy: str = "",
         loop_repeats: int = 0,
         loop_hold_steps: int = 12,
+        noedit_steps: int = 0,
+        error_repeats: int = 0,
     ) -> None:
         self.default_policy = default_policy
         self.loop_repeats = loop_repeats
         self.loop_hold_steps = loop_hold_steps
-        self._loop_hold: dict[str, int] = {}  # run id -> step up to which thinking stays on
+        self.noedit_steps = noedit_steps
+        self.error_repeats = error_repeats
+        # run id -> (step up to which thinking stays on, reason of the trigger)
+        self._loop_hold: dict[str, tuple[int, str]] = {}
+        # run id -> (bytes of the event log read, recent error signatures)
+        self._error_seen: dict[str, tuple[int, deque[str]]] = {}
         self._json_cache: dict[str, think_policy.Policy | None] = {}
         self._last_valid_json: think_policy.Policy | None = None
         self.after_steps = after_steps
@@ -289,11 +311,12 @@ class ThinkSwitch:
             return ""
         return None
 
-    def _tail_calls(self, run_id: str, count: int) -> tuple[list[str], int]:
-        """The last ``count`` tool calls of a run (name + arguments as one string) and the number
-        of the last model call, from the tail of the run's event log."""
+    def _tail_calls(self, run_id: str, count: int) -> tuple[list[str], int, int]:
+        """The last ``count`` tool calls of a run (name + arguments as one string), the number
+        of the last model call and the number of the last model call that edited a file, from
+        the tail of the run's event log."""
         if self.events is None:
-            return [], 0
+            return [], 0, 0
         try:
             with (self.events.directory / f"{run_id}.jsonl").open("rb") as handle:
                 handle.seek(0, 2)
@@ -301,9 +324,12 @@ class ThinkSwitch:
                 handle.seek(max(0, size - 262144))
                 data = handle.read()
         except OSError:
-            return [], 0
+            return [], 0, 0
         calls: list[str] = []
         last_step = 0
+        # shortcut: only the last 256 KB of the log is read, so an edit older than that is not seen
+        # and a long run looks unedited; keep a per-run offset like _steps to upgrade
+        edit_step = 0
         for line in data.splitlines()[1:] if size > 262144 else data.splitlines():
             if b'"tool_use"' not in line:
                 continue
@@ -313,31 +339,82 @@ class ThinkSwitch:
                 continue
             if event.get("kind") != "tool_use":
                 continue
+            step = int(event.get("step") or 0)
+            if _is_edit(str(event.get("name", "")), event.get("input")):
+                edit_step = step
             calls.append(
                 str(event.get("name", ""))
                 + json.dumps(event.get("input"), sort_keys=True, ensure_ascii=False)
             )
-            last_step = int(event.get("step") or 0)
-        return calls[-count:], last_step
+            last_step = step
+        return calls[-count:], last_step, edit_step
+
+    def _repeated_error(self, run_id: str) -> bool:
+        """True when an error result read since the last check has the same signature as
+        ``error_repeats`` - 1 of the run's recent errors; those errors are then forgotten.
+        A log line is read once, as in _steps."""
+        if self.error_repeats <= 0 or self.events is None:
+            return False
+        offset, recent = self._error_seen.get(run_id, (0, deque[str](maxlen=RECENT_ERRORS_KEPT)))
+        try:
+            with (self.events.directory / f"{run_id}.jsonl").open("rb") as handle:
+                handle.seek(offset)
+                data = handle.read()
+        except OSError:
+            return False
+        whole = data.rfind(b"\n") + 1
+        repeated = False
+        for line in data[:whole].splitlines():
+            if b'"tool_result"' not in line:
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("kind") != "tool_result" or not event.get("is_error"):
+                continue
+            signature = " ".join(str(event.get("text") or "").split())
+            recent.append(signature[:ERROR_SIGNATURE_MAX_CHARS])
+            if recent.count(recent[-1]) >= self.error_repeats:
+                repeated = True
+                recent.clear()
+        self._error_seen[run_id] = (offset + whole, recent)
+        return repeated
 
     def _loop_tick(self) -> str | None:
         """A Worker that makes the same tool call again and again (170 identical ``grep -c`` in 11
         minutes was seen) gets thinking: with it on the model reads the answer it keeps ignoring and
-        changes course. The flag stays on for ``loop_hold_steps`` model calls after the last
-        repeat, then the policy decides again. Returns None when no run is looping."""
-        if self.loop_repeats <= 0:
+        changes course. A Worker that goes ``noedit_steps`` model calls without editing a file (past
+        its first NOEDIT_WARMUP_STEPS) gets it the same way, and so does one whose tool errors
+        repeat ``error_repeats`` times with the same start of output. The flag stays on for
+        ``loop_hold_steps`` model calls after the last trigger, then the policy decides again.
+        Returns None when no run is stuck."""
+        if self.loop_repeats <= 0 and self.noedit_steps <= 0 and self.error_repeats <= 0:
             return None
         for run in self.store.running_local_workers():
-            calls, step = self._tail_calls(run["run_id"], self.loop_repeats)
-            looping = len(calls) >= self.loop_repeats and len(set(calls)) == 1
+            calls, step, edit_step = self._tail_calls(run["run_id"], self.loop_repeats)
+            looping = (
+                self.loop_repeats > 0 and len(calls) >= self.loop_repeats and len(set(calls)) == 1
+            )
+            unedited = (
+                self.noedit_steps > 0
+                and step > NOEDIT_WARMUP_STEPS
+                and step - edit_step >= self.noedit_steps
+            )
+            repeated = self._repeated_error(run["run_id"])
+            why = ""
             if looping:
-                self._loop_hold[run["run_id"]] = step + self.loop_hold_steps
-            elif step >= self._loop_hold.get(run["run_id"], 0):
+                why = f"loop: the same tool call {self.loop_repeats} times in a row"
+            elif unedited:
+                why = f"no file edit in {self.noedit_steps} model steps"
+            elif repeated:
+                why = f"the same error {self.error_repeats} times in a row"
+            if why:
+                self._loop_hold[run["run_id"]] = (step + self.loop_hold_steps, why)
+            elif step >= self._loop_hold.get(run["run_id"], (0, ""))[0]:
                 self._loop_hold.pop(run["run_id"], None)
                 continue
-            return self._set(
-                "on", run, f"loop: the same tool call {self.loop_repeats} times in a row"
-            )
+            return self._set("on", run, self._loop_hold[run["run_id"]][1])
         return None
 
     def _set(self, desired: str, run: dict[str, Any], why: str) -> str:

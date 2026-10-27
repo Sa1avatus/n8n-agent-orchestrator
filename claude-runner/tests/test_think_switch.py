@@ -3,8 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+from claude_runner.config import Settings
 from claude_runner.store import Store
 from claude_runner.think_switch import (
+    ERROR_SIGNATURE_MAX_CHARS,
     ThinkSwitch,
     parse_pulse,
     pulse_thinking,
@@ -605,3 +609,241 @@ def test_loop_detection_off_by_default_and_different_arguments_do_not_count(tmp_
     assert ThinkSwitch(store, flag, 0, events, loop_repeats=4).tick() == ""
     _calls(events, "a", ["x"] * 6, first_step=5)
     assert ThinkSwitch(store, flag, 0, events).tick() == "" and flag.read_text() == "off"
+
+
+READ = ("Read", {"file_path": "f"})
+EDIT = ("Edit", {"file_path": "f"})
+
+
+def _tool_uses(events: _Events, run_id: str, first_step: int, uses: list[tuple[str, dict]]) -> None:
+    import json
+
+    with (events.directory / f"{run_id}.jsonl").open("a", encoding="utf-8") as handle:
+        for number, (name, tool_input) in enumerate(uses, first_step):
+            event = {"kind": "tool_use", "name": name, "input": tool_input, "step": number}
+            handle.write(json.dumps(event) + chr(10))
+
+
+def test_no_edit_for_n_steps_turns_thinking_on_and_an_edit_resets_the_count(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, loop_hold_steps=3, noedit_steps=12)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 11)
+    assert switch.tick() == "" and flag.read_text() == "off"  # 11 steps without an edit
+    _tool_uses(events, "a", 12, [READ])
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "no file edit in 12" in events.notes[-1][1]["reason"]
+    _tool_uses(events, "a", 13, [EDIT])
+    flag.write_text("off")
+    _tool_uses(events, "a", 14, [READ])
+    assert switch.tick() == "on"  # held for loop_hold_steps after the trigger
+    _tool_uses(events, "a", 15, [READ] * 9)
+    flag.write_text("off")
+    switch.marker.unlink()
+    assert switch.tick() == "" and flag.read_text() == "off"  # hold over, 10 steps since the edit
+    assert switch._loop_hold == {}
+    _tool_uses(events, "a", 24, [READ])
+    assert switch.tick() == "" and flag.read_text() == "off"  # 11 steps since the edit
+    _tool_uses(events, "a", 25, [READ])
+    assert switch.tick() == "on" and flag.read_text() == "on"  # 12 steps since the edit
+
+
+def test_no_edit_count_starts_after_the_warm_up_steps(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=2)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 6)
+    assert switch.tick() == "" and flag.read_text() == "off"  # 6 steps: still the warm-up
+    _tool_uses(events, "a", 7, [READ])
+    assert switch.tick() == "on"
+
+
+def test_bash_sed_in_place_and_redirection_count_as_edits(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=3)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 5)
+    _tool_uses(events, "a", 6, [("Bash", {"command": "sed -i s/a/b/ f"})] + [READ] * 2)
+    assert switch.tick() == "" and flag.read_text() == "off"  # 2 steps after the sed -i
+    _tool_uses(events, "a", 9, [("Bash", {"command": "echo x > f"})])
+    _tool_uses(events, "a", 10, [("Bash", {"command": "grep a f"}), READ])
+    assert switch.tick() == "" and flag.read_text() == "off"  # 2 steps after the redirection
+    _tool_uses(events, "a", 12, [READ])
+    assert switch.tick() == "on"
+
+
+def _tool_results(events: _Events, run_id: str, texts: list[str], is_error: bool = True) -> None:
+    import json
+
+    with (events.directory / f"{run_id}.jsonl").open("a", encoding="utf-8") as handle:
+        for text in texts:
+            event = {"kind": "tool_result", "is_error": is_error, "text": text}
+            handle.write(json.dumps(event) + chr(10))
+
+
+def test_same_error_three_times_turns_thinking_on_and_clears_the_window(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, error_repeats=3)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T008: x")
+    _tool_results(events, "a", ["ENOENT: no such file", "  ENOENT:   no such\n file"])
+    assert switch.tick() == "" and flag.read_text() == "off"  # two errors: not yet
+    _tool_results(events, "a", ["ENOENT: no such file"])
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "the same error 3 times" in events.notes[-1][1]["reason"]
+    assert len(switch._error_seen["a"][1]) == 0
+
+
+def test_different_errors_and_successes_do_not_trigger(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, error_repeats=3)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T008: x")
+    _tool_results(events, "a", ["err a", "err b", "err c", "err a", "err b"])
+    assert switch.tick() == "" and flag.read_text() == "off"
+    _tool_results(events, "a", ["err a"] * 5, is_error=False)
+    assert switch.tick() == "" and flag.read_text() == "off"
+
+
+def test_repeated_error_detector_off_with_zero(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, error_repeats=0)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T008: x")
+    _tool_results(events, "a", ["same"] * 5)
+    assert switch.tick() == "" and flag.read_text() == "off"
+
+
+def test_no_edit_detector_off_with_zero(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=0)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 30)
+    assert switch.tick() == "" and flag.read_text() == "off"
+
+
+GREP = ("Grep", {"pattern": "p"})
+GLOB = ("Glob", {"pattern": "*.py"})
+WRITE = ("Write", {"file_path": "f", "content": "x"})
+REDIRECT = ("Bash", {"command": "echo x > f"})
+SED_IN_PLACE = ("Bash", {"command": "sed -i s/a/b/ f"})
+
+
+def test_twelfth_step_without_an_edit_turns_thinking_on_and_holds_it(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=12)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 11)
+    assert switch.tick() == "" and flag.read_text() == "off"  # 11 model steps without an edit
+    _tool_uses(events, "a", 12, [READ])
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "no file edit in 12" in events.notes[-1][1]["reason"]
+    flag.write_text("off")  # something else writes off again
+    _tool_uses(events, "a", 13, [READ] * 10)
+    assert switch.tick() == "on" and flag.read_text() == "on"  # no edit yet: still held
+
+
+def test_reading_and_searching_for_11_steps_is_not_stuck(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=12)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    research = [READ, GREP, GLOB]
+    for step in range(1, 12):
+        _tool_uses(events, "a", step, [research[step % len(research)]])
+        assert switch.tick() == "" and flag.read_text() == "off"  # real research, no trigger
+    _tool_uses(events, "a", 12, [READ])
+    assert switch.tick() == "on"  # the trigger is at step 12, not before
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [EDIT, WRITE, REDIRECT, SED_IN_PLACE],
+    ids=["Edit", "Write", "bash-redirect", "bash-sed-i"],
+)
+def test_each_kind_of_edit_resets_the_no_edit_count(
+    tmp_path: Path, edit: tuple[str, dict[str, str]]
+) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, noedit_steps=12)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 11)
+    _tool_uses(events, "a", 12, [edit])
+    assert switch.tick() == "" and flag.read_text() == "off"  # the edit is step 12
+    _tool_uses(events, "a", 13, [READ] * 11)
+    assert switch.tick() == "" and flag.read_text() == "off"  # 11 steps since the edit
+    _tool_uses(events, "a", 24, [READ])
+    assert switch.tick() == "on" and flag.read_text() == "on"  # 12 steps since the edit
+
+
+def test_errors_with_the_same_start_of_output_count_as_the_same(tmp_path: Path) -> None:
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(store, flag, 0, events, error_repeats=3)
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T008: x")
+    start = "E" * ERROR_SIGNATURE_MAX_CHARS
+    _tool_results(events, "a", [start + " in one file", start + " in another file"])
+    assert switch.tick() == "" and flag.read_text() == "off"  # two of three: not yet
+    _tool_results(events, "a", [start + " in a third file"])
+    assert switch.tick() == "on" and flag.read_text() == "on"
+    assert "the same error 3 times" in events.notes[-1][1]["reason"]
+
+
+def test_zero_in_the_environment_turns_both_stuck_detectors_off(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", "0")
+    monkeypatch.setenv("CLAUDE_RUNNER_THINK_STUCK_ERRORS", "0")
+    settings = Settings.from_env()
+    store = Store(tmp_path / "r.sqlite")
+    flag = tmp_path / "local_thinking"
+    flag.write_text("off")
+    events = _Events(tmp_path / "events")
+    switch = ThinkSwitch(
+        store,
+        flag,
+        0,
+        events,
+        noedit_steps=settings.think_stuck_noedit_steps,
+        error_repeats=settings.think_stuck_errors,
+    )
+    _prompt_run(store, "a", "s1", "running", 60, None, "TASK T007: x")
+    _tool_uses(events, "a", 1, [READ] * 30)
+    _tool_results(events, "a", ["same"] * 5)
+    assert switch.tick() == "" and flag.read_text() == "off"
+
+
+def test_stuck_detectors_default_to_12_steps_and_3_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", raising=False)
+    monkeypatch.delenv("CLAUDE_RUNNER_THINK_STUCK_ERRORS", raising=False)
+    settings = Settings.from_env()
+    assert settings.think_stuck_noedit_steps == 12
+    assert settings.think_stuck_errors == 3

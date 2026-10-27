@@ -29,8 +29,8 @@ RUN python3 -m venv /tmp/uvvenv \
     && /tmp/uvvenv/bin/uv venv --seed --python 3.12 /opt/claude-runner/venv \
     && /opt/claude-runner/venv/bin/pip install --no-cache-dir ".[dev]" \
     && rm -rf /tmp/uvvenv \
-    && mkdir -p /data /home/node/.claude /workspace \
-    && chown -R node:node /data /home/node/.claude
+    && mkdir -p /data /home/node/.claude /workspace /secrets \
+    && chown -R node:node /data /home/node/.claude /secrets
 
 ENV PATH="/opt/claude-runner/venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \

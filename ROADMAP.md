@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.100 · October 27, 2026** — Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next
+**0.13.0 · October 27, 2026** — Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next
 
-Current version: **0.11.100** · Missions completed: **25** · Missions in the queue: **27** · Next milestone: **0.12.0 · 1.0.0**
+Current version: **0.13.0** · Missions completed: **26** · Missions in the queue: **25** · Next milestone: **0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
