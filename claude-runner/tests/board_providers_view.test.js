@@ -67,7 +67,7 @@ function reply(payload, ok = true, status = ok ? 200 : 400) {
 
 const PROVIDERS = [{
   name: "alpha", label: "alpha", api_type: "anthropic", base_url: "https://a.example",
-  enabled: true, notes: "",
+  enabled: true, notes: "", version: "v+1",
   models: [{ model: "m1" }, { model: "m2" }], key: SECRET,
   key_state: { has_key: true, set_at: "2026-10-01T00:00:00Z" },
 }];
@@ -103,6 +103,18 @@ function load() {
     if (method === "PUT" && url === "/api/board/providers/alpha" && opts.body && JSON.parse(opts.body).dry_run) {
       return reply({ error: { message: "conflict" } }, false, 409);
     }
+    if (method === "GET" && url === "/api/board/providers/alpha/available-models") {
+      return reply({ status: 200, models: [
+        { id: "m1", name: "m1", free: null, price_in: null, price_out: null },
+        { id: "vendor/free-one:free", name: "F", free: true, price_in: 0, price_out: 0 },
+        { id: "vendor/paid", name: "P", free: false, price_in: 1, price_out: 2 },
+      ] });
+    }
+    if (method === "DELETE" && url.startsWith("/api/board/providers/alpha?")) {
+      if (globalThis.__deleteRefused) return reply({ error: { message: "provider 'alpha' is used by a role" } }, false, 409);
+      return reply({ deleted: "alpha" });
+    }
+    if (method === "POST" && url === "/api/board/providers/alpha/models") return reply({ provider: PROVIDERS[0] });
     if (method === "POST" && url.endsWith("/test")) return reply({ status: 200, latency_ms: 42 });
     return reply({ error: { message: "unexpected " + method + " " + url } }, false);
   };
@@ -155,7 +167,7 @@ async function main() {
   {
     const { view, board, calls, env } = load();
     await view.open();
-    const checks = allNodes(board).find((n) => n.className === "bvprov-checks");
+    const checks = allNodes(board).find((n) => String(n.className).startsWith("bvprov-checks"));
     const select = allNodes(checks).find((n) => n.tag === "select");
     select.value = "m2";
     env.answer = false;
@@ -195,6 +207,48 @@ async function main() {
     const back = buttons(board, "Back to missions")[0];
     back.handlers.click();
     check("closing the page shows the board again", board.className === "");
+  }
+  {
+    const { view, board, calls } = load();
+    await view.open();
+    await buttons(board, "Fetch models")[0].handlers.click();
+    const listed = () => allNodes(board).filter((n) => String(n.className) === "bvprov-listed");
+    check("both new models are listed", listed().length === 2);
+    const freeLabel = allNodes(board).find((n) => n.tag === "label" && allText(n).includes("Free only"));
+    const freeBox = freeLabel && freeLabel.children[0];
+    check("a free-only switch exists", Boolean(freeBox));
+    freeBox.checked = true;
+    freeBox.handlers.change();
+    check("free only keeps the free model", listed().length === 1 && allText(listed()[0]).includes("vendor/free-one:free"));
+    await buttons(board, "Select shown")[0].handlers.click();
+    await buttons(board, "Add selected (1)")[0].handlers.click();
+    const post = calls.find((c) => c.method === "POST" && c.url === "/api/board/providers/alpha/models");
+    check("the picked model is posted with its prices",
+      post && post.body.model === "vendor/free-one:free" && post.body.price_input_per_mtok_usd === 0);
+    check("the add carries the dashboard header", post && post.headers["X-AHAWR-Dashboard"] === "1");
+  }
+  {
+    const { view, board, calls, env } = load();
+    await view.open();
+    env.answer = false;
+    await buttons(board, "Delete provider")[0].handlers.click();
+    check("a declined delete sends nothing", !calls.some((c) => c.method === "DELETE"));
+    env.answer = true;
+    await buttons(board, "Delete provider")[0].handlers.click();
+    const del = calls.find((c) => c.method === "DELETE");
+    check("delete carries the encoded version in the query",
+      del && del.url === "/api/board/providers/alpha?expected_version=v%2B1");
+    check("delete carries the dashboard header", del && del.headers["X-AHAWR-Dashboard"] === "1");
+  }
+  {
+    const { view, board, env, notices } = load();
+    await view.open();
+    env.answer = true;
+    globalThis.__deleteRefused = true;
+    await buttons(board, "Delete provider")[0].handlers.click();
+    globalThis.__deleteRefused = false;
+    check("a refused delete is explained on the providers page", allText(board).includes("is used by a role"));
+    check("the refusal also reaches showNotice", notices.some((n) => n.includes("is used by a role")));
   }
   console.log("board_providers_view tests passed");
 }

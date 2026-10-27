@@ -14,7 +14,7 @@ const QA_LAYERS = ["regression", "api", "ui"];
 const QA_DEFAULT_LAYERS = ["ui"];
 const ATTEMPT_KEY_PATTERN = /^[1-9][0-9]*$/;
 const ESCALATE_SUFFIX = "_escalate";
-const ESCALATE_KEYS = ["model", "above_steps", "below_score"];
+const ESCALATE_KEYS = ["model", "above_steps", "below_score", "from_attempt"];
 const MAX_SCORE = 100;
 const FRESH_KEY = "fresh";
 const FRESH_AUTO = "auto";
@@ -200,6 +200,10 @@ function checkEscalate(role, value, providers) {
   if (typeof below !== "number" || !(below > 0 && below <= MAX_SCORE)) {
     errors.push(`role ${name}: 'below_score' must be above 0 and up to ${MAX_SCORE}`);
   }
+  const first = rule.has("from_attempt") ? rule.get("from_attempt") : 2;
+  if (!Number.isInteger(first) || first < 2) {
+    errors.push(`role ${name}: 'from_attempt' must be a whole number of at least 2`);
+  }
   return errors;
 }
 
@@ -356,20 +360,21 @@ function pickOrThrow(roles, role, attempt, legacy) {
 }
 
 // The escalation model when the task used more than above_steps steps and either it is a split
-// part (the split came from that many steps) or the last attempt scored too low.
-function escalatedModel(block, facts) {
+// part (the split came from that many steps) or the last attempt scored too low; the score rule
+// applies only from attempt from_attempt (default 2) on.
+function escalatedModel(block, facts, attempt) {
   if (!isDict(block) || !facts) return null;
   const rule = asMap(block);
   const limit = rule.get("above_steps");
   if (facts.split_steps != null && facts.split_steps > limit) return rule.get("model");
-  if (facts.steps == null || facts.steps <= limit) return null;
+  if (attempt < (rule.get("from_attempt") ?? 2) || facts.steps == null || facts.steps <= limit) return null;
   const below = rule.get("below_score");
   return below == null || (facts.score != null && facts.score < below) ? rule.get("model") : null;
 }
 
 function chosenModel(roles, role, attempt, legacy, facts) {
   const picked = pickOrThrow(roles, role, attempt, legacy);
-  const escalated = escalatedModel(asMap(roles).get(role + ESCALATE_SUFFIX), facts);
+  const escalated = escalatedModel(asMap(roles).get(role + ESCALATE_SUFFIX), facts, attempt);
   return escalated === null ? picked : { ...picked, model: escalated };
 }
 

@@ -237,7 +237,7 @@ async def test_state_snapshot_has_expected_fields() -> None:
     assert isinstance(snap, SupervisorSnapshot)
     expected = {
         "name", "last_run", "last_result", "last_action", "error_count", "status",
-        "enabled", "dry_run",
+        "enabled", "dry_run", "interval_s", "health_window",
     }
     for guard_state in snap["guards"].values():
         assert set(guard_state) == expected

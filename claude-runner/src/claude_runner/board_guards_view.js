@@ -46,6 +46,9 @@ function normalise(guards, history) {
     last_action: g.last_action || "",
     last_result: g.last_result || "",
     error_count: g.error_count || 0,
+    interval_s: g.interval_s || 0,
+    health_window: g.health_window || "24h",
+    health: g.health || null,
     series: seriesOf(history, g.name),
   }));
   const heartbeats = (d.heartbeats || []).map((h) => ({
@@ -63,6 +66,8 @@ function normalise(guards, history) {
     dry_run: !!d.dry_run,
     running: !!d.running,
     tab: !!d.tab,
+    edit: !!d.edit,
+    windows: Array.isArray(d.windows) ? d.windows : ["1h", "24h", "7d"],
     guards: list,
     heartbeats,
     summary: { total: list.length, ok: count.ok, warning: count.warning, error: count.error, off: count.off },

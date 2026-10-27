@@ -82,8 +82,8 @@ function providerUrl(name) {
   return "/api/board/providers/" + encodeURIComponent(name);
 }
 
-function labelled(ui, key, en, control) {
-  return ui.el("label", {}, [ui.el("span", { textContent: ui.L(key, en) }, []), control]);
+function labelled(ui, key, en, control, extra) {
+  return ui.el("label", { className: extra || "" }, [ui.el("span", { textContent: ui.L(key, en) }, []), control]);
 }
 
 function header(ui, key, en) {
@@ -174,7 +174,7 @@ function keySection(provider, ui) {
   const input = ui.el("input", { type: "password", autocomplete: "off" }, []);
   const save = ui.el("button", { type: "button", textContent: ui.L("prov.key.save", "Save key") }, []);
   save.addEventListener("click", () => saveKey(provider.name, input, ui));
-  return ui.el("div", { className: "bvprov-key" }, [
+  return ui.el("div", { className: "bvprov-key bvprov-card" }, [
     ui.el("h4", { textContent: ui.L("prov.key.title", "API key") }, []),
     ui.el("p", { textContent: ui.keyText(provider.key_state) }, []),
     labelled(ui, "prov.key.field", "New key", input),
@@ -296,6 +296,106 @@ function newModelRow(provider, ui) {
   ]);
 }
 
+const MAX_LISTED_MODELS = 300;
+
+function listedPrice(model, ui) {
+  if (model.free === true) return ui.L("prov.free", "free");
+  if (model.price_in == null && model.price_out == null) return "";
+  return String(model.price_in ?? "-") + " / " + String(model.price_out ?? "-");
+}
+
+async function addPicked(provider, chosen, ui) {
+  let added = 0;
+  let skipped = 0;
+  for (const model of chosen) {
+    const fields = { model: model.id };
+    if (model.price_in != null) fields.price_input_per_mtok_usd = model.price_in;
+    if (model.price_out != null) fields.price_output_per_mtok_usd = model.price_out;
+    try {
+      await ui.write("POST", providerUrl(provider.name) + "/models", fields);
+      added += 1;
+    } catch (err) {
+      if (err.status === 409) throw err;
+      skipped += 1;
+    }
+  }
+  ui.notify(ui.L("prov.fetch.added", "{added} models added, {skipped} skipped.", { added, skipped }));
+}
+
+function listedRow(model, picked, redraw, ui) {
+  const box = ui.el("input", { type: "checkbox", checked: picked.has(model.id) }, []);
+  box.addEventListener("change", () => {
+    if (box.checked) picked.add(model.id);
+    else picked.delete(model.id);
+    redraw();
+  });
+  return ui.el("label", { className: "bvprov-listed" }, [
+    box,
+    ui.el("span", { className: "mono", textContent: model.id }, []),
+    ui.el("small", { textContent: listedPrice(model, ui) }, []),
+  ]);
+}
+
+function showListed(panel, provider, body, ui) {
+  panel.textContent = "";
+  if (body.status !== 200) {
+    const status = body.status == null ? "-" : String(body.status);
+    panel.appendChild(ui.el("p", { className: "bad", textContent: ui.L("prov.fetch.failed", "The provider did not return a model list (status {status}).", { status }) }, []));
+    return;
+  }
+  const have = new Set((provider.models || []).map((m) => m.model));
+  const models = body.models.filter((m) => !have.has(m.id));
+  const picked = new Set();
+  const filter = ui.el("input", { type: "text", placeholder: ui.L("prov.fetch.filter", "Filter by name") }, []);
+  const freeOnly = ui.el("input", { type: "checkbox" }, []);
+  const count = ui.el("small", {}, []);
+  const list = ui.el("div", { className: "bvprov-listing" }, []);
+  const add = ui.el("button", { type: "button", className: "pri" }, []);
+  const all = ui.el("button", { type: "button", textContent: ui.L("prov.fetch.all", "Select shown") }, []);
+  const shown = () => models.filter((m) => (!freeOnly.checked || m.free === true)
+    && m.id.toLowerCase().includes(filter.value.trim().toLowerCase()));
+  const redraw = () => {
+    const rows = shown();
+    list.textContent = "";
+    for (const model of rows.slice(0, MAX_LISTED_MODELS)) list.appendChild(listedRow(model, picked, redraw, ui));
+    count.textContent = ui.L("prov.fetch.count", "{shown} of {total} models", { shown: rows.length, total: models.length });
+    add.textContent = ui.L("prov.fetch.add", "Add selected ({n})", { n: picked.size });
+  };
+  filter.addEventListener("input", redraw);
+  freeOnly.addEventListener("change", redraw);
+  all.addEventListener("click", () => {
+    for (const model of shown().slice(0, MAX_LISTED_MODELS)) picked.add(model.id);
+    redraw();
+  });
+  add.addEventListener("click", async () => {
+    if (!picked.size) return;
+    try {
+      await addPicked(provider, models.filter((m) => picked.has(m.id)), ui);
+      await ui.reload();
+    } catch (err) {
+      await failed(err, ui);
+    }
+  });
+  const free = ui.el("label", {}, [freeOnly, ui.el("span", { textContent: ui.L("prov.fetch.free", "Free only") }, [])]);
+  panel.appendChild(ui.el("div", { className: "bvprov-fetchbar" }, [filter, free, all, add]));
+  panel.appendChild(count);
+  panel.appendChild(list);
+  redraw();
+}
+
+function fetchControls(provider, ui) {
+  const panel = ui.el("div", { className: "bvprov-fetch" }, []);
+  const button = ui.el("button", { type: "button", textContent: ui.L("prov.fetch", "Fetch models") }, []);
+  button.addEventListener("click", async () => {
+    try {
+      showListed(panel, provider, await ui.read(providerUrl(provider.name) + "/available-models"), ui);
+    } catch (err) {
+      await failed(err, ui);
+    }
+  });
+  return { button, panel };
+}
+
 function modelsSection(provider, ui) {
   const models = provider.models || [];
   const head = ui.el("tr", {}, [
@@ -311,10 +411,17 @@ function modelsSection(provider, ui) {
     header(ui, "prov.col.apply", "Apply"),
   ]);
   const rows = models.map((model) => modelRow(provider, model, ui));
-  return ui.el("div", {}, [
-    ui.el("h4", { textContent: ui.L("prov.models.title", "Models") }, []),
+  const fetcher = fetchControls(provider, ui);
+  return ui.el("div", { className: "bvprov-card" }, [
+    ui.el("div", { className: "bvprov-sechead" }, [
+      ui.el("h4", { textContent: ui.L("prov.models.title", "Models") }, []),
+      fetcher.button,
+    ]),
+    fetcher.panel,
     models.length ? null : ui.el("p", { textContent: ui.L("prov.models.none", "No models yet.") }, []),
-    ui.el("table", { className: "t" }, [head, ...rows, newModelRow(provider, ui)]),
+    ui.el("div", { className: "bvprov-tablewrap" }, [
+      ui.el("table", { className: "t" }, [head, ...rows, newModelRow(provider, ui)]),
+    ]),
     ui.el("p", { textContent: ui.L("prov.models.caps_note", "JSON object with only the values that differ from the API type, e.g. tools set to false.") }, []),
   ].filter(Boolean));
 }
@@ -353,6 +460,20 @@ function templateRow(ui, inputs, typeNotes) {
   ]);
 }
 
+async function deleteProvider(provider, ui) {
+  const question = ui.L("prov.delete_confirm", "Delete provider {name}? Its models and its stored key are removed. This cannot be undone.", { name: provider.name });
+  if (!globalThis.confirm(question)) return undefined;
+  const url = providerUrl(provider.name) + "?expected_version=" + encodeURIComponent(provider.version);
+  try {
+    await ui.write("DELETE", url);
+  } catch (err) {
+    return ui.notify(err.message);
+  }
+  ui.notify(ui.L("prov.deleted", "Provider {name} deleted.", { name: provider.name }));
+  ui.close();
+  return ui.reload();
+}
+
 function providerFields(provider, isNew, ui) {
   const values = provider || {
     label: "", api_type: BoardProviders.API_TYPES[0].id, base_url: "", enabled: true, notes: "",
@@ -369,7 +490,7 @@ function providerFields(provider, isNew, ui) {
   const showTypeNotes = () => fillTypeNotes(typeNotes, inputs.api_type.value, ui);
   inputs.api_type.addEventListener("change", showTypeNotes);
   showTypeNotes();
-  const save = ui.el("button", { type: "button", textContent: ui.L("prov.form.save", "Save") }, []);
+  const save = ui.el("button", { type: "button", className: "pri", textContent: ui.L("prov.form.save", "Save") }, []);
   save.addEventListener("click", () => saveProvider(provider, inputs, ui));
   const close = ui.el("button", { type: "button", textContent: ui.L("prov.close", "Close") }, []);
   close.addEventListener("click", () => ui.close());
@@ -379,12 +500,27 @@ function providerFields(provider, isNew, ui) {
     labelled(ui, "prov.form.api", "API type", inputs.api_type),
     typeNotes,
     labelled(ui, "prov.form.url", "Base URL", inputs.base_url),
-    labelled(ui, "prov.form.enabled", "Enabled", inputs.enabled),
-    labelled(ui, "prov.form.notes", "Notes", inputs.notes),
-    ui.el("div", {}, [save, close]),
+    labelled(ui, "prov.form.enabled", "Enabled", inputs.enabled, "check"),
+    labelled(ui, "prov.form.notes", "Notes", inputs.notes, "wide"),
+    ui.el("div", { className: "bvprov-actions wide" }, [save, close]),
   ];
   if (isNew) parts.unshift(templateRow(ui, inputs, typeNotes));
-  return ui.el("div", {}, parts);
+  return ui.el("div", { className: "bvprov-card" }, [
+    ui.el("h4", { textContent: ui.L("prov.connection", "Connection") }, []),
+    ui.el("div", { className: "bvprov-fields" }, parts),
+  ]);
+}
+
+function topRow(provider, title, ui) {
+  const children = [ui.el("h3", { textContent: title }, [])];
+  if (provider) {
+    const off = !provider.enabled;
+    children.push(ui.el("span", { className: "bvprov-pill" + (off ? " off" : ""), textContent: off ? ui.L("prov.off", "off") : ui.L("prov.on", "enabled") }, []));
+    const remove = ui.el("button", { type: "button", className: "danger", textContent: ui.L("prov.delete", "Delete provider") }, []);
+    remove.addEventListener("click", () => deleteProvider(provider, ui));
+    children.push(ui.el("span", { className: "bvprov-danger-slot" }, [remove]));
+  }
+  return ui.el("div", { className: "bvprov-top" }, children);
 }
 
 function build(provider, ui) {
@@ -392,7 +528,7 @@ function build(provider, ui) {
   const title = isNew
     ? ui.L("prov.form.new", "New provider")
     : ui.L("prov.form.edit", "Provider {name}", { name: provider.name });
-  const parts = [ui.el("h3", { textContent: title }, []), providerFields(provider, isNew, ui)];
+  const parts = [topRow(provider, title, ui), providerFields(provider, isNew, ui)];
   if (!isNew) parts.push(keySection(provider, ui), modelsSection(provider, ui));
   return ui.el("section", { className: "bvprov-form" }, parts);
 }

@@ -65,6 +65,16 @@ class GuardHistory:
             for name, entries in self._entries.items()
         }
 
+    def health(self, name: str, window: str, now: float | None = None) -> dict[str, object]:
+        """Checks and errors of one guard inside ``window``. Only the last ``max_entries`` checks
+        are kept, so a long window of a fast guard covers less time than it names."""
+        stamp = time.time() if now is None else now
+        since = stamp - WINDOWS_S.get(window, WINDOWS_S[DEFAULT_WINDOW])
+        recent = [e for e in self._entries.get(name, ()) if float(str(e["t"])) >= since]
+        errors = sum(1 for e in recent if e["result"] == "error")
+        ok_pct = round(100 * (len(recent) - errors) / len(recent), 1) if recent else None
+        return {"window": window, "checks": len(recent), "errors": errors, "ok_pct": ok_pct}
+
     def summary(self) -> dict[str, dict[str, int]]:
         """Counts per guard over the stored entries: checks, errors, actions."""
         return {

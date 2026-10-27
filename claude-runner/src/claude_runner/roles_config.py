@@ -22,7 +22,7 @@ QA_LAYERS = ("regression", "api", "ui")
 QA_DEFAULT_LAYERS = ("ui",)
 _ATTEMPT_KEY_PATTERN = re.compile(r"[1-9][0-9]*")
 ESCALATE_SUFFIX = "_escalate"
-ESCALATE_KEYS = frozenset({"model", "above_steps", "below_score"})
+ESCALATE_KEYS = frozenset({"model", "above_steps", "below_score", "from_attempt"})
 MAX_SCORE = 100
 
 
@@ -94,6 +94,9 @@ def _check_escalate(role: str, value: Any, providers: Collection[str]) -> list[s
     below = value.get("below_score", 1)
     if isinstance(below, bool) or not isinstance(below, int | float) or not 0 < below <= MAX_SCORE:
         errors.append(f"role {role!r}: 'below_score' must be above 0 and up to {MAX_SCORE}")
+    first = value.get("from_attempt", 2)
+    if isinstance(first, bool) or not isinstance(first, int) or first < 2:
+        errors.append(f"role {role!r}: 'from_attempt' must be a whole number of at least 2")
     return errors
 
 
@@ -282,12 +285,13 @@ def _chosen(
     facts: Mapping[str, Any] | None,
 ) -> tuple[str, dict[str, Any]]:
     model, options = _pick(roles, role, attempt, legacy)
-    return _escalated(roles.get(f"{role}{ESCALATE_SUFFIX}"), facts) or model, options
+    return _escalated(roles.get(f"{role}{ESCALATE_SUFFIX}"), facts, attempt) or model, options
 
 
-def _escalated(block: Any, facts: Mapping[str, Any] | None) -> str | None:
+def _escalated(block: Any, facts: Mapping[str, Any] | None, attempt: int) -> str | None:
     """The escalation model when the task used more than ``above_steps`` steps and either it is
-    a split part (the split came from that many steps) or the last attempt scored too low."""
+    a split part (the split came from that many steps) or the last attempt scored too low; the
+    score rule applies only from attempt ``from_attempt`` (default 2) on."""
     if not isinstance(block, dict) or not facts:
         return None
     limit = block["above_steps"]
@@ -295,7 +299,7 @@ def _escalated(block: Any, facts: Mapping[str, Any] | None) -> str | None:
     if split_steps is not None and split_steps > limit:
         return str(block["model"])
     steps, score, below = facts.get("steps"), facts.get("score"), block.get("below_score")
-    if steps is None or steps <= limit:
+    if attempt < block.get("from_attempt", 2) or steps is None or steps <= limit:
         return None
     return str(block["model"]) if below is None or (score is not None and score < below) else None
 

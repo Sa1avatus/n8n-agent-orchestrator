@@ -257,7 +257,7 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 </aside>
 <div id="content">
 <div id="guardstrip"></div>
-<nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Runs</button><button id="tabboard" type="button">Missions</button></nav>
+<nav class="tabs" id="viewtabs"><button id="tabruns" class="on" type="button">Runs</button><button id="tabboard" type="button">Missions</button><button id="tabprov" type="button">Providers</button></nav>
 <div id="boardpane" hidden>
   <iframe id="boardframe" title="Missions" hidden></iframe>
 </div>
@@ -467,7 +467,7 @@ async function loadRuns() {
   // run that just started when it matches the filter (runMatches)
   if (S.known && !S.filter.session) {
     const fresh = data.runs.find((r) => !S.known.has(r.run_id) && runMatches(S.filter, r));
-    if (fresh && (!S.run || !isActive(S.run))) select(fresh.run_id);
+    if (fresh && (!S.run || !isActive(S.run))) select(fresh.run_id, TAB !== "runs");
   }
   S.known = ids;
   S.runs = data.runs;
@@ -639,10 +639,11 @@ function applyGoto() {
   const row = $(`#ledger [data-key="e${target.seq}"]`);
   if (row) row.scrollIntoView({ block: "center" });
 }
-function select(id) {
+// keepTab: the run follows the live work in the list without leaving the tab the reader is on
+function select(id, keepTab) {
   if (S.sel === id) { applyGoto(); return; }
   Object.assign(S, { sel: id, run: null, entries: [], next: 0, live: null, pick: null, model: null });
-  setTab("runs"); // a run deep link always opens the Прогоны tab
+  if (!keepTab) setTab("runs"); // a click or a run deep link opens the Прогоны tab
   writeUrl(S.filter);
   $("#runview").innerHTML = `<section id="head"></section>
     <div id="toolbar"><label><input type="checkbox" id="o-think" ${S.show.thinking ? "checked" : ""}> thinking</label>
@@ -1074,17 +1075,18 @@ function toolPayload(e) {
 const boardframe = document.getElementById("boardframe");
 function boardFrameUrl() { return "/static/board.html" + (location.hash || "#board"); }
 // the tab names follow the language chosen on the board (localStorage "board.lang", shared with the board frame)
-const SHELL_TEXT = { en: { runs: "Runs", missions: "Missions" }, ru: { runs: "Прогоны", missions: "Миссии" } };
+const SHELL_TEXT = { en: { runs: "Runs", missions: "Missions", providers: "Providers" }, ru: { runs: "Прогоны", missions: "Миссии", providers: "Провайдеры" } };
 let shellStrings = null;
 function shellLang() { try { return localStorage.getItem("board.lang") || "en"; } catch (e) { return "en"; } }
 function applyShellLang() {
   const lang = shellLang();
   const base = SHELL_TEXT[lang] || SHELL_TEXT.en;
   const got = (shellStrings && shellStrings[lang]) || {};
-  const s = { runs: got.runs || base.runs, missions: got.missions || base.missions };
+  const s = { runs: got.runs || base.runs, missions: got.missions || base.missions, providers: got.providers || base.providers };
   const set = (id, text) => { const el = document.getElementById(id); if (el && text) el.textContent = text; };
   set("tabruns", s.runs);
   set("tabboard", s.missions);
+  set("tabprov", s.providers);
   const frame = document.getElementById("boardframe");
   if (frame && s.missions) frame.title = s.missions;
   document.documentElement.lang = lang;
@@ -1094,7 +1096,7 @@ fetch("/api/board/i18n", { cache: "no-store" }).then((r) => (r.ok ? r.json() : n
   shellStrings = {};
   for (const lang of Object.keys(d.strings)) {
     const t = d.strings[lang] || {};
-    shellStrings[lang] = { runs: t["nav.runs"], missions: t["nav.missions"] };
+    shellStrings[lang] = { runs: t["nav.runs"], missions: t["nav.missions"], providers: t["prov.open"] };
   }
   applyShellLang();
 }).catch(() => {});
@@ -1120,6 +1122,17 @@ const GUARD_TEXT = {
     fresh: "fresh",
     stale: "stale",
     unknown: "unknown",
+    "tab.view.detail": "Detail",
+    "set.title": "Settings",
+    "set.interval": "Poll interval",
+    "set.window": "Health window",
+    "set.save": "Save",
+    "set.health": "Health",
+    "set.checks": "checks",
+    "set.in": "in",
+    "set.actions": "Recent actions",
+    "set.off": "Editing is off (DASHBOARD_GUARDS_EDIT).",
+    "set.failed": "The change was not saved",
   },
   ru: {
     title: "Стражи",
@@ -1136,6 +1149,17 @@ const GUARD_TEXT = {
     fresh: "свежий",
     stale: "устарел",
     unknown: "неизвестно",
+    "tab.view.detail": "Список",
+    "set.title": "Настройки",
+    "set.interval": "Интервал опроса",
+    "set.window": "Окно для расчёта здоровья",
+    "set.save": "Сохранить",
+    "set.health": "Здоровье",
+    "set.checks": "проверок",
+    "set.in": "за",
+    "set.actions": "Последние действия",
+    "set.off": "Правка выключена (DASHBOARD_GUARDS_EDIT).",
+    "set.failed": "Изменение не сохранено",
   },
 };
 let guardStrings = null;
@@ -1202,6 +1226,7 @@ document.addEventListener("click", (e) => {
   if (b) { e.preventDefault(); loadGuards(); }
 });
 let TAB = "runs";
+let providersOpen = false;  // the Providers page of the board frame is shown
 function setTab(name) {
   const runs = name === "runs";
   const board = name === "board";
@@ -1213,7 +1238,9 @@ function setTab(name) {
   const tabboard = document.getElementById("tabboard");
   const pane = document.getElementById("boardpane");
   if (tabruns) tabruns.classList.toggle("on", runs);
-  if (tabboard) tabboard.classList.toggle("on", board);
+  if (tabboard) tabboard.classList.toggle("on", board && !providersOpen);
+  const tabprov = document.getElementById("tabprov");
+  if (tabprov) tabprov.classList.toggle("on", board && providersOpen);
   if (pane) pane.hidden = !board;
   if (boardframe) {
     if (board && !boardframe.src) boardframe.src = boardFrameUrl();
@@ -1280,8 +1307,25 @@ document.getElementById("tabruns").addEventListener("click", () => {
   setTab("runs");
 });
 document.getElementById("tabboard").addEventListener("click", () => {
+  const view = boardframe && boardframe.contentWindow && boardframe.contentWindow.BoardProvidersView;
+  if (view) view.close();
   location.hash = "#board";
   syncTab();
+});
+// The Providers tab shows the board frame with its Providers page; the page tells the shell when it opens or closes
+// (its own Back button), so the tab marks follow.
+document.getElementById("tabprov").addEventListener("click", () => {
+  if (!(location.hash || "").startsWith("#board")) location.hash = "#board";
+  syncTab();
+  const loadedView = () => boardframe.contentWindow && boardframe.contentWindow.BoardProvidersView;
+  // a frame that is still loading shows about:blank: wait for its load event until the page's script exists
+  if (loadedView()) loadedView().open();
+  else boardframe.addEventListener("load", () => { const view = loadedView(); if (view) view.open(); }, { once: true });
+});
+window.addEventListener("message", (ev) => {
+  if (ev.origin !== location.origin || !ev.data || ev.data.ahawr !== "providers") return;
+  providersOpen = ev.data.open === true;
+  setTab(TAB);
 });
 window.addEventListener("hashchange", syncTab);
 // later hash changes are forwarded into the iframe; the board script re-routes
@@ -1300,7 +1344,7 @@ window.addEventListener("hashchange", fromHash);
   renderTags();
   await loadRuns();
   fromHash();
-  if (!S.sel && S.runs[0]) select(S.runs[0].run_id);
+  if (!S.sel && S.runs[0]) select(S.runs[0].run_id, TAB !== "runs");
   setInterval(loadRuns, 3000);
 })();
 </script>

@@ -6,15 +6,25 @@
 
 const V = globalThis.BoardGuardsView;
 const REFRESH_MS = 10000;
-const VIEWS = ["cards", "flow", "lanes"];
+const VIEWS = ["detail", "cards", "flow", "lanes"];
 const WINDOWS = ["1h", "24h", "7d"];
 const FLOW_NODE = { width: 150, height: 34, gap: 12, top: 44 };
 const FLOW_COLUMN_X = { hosts: 10, guards: 250, receivers: 490 };
 const PREFS_KEY = "guards.prefs";
+const DETAIL_STRIP = 48;
+const DETAIL_ACTIONS = 6;
+// what each guard does, shown under its name; a translation key "guard.<name>" wins
+const GUARD_TEXT = {
+  queue_restart: "Restarts the mission queue when it stops",
+  host_heartbeat: "Watches the host watchers",
+  tg_relay: "Forwards notices to Telegram",
+  mission_notice: "Posts mission start and end notices",
+  idle: "Stops idle runs after a timeout",
+};
 
 let ctx = null;
 let timer = null;
-let state = { view: "cards", window: "24h", model: null, host: null };
+let state = { view: "detail", window: "24h", model: null, host: null, selected: "" };
 let root = null;
 
 function loadPrefs() {
@@ -105,7 +115,49 @@ function lanesView(model, now) {
   return `<div class="gt-windows" role="group">${buttons}</div>${model.guards.map(lane).join("")}`;
 }
 
+function actionRows(g) {
+  const rows = (g.series || []).filter((e) => e.action).slice(-DETAIL_ACTIONS).reverse();
+  if (!rows.length) return `<div class="gt-sub">${ctx.esc(ctx.t("none", "—"))}</div>`;
+  return rows.map((e) => `<div class="gt-sub gt-mono">${ctx.esc(new Date(e.t * 1000).toLocaleTimeString())} ${ctx.esc(e.action)}</div>`).join("");
+}
+
+function settingsCard(g, model) {
+  const windows = model.windows.map((w) => `<option value="${ctx.esc(w)}"${w === g.health_window ? " selected" : ""}>${ctx.esc(ctx.t("tab.window." + w, w))}</option>`).join("");
+  if (!model.edit) {
+    return `<div class="gt-card gt-block"><h4>${ctx.esc(ctx.t("set.title", "Settings"))}</h4><div class="gt-sub">${ctx.esc(ctx.t("set.interval", "Poll interval"))}: ${g.interval_s} ${ctx.esc(ctx.t("unit.s", "s"))}</div>` +
+      `<div class="gt-sub">${ctx.esc(ctx.t("set.window", "Health window"))}: ${ctx.esc(g.health_window)}</div><div class="gt-sub">${ctx.esc(ctx.t("set.off", "Editing is off (DASHBOARD_GUARDS_EDIT)."))}</div></div>`;
+  }
+  return `<div class="gt-card gt-block"><h4>${ctx.esc(ctx.t("set.title", "Settings"))}</h4><div class="gt-fields">` +
+    `<label>${ctx.esc(ctx.t("set.interval", "Poll interval"))}<span class="gt-unit"><input type="number" min="1" max="86400" step="1" value="${g.interval_s}" data-field="interval_s"> ${ctx.esc(ctx.t("unit.s", "s"))}</span></label>` +
+    `<label>${ctx.esc(ctx.t("set.window", "Health window"))}<select data-field="health_window">${windows}</select></label></div>` +
+    `<button type="button" class="gt-save" data-save="${ctx.esc(g.name)}">${ctx.esc(ctx.t("set.save", "Save"))}</button></div>`;
+}
+
+function healthCard(g) {
+  const h = g.health;
+  const pct = h && h.ok_pct != null ? `${h.ok_pct}%` : ctx.t("none", "—");
+  const counts = h ? `${h.checks} ${ctx.t("set.checks", "checks")} · ${h.errors} ${ctx.t("error", "error")} · ${ctx.t("set.in", "in")} ${g.health_window}` : "";
+  const cells = V.strip(g.series, DETAIL_STRIP).map((r) => `<i class="${ctx.esc(r)}"></i>`).join("");
+  return `<div class="gt-card gt-block"><h4>${ctx.esc(ctx.t("set.health", "Health"))}</h4><div class="gt-big">${ctx.esc(pct)}</div><div class="gt-sub">${ctx.esc(counts)}</div><div class="gt-strip">${cells}</div></div>`;
+}
+
+function detailView(model, now) {
+  const guards = model.guards;
+  if (!guards.length) return `<div class="gt-head">${ctx.esc(ctx.t("none", "—"))}</div>`;
+  const g = guards.find((x) => x.name === state.selected) || guards[0];
+  const items = guards.map((x) => `<button type="button" class="gt-item${x.name === g.name ? " on" : ""}" data-select="${ctx.esc(x.name)}"><span class="gt-led ${ctx.esc(V.statusClass(x.status))}"></span>${ctx.esc(x.name)}</button>`).join("");
+  const on = g.status !== "off";
+  const toggle = `<button type="button" class="gt-tog${on ? " on" : ""}" role="switch" aria-checked="${on}" aria-label="${ctx.esc(g.name)}" data-toggle="${ctx.esc(g.name)}" data-on="${on}"${model.edit ? "" : " disabled"}></button>`;
+  const text = ctx.t("guard." + g.name, GUARD_TEXT[g.name] || "");
+  const when = g.last_run ? `${ago(now - g.last_run)} ${ctx.t("tab.ago", "ago")}` : ctx.t("none", "—");
+  return `<div class="gt-split"><div class="gt-side">${items}</div><div class="gt-main">` +
+    `<div class="gt-dhead"><b class="gt-dname">${ctx.esc(g.name)}</b>${badge(g.status)}${dryMark(g)}<span class="gt-push">${toggle}</span></div>` +
+    `<div class="gt-sub">${ctx.esc(text)}${text ? " · " : ""}${ctx.esc(ctx.t("last", "last"))}: ${ctx.esc(when)}</div>` +
+    `${settingsCard(g, model)}${healthCard(g)}<div class="gt-card gt-block"><h4>${ctx.esc(ctx.t("set.actions", "Recent actions"))}</h4>${actionRows(g)}</div></div></div>`;
+}
+
 function viewHtml(model, now) {
+  if (state.view === "detail") return detailView(model, now);
   if (state.view === "flow") return flowView(model, now);
   if (state.view === "lanes") return lanesView(model, now);
   return cardsView(model, now);
@@ -131,7 +183,38 @@ function render() {
   ctx.setHTML(root, `${header(state.model)}<div class="gt-views" role="group">${tabs}</div>${viewHtml(state.model, now)}${hostHtml(state.host)}`);
 }
 
+function editing() {
+  const a = document.activeElement;
+  return Boolean(root && a && root.contains(a) && a.matches && a.matches("[data-field]"));
+}
+
+async function putGuard(name, body) {
+  try {
+    const res = await fetch("/api/guards/" + encodeURIComponent(name), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-AHAWR-Dashboard": "1" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "HTTP " + res.status);
+    }
+  } catch (e) {
+    window.alert(ctx.t("set.failed", "The change was not saved") + ": " + e.message);
+  }
+  refresh();
+}
+
+function saveFields(name) {
+  const body = {};
+  for (const el of root.querySelectorAll("[data-field]")) {
+    body[el.dataset.field] = el.dataset.field === "interval_s" ? Number(el.value) : el.value;
+  }
+  putGuard(name, body);
+}
+
 async function refresh() {
+  if (editing()) return;
   try {
     const [g, h, a] = await Promise.all([
       fetch("/api/guards", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
@@ -165,9 +248,15 @@ function onClick(e) {
   const v = e.target.closest("[data-view]");
   const w = e.target.closest("[data-window]");
   const d = e.target.closest("[data-host]");
+  const pick = e.target.closest("[data-select]");
+  const flip = e.target.closest("[data-toggle]");
+  const save = e.target.closest("[data-save]");
   if (v) { state.view = v.dataset.view; savePrefs(); render(); }
   if (w) { state.window = w.dataset.window; savePrefs(); refresh(); }
   if (d) hostDecision(d.dataset.host, d.dataset.decision);
+  if (pick) { state.selected = pick.dataset.select; render(); }
+  if (flip && !flip.disabled) putGuard(flip.dataset.toggle, { enabled: flip.dataset.on !== "true" });
+  if (save) saveFields(save.dataset.save);
 }
 
 function mount(el, helpers) {

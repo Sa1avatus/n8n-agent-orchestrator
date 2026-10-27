@@ -642,3 +642,59 @@ def test_import_from_env_asks_the_env_source_when_the_dashboard_has_no_blocks(
         "exists": False,
         "fields": {"label": "local", "api_type": "anthropic", "base_url": "http://litellm:4000"},
     }]
+
+
+def test_available_models_lists_the_provider_models_and_marks_the_free_ones(
+    board, fake_post: FakePost
+) -> None:
+    client, _, secrets = board
+    _create(client, name="router", api_type="openai-chat", base_url="https://r.example/api/v1")
+    secrets.set_key("router", "sk-made-up-list")
+    seen: list[tuple[str, dict[str, str]]] = []
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+        seen.append((url, headers))
+        return 200, {"data": [
+            {"id": "a/free-model:free", "name": "Free",
+             "pricing": {"prompt": "0", "completion": "0"}},
+            {"id": "b/paid", "pricing": {"prompt": "0.000001", "completion": "0.000002"}},
+            {"id": "c/unpriced"},
+            {"no_id": True},
+        ]}
+
+    client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
+    body = client.get(f"{PREFIX}/router/available-models").json()
+    auth = {"Authorization": "Bearer sk-made-up-list"}
+    assert seen == [("https://r.example/api/v1/models", auth)]
+    assert body["status"] == 200
+    assert [(m["id"], m["free"], m["price_in"], m["price_out"]) for m in body["models"]] == [
+        ("a/free-model:free", True, 0.0, 0.0),
+        ("b/paid", False, 1.0, 2.0),
+        ("c/unpriced", None, None, None),
+    ]
+    assert "sk-made-up-list" not in str(body)
+
+
+def test_available_models_reports_a_failed_call_without_raising(board) -> None:
+    client, _, _ = board
+    _create(client, name="router", api_type="openai-chat", base_url="https://r.example/api/v1")
+
+    def failing_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+        raise httpx.ConnectError("down")
+
+    client.app.state.provider_get = failing_get  # type: ignore[attr-defined]
+    assert client.get(f"{PREFIX}/router/available-models").json() == {"status": None, "models": []}
+
+
+def test_available_models_uses_the_models_path_of_the_api_type(board) -> None:
+    client, _, _ = board
+    _create(client, name="claude-like", api_type="anthropic", base_url="https://c.example/api")
+    seen: list[str] = []
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+        seen.append(url)
+        return 200, {"data": []}
+
+    client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
+    client.get(f"{PREFIX}/claude-like/available-models")
+    assert seen == ["https://c.example/api/v1/models"]

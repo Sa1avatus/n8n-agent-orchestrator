@@ -73,7 +73,10 @@ the model of the chain when its condition holds.
 - `model`: the model used when the block fires;
 - `above_steps`: the step limit (a whole number, at least 1);
 - `below_score`: the review score under which a retry escalates (above 0, up to 100); optional, without it
-  the steps alone decide.
+  the steps alone decide;
+- `from_attempt`: the first attempt the retry rule may fire on (a whole number, at least 2; default 2). With
+  `3`, attempt 2 stays on the chain model whatever attempt 1 scored, and attempt 3 escalates when attempt 2
+  scored under `below_score`. The split-part rule below ignores it.
 
 The block is read when an attempt starts and fires in two cases, never in the middle of a run (stopping a
 run is the job of the adaptive split):

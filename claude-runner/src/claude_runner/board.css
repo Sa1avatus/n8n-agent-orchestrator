@@ -38,7 +38,6 @@ button { font: inherit; color: inherit; }
 #boardbar h1 { font-size: 15px; font-weight: 650; margin: 0; }
 #boardbar a { color: var(--accent); text-decoration: none; font-size: 12px; }
 #boardbar a:hover { text-decoration: underline; }
-#boardbar #bvprov { margin-left: auto; font-size: 12px; color: var(--accent); background: none; border: 1px solid var(--line2); border-radius: 8px; padding: 3px 10px; cursor: pointer; }
 
 /* view header (board_views.js) ------------------------------------- */
 #boardviews { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
@@ -537,22 +536,69 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 #boardviewbody .prb { padding: 6px 10px 8px; }
 
 #board.provopen > :not(#boardbar):not(.bvprov) { display: none; }
+.bvprov { flex: 1 1 0; min-height: 0; overflow-y: auto; padding: 6px 20px 28px; }
 .bvprov-head { display: flex; align-items: center; gap: 12px; }
+.bvprov-head h2 { margin: 12px 0 4px; font-size: 20px; font-weight: 600; }
 .bvprov-head button { margin-left: auto; }
-.bvprov-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
-.bvprov-list, .bvprov-detail { border: 1px solid var(--line2); border-radius: 12px; padding: 10px; }
-.bvprov-item { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin: 0 0 4px; padding: 6px 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 8px; color: inherit; cursor: pointer; }
-.bvprov-item.on { border-color: var(--accent); }
-.bvprov-item small, .bvprov-prop small { color: var(--muted); font-size: 11.5px; }
-.bvprov-list > button:not(.bvprov-item) { margin-top: 6px; }
-.bvprov-import h3 { font-size: 13px; margin: 14px 0 4px; }
+.bvprov > p { margin: 2px 0 12px; font-size: 12.5px; color: var(--muted); }
+.bvprov > p.bad { color: var(--bad); }
+.bvprov > p.bvprov-notice { padding: 8px 12px; border: 1px solid var(--line2); border-radius: 8px; background: var(--panel); font-size: 13px; color: var(--ink); }
+.bvprov > p.bad:empty, .bvprov > p.mono:empty { display: none; }
+.bvprov button { font: inherit; font-size: 13px; color: var(--ink); background: var(--panel2); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+.bvprov button:hover { border-color: var(--acc); }
+.bvprov button.pri { background: var(--acc); border-color: var(--acc); color: var(--bg); font-weight: 600; }
+.bvprov button.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+.bvprov input[type=text], .bvprov input[type=password], .bvprov select, .bvprov textarea { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line2); border-radius: 8px; padding: 7px 10px; width: 100%; }
+.bvprov input:focus, .bvprov select:focus, .bvprov textarea:focus { outline: none; border-color: var(--acc); }
+.bvprov input[type=checkbox] { width: auto; accent-color: var(--acc); }
+.bvprov-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 20px; align-items: start; }
+.bvprov-list { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: var(--panel); }
+.bvprov-detail { min-width: 0; }
+.bvprov-item { display: flex; flex-direction: column; align-items: flex-start; width: 100%; margin: 0 0 4px; padding: 8px 10px; text-align: left; background: none !important; border: 1px solid transparent !important; border-radius: 8px; }
+.bvprov-item small { color: var(--muted); font-size: 12px; }
+.bvprov-item.on { background: var(--accbg) !important; }
+.bvprov-item.on, .bvprov-item.on small { color: var(--acc); }
+.bvprov-list > button:not(.bvprov-item) { margin-top: 8px; }
+.bvprov-import h3 { font-size: 12.5px; font-weight: 500; color: var(--muted); margin: 16px 0 4px; }
 .bvprov-import p { font-size: 12px; color: var(--muted); margin: 0 0 6px; }
-.bvprov-prop { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--line2); }
-.bvprov-prop small:nth-of-type(1) { grid-column: 1; word-break: break-all; }
-.bvprov-prop small:nth-of-type(2) { grid-column: 1; }
-.bvprov-prop button { grid-column: 2; grid-row: 1 / span 3; align-self: center; }
-.bvprov-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.bvprov-checks { margin-top: 14px; border-top: 1px solid var(--line2); padding-top: 8px; }
-.bvprov-form label { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 8px; margin: 6px 0; }
-.bvprov-form input[type=text], .bvprov-form select, .bvprov-form textarea { width: 100%; box-sizing: border-box; }
-@media (max-width: 720px) { .bvprov-grid { grid-template-columns: 1fr; } }
+.bvprov-prop { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.bvprov-prop small { grid-column: 1; color: var(--muted); font-size: 11.5px; word-break: break-all; }
+.bvprov-prop button { grid-column: 2; grid-row: 1 / span 3; align-self: center; padding: 4px 10px; }
+.bvprov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bvprov-top { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }
+.bvprov-top h3 { margin: 0; font-size: 20px; font-weight: 600; }
+.bvprov-top .bvprov-danger-slot { margin-left: auto; }
+.bvprov-pill { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--okbg); color: var(--ok); }
+.bvprov-pill.off { background: var(--badbg); color: var(--bad); }
+.bvprov-card { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.bvprov-card h4 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.bvprov-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.bvprov-fields label, .bvprov-key label { display: block; font-size: 12.5px; color: var(--muted); }
+.bvprov-fields label span, .bvprov-key label span { display: block; margin-bottom: 4px; }
+.bvprov-fields .wide { grid-column: 1 / -1; }
+.bvprov-fields .check { display: flex; align-items: center; gap: 8px; }
+.bvprov-fields .check span { margin: 0; }
+.bvprov-template-hint { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
+.bvprov-actions { display: flex; gap: 8px; margin-top: 12px; }
+.bvprov-key { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 260px) auto; gap: 12px; align-items: end; }
+.bvprov-key h4 { grid-column: 1; margin: 0; }
+.bvprov-key p { grid-column: 1; margin: 0; font-size: 12.5px; color: var(--muted); }
+.bvprov-key label { grid-column: 2; grid-row: 1 / span 2; }
+.bvprov-key > button { grid-column: 3; grid-row: 1 / span 2; }
+.bvprov-sechead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bvprov-sechead h4 { margin: 0; }
+.bvprov-sechead button { margin-left: auto; }
+.bvprov-fetchbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; }
+.bvprov-fetchbar input[type=text] { flex: 1 1 200px; width: auto; }
+.bvprov-fetchbar label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+.bvprov-listing { max-height: 280px; overflow-y: auto; margin: 8px 0 12px; }
+.bvprov-listed { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 4px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.bvprov-listed small { color: var(--muted); font-size: 12px; }
+.bvprov-tablewrap { overflow-x: auto; margin-top: 8px; }
+.bvprov-tablewrap table.t { font-size: 12px; min-width: 760px; }
+.bvprov-tablewrap table.t input[type=text], .bvprov-tablewrap table.t select, .bvprov-tablewrap table.t textarea { min-width: 72px; padding: 4px 6px; }
+.bvprov-tablewrap table.t textarea { height: 30px; }
+.bvprov-checks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bvprov-checks h4 { flex-basis: 100%; }
+.bvprov-checks select { width: auto; min-width: 200px; }
+@media (max-width: 760px) { .bvprov-grid { grid-template-columns: 1fr; } .bvprov-fields { grid-template-columns: 1fr; } .bvprov-key { grid-template-columns: 1fr; } .bvprov-key label, .bvprov-key > button { grid-column: 1; grid-row: auto; } }

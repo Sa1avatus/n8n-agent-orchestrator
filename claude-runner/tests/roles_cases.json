@@ -1190,6 +1190,122 @@
         "model": "sonnet",
         "fresh": true
       }
+    },
+    {
+      "name": "from_attempt_keeps_attempt_2_local_after_a_low_first_score",
+      "global": {
+        "worker": {
+          "1": "openrouter/nemo",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 1,
+          "below_score": 50,
+          "from_attempt": 3
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 2,
+      "facts": {
+        "score": 40,
+        "steps": 30,
+        "split_steps": null
+      },
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "from_attempt_escalates_attempt_3_after_a_low_second_score",
+      "global": {
+        "worker": {
+          "1": "openrouter/nemo",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 1,
+          "below_score": 50,
+          "from_attempt": 3
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "score": 40,
+        "steps": 30,
+        "split_steps": null
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
+    },
+    {
+      "name": "from_attempt_keeps_attempt_3_local_after_a_good_second_score",
+      "global": {
+        "worker": {
+          "1": "openrouter/nemo",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 1,
+          "below_score": 50,
+          "from_attempt": 3
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 3,
+      "facts": {
+        "score": 60,
+        "steps": 30,
+        "split_steps": null
+      },
+      "expect": {
+        "provider": "local",
+        "model": "qwen"
+      }
+    },
+    {
+      "name": "from_attempt_attempt_4_is_the_chain_model",
+      "global": {
+        "worker": {
+          "1": "openrouter/nemo",
+          "2": "local/qwen",
+          "4": "anthropic/sonnet"
+        },
+        "worker_escalate": {
+          "model": "anthropic/sonnet",
+          "above_steps": 1,
+          "below_score": 50,
+          "from_attempt": 3
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "worker",
+      "attempt": 4,
+      "facts": {
+        "score": 60,
+        "steps": 30,
+        "split_steps": null
+      },
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet"
+      }
     }
   ]
 }

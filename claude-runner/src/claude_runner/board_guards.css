@@ -31,3 +31,29 @@
 .gt-dot.warning { background: var(--retry); } .gt-dot.error { background: var(--err); border-radius: 2px; }
 .gt-dot.act { outline: 2px solid var(--ink); outline-offset: 1px; }
 @media (max-width: 520px) { .gt-lane { flex-direction: column; align-items: stretch; gap: 4px; } .gt-lname { width: auto; } }
+
+.gt-split { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 16px; align-items: start; }
+.gt-side { border: 1px solid var(--line); border-radius: 12px; padding: 8px; background: var(--panel); }
+.gt-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font: inherit; font-size: 13px; color: var(--ink); background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.gt-item.on { background: var(--sel); color: var(--accent); }
+.gt-led { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.gt-led.ok { background: var(--ok); } .gt-led.warning { background: var(--retry); } .gt-led.error { background: var(--err); }
+.gt-main { min-width: 0; }
+.gt-dhead { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.gt-dname { font-size: 20px; font-weight: 600; font-family: var(--mono, monospace); }
+.gt-push { margin-left: auto; }
+.gt-tog { width: 40px; height: 22px; border-radius: 99px; border: none; background: var(--line); position: relative; cursor: pointer; padding: 0; }
+.gt-tog::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left .15s; }
+.gt-tog.on { background: var(--accent); } .gt-tog.on::after { left: 21px; }
+.gt-tog:disabled { opacity: .5; cursor: default; }
+.gt-block { margin-top: 12px; padding: 14px 16px; border-radius: 12px; }
+.gt-block h4 { margin: 0 0 8px; font-size: 14px; }
+.gt-fields { display: flex; flex-wrap: wrap; gap: 16px; }
+.gt-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.gt-fields input, .gt-fields select { font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-width: 120px; }
+.gt-unit { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.gt-unit input { width: 110px; min-width: 0; }
+.gt-save { margin-top: 12px; font: inherit; font-size: 13px; color: var(--bg); background: var(--accent); border: none; border-radius: 8px; padding: 6px 16px; cursor: pointer; }
+.gt-big { font-size: 24px; font-weight: 600; }
+.gt-mono { font-family: var(--mono, monospace); }
+@media (max-width: 760px) { .gt-split { grid-template-columns: 1fr; } }

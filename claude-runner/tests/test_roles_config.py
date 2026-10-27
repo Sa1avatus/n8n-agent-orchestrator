@@ -239,6 +239,12 @@ GOLDEN_FLAG_OFF: list[tuple[str, tuple[str, ...], tuple[str, ...]]] = [
         ("role 'worker_escalate': 'above_steps' must be a whole number of at least 1",),
         (),
     ),
+    (
+        '{"worker": "LOCAL/a", "worker_escalate": '
+        '{"model": "OTHER/b", "above_steps": 1, "from_attempt": 1}}',
+        ("role 'worker_escalate': 'from_attempt' must be a whole number of at least 2",),
+        (),
+    ),
     ("[]", ("roles_json must be a JSON object",), ()),
     (
         '{"worker": "LOCAL/a", "worker": "LOCAL/b"}',

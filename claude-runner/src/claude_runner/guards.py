@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import urllib.request
 from collections.abc import Awaitable, Callable, Mapping
@@ -24,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .guards_history import GuardHistory
+from .guards_history import DEFAULT_WINDOW, WINDOWS_S, GuardHistory
 
 logger = logging.getLogger("claude_runner.guards")
 
@@ -117,6 +118,7 @@ class GuardSettings:
     queue_state_path: str = ""
     tab: bool = False
     state_dir: str = ""
+    edit: bool = False
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> GuardSettings:
@@ -176,6 +178,7 @@ class GuardSettings:
             queue_state_path=env.get("DASHBOARD_GUARDS_QUEUE_STATE_PATH", "").strip(),
             tab=master and _bool(env, "DASHBOARD_GUARDS_TAB", False),
             state_dir=env.get("DASHBOARD_GUARDS_STATE_DIR", "").strip(),
+            edit=master and _bool(env, "DASHBOARD_GUARDS_EDIT", False),
         )
 
     def enabled(self, name: str) -> bool:
@@ -190,6 +193,51 @@ class GuardSettings:
 
     def dry_run_for(self, name: str) -> bool:
         return self.dry_run or name.lower() in self.dry_run_guards
+
+
+MIN_INTERVAL_S = 1.0
+MAX_INTERVAL_S = 86400.0
+OVERRIDES_FILE = "guards_overrides.json"
+
+
+class GuardOverrides:
+    """Settings the operator changed in the dashboard: enabled, interval (seconds) and health
+    window per guard. They win over the environment and are kept in a JSON file in the state
+    directory (atomic write); without a state directory they last until the next restart."""
+
+    def __init__(self, path: str = "") -> None:
+        self.path = path
+        self._data: dict[str, dict[str, Any]] = {}
+        self._load()
+
+    def get(self, name: str) -> dict[str, Any]:
+        return dict(self._data.get(name, {}))
+
+    def update(self, name: str, fields: dict[str, Any]) -> None:
+        self._data[name] = {**self._data.get(name, {}), **fields}
+        self._save()
+
+    def _save(self) -> None:
+        if not self.path:
+            return
+        tmp = self.path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as handle:
+                json.dump(self._data, handle)
+            os.replace(tmp, self.path)
+        except OSError as exc:
+            logger.warning("guard overrides not saved: %s", exc)
+
+    def _load(self) -> None:
+        if not self.path or not os.path.exists(self.path):
+            return
+        try:
+            with open(self.path, encoding="utf-8") as handle:
+                data = json.load(handle)
+            self._data = {str(k): dict(v) for k, v in data.items() if isinstance(v, dict)}
+        except (OSError, ValueError, TypeError) as exc:
+            self._data = {}
+            logger.warning("guard overrides file ignored (%s): %s", self.path, exc)
 
 
 @dataclass
@@ -478,6 +526,9 @@ class GuardSupervisor:
         self.notifier = notifier
         self.history = history
         self.limiter = NoticeLimiter(settings.notice_limit)
+        self.overrides = GuardOverrides(
+            os.path.join(settings.state_dir, OVERRIDES_FILE) if settings.state_dir else ""
+        )
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._notice_tasks: set[asyncio.Task[bool]] = set()
         self._running = False
@@ -491,7 +542,7 @@ class GuardSupervisor:
         self._stop_event = asyncio.Event()
         started = 0
         for guard in self.guards:
-            if not self.settings.enabled(guard.name):
+            if not self.effective_enabled(guard.name):
                 continue
             self._tasks[guard.name] = asyncio.create_task(self._run_guard(guard))
             started += 1
@@ -525,12 +576,75 @@ class GuardSupervisor:
             guards={g.name: self._guard_status(g) for g in self.guards},
         )
 
+    def effective_enabled(self, name: str) -> bool:
+        """The master switch, then the operator's override, then the environment."""
+        if not self.settings.master:
+            return False
+        override = self.overrides.get(name).get("enabled")
+        return self.settings.enabled(name) if override is None else bool(override)
+
+    def interval_for(self, guard: Guard) -> float:
+        override = self.overrides.get(guard.name).get("interval")
+        return float(override) if override is not None else guard.interval
+
+    def health_window(self, name: str) -> str:
+        return str(self.overrides.get(name).get("health_window", DEFAULT_WINDOW))
+
+    async def apply_override(
+        self,
+        name: str,
+        *,
+        enabled: bool | None = None,
+        interval: float | None = None,
+        health_window: str | None = None,
+    ) -> None:
+        """Change a guard at run time. Raises KeyError for an unknown guard and ValueError for
+        a value out of range; the task of the guard is started, stopped or restarted at once."""
+        guard = next((g for g in self.guards if g.name == name), None)
+        if guard is None:
+            raise KeyError(name)
+        fields: dict[str, Any] = {}
+        if enabled is not None:
+            if not isinstance(enabled, bool):
+                raise ValueError("enabled must be true or false")
+            fields["enabled"] = enabled
+        if interval is not None:
+            if isinstance(interval, bool) or not isinstance(interval, int | float):
+                raise ValueError("interval must be a number of seconds")
+            if not MIN_INTERVAL_S <= interval <= MAX_INTERVAL_S:
+                raise ValueError(
+                    f"interval must be between {MIN_INTERVAL_S:g} and {MAX_INTERVAL_S:g} seconds"
+                )
+            fields["interval"] = float(interval)
+        if health_window is not None:
+            if health_window not in WINDOWS_S:
+                raise ValueError("health window must be one of " + ", ".join(WINDOWS_S))
+            fields["health_window"] = health_window
+        self.overrides.update(name, fields)
+        if self._running and ("enabled" in fields or "interval" in fields):
+            await self._sync_task(guard, restart="interval" in fields)
+
+    async def _sync_task(self, guard: Guard, restart: bool) -> None:
+        task = self._tasks.get(guard.name)
+        wanted = self.effective_enabled(guard.name)
+        if task is not None and (restart or not wanted):
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            self._tasks.pop(guard.name, None)
+            task = None
+        if wanted and task is None:
+            guard.state.enabled = True
+            guard.state.consecutive_errors = 0
+            self._tasks[guard.name] = asyncio.create_task(self._run_guard(guard))
+
     def _guard_status(self, guard: Guard) -> dict[str, object]:
         return {
             "name": guard.name,
             **guard.state.snapshot(),
-            "enabled": self.settings.enabled(guard.name) and guard.state.enabled,
+            "enabled": self.effective_enabled(guard.name) and guard.state.enabled,
             "dry_run": self.settings.dry_run_for(guard.name),
+            "interval_s": self.interval_for(guard),
+            "health_window": self.health_window(guard.name),
         }
 
     async def _run_guard(self, guard: Guard) -> None:
@@ -577,7 +691,7 @@ class GuardSupervisor:
                     break
                 # sleep the current backoff first, then double it afterwards, so
                 # the first failure sleeps BACKOFF_BASE_S
-                await asyncio.sleep(backoff if failing else guard.interval)
+                await asyncio.sleep(backoff if failing else self.interval_for(guard))
             except asyncio.CancelledError:
                 break
             if failing:

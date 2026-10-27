@@ -302,7 +302,37 @@ def create_dashboard_app(
         if history is not None:
             body["tab"] = True
             body["history_summary"] = history.summary()
+            for guard in body["guards"]:
+                guard["health"] = history.health(guard["name"], guard["health_window"])
+        body["edit"] = request.app.state.guards.settings.edit
+        body["windows"] = list(WINDOWS_S)
         return body
+
+    @app.put("/api/guards/{name}")
+    async def api_guard_update(name: str, request: Request) -> dict[str, Any]:
+        """Change one guard at run time: ``enabled``, ``interval_s`` (seconds) and
+        ``health_window`` (1h, 24h or 7d). Needs DASHBOARD_GUARDS_EDIT=1 and the dashboard
+        header."""
+        supervisor = request.app.state.guards
+        if request.headers.get("x-ahawr-dashboard") != "1":
+            raise HTTPException(status_code=403, detail="missing X-AHAWR-Dashboard header")
+        if not supervisor.settings.edit:
+            raise HTTPException(status_code=403, detail="guard editing is off")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="the body must be a JSON object")
+        try:
+            await supervisor.apply_override(
+                name,
+                enabled=body.get("enabled"),
+                interval=body.get("interval_s"),
+                health_window=body.get("health_window"),
+            )
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"unknown guard {name!r}") from None
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        return {"guard": supervisor.state()["guards"][name]}
 
     @app.get("/api/guards/history")
     async def api_guards_history(request: Request, window: str = "24h") -> dict[str, Any]:

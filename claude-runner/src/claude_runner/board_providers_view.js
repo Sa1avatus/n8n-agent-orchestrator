@@ -1,7 +1,7 @@
 /* board-scope-wrapped */
 (function () {
 /* Board providers page (T022): the screen opened from the header Providers
- * button (#bvprov in board.html).
+ * tab of the shell.
  *
  * open() reads GET /api/board/providers, /import-from-env and /templates and renders
  * a master-detail page into #board (the rest of the board is hidden meanwhile): on the
@@ -9,7 +9,8 @@
  * env blocks (one Create per row); on the right the form of the selected provider, a
  * model select with Test and Probe, or, with nothing selected, the templates to start
  * from. Test and Probe send real requests, so each asks for confirmation first.
- * Writes go through providerWrite, which carries the dashboard header.
+ * The page is opened by the Providers tab of the dashboard shell (dashboard.html), which calls
+ * BoardProvidersView.open() and .close(). Writes go through providerWrite, which carries the dashboard header.
  * The add and edit form is board_providers_form.js; its notices go through showNotice.
  *
  * A key value is never read: only key_state.has_key and key_state.set_at are shown.
@@ -17,7 +18,7 @@
  */
 "use strict";
 
-const state = { providers: [], proposals: [], templates: [], notice: "", error: "", root: null, form: null };
+const state = { providers: [], proposals: [], templates: [], notice: "", error: "", root: null, form: null, noticeLine: null };
 
 function L(key, en, params) {
   const text = t(key, params);
@@ -134,9 +135,9 @@ function providerItem(provider) {
 
 function checksNode(provider) {
   const models = provider.models || [];
-  const title = el("h3", { textContent: L("prov.col.check", "Check") }, []);
+  const title = el("h4", { textContent: L("prov.col.check", "Check") }, []);
   if (!models.length) {
-    return el("section", { className: "bvprov-checks" }, [title,
+    return el("section", { className: "bvprov-checks bvprov-card" }, [title,
       el("p", { textContent: L("prov.no_models", "no models") }, [])]);
   }
   const select = el("select", {}, models.map((m) =>
@@ -145,7 +146,7 @@ function checksNode(provider) {
   const probe = el("button", { type: "button", textContent: L("prov.probe", "Probe") }, []);
   test.addEventListener("click", () => runCheck(provider.name, select.value, "test"));
   probe.addEventListener("click", () => runCheck(provider.name, select.value, "probe"));
-  return el("section", { className: "bvprov-checks" }, [title, select, test, probe]);
+  return el("section", { className: "bvprov-checks bvprov-card" }, [title, select, test, probe]);
 }
 
 function openForm(name, template) {
@@ -160,11 +161,15 @@ function formDeps() {
     el,
     keyText,
     write: providerWrite,
+    read: (url) => fetch(url, { cache: "no-store" }).then(unwrap),
     templates: state.templates,
     template: state.form ? state.form.template : undefined,
     notify: (text) => {
       state.notice = text;
       globalThis.BoardDnd.showNotice(text);
+      // the board's own notice sits in the part of the page that is hidden here: show the text on this page
+      if (state.noticeLine) state.noticeLine.textContent = text;
+      state.root.scrollTop = 0;
     },
     reload,
     edit: (name) => {
@@ -253,6 +258,9 @@ function setPageOpen(open) {
   if (!board) return;
   const rest = String(board.className || "").split(/\s+/).filter((c) => c && c !== "provopen");
   board.className = (open ? [...rest, "provopen"] : rest).join(" ");
+  if (globalThis.parent && globalThis.parent !== globalThis) {
+    globalThis.parent.postMessage({ ahawr: "providers", open }, globalThis.location.origin);
+  }
 }
 
 function closePage() {
@@ -270,7 +278,8 @@ function render() {
     el("h2", { textContent: L("prov.title", "Providers") }, []), back]));
   root.appendChild(el("p", { textContent: L("prov.hint", "Stored in the database (board.providers). Keys are never shown: only whether a key is set and when it was set.") }, []));
   root.appendChild(el("p", { className: "bad", textContent: state.error }, []));
-  root.appendChild(el("p", { className: "mono", textContent: state.notice }, []));
+  state.noticeLine = el("p", { className: "mono bvprov-notice", textContent: state.notice }, []);
+  root.appendChild(state.noticeLine);
   root.appendChild(el("div", { className: "bvprov-grid" }, [listNode(), detailNode()]));
 }
 
@@ -285,12 +294,10 @@ async function open() {
   if (!state.form && state.providers.length) openForm(state.providers[0].name);
 }
 
-const BoardProvidersView = { open };
+const BoardProvidersView = { open, close: closePage };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardProvidersView;
 } else {
   globalThis.BoardProvidersView = BoardProvidersView;
-  document.getElementById("bvprov").addEventListener("click", () => open());
-  globalThis.addEventListener("hashchange", closePage);
 }
 })();

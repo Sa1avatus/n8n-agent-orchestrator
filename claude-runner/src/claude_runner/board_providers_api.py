@@ -40,9 +40,11 @@ _MODEL_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
 _CONTROL_KEYS = frozenset({"expected_version", "dry_run"})
 
 PostFn = Callable[[str, dict[str, str], dict[str, Any], float], int]
+GetFn = Callable[[str, dict[str, str], float], tuple[int, Any]]
 PROVIDER_CALL_TIMEOUT_SECONDS = 30.0
 ANTHROPIC_VERSION = "2023-06-01"
 KEY_MAX_CHARS = 4096
+MODELS_PATHS = {"anthropic": "/v1/models"}  # every other API type lists at /models
 TEST_MAX_TOKENS = 1
 PROBE_MAX_TOKENS = 16
 PROBE_PROMPT = "Reply with one word."
@@ -270,12 +272,7 @@ def _tested_api_type(provider: dict[str, Any], row: dict[str, Any]) -> ApiType:
     return api
 
 
-def _call_target(
-    name: str, provider: dict[str, Any], api: ApiType, secrets: ProviderSecrets
-) -> tuple[str, dict[str, str]]:
-    key = secrets.get_key(name) or ""
-    if api["auth_style"] != "none" and not key:
-        raise ConflictError(f"provider {name!r} has no key; set one first")
+def _auth_headers(key: str, api: ApiType) -> dict[str, str]:
     headers: dict[str, str] = {}
     if api["auth_style"] == "x-api-key":
         headers["x-api-key"] = key
@@ -283,7 +280,54 @@ def _call_target(
         headers["Authorization"] = f"Bearer {key}"
     if "anthropic-version" in api["extra_fields"]:
         headers["anthropic-version"] = ANTHROPIC_VERSION
-    return provider["base_url"].rstrip("/") + api["endpoint_path"], headers
+    return headers
+
+
+def _call_target(
+    name: str, provider: dict[str, Any], api: ApiType, secrets: ProviderSecrets
+) -> tuple[str, dict[str, str]]:
+    key = secrets.get_key(name) or ""
+    if api["auth_style"] != "none" and not key:
+        raise ConflictError(f"provider {name!r} has no key; set one first")
+    return provider["base_url"].rstrip("/") + api["endpoint_path"], _auth_headers(key, api)
+
+
+def _httpx_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+    response = httpx.get(url, headers=headers, timeout=timeout)
+    try:
+        return response.status_code, response.json()
+    except ValueError:
+        return response.status_code, None
+
+
+def _per_mtok(price: Any) -> float | None:
+    """OpenRouter-style prices are USD per token as text; the table keeps USD per 1M tokens."""
+    try:
+        return round(float(price) * 1_000_000, 6)
+    except (TypeError, ValueError):
+        return None
+
+
+def _listed_model(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+        return None
+    pricing = item.get("pricing") if isinstance(item.get("pricing"), dict) else {}
+    price_in, price_out = _per_mtok(pricing.get("prompt")), _per_mtok(pricing.get("completion"))
+    free = item["id"].endswith(":free") or (price_in == 0 and price_out == 0)
+    known = bool(pricing) or item["id"].endswith(":free")
+    return {
+        "id": item["id"],
+        "name": str(item.get("name") or item.get("display_name") or item["id"]),
+        "price_in": price_in,
+        "price_out": price_out,
+        "free": free if known else None,
+    }
+
+
+def _listed_models(payload: Any) -> list[dict[str, Any]]:
+    items = payload.get("data") if isinstance(payload, dict) else None
+    rows = [_listed_model(item) for item in items] if isinstance(items, list) else []
+    return [row for row in rows if row is not None]
 
 
 def _httpx_post(url: str, headers: dict[str, str], body: dict[str, Any], timeout: float) -> int:
@@ -491,6 +535,23 @@ def _build_router() -> APIRouter:
         store.set_model_probe(name, row["model"], result)
         return {"provider": _with_key_state(_require(store, name), secrets), "probe": result}
 
+    @router.get("/{name}/available-models")
+    def available_models(request: Request, name: str) -> dict[str, Any]:
+        """The models the provider itself lists (GET <base_url>/models). A key is sent when one
+        is stored; some providers list without one. Nothing is stored here."""
+        store, secrets = _deps(request)
+        provider = _require(store, name)
+        api = get_api_type(provider["api_type"])
+        key = secrets.get_key(name) or ""
+        url = provider["base_url"].rstrip("/") + MODELS_PATHS.get(api["id"], "/models")
+        get = cast(GetFn, request.app.state.provider_get)
+        try:
+            status, payload = get(url, _auth_headers(key, api), PROVIDER_CALL_TIMEOUT_SECONDS)
+        except httpx.HTTPError as exc:
+            logger.warning("model list of %s failed: %s", name, type(exc).__name__)
+            return {"status": None, "models": []}
+        return {"status": status, "models": _listed_models(payload) if status == 200 else []}
+
     @router.post("/{name}/models")
     def add_model(request: Request, name: str, body: dict[str, Any]) -> dict[str, Any]:
         _require_dashboard_header(request)
@@ -535,11 +596,13 @@ def add_provider_routes(
     *,
     providers: Mapping[str, ProviderProfile] | None = None,
     post: PostFn = _httpx_post,
+    get: GetFn = _httpx_get,
     env_source: Callable[[], list[dict[str, Any]]] | None = None,
 ) -> None:
     """Attach the provider routes; ``add_board_routes`` must already have set the error handlers."""
     app.state.provider_secrets = secrets
     app.state.provider_profiles = dict(providers or {})
     app.state.provider_post = post
+    app.state.provider_get = get
     app.state.provider_env_source = env_source
     app.include_router(_build_router())

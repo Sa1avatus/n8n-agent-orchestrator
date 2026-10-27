@@ -3,7 +3,29 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.300** (claude-runner `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.11.400** (claude-runner `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-27 (0.11.400)
+
+Small step: the Providers and Guards pages, the Worker escalation and fixes.
+
+- **Providers page** (`board_providers_view.js`, `board_providers_form.js`, `board.css`): look of variant A (cards: Connection, API key,
+  Models), a Delete provider button (refused with the reason while a role uses the provider; the notice is shown on the page, it was
+  hidden before), and the page opens from a Providers tab next to Guards in the dashboard shell (first click after a fresh load works).
+- **Fetch models** (`GET /api/board/providers/{name}/available-models`): lists what the provider itself offers (`/models`, `/v1/models`
+  for the Anthropic type), with the stored key; the page filters by name and "Free only" (OpenRouter prices, `:free`) and adds the picked
+  models with their prices. LiteLLM with a wildcard route lists its own catalogue, not the local models: list the models through the
+  llama-server provider instead.
+- **Guards page, list and detail** (`board_guards.js`, `guards.py`, `PUT /api/guards/{name}`): per guard an on/off switch, the poll interval
+  (1 to 86400 s) and the health window (1h, 24h, 7d) with ok share, checks and errors in the window. Changes act at once (the task of the
+  guard starts, stops or restarts) and are kept in `guards_overrides.json` of the state directory. Flag `DASHBOARD_GUARDS_EDIT`
+  (OFF by default; the master switch and dry run stay stronger).
+- **Escalation block `from_attempt`** (`roles_config.py`, `board_roles.js`, `docs/roles-config.md`): the score rule of `worker_escalate` fires
+  only from that attempt on (default 2). The Worker chain in `hermes_config` (all missions): attempt 1 OpenRouter nemotron 550b free,
+  attempts 2 and 3 local, attempt 3 on Sonnet 5.5 when attempt 2 scored under 50, attempt 4 on: Sonnet 5.5.
+- **Dashboard tabs**: a run that starts or ends no longer pulls the reader from Providers, Guards or Missions to Runs; the list follows
+  the live run in the background and only a click or a `#run=` link opens the Runs tab.
+- Tests: `test_guards_overrides.py`, `board_providers_view.test.js`, `test_board_providers_api.py`, `roles_cases.json` (shared by Python and JS).
 
 ## 2026-10-27 (0.11.300)
 
