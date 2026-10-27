@@ -49,7 +49,7 @@ from .board import (
     get_board_store,
     now,
 )
-from .board_lessons import InMemoryLessonStore
+from .board_lessons import InMemoryLessonStore, PgLessonStore
 from .board_lessons_extract import build_candidate, decide, render_lessons_block, select_lessons
 from .board_ops_redact import scrub
 from .board_pg import UnavailableBoardStore
@@ -144,8 +144,27 @@ def _roles_text(request: Request, body: dict[str, Any]) -> str:
     return text
 
 
-def _lessons_store(request: Request) -> InMemoryLessonStore:
-    store: InMemoryLessonStore = request.app.state.lessons_store
+def _make_lessons_store(store: BoardStore) -> InMemoryLessonStore | PgLessonStore:
+    """The lessons table when the board runs on PostgreSQL (own connection, like the board store);
+    the in-memory store otherwise, or when the table cannot be reached (logged)."""
+    dsn = getattr(store, "_dsn", None)
+    if not isinstance(dsn, str):
+        return InMemoryLessonStore()
+    try:
+        import psycopg
+        from psycopg.rows import dict_row
+
+        conn = psycopg.connect(dsn, row_factory=dict_row, autocommit=True, prepare_threshold=None)
+        conn.execute("SET search_path TO board, public")
+        conn.execute("SELECT 1 FROM board.lessons LIMIT 1")
+    except Exception as exc:  # noqa: BLE001 - any connection or schema failure falls back, loudly
+        logger.warning("lessons table not reachable, lessons stay in memory: %s", exc)
+        return InMemoryLessonStore()
+    return PgLessonStore(conn)
+
+
+def _lessons_store(request: Request) -> InMemoryLessonStore | PgLessonStore:
+    store: InMemoryLessonStore | PgLessonStore = request.app.state.lessons_store
     return store
 
 
@@ -386,8 +405,7 @@ def add_board_routes(app: Any, settings: Any) -> None:
     app.state.board_store = store
     app.state.settings = settings
     if getattr(app.state, "lessons_store", None) is None:
-        # shortcut: lessons live in memory, upgrade when PgLessonStore is wired to the board DB
-        app.state.lessons_store = InMemoryLessonStore()
+        app.state.lessons_store = _make_lessons_store(store)
 
     # exception handlers must live on the FastAPI app (APIRouter has none)
     app.add_exception_handler(ConflictError, _on_conflict)
