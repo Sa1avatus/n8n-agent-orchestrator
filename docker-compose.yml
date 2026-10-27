@@ -144,6 +144,9 @@ services:
       - HOST_ACTIONS=${HOST_ACTIONS:-}
       - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
       - CLAUDE_RUNNER_ALLOWED_ROOTS=/workspace,/d
+      # a restore point of the tracked changes before every Worker run (git_snapshot.py): refs/ahawr/snapshots/<run_id>
+      - CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT=${CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT:-1}
+      - CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP=${CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP:-100}
       # missions.working_directory is a host path (D:\OpenAIProjects\app); it is mapped into the
       # container (/d/OpenAIProjects/app) and Claude Code runs there.
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d

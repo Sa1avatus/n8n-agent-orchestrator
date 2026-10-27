@@ -29,6 +29,7 @@ from .claude_cli import (
 from .config import ROLES, Settings, map_host_path
 from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
+from .git_snapshot import take_snapshot
 from .local_pricing import LocalPricing
 from .store import Store, now
 
@@ -420,6 +421,12 @@ class RunManager:
             if self.on_run_start is not None:
                 with contextlib.suppress(Exception):
                     self.on_run_start()
+            if role == "worker" and not compact and self.settings.worker_git_snapshot:
+                ref = await asyncio.to_thread(
+                    take_snapshot, Path(cwd), run_id, self.settings.git_snapshot_keep
+                )
+                if ref:
+                    self.events.add(run_id, {"kind": "git_snapshot", "ref": ref})
             if self.think_flag is not None and provider_name == "local":
                 with contextlib.suppress(Exception):
                     # the thinking mode the first request of the run starts in

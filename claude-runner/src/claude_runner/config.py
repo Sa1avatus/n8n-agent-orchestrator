@@ -68,7 +68,20 @@ _SECRET_ENV_FILES = [
     ".env.test",
 ]
 _SECRET_DENY = [f"Read({where}{name})" for where in ("./", "**/") for name in _SECRET_ENV_FILES]
-_GIT_DENY = ["Bash(git commit *)", "Bash(git push *)"]
+# A Worker that compares files with HEAD wiped the uncommitted edits of the whole tree three times
+# (a stash it then dropped, `git show HEAD:<file> > <file>`): git commands that change the tree
+# or the stash stay denied, with and without `-C <dir>`, and so does writing `git show` output
+# to a file.
+_GIT_TREE_CMDS = ("stash", "checkout", "restore", "reset", "clean", "switch", "rebase", "apply")
+_GIT_DENY = [
+    "Bash(git commit *)",
+    "Bash(git push *)",
+    *(f"Bash(git {name})" for name in _GIT_TREE_CMDS),
+    *(f"Bash(git {name} *)" for name in _GIT_TREE_CMDS),
+    *(f"Bash(git -C * {name} *)" for name in _GIT_TREE_CMDS),
+    "Bash(git show *>*)",
+    "Bash(git -C * show *>*)",
+]
 # The Reviewer runs in `dontAsk`, where a Bash command works only if a rule allows it (a real
 # run: 105 denied Bash calls, among them plain grep, wc, git status and ahawr-search). It gets
 # read-only inspection commands and the retrieval CLI, so it can check a Worker's claims itself.
@@ -423,6 +436,10 @@ class Settings:
     # starts: a script that allocates more gets MemoryError with a traceback (it can fix
     # itself) instead of an OOM kill; a memory-mapped file is not counted. 0 = off
     proc_data_limit_mb: int = 4096
+    # a restore point (git_snapshot.py) of the tracked changes before every Worker run, the newest
+    # git_snapshot_keep are kept; off by default (docker-compose.yml turns it on)
+    worker_git_snapshot: bool = False
+    git_snapshot_keep: int = 100
     mem_guard_cgroup_percent: int = 85
     # watchdog (runs.py): every interval, a run's CLI process that used more than
     # cpu_seconds of CPU since the run's last event is killed as child_hung, and one
@@ -532,6 +549,8 @@ class Settings:
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
             mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
             proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
+            worker_git_snapshot=_bool(env, "CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT", False),
+            git_snapshot_keep=_int(env, "CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP", 100, 1),
             mem_guard_cgroup_percent=_int(env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", 85),
             watchdog_interval_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS", 60, 1),
             watchdog_cpu_seconds=_int(env, "CLAUDE_RUNNER_WATCHDOG_CPU_SECONDS", 900, 1),
