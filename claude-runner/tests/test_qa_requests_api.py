@@ -302,3 +302,33 @@ def test_result_refuses_an_unknown_verdict_object(qa: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_a_qa_request_is_recorded_as_a_qa_run(qa: TestClient) -> None:
+    request_id = _create(qa)
+    run_id = "run_" + request_id
+    qa.post(CLAIM.format(request_id=request_id), headers=AUTH)
+    opened = qa.get(f"/v1/runs/{run_id}", headers=AUTH).json()
+    assert (opened["role"], opened["status"]) == ("qa", "running")
+
+    verdicts = [
+        {"verdict": "pass", "scenario": "a"},
+        {"verdict": "fail", "scenario": "b"},
+        "skipped",
+    ]
+    body = {"verdicts": verdicts, "error": ""}
+    qa.post(RESULT.format(request_id=request_id), json=body, headers=AUTH)
+    closed = qa.get(f"/v1/runs/{run_id}", headers=AUTH).json()
+    assert closed["status"] == "failed"
+    assert "1 fail, 1 pass, 1 skipped" in closed["output"]
+    assert "Failed: b" in closed["output"]
+    assert closed["cost_usd"] == 0.0
+
+
+def test_a_clean_qa_request_is_a_completed_run(qa: TestClient) -> None:
+    request_id = _create(qa)
+    qa.post(CLAIM.format(request_id=request_id), headers=AUTH)
+    body = {"verdicts": ["pass", "pass"], "error": ""}
+    qa.post(RESULT.format(request_id=request_id), json=body, headers=AUTH)
+    run = qa.get(f"/v1/runs/{'run_' + request_id}", headers=AUTH).json()
+    assert (run["status"], run["role"]) == ("completed", "qa")

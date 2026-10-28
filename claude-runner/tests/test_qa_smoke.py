@@ -325,6 +325,7 @@ def test_error_finding_fails_the_verdict_and_keeps_a_named_screenshot(tmp_path: 
     assert verdict["verdict"] == "fail"
     assert ("pageerror", "error") in [(f["detector"], f["severity"]) for f in verdict["findings"]]
     assert re.fullmatch(r"[\w.-]+/finding-001\.png", verdict["screenshots"][0])
+    assert verdict["failed_reason"].startswith("1 error findings; first: pageerror")
 
 
 def test_warning_only_findings_pass(tmp_path: Path) -> None:
@@ -335,6 +336,7 @@ def test_warning_only_findings_pass(tmp_path: Path) -> None:
     assert [(f["detector"], f["severity"]) for f in verdict["findings"]] == [
         ("no-effect", "warning")
     ]
+    assert verdict["failed_reason"] == ""
 
 
 @pytest.fixture(autouse=True)

@@ -304,8 +304,9 @@ def create_dashboard_app(
             body["history_summary"] = history.summary()
             for guard in body["guards"]:
                 guard["health"] = history.health(guard["name"], guard["health_window"])
-        body["edit"] = request.app.state.guards.settings.edit
-        body["windows"] = list(WINDOWS_S)
+        if request.app.state.guards.settings.master:  # off: the body keeps its previous shape
+            body["edit"] = request.app.state.guards.settings.edit
+            body["windows"] = list(WINDOWS_S)
         return body
 
     @app.put("/api/guards/{name}")

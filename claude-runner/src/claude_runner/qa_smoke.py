@@ -550,6 +550,11 @@ def build_smoke_verdict(state: Crawl, started: float) -> dict[str, Any]:
     )
     verdict["findings"] = [_finding_json(finding) for finding in state.findings]
     verdict["verdict"] = _outcome(state)
+    errors = [finding for finding in state.findings if finding.severity == ERROR]
+    if verdict["verdict"] == "fail" and errors:
+        # the verdict said "fail" with an empty reason: name the first finding of error severity
+        first = f"{errors[0].detector} on {errors[0].url}: {errors[0].reason}"
+        verdict["failed_reason"] = scrub(f"{len(errors)} error findings; first: {first}")
     return verdict
 
 

@@ -102,7 +102,7 @@ mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: va
 .src.hermes { color: var(--compact); background: color-mix(in srgb, var(--compact) 14%, transparent); }
 .role { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
 .role.architect { color: var(--r-architect); } .role.worker { color: var(--r-worker); } .role.reviewer { color: var(--r-reviewer); }
-.role.qa { color: var(--r-qa); } .role.retrieval { color: var(--r-retrieval); }
+.role.qa, .role.qa_agent { color: var(--r-qa); } .role.retrieval { color: var(--r-retrieval); }
 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 .dot.running, .dot.queued { background: var(--accent); animation: pulse 1.2s infinite; }
 .dot.completed { background: var(--ok); } .dot.failed, .dot.interrupted { background: var(--err); } .dot.cancelled { background: var(--retry); }
@@ -394,6 +394,9 @@ function parseRunsHash(hash) {
 
 // ---------------------------------------------------------------- formatting
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// the role as the reader sees it: the QA roles are spelled out ("scenario" = the scripts, "agent" = the model)
+const ROLE_LABELS = { qa: "quality assurance · scenario", qa_agent: "quality assurance · agent" };
+const roleLabel = (role) => ROLE_LABELS[role] || role;
 const tok = (n) => n == null || isNaN(n) ? "–" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e4 ? (n / 1e3).toFixed(1) + "K" : n >= 1e3 ? (n / 1e3).toFixed(2) + "K" : String(Math.round(n));
 function ms(v) {
   if (v == null || isNaN(v)) return "";
@@ -480,7 +483,7 @@ function renderList() {
       <div class="m"><span class="dot ${esc(r.status)}"></span>
         <span>${esc(r.status)}</span>
         <span class="src ${esc(r.source)}">${r.source === "hermes" ? "HERMES" : "CLAUDE"}</span>
-        <span class="role ${esc(r.role)}">${esc(r.role)}</span>
+        <span class="role ${esc(r.role)}">${esc(roleLabel(r.role))}</span>
         <span>${esc(r.model || "")}</span>${r.provider && r.provider !== "hermes" ? `<span>${esc(r.provider)}</span>` : ""}
         <span>${esc(ago(r.updated_at || r.created_at))}</span></div>
     </div>`).join("") : '<div class="item" style="cursor:default" class="t-mut">No runs yet.</div>';
@@ -552,7 +555,7 @@ function renderSearch() {
   }
   for (const g of groups.values()) {
     const time = g.time != null ? ago(g.time) : "";
-    out.push(`<div class="sgroup"><div class="sg"><b>${esc(String(g.key).slice(0, 14))}</b>${g.roles.length ? " · " + g.roles.map(esc).join(", ") : ""}${g.models.length ? " · " + esc(g.models[0]) : ""} · ${g.matches} match${g.matches === 1 ? "" : "es"}${time ? " · " + esc(time) : ""}</div>
+    out.push(`<div class="sgroup"><div class="sg"><b>${esc(String(g.key).slice(0, 14))}</b>${g.roles.length ? " · " + g.roles.map((role) => esc(roleLabel(role))).join(", ") : ""}${g.models.length ? " · " + esc(g.models[0]) : ""} · ${g.matches} match${g.matches === 1 ? "" : "es"}${time ? " · " + esc(time) : ""}</div>
       ${g.runs.map((r) => `<div class="item sres" data-id="${esc(r.run_id)}" data-seq="${r.snippets && r.snippets.length ? Number(r.snippets[0].seq) : ""}">
         <div class="t">${esc(r.run_id)}</div>
         ${r.snippets.map((s) => `<div class="snip"><span class="sf">${esc(s.field)}</span>${highlight(s.snippet, S.fq)}</div>`).join("")}
@@ -804,7 +807,7 @@ function renderHead(m) {
     <div class="meta"><span><span class="dot ${esc(r.status)}"></span> <b class="fv" data-field="status" data-value="${esc(r.status)}" title="Filter by status">${esc(r.status)}</b></span>
       ${isActive(r) && r.source === "claude-code" ? `<button class="stop" data-stop="${esc(r.run_id)}" title="Stop the Claude Code process and its tools (cancelling the n8n execution does not)"${S.stopping === r.run_id ? " disabled" : ""}>${S.stopping === r.run_id ? "stopping…" : "■ Stop"}</button>` : ""}
       <span class="src fv ${esc(r.source)}" data-field="source" data-value="${esc(r.source)}" title="Filter by source">${r.source === "hermes" ? "HERMES" : "CLAUDE CODE"}</span>
-      <span class="role fv ${esc(r.role)}" data-field="role" data-value="${esc(r.role)}" title="Filter by role">${esc(r.role)}</span>
+      <span class="role fv ${esc(r.role)}" data-field="role" data-value="${esc(r.role)}" title="Filter by role">${esc(roleLabel(r.role))}</span>
       <span>model ${r.model ? `<b class="fv" data-field="model" data-value="${esc(r.model)}" title="Filter by model">${esc(r.model)}</b>` : `<b>default</b>`}</span>${r.provider ? `<span>provider <b class="fv" data-field="provider" data-value="${esc(r.provider)}" title="Filter by provider">${esc(r.provider)}</b></span>` : ""}
       <span>session <a class="fv" data-session="${esc(sessionKey)}" title="Filter by session">${esc(String(r.session_id).slice(0, 12))}</a></span>
       ${r.cwd ? `<span>cwd <b class="fv" data-field="cwd" data-value="${esc(r.cwd)}" title="Filter by cwd">${esc(r.cwd)}</b></span>` : ""}<span>started <b>${esc(r.started_at ? new Date(r.started_at).toLocaleString() : "queued")}</b></span></div>

@@ -17,6 +17,7 @@ from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from . import qa_run_record
 from .board_api import add_board_routes
 from .board_ops_redact import scrub
 from .claude_cli import child_env
@@ -301,7 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.500", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.11.600", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -539,14 +540,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/v1/qa/requests/{request_id}/claim", dependencies=[Depends(authorize)])
     def claim_qa_request(request_id: str, request: Request) -> dict[str, Any]:
         with _qa_refusals(request_id):
-            return qa_store(request).request_dict(qa_store(request).claim(request_id))
+            claimed = qa_store(request).request_dict(qa_store(request).claim(request_id))
+        qa_run_record.start(manager(request), claimed)
+        return claimed
 
     @app.post("/v1/qa/requests/{request_id}/result", dependencies=[Depends(authorize)])
     def finish_qa_request(
         request_id: str, body: QaResultBody, request: Request
     ) -> dict[str, Any]:
         with _qa_refusals(request_id):
-            return qa_store(request).request_dict(
+            finished = qa_store(request).request_dict(
                 qa_store(request).finish(
                     request_id,
                     [
@@ -556,6 +559,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     body.error,
                 )
             )
+        qa_run_record.finish(manager(request), finished)
+        return finished
 
     @app.post("/v1/report-facts", dependencies=[Depends(authorize)])
     def report_facts(body: ReportFactsBody, request: Request) -> dict[str, str]:
