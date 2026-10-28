@@ -875,6 +875,7 @@ function badgeFor(e, tools) {
     case "compact": return ["k-compact", "COMPACT"];
     case "result": return [e.is_error ? "k-result bad" : "k-result", "RESULT"];
     case "end": return [e.status === "completed" ? "k-end" : "k-end bad", "END"];
+    case "qa_scenario": return [e.verdict === "pass" ? "k-end" : e.verdict === "skipped" ? "k-system" : "k-end bad", "QA " + String(e.verdict).toUpperCase()];
     default: return ["k-system", e.kind.toUpperCase()];
   }
 }
@@ -901,6 +902,7 @@ function summaryHTML(e, tools) {
     case "retry": return `attempt ${esc(e.attempt)}/${esc(e.max_retries)} · ${esc(e.status ?? "")} ${esc(e.error ?? "")}${e.delay_ms ? " · wait " + ms(e.delay_ms) : ""}`;
     case "compact": return `context compacted (${esc(e.trigger)}): ${tok(e.pre_tokens)} → ${tok(e.post_tokens)} tokens${e.duration_ms ? " in " + ms(e.duration_ms) : ""}`;
     case "result": return [e.subtype, e.num_turns != null ? e.num_turns + " turns" : "", e.duration_ms ? ms(e.duration_ms) : "", e.cost_usd != null ? "$" + Number(e.cost_usd).toFixed(4) : ""].filter(Boolean).map(esc).join(" · ") + (e.is_error && e.text ? " — " + esc(oneLine(e.text)) : "");
+    case "qa_scenario": return [e.layer, e.scenario || "(no name)", e.reason].filter(Boolean).map((x) => esc(oneLine(x, 200))).join(" · ");
     case "end": return `run ${esc(e.status)}${e.error ? " — " + esc(e.error_code) + ": " + esc(oneLine(e.error)) : ""}`;
     default: return esc(oneLine(e.text || JSON.stringify(e)));
   }

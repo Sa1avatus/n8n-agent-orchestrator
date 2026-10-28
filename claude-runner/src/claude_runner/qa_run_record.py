@@ -22,6 +22,7 @@ QA_PROVIDER = "qa"
 QA_MODEL = "scripted"
 FAILED_LISTED = 10
 SCENARIO_MAX_CHARS = 120
+REASON_MAX_CHARS = 400
 
 
 def run_id_of(request_id: str) -> str:
@@ -33,6 +34,39 @@ def _verdict_of(entry: str | dict[str, Any]) -> tuple[str, str]:
         return entry, ""
     scenario = str(entry.get("scenario") or "")[:SCENARIO_MAX_CHARS]
     return str(entry.get("verdict") or "unknown"), scenario
+
+
+def _reason_of(entry: dict[str, Any]) -> str:
+    """Why a scenario did not pass: the blocker, the failed step, or the first browser error."""
+    parts: list[str] = []
+    if entry.get("blocked_reason"):
+        parts.append(str(entry["blocked_reason"]))
+    if entry.get("failed_step") is not None:
+        parts.append(f"step {entry['failed_step']}")
+    for key in ("failed_reason", "reason"):
+        if entry.get(key):
+            parts.append(str(entry[key]))
+    for key in ("console_errors", "network_errors"):
+        errors = entry.get(key) or []
+        if errors:
+            parts.append(f"{key.split('_')[0]}: {errors[0]}")
+    return "; ".join(parts)[:REASON_MAX_CHARS]
+
+
+def scenario_event(entry: str | dict[str, Any]) -> dict[str, Any]:
+    """One event per verdict, so the run shows every scenario with its own result."""
+    if isinstance(entry, str):
+        return {"kind": "qa_scenario", "scenario": "", "layer": "", "verdict": entry, "reason": ""}
+    event: dict[str, Any] = {
+        "kind": "qa_scenario",
+        "scenario": str(entry.get("scenario") or "")[:SCENARIO_MAX_CHARS],
+        "layer": str(entry.get("layer") or ""),
+        "verdict": str(entry.get("verdict") or "unknown"),
+        "reason": _reason_of(entry),
+    }
+    if entry.get("minutes"):
+        event["minutes"] = entry["minutes"]
+    return event
 
 
 def summarize(verdicts: list[str | dict[str, Any]], error: str) -> tuple[str, dict[str, Any]]:
@@ -102,6 +136,8 @@ def finish(manager: RunManager, request: dict[str, Any]) -> None:
             details=details,
             finished_at=now(),
         )
+        for entry in request.get("verdicts") or []:
+            manager.events.add(run_id, scenario_event(entry))
         verdict_event = {"kind": "qa_verdict", "role": QA_ROLE, "status": status, "summary": output}
         manager.events.add(run_id, verdict_event)
         manager.events.add(run_id, {"kind": "end", "status": status, "error_code": "", "error": ""})

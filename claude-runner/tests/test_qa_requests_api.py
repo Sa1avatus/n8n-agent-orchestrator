@@ -332,3 +332,23 @@ def test_a_clean_qa_request_is_a_completed_run(qa: TestClient) -> None:
     qa.post(RESULT.format(request_id=request_id), json=body, headers=AUTH)
     run = qa.get(f"/v1/runs/{'run_' + request_id}", headers=AUTH).json()
     assert (run["status"], run["role"]) == ("completed", "qa")
+
+
+def test_every_scenario_is_an_event_of_the_qa_run(qa: TestClient) -> None:
+    request_id = _create(qa)
+    qa.post(CLAIM.format(request_id=request_id), headers=AUTH)
+    verdicts = [
+        {"verdict": "pass", "scenario": "login", "layer": "ui"},
+        {"verdict": "fail", "scenario": "save", "failed_step": 3, "failed_reason": "no toast"},
+        "skipped",
+    ]
+    qa.post(RESULT.format(request_id=request_id), json={"verdicts": verdicts}, headers=AUTH)
+    events = qa.get(f"/v1/runs/run_{request_id}/events", headers=AUTH).json()
+    items = events["events"] if isinstance(events, dict) else events
+    scenarios = [e for e in items if e["kind"] == "qa_scenario"]
+    assert [(e["scenario"], e["verdict"]) for e in scenarios] == [
+        ("login", "pass"),
+        ("save", "fail"),
+        ("", "skipped"),
+    ]
+    assert scenarios[1]["reason"] == "step 3; no toast"
