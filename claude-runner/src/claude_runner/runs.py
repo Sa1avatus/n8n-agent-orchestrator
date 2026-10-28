@@ -26,7 +26,7 @@ from .claude_cli import (
     classify,
     transcript_exists,
 )
-from .config import ROLES, Settings, map_host_path
+from .config import ROLES, ProviderProfile, Settings, map_host_path
 from .context_probe import probe_context, resume_compact_threshold, window_env
 from .events import EventLog
 from .git_snapshot import take_snapshot
@@ -180,6 +180,8 @@ class StartRequest:
 class RunManager:
     def __init__(self, settings: Settings, store: Store | None = None) -> None:
         self.settings = settings
+        # providers that exist only in the board database (set by the app when providers_db is on)
+        self.extra_provider: Callable[[str], ProviderProfile | None] | None = None
         self.store = store or Store(settings.data_dir / "runner.sqlite")
         # Owner token for the run rows this manager starts: f"{pid}:{boot_id}"
         # (boot_id is a uuid4 per manager instance). A row carries it as
@@ -262,6 +264,12 @@ class RunManager:
         role = (role or "").strip().lower()
         return role if role in ROLES else "generic"
 
+    def _provider(self, name: str) -> ProviderProfile | None:
+        found = self.settings.provider(name)
+        if found is None and name.strip() and self.extra_provider is not None:
+            return self.extra_provider(name)
+        return found
+
     def public(self, run: dict[str, Any], **extra: Any) -> dict[str, Any]:
         """Hermes-compatible run view: the Run Manager reads status/output/error/session_id."""
         error: dict[str, Any] | str = ""
@@ -308,7 +316,7 @@ class RunManager:
                     # One turn per session at a time: a repeated start (n8n retry, recovery)
                     # attaches to the run that is already working on this session.
                     return self.public(active, attached=True)
-            provider = self.settings.provider(request.provider.strip())
+            provider = self._provider(request.provider.strip())
             fresh_retry = bool(session_id and self.settings.retry_fresh_session_for(provider))
             claude_id, resume, created = self._bind(session_id, cwd, role, fresh=fresh_retry)
             session_id = session_id or claude_id
@@ -435,7 +443,7 @@ class RunManager:
                         run_id, {"kind": "thinking_state", "thinking": self.think_flag()}
                     )
             profile = self.settings.profile(role)
-            provider = self.settings.provider(provider_name)
+            provider = self._provider(provider_name)
             # Cloud thinking: resolve the per-attempt mode for non-local providers when the
             # setting is on; None when the provider is local, the setting is off, or the
             # policy is empty/invalid. An unconfigured cloud provider is still resolved: the
@@ -867,7 +875,7 @@ class RunManager:
             last = self.store.get_run(session["last_run_id"]) if session["last_run_id"] else None
             provider_name = str((last or {}).get("provider") or "")
             model = model or str((last or {}).get("model") or "")
-            provider = self.settings.provider(provider_name)
+            provider = self._provider(provider_name)
             if self.settings.retry_fresh_session_for(provider):
                 # Fresh-session retry is on: a retry will start a new session, so
                 # compacting the old one would be wasted work.

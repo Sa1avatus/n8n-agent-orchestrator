@@ -199,3 +199,16 @@ key `options`:
 ## Roles added by other missions
 
 _To be filled in by the missions that add roles._
+
+### Failover when a provider keeps refusing
+
+A free or remote model answers 429 or 5xx for minutes at a time. The Run Manager retries with the delays of
+`retry_delays_json`; after two retries it starts the same task on the model the chain names for the **next**
+attempt (a local model after a free cloud one), in a fresh session with the full task text, and does not count an
+attempt. It happens once per run; after it the normal retry limits apply to the new model. It does not apply to a
+Worker already on a local provider, to a report task, or when the next attempt names the same model.
+
+The patch is `data-tables/ops/failover_patch.py` (ops, not in git): `Build Worker Run Input` adds
+`fallback_provider`, `fallback_model` and `full_input`; the Run Manager nodes `Normalize Request`, `Retry Controller` and
+`Build Result` carry and use them. `launch_mission.sh` applies it to both workflows at every launch (idempotent).
+The result field `failed_over_from` names the model that was left.

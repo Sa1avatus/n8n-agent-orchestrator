@@ -129,6 +129,16 @@ class ProviderRegistry:
     def env_profiles(self) -> dict[str, ProviderProfile]:
         return dict(self._env_profiles)
 
+    def db_profile(self, name: str) -> ProviderProfile | None:
+        """The profile of a provider that exists only in the database. An env block of the same
+        name always wins (its extra settings are not in the database row)."""
+        key = provider_key(name)
+        if key in self._env_profiles:
+            return None
+        with self._lock:
+            entry = self._entries.get(key)
+        return None if entry is None else entry.profile
+
     def __repr__(self) -> str:
         with self._lock:
             names = sorted(self._entries)

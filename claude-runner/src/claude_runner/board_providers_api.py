@@ -45,6 +45,9 @@ PROVIDER_CALL_TIMEOUT_SECONDS = 30.0
 ANTHROPIC_VERSION = "2023-06-01"
 KEY_MAX_CHARS = 4096
 MODELS_PATHS = {"anthropic": "/v1/models"}  # every other API type lists at /models
+ANTHROPIC_HOST = "api.anthropic.com"
+MODELS_PAGE_SIZE = 1000  # the Anthropic list is paged (20 by default); 1000 is its largest page
+MODELS_MAX_PAGES = 10
 TEST_MAX_TOKENS = 1
 PROBE_MAX_TOKENS = 16
 PROBE_PROMPT = "Reply with one word."
@@ -324,6 +327,30 @@ def _listed_model(item: Any) -> dict[str, Any] | None:
     }
 
 
+def _listing_headers(key: str, api: ApiType, base_url: str) -> dict[str, str]:
+    """Anthropic headers only for Anthropic's own host: a gateway (OpenRouter, LiteLLM) answers them
+    with a paged Anthropic-style list without prices, and its own list is OpenAI-shaped."""
+    if api["id"] == "anthropic" and urlsplit(base_url).hostname != ANTHROPIC_HOST:
+        return {"Authorization": f"Bearer {key}"} if key else {}
+    return _auth_headers(key, api)
+
+
+def _list_models(get: GetFn, url: str, headers: dict[str, str]) -> tuple[int, list[dict[str, Any]]]:
+    """The listed models, following the pages of an Anthropic-style list (``has_more``)."""
+    models: list[dict[str, Any]] = []
+    after = ""
+    for _ in range(MODELS_MAX_PAGES):
+        query = f"?limit={MODELS_PAGE_SIZE}" + (f"&after_id={after}" if after else "")
+        status, payload = get(url + query, headers, PROVIDER_CALL_TIMEOUT_SECONDS)
+        if status != 200:
+            return status, []
+        models.extend(_listed_models(payload))
+        after = str(payload.get("last_id") or "") if isinstance(payload, dict) else ""
+        if not (isinstance(payload, dict) and payload.get("has_more") is True and after):
+            break
+    return 200, models
+
+
 def _listed_models(payload: Any) -> list[dict[str, Any]]:
     items = payload.get("data") if isinstance(payload, dict) else None
     rows = [_listed_model(item) for item in items] if isinstance(items, list) else []
@@ -543,14 +570,15 @@ def _build_router() -> APIRouter:
         provider = _require(store, name)
         api = get_api_type(provider["api_type"])
         key = secrets.get_key(name) or ""
-        url = provider["base_url"].rstrip("/") + MODELS_PATHS.get(api["id"], "/models")
+        base = provider["base_url"].rstrip("/")
+        url = base + MODELS_PATHS.get(api["id"], "/models")
         get = cast(GetFn, request.app.state.provider_get)
         try:
-            status, payload = get(url, _auth_headers(key, api), PROVIDER_CALL_TIMEOUT_SECONDS)
+            status, models = _list_models(get, url, _listing_headers(key, api, base))
         except httpx.HTTPError as exc:
             logger.warning("model list of %s failed: %s", name, type(exc).__name__)
             return {"status": None, "models": []}
-        return {"status": status, "models": _listed_models(payload) if status == 200 else []}
+        return {"status": status, "models": models}
 
     @router.post("/{name}/models")
     def add_model(request: Request, name: str, body: dict[str, Any]) -> dict[str, Any]:

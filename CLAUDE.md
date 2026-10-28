@@ -69,6 +69,11 @@ git diff --check
   or touches the Docker socket. The task reads the outcome in a later run with `GET /v1/host-actions/<id>` and
   never waits for the operator.
 
+- Inputs that live in a container (a volume, a SQLite log, a service database) are not readable by a Worker, which has no
+  docker. The plan states every such input as a prerequisite with a host path ("operator copy at <path>"), the operator stages
+  it before the task, and a Worker that cannot find a named input stops in its first attempt and reports it as a blocker
+  with what it checked, instead of searching for hours or building a partial result.
+
 ## Quality bar (what a reviewer will check)
 
 - Reuse before you write: search for an existing helper (`ahawr-search`, then grep) before adding one. Do not add a

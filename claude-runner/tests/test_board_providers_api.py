@@ -665,7 +665,7 @@ def test_available_models_lists_the_provider_models_and_marks_the_free_ones(
     client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
     body = client.get(f"{PREFIX}/router/available-models").json()
     auth = {"Authorization": "Bearer sk-made-up-list"}
-    assert seen == [("https://r.example/api/v1/models", auth)]
+    assert seen == [("https://r.example/api/v1/models?limit=1000", auth)]
     assert body["status"] == 200
     assert [(m["id"], m["free"], m["price_in"], m["price_out"]) for m in body["models"]] == [
         ("a/free-model:free", True, 0.0, 0.0),
@@ -697,4 +697,41 @@ def test_available_models_uses_the_models_path_of_the_api_type(board) -> None:
 
     client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
     client.get(f"{PREFIX}/claude-like/available-models")
-    assert seen == ["https://c.example/api/v1/models"]
+    assert seen == ["https://c.example/api/v1/models?limit=1000"]
+
+
+def test_a_gateway_with_the_anthropic_type_is_asked_with_a_bearer_key_only(
+    board, fake_post: FakePost
+) -> None:
+    client, _, secrets = board
+    _create(client, name="gate", api_type="anthropic", base_url="https://openrouter.example/api")
+    secrets.set_key("gate", "sk-made-up-gate")
+    seen: list[dict[str, str]] = []
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+        seen.append(headers)
+        return 200, {"data": [{"id": "v/m:free", "pricing": {"prompt": "0", "completion": "0"}}]}
+
+    client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
+    body = client.get(f"{PREFIX}/gate/available-models").json()
+    assert seen == [{"Authorization": "Bearer sk-made-up-gate"}]
+    assert body["models"][0]["free"] is True
+
+
+def test_the_anthropic_host_is_paged_with_its_own_headers(board, fake_post: FakePost) -> None:
+    client, _, secrets = board
+    _create(client, name="vendor", api_type="anthropic", base_url="https://api.anthropic.com")
+    secrets.set_key("vendor", "sk-made-up-vendor")
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> tuple[int, Any]:
+        calls.append((url, headers))
+        if "after_id" not in url:
+            return 200, {"data": [{"id": "m1"}], "has_more": True, "last_id": "m1"}
+        return 200, {"data": [{"id": "m2"}], "has_more": False, "last_id": "m2"}
+
+    client.app.state.provider_get = fake_get  # type: ignore[attr-defined]
+    body = client.get(f"{PREFIX}/vendor/available-models").json()
+    assert [m["id"] for m in body["models"]] == ["m1", "m2"]
+    assert calls[1][0].endswith("?limit=1000&after_id=m1")
+    assert calls[0][1]["x-api-key"] == "sk-made-up-vendor"

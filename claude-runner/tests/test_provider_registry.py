@@ -177,3 +177,35 @@ def test_secrets_stay_out_of_repr_and_logs(
     assert DB_KEY not in repr(registry)
     assert DB_KEY not in caplog.text
     assert "sk-made-up-env" not in caplog.text
+
+
+def test_db_profile_serves_database_only_providers_and_leaves_env_blocks_alone(
+    secrets: ProviderSecrets,
+) -> None:
+    store = FakeStore(
+        [db_row("local", base_url="http://db:4000"), db_row("acme", base_url="http://acme:4000")],
+        stamp="2026-10-26T10:00:00+00:00",
+    )
+    registry = ProviderRegistry(
+        _providers(FAKE_ENV), providers_db=True, store=store, secrets=secrets
+    )
+    acme = registry.db_profile("acme")
+    assert acme is not None and acme.env["ANTHROPIC_BASE_URL"] == "http://acme:4000"
+    assert registry.db_profile("local") is None
+    assert registry.db_profile("nowhere") is None
+
+
+def test_a_run_falls_back_to_a_database_provider_only_without_an_env_block() -> None:
+    from types import SimpleNamespace
+
+    from claude_runner.runs import RunManager
+
+    env_profile = ProviderProfile(name="LOCAL", env={})
+    db_profile = ProviderProfile(name="ACME", env={"ANTHROPIC_BASE_URL": "http://acme:4000"})
+    manager = SimpleNamespace(
+        settings=SimpleNamespace(provider=lambda name: env_profile if name == "local" else None),
+        extra_provider=lambda name: db_profile,
+    )
+    assert RunManager._provider(manager, "local") is env_profile  # type: ignore[arg-type]
+    assert RunManager._provider(manager, "acme") is db_profile  # type: ignore[arg-type]
+    assert RunManager._provider(manager, "  ") is None  # type: ignore[arg-type]

@@ -249,6 +249,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             secrets=secrets,
         )  # type: ignore[arg-type]
         app.state.provider_registry = registry
+        manager.extra_provider = registry.db_profile
         app.state.provider_poll_stop = registry.start_polling()
         app.state.interrupted = await manager.startup()
         app.state.cli_version = await _cli_version(settings)
@@ -300,7 +301,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.400", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.11.500", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
