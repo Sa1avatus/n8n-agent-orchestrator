@@ -187,7 +187,12 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
     log = RetrievalLog(db)
     try:
         report = await usage_report(
-            log, args.runner_url, args.since, args.profile, api_key=args.runner_key
+            log,
+            args.runner_url,
+            args.since,
+            args.profile,
+            api_key=args.runner_key,
+            with_breakdown=True,
         )
     except Exception as exc:
         print(f"error: claude-runner not reachable at {args.runner_url}: {exc}", file=sys.stderr)
@@ -196,11 +201,15 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
         with suppress(Exception):
             log.close()
 
+    profiles_dict, breakdown = report
+
     if args.json:
-        print(json.dumps(report, ensure_ascii=False, indent=2))
+        payload = dict(profiles_dict)
+        payload["breakdown"] = breakdown
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
-    profiles = list(report.keys())
+    profiles = list(profiles_dict.keys())
     if not profiles:
         print("no usage data (empty log or unknown --profile)")
         return 0
@@ -212,7 +221,7 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
     print(f"runner: {args.runner_url}  since: {args.since if args.since is not None else 'all'}")
     print(header)
     for profile in profiles:
-        prof = report[profile]
+        prof = profiles_dict[profile]
         print(
             f"{profile:<10} {prof['selected_files']:>8} {prof['opened_files']:>8} "
             f"{prof['precision']:>9.3f} {prof['recall']:>7.3f} "
@@ -220,13 +229,27 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
         )
 
     for profile in profiles:
-        missed = report[profile]["missed_files"]
+        missed = profiles_dict[profile]["missed_files"]
         if missed:
             print(f"\nmissed files ({profile}):")
             for item in missed[: args.top]:
                 print(f"  {item['requests']:>3}  {item['path']}")
             if len(missed) > args.top:
                 print(f"  … {len(missed) - args.top} more")
+
+    header = f"{'key':<10} {'requests':>8} {'selected':>8} {'precision':>9} {'recall':>7}"
+    for split_name in ("role", "query_type", "day"):
+        splits = breakdown.get(split_name) or {}
+        if not splits:
+            continue
+        print(f"\nbreakdown by {split_name}:")
+        print(header)
+        for key, entry in splits.items():
+            label = key if key else "-"
+            print(
+                f"{label:<10} {entry['requests']:>8} {entry['selected_files']:>8} "
+                f"{entry['precision']:>9.3f} {entry['recall']:>7.3f}"
+            )
     return 0
 
 

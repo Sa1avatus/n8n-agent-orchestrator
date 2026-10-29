@@ -12,12 +12,13 @@ OPTIONS_KEY = "options"
 FIRST_ATTEMPT_KEY = "1"
 MAX_ROLE_KEYS = 10
 MAX_DISTINCT_MODELS = 8
-KNOWN_ROLES = frozenset({"architect", "worker", "reviewer", "service", "qa", "report"})
+KNOWN_ROLES = frozenset({"architect", "worker", "reviewer", "service", "qa", "qa_agent", "report"})
 COMMON_OPTION_KEYS = frozenset({"fresh", "think", "max_polls", "poll_seconds", "max_retries"})
 QA_OPTION_KEYS = COMMON_OPTION_KEYS | {"mode", "max_minutes", "max_cost_usd", "layers", "smoke"}
 QA_MODES = ("off", "final", "ui_tasks", "nightly")
 QA_DEFAULT_OPTIONS: dict[str, Any] = {"mode": "off", "max_minutes": 20, "max_cost_usd": 1}
 QA_LIMIT_KEYS = ("max_minutes", "max_cost_usd")
+QA_AGENT_OPTION_KEYS = COMMON_OPTION_KEYS | set(QA_LIMIT_KEYS)
 QA_LAYERS = ("regression", "api", "ui")
 QA_DEFAULT_LAYERS = ("ui",)
 _ATTEMPT_KEY_PATTERN = re.compile(r"[1-9][0-9]*")
@@ -148,7 +149,12 @@ def _check_model(role: str, element: str, model: Any, providers: Collection[str]
 def _check_options(role: str, options: Any) -> list[str]:
     if not isinstance(options, dict):
         return [f"role {role!r}: {OPTIONS_KEY!r} must be an object"]
-    allowed = QA_OPTION_KEYS if role == "qa" else COMMON_OPTION_KEYS
+    if role == "qa":
+        allowed = QA_OPTION_KEYS
+    elif role == "qa_agent":
+        allowed = QA_AGENT_OPTION_KEYS
+    else:
+        allowed = COMMON_OPTION_KEYS
     errors = [f"role {role!r}: unknown option {key!r}" for key in options if key not in allowed]
     if role == "qa":
         errors.extend(_check_qa_options(role, options))

@@ -492,13 +492,18 @@ class RetrievalService:
                     notes.append("reranker_disabled")
                 else:
                     degraded.append(outcome.degraded_reason)
-            elif outcome.scores:
+            elif outcome.scores or outcome.dropped:
+                # the backend answered; reranking happened even when every score fell
+                # below the threshold, so the dropped documents keep the fused-only branch
                 reranked = True
-                for candidate in window:
-                    if candidate.chunk_id in outcome.scores:
-                        raw, normalized = outcome.scores[candidate.chunk_id]
-                        candidate.reranker_raw = round(raw, 6)
-                        candidate.reranker = round(normalized, 6)
+                if outcome.scores:
+                    for candidate in window:
+                        if candidate.chunk_id in outcome.scores:
+                            raw, normalized = outcome.scores[candidate.chunk_id]
+                            candidate.reranker_raw = round(raw, 6)
+                            candidate.reranker = round(normalized, 6)
+                if not outcome.scores and outcome.dropped:
+                    notes.append("reranker_all_below_threshold")
                 n_reranked = sum(c.reranker is not None for c in window)
                 order = sorted(
                     (c for c in window if c.reranker is not None),

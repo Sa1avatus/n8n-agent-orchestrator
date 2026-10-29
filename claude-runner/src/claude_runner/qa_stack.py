@@ -31,6 +31,7 @@ PRODUCTION_DATABASE_NAMES = frozenset({"postgres", "n8n", "ahawr"})
 QA_POSTGRES_IMAGE = "postgres:16-alpine"
 QA_FIXTURES = ("default", "empty")
 STACK_MODES = ("docker", "inprocess", "postgres")
+STACK_MODE_ENV = "QA_STACK_MODE"
 DASHBOARD_FIXTURE_ENV = "DASHBOARD_QA_FIXTURE"
 DASHBOARD_DSN_ENV = "DASHBOARD_BOARD_PG_DSN"
 # "postgres" mode: a throwaway Postgres server that already runs (the qa-postgres service of the
@@ -119,6 +120,10 @@ def build_qa_dsn(host: str, database: str, password: str) -> str:
     if not _PASSWORD_PATTERN.fullmatch(password):
         raise QaTargetError("password must be made of URL-safe characters")
     return f"postgresql://{QA_USER}:{password}@{host}:{QA_PORT}/{database}"
+
+
+def mode_from_env() -> str:
+    return os.environ.get(STACK_MODE_ENV) or "docker"
 
 
 def stack_up(fixture: str = "default", mode: str = "docker") -> QaStack:

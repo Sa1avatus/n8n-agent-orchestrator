@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import itertools
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from claude_runner.qa_requests import (
+    QA_AGENT_FLAG,
+    QA_AGENT_LAYER,
     QA_CLAIM_WAIT_MINUTES,
     QA_MAX_STORED_REQUESTS,
     QA_RUN_BOUND_MINUTES,
@@ -207,3 +210,53 @@ def test_golden_old_payload_keys_and_round_trip(tmp_path: Path) -> None:
     assert reloaded == store.get(request.id)
     assert reloaded is not None and reloaded.layers is None
     assert store.request_dict(reloaded) == raw
+
+
+def _serialised(store: QaRequestStore, request_id: str) -> str:
+    found = store.get(request_id)
+    if found is None:
+        raise AssertionError(f"request {request_id} not found in store")
+    return json.dumps(store.request_dict(found), sort_keys=True)
+
+
+def test_pinned_serialised_request_and_result(tmp_path: Path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    request = store.create("m1", "/w", "final", "n1")
+    clock.advance(seconds=1)
+    store.claim(request.id)
+    clock.advance(seconds=1)
+    store.finish(request.id, ["pass", "fail"], "")
+    pinned = _serialised(store, request.id)
+    assert '"layers"' not in pinned
+    assert '"agent"' not in pinned
+    assert '"qa_agent"' not in pinned
+    assert '"status": "done"' in pinned
+    assert '"verdicts": ["pass", "fail"]' in pinned
+    assert f'"id": "{request.id}"' in pinned
+
+
+def test_flag_off_agent_layer_is_rejected_and_output_matches_pinned(tmp_path: Path) -> None:
+    clock = Clock()
+    store = _store(tmp_path, clock)
+    request = store.create("m1", "/w", "final", "n1")
+    with pytest.raises(ValueError, match="unknown QA layer: agent"):
+        store.create("m1", "/w", "final", "n2", layers=["agent"])
+    assert store.list_requests() == [request]
+    clock.advance(seconds=1)
+    store.claim(request.id)
+    clock.advance(seconds=1)
+    store.finish(request.id, ["pass", "fail"], "")
+    fresh = _store(tmp_path, clock)
+    assert _serialised(store, request.id) == _serialised(fresh, request.id)
+
+
+def test_flag_on_agent_layer_is_accepted(tmp_path: Path) -> None:
+    store = _store(tmp_path, Clock())
+    request = store.create(
+        "m1", "/w", "final", "n1", layers=[QA_AGENT_LAYER], options={QA_AGENT_FLAG: True}
+    )
+    assert request.layers == ["agent"]
+    assert request_layers(request) == ["agent"]
+    assert store.request_dict(request)["layers"] == ["agent"]
+    assert '"layers": ["agent"]' in _serialised(store, request.id)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import TYPE_CHECKING
 
@@ -16,6 +17,10 @@ if TYPE_CHECKING:
 # Related tests are packed only into the budget that remains after the relevant
 # fragments; they never displace an original selection.
 RELATED_TEST_CAP = 3
+RETRIEVAL_RENDER_PATH_HEADER = (
+    os.environ.get("RETRIEVAL_RENDER_PATH_HEADER", "").lower()
+    in ("1", "true", "yes", "on")
+)
 IMPORT_RE = re.compile(r"^\s*(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_.]*)")
 
 PRECEDENCE_NOTE = (
@@ -345,6 +350,13 @@ def render_context(
         ]
         lines.append("--- " + " | ".join(meta))
         numbered = _numbered_lines(record) if line_numbers else None
-        lines.append("\n".join(numbered) if numbered is not None else record.content)
+        fragment_text = "\n".join(numbered) if numbered is not None else record.content
+        if RETRIEVAL_RENDER_PATH_HEADER:
+            header_path = record.path
+            root = (roots or {}).get(record.corpus_id)
+            if root and record.source_type in ("code", "doc"):
+                header_path = f"{root.rstrip('/')}/{record.path}"
+            fragment_text = f"path: {header_path}\n{fragment_text}"
+        lines.append(fragment_text)
     lines.append("=== END RETRIEVED CONTEXT ===")
     return "\n".join(lines)

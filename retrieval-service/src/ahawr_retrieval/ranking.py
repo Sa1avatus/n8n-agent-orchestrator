@@ -9,6 +9,7 @@ the weights are fixed per profile (profiles.py).
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 from collections.abc import Sequence
 from pathlib import PurePosixPath
@@ -30,6 +31,30 @@ AUTHORITY = {
     "doc": "current_documentation",
     "history": "historical_evidence",
 }
+
+
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Ranking env flags — all OFF by default; behavior is byte-for-byte unchanged when off.
+_RANKING_USE_RRF = _bool_env("RETRIEVAL_RANKING_USE_RRF", False)
+_RANKING_RRF_K = int(os.environ.get("RETRIEVAL_RANKING_RRF_K", "") or "60")
+_RANKING_MAX_FRAGMENTS_PER_FILE = int(
+    os.environ.get("RETRIEVAL_RANKING_MAX_FRAGMENTS_PER_FILE", "") or "0"
+)
+_RANKING_LEXICAL_WEIGHT = float(
+    os.environ.get("RETRIEVAL_RANKING_LEXICAL_WEIGHT", "") or "1.0"
+)
+_RANKING_VECTOR_WEIGHT = float(
+    os.environ.get("RETRIEVAL_RANKING_VECTOR_WEIGHT", "") or "1.0"
+)
+_RANKING_MIN_FINAL_SCORE = float(
+    os.environ.get("RETRIEVAL_RANKING_MIN_FINAL_SCORE", "") or "0.0"
+)
 
 
 def _scope_patterns(scope: Sequence[str]) -> list[str]:
@@ -117,7 +142,18 @@ def rank_candidates(
             + weights.test_file * f["test_file"]
             + f["source_prior"]
         )
-        if not reranked:
+        if _RANKING_USE_RRF:
+            # RRF fusion mode: weighted reciprocal ranks per retriever with configurable k;
+            # a retriever the candidate was not ranked in contributes nothing.
+            lexical_w = _RANKING_LEXICAL_WEIGHT
+            vector_w = _RANKING_VECTOR_WEIGHT
+            rrf_k_value = _RANKING_RRF_K
+            relevance = 0.0
+            if "lexical" in candidate.ranks:
+                relevance += lexical_w / (rrf_k_value + candidate.ranks["lexical"])
+            if "vector" in candidate.ranks:
+                relevance += vector_w / (rrf_k_value + candidate.ranks["vector"])
+        elif not reranked:
             # Reranker disabled or unavailable: fused evidence takes the reranker's weight.
             relevance = (weights.rerank + weights.fused) * candidate.fused_norm
         elif candidate.reranker is not None:
@@ -131,6 +167,20 @@ def rank_candidates(
         if candidate.record is not None and candidate.record.source_type == "history":
             candidate.final *= weights.history_multiplier
     ordered = sorted(candidates, key=lambda c: (-c.final, c.fused_rank, c.chunk_id))
+    # Optional minimum final score cutoff behind flag; off (0.0) leaves behavior unchanged.
+    if _RANKING_MIN_FINAL_SCORE > 0:
+        ordered = [c for c in ordered if c.final >= _RANKING_MIN_FINAL_SCORE]
+    # Per-file fragment cap when set (> 0); when unset (0) no cap is applied.
+    if _RANKING_MAX_FRAGMENTS_PER_FILE > 0:
+        path_counts: dict[str, int] = {}
+        capped_ordered: list[Candidate] = []
+        for candidate in ordered:
+            path = candidate.record.path if candidate.record is not None else candidate.chunk_id
+            count = path_counts.get(path, 0)
+            if count < _RANKING_MAX_FRAGMENTS_PER_FILE:
+                capped_ordered.append(candidate)
+                path_counts[path] = count + 1
+        ordered = capped_ordered
     for rank, candidate in enumerate(ordered, start=1):
         candidate.final_rank = rank
     return ordered

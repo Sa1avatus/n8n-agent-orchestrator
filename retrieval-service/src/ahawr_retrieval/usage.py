@@ -12,12 +12,15 @@ from __future__ import annotations
 import json
 import re
 import shlex
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 
 from .logstore import RetrievalLog
 
+# The MCP tool of the ahawr search, counted like a Bash ``ahawr-search`` command.
+MCP_SEARCH_TOOL = "mcp__ahawr__ahawr_search"
 # File-opening commands recognised inside Bash commands (case-insensitive first word).
 READ_COMMANDS = frozenset(
     {"cat", "sed", "head", "tail", "grep", "awk", "less", "more", "nl", "wc", "sort", "uniq"}
@@ -121,14 +124,35 @@ def _timestamp(value: Any) -> float | None:
     except (TypeError, ValueError):
         pass
     try:
-        from datetime import datetime
-
         return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
 
 
+def _day_of(value: Any) -> str:
+    """The UTC date (``YYYY-MM-DD``) of a request timestamp, or ``""`` when absent."""
+    ts = _timestamp(value)
+    if ts is None:
+        return ""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+
+
 _EXTENSION_RE = re.compile(r"[.][A-Za-z0-9]{1,8}$")
+# Query-type classifier shared with the real-query dataset builder (eval/real_queries.py):
+# "path" when the query names a file or path, "code" when it names an identifier
+# (snake_case, CamelCase or `()`), otherwise "words".
+QUERY_TYPES = ("path", "code", "words")
+_PATH_TOKEN_RE = re.compile(r"[/\\]\S+|\b[\w.-]+\.[A-Za-z][A-Za-z0-9]{0,7}\b")
+_CODE_TOKEN_RE = re.compile(r"\b[a-z][a-z0-9]*(_[a-z0-9]+)+\b|\b[a-z]+[A-Z]\w*|\b\w+\(")
+
+
+def query_type(query: str) -> str:
+    """``path`` if the query names a file or path, ``code`` if it names code, else ``words``."""
+    if _PATH_TOKEN_RE.search(query):
+        return "path"
+    if _CODE_TOKEN_RE.search(query):
+        return "code"
+    return "words"
 
 
 def _is_flag(token: str) -> bool:
@@ -230,7 +254,8 @@ def opened_files_from_events(events: list[dict[str, Any]]) -> tuple[set[str], in
 
     Reads come from ``Read``/``Edit``/``Write`` tool inputs (``file_path``) and from
     file operands inside ``Bash`` commands (``cat``/``sed``/``head``/``tail``/``grep``/…).
-    ``ahawr_search_calls`` counts Bash commands whose first word is ``ahawr-search``.
+    ``ahawr_search_calls`` counts Bash commands whose first word is ``ahawr-search`` and
+    ``mcp__ahawr__ahawr_search`` tool calls.
     """
     opened: set[str] = set()
     ahawr_search_calls = 0
@@ -243,6 +268,8 @@ def opened_files_from_events(events: list[dict[str, Any]]) -> tuple[set[str], in
             path = input.get("file_path")
             if path:
                 opened.add(str(path).strip())
+        elif name == MCP_SEARCH_TOOL:
+            ahawr_search_calls += 1
         elif name == "Bash":
             command = str(input.get("command") or "")
             if not command.strip():
@@ -352,12 +379,50 @@ def _match_run_to_request(
     return None
 
 
+def usage_breakdown(per_request: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Precision / recall / selected-file counts split by role, query type and day.
+
+    ``role`` is the request's ``profile``; ``query_type`` is :func:`query_type` of its
+    ``query_text``; ``day`` is the UTC date of its ``ts`` (an empty ``day`` marks
+    requests without a timestamp). Each split holds one entry per key with
+    ``requests``, ``selected_files``, ``precision`` and ``recall``.
+    """
+    fields = ("profile", "query_type", "day")
+    splits: dict[str, dict[str, dict[str, Any]]] = {field: {} for field in fields}
+    for _rid, req in per_request.items():
+        for field in fields:
+            key = req[field]
+            entry = splits[field].setdefault(
+                key, {"requests": 0, "n_selected": 0, "n_opened": 0, "n_selected_opened": 0}
+            )
+            entry["requests"] += 1
+            entry["n_selected"] += req["n_selected"]
+            entry["n_opened"] += req["n_opened"]
+            entry["n_selected_opened"] += req["n_selected_opened"]
+    for _field, entries in splits.items():
+        for _key, entry in entries.items():
+            entry["selected_files"] = entry["n_selected"]
+            entry["precision"] = (
+                entry["n_selected_opened"] / entry["n_selected"] if entry["n_selected"] else 0.0
+            )
+            entry["recall"] = (
+                entry["n_selected_opened"] / entry["n_opened"] if entry["n_opened"] else 0.0
+            )
+            entry.pop("n_selected")
+            entry.pop("n_selected_opened")
+            entry.pop("n_opened")
+    for _field, entries in splits.items():
+        splits[_field] = dict(sorted(entries.items()))
+    return {"role": splits["profile"], "query_type": splits["query_type"], "day": splits["day"]}
+
+
 def compute_usage(
     requests: list[dict[str, Any]],
     candidates: list[dict[str, Any]],
     runs: list[dict[str, Any]],
     run_events: dict[str, list[dict[str, Any]]],
-) -> dict[str, dict[str, Any]]:
+    with_breakdown: bool = False,
+) -> dict[str, dict[str, Any]] | tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Per-profile usage metrics from in-memory inputs.
 
     Each request is matched to the runs that share its ``role`` (``profile``) and
@@ -371,7 +436,11 @@ def compute_usage(
       * ``recall`` — Σ|selected ∩ opened| / Σ|opened| (0.0 if none opened)
       * ``token_share`` — tokens of selected chunks whose file was opened / Σ context
       * ``missed_files`` — ``[{path, requests}, …]``: files opened but never selected
-      * ``ahawr_search_calls`` — count of ``ahawr-search`` Bash commands
+      * ``ahawr_search_calls`` — count of ``ahawr-search`` Bash commands and MCP search calls
+    The profile report carries no breakdown of its own. With ``with_breakdown`` the
+    return value is a ``(profiles, breakdown)`` tuple: the first element is the
+    per-profile dict (unchanged shape), the second the role / query-type / day split
+    (:func:`usage_breakdown`) computed from the same per-request metrics.
     """
     by_request = selected_files(requests, candidates)
     request_key: dict[str, tuple[str, str]] = {
@@ -420,6 +489,9 @@ def compute_usage(
         selected_tokens = sum(tokens for path, tokens in selected.items())
         opened_selected_tokens = sum(tokens for path, tokens in selected.items() if path in opened)
         per_request[rid] = {
+            "profile": profile_of_request[rid],
+            "query_type": query_type(str(r.get("query_text") or "")),
+            "day": _day_of(r.get("ts")),
             "selected_tokens": selected_tokens,
             "selected_opened_tokens": opened_selected_tokens,
             "n_selected": n_selected,
@@ -491,7 +563,9 @@ def compute_usage(
             "missed_files": missed,
             "ahawr_search_calls": prof["ahawr_search_calls"],
         }
-    return result
+    if not with_breakdown:
+        return result
+    return (result, usage_breakdown(per_request))
 
 
 async def usage_report(
@@ -500,12 +574,18 @@ async def usage_report(
     since: float | None = None,
     profile: str | None = None,
     api_key: str = "",
-) -> dict[str, Any]:
+    with_breakdown: bool = False,
+) -> dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]:
     """Read the retrieval log and the claude-runner API, then compute usage metrics.
 
     ``runner_url`` is the base URL (e.g. ``http://localhost:8899``); the runner API is
     called as ``GET {base}/v1/runs`` and ``GET {base}/v1/runs/{id}/events``. The log
     is closed before returning.
+
+    With ``with_breakdown`` the report is returned as a ``(profiles, breakdown)``
+    tuple: the first element is the per-profile dict (unchanged shape), the second
+    the role / query-type / day split from :func:`usage_breakdown`. With the flag
+    off the result equals the old profile dict exactly.
     """
     requests = log.requests(since)
     request_ids = {r["request_id"] for r in requests}
@@ -530,7 +610,12 @@ async def usage_report(
             ).json()
             run_events[str(run_id)] = body.get("events") or []
 
-    report = compute_usage(requests, candidates, runs, run_events)
+    report = compute_usage(requests, candidates, runs, run_events, with_breakdown=with_breakdown)
+    if isinstance(report, tuple):
+        profiles, breakdown = report
+        if profile is not None:
+            profiles = {profile: profiles[profile]} if profile in profiles else {}
+        return (profiles, breakdown)
     if profile is not None:
         report = {profile: report[profile]} if profile in report else {}
     return report

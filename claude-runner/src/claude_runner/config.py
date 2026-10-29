@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-ROLES = ("architect", "worker", "reviewer", "qa", "generic")
+ROLES = ("architect", "worker", "reviewer", "qa", "qa_agent", "generic")
 PERMISSION_MODES = {
     "default",
     "acceptEdits",
@@ -345,6 +345,13 @@ DEFAULT_PROFILES: dict[str, RoleProfile] = {
         disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY + _REVIEWER_BASH_DENY,
     ),
     "qa": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
+    # qa_agent (docs/qa-agent.md): read-only, reads PNG files with Read; no writes, no
+    # shell commands. The tools set is restricted to Read, Glob and Grep.
+    "qa_agent": RoleProfile(
+        "dontAsk",
+        disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY,
+        tools="Read,Glob,Grep",
+    ),
     "generic": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
 }
 
@@ -468,6 +475,8 @@ class Settings:
     search_first: bool = False
     search_first_roles: tuple[str, ...] = ("worker",)
     search_first_every: int = 6
+    # Give the local Worker the ahawr_search MCP tool (claude_cli.mcp_search_args); off by default.
+    mcp_search: bool = False
     # Fresh-session retry: off by default (a retry compacts and resumes the old session).
     retry_fresh_session: bool = False
     retry_input_chars: int = DEFAULT_RETRY_INPUT_CHARS
@@ -506,6 +515,8 @@ class Settings:
                 raise ValueError(f"{prefix}PERMISSION_MODE: unknown permission mode {mode!r}")
             allowed = _list(env.get(prefix + "ALLOWED_TOOLS"))
             disallowed = _list(env.get(prefix + "DISALLOWED_TOOLS"))
+            tools_env = env.get(prefix + "TOOLS", "").strip()
+            tools = base.tools if tools_env == "" else tools_env
             profiles[role] = replace(
                 base,
                 permission_mode=mode,
@@ -513,7 +524,7 @@ class Settings:
                 disallowed_tools=base.disallowed_tools if disallowed is None else disallowed,
                 append_system_prompt=env.get(prefix + "APPEND_SYSTEM_PROMPT", "").strip(),
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
-                tools=env.get(prefix + "TOOLS", "").strip(),
+                tools=tools,
                 add_dirs=_list(env.get(prefix + "ADD_DIRS")) or [],
             )
         # Empty env var = "use Claude Code's built-in summarizer" (no custom instructions);
@@ -548,10 +559,10 @@ class Settings:
             think_off_after_steps=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS", 0),
             think_loop_repeats=_int(env, "CLAUDE_RUNNER_THINK_LOOP_REPEATS", 4),
             think_loop_hold_steps=_int(env, "CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS", 12),
-            think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
-            mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
             think_stuck_noedit_steps=_int(env, "CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", 12),
             think_stuck_errors=_int(env, "CLAUDE_RUNNER_THINK_STUCK_ERRORS", 3),
+            think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
+            mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
             proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
             worker_git_snapshot=_bool(env, "CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT", False),
             git_snapshot_keep=_int(env, "CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP", 100, 1),
@@ -574,6 +585,7 @@ class Settings:
                 _list(env.get("CLAUDE_RUNNER_SEARCH_FIRST_ROLES")) or ["worker"]
             ),
             search_first_every=_int(env, "CLAUDE_RUNNER_SEARCH_FIRST_EVERY", 6),
+            mcp_search=_bool(env, "CLAUDE_RUNNER_MCP_SEARCH", False),
             retry_fresh_session=_bool(env, "CLAUDE_RUNNER_RETRY_FRESH_SESSION", False),
             retry_input_chars=_int(
                 env, "CLAUDE_RUNNER_RETRY_INPUT_CHARS", DEFAULT_RETRY_INPUT_CHARS, minimum=1

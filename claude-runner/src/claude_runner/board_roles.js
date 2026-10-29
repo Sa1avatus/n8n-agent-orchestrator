@@ -6,9 +6,11 @@ const OPTIONS_KEY = "options";
 const FIRST_ATTEMPT_KEY = "1";
 const MAX_ROLE_KEYS = 10;
 const MAX_DISTINCT_MODELS = 8;
-const KNOWN_ROLES = ["architect", "worker", "reviewer", "service", "qa", "report"];
+const KNOWN_ROLES = ["architect", "worker", "reviewer", "service", "qa", "qa_agent", "report"];
 const COMMON_OPTION_KEYS = ["fresh", "think", "max_polls", "poll_seconds", "max_retries"];
 const QA_OPTION_KEYS = [...COMMON_OPTION_KEYS, "mode", "max_minutes", "max_cost_usd", "layers"];
+// Mirrors QA_AGENT_OPTION_KEYS in roles_config.py: the qa_agent role's options.
+const QA_AGENT_OPTION_KEYS = [...COMMON_OPTION_KEYS, "max_minutes", "max_cost_usd"];
 // Mirrors QA_LAYERS and QA_DEFAULT_LAYERS in roles_config.py.
 const QA_LAYERS = ["regression", "api", "ui"];
 const QA_DEFAULT_LAYERS = ["ui"];
@@ -277,7 +279,7 @@ function checkLayers(name, layers) {
 function checkOptions(role, options) {
   const name = pyRepr(role);
   if (!isDict(options)) return [`role ${name}: ${pyRepr(OPTIONS_KEY)} must be an object`];
-  const allowed = role === "qa" ? QA_OPTION_KEYS : COMMON_OPTION_KEYS;
+  const allowed = role === "qa" ? QA_OPTION_KEYS : role === "qa_agent" ? QA_AGENT_OPTION_KEYS : COMMON_OPTION_KEYS;
   const errors = [...asMap(options).keys()]
     .filter((key) => !allowed.includes(key))
     .map((key) => `role ${name}: unknown option ${pyRepr(key)}`);

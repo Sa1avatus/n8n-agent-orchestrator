@@ -557,6 +557,36 @@ def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:
         assert states == {"claude-runner": "ok", "hermes": "Hermes: 401 (check the API key)"}
 
 
+def test_dashboard_lists_qa_agent_run_and_its_events(client: TestClient) -> None:
+    """A qa_agent run and its events are visible in the dashboard Runs list."""
+    qa = start(
+        client,
+        role="qa_agent",
+        input="TASK T014: verify qa_agent shows in runs\n[[tools]]",
+        provider="local",
+    )
+    wait_for(client, qa["run_id"])
+    with dashboard(client) as dash:
+        # the qa_agent run appears in the unfiltered list, with its role and source set
+        body = dash.get("/api/runs").json()
+        assert body["sources"] == {"claude-runner": "ok", "hermes": "ok"}
+        by_id = {r["run_id"]: r for r in body["runs"]}
+        assert qa["run_id"] in by_id
+        qa_run = by_id[qa["run_id"]]
+        assert qa_run["role"] == "qa_agent"
+        assert qa_run["source"] == "claude-code"
+        # role=qa_agent filter returns only the qa_agent run (AND across fields, OR within)
+        only_qa = dash.get("/api/runs", params={"role": "qa_agent"}).json()["runs"]
+        assert [r["run_id"] for r in only_qa] == [qa["run_id"]]
+        # the run's events are served through the dashboard, with the run summary intact
+        ev = dash.get(f"/api/runs/{qa['run_id']}/events").json()
+        assert ev["run"]["run_id"] == qa["run_id"]
+        assert ev["run"]["role"] == "qa_agent"
+        assert ev["run"]["source"] == "claude-code"
+        kinds = [e["kind"] for e in ev["events"]]
+        assert kinds[-1] == "end"
+
+
 def test_dashboard_multi_value_filters(client: TestClient) -> None:
     w = start(client, role="worker", input="x", provider="local")
     wait_for(client, w["run_id"])

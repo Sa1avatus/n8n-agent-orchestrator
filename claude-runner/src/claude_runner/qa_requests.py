@@ -11,7 +11,7 @@ import json
 import os
 import threading
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -23,6 +23,8 @@ from claude_runner.store import now as utc_now
 QA_CLAIM_WAIT_MINUTES = 5
 QA_RUN_BOUND_MINUTES = QA_MAX_MINUTES
 QA_MAX_STORED_REQUESTS = 200
+QA_AGENT_LAYER = "agent"
+QA_AGENT_FLAG = "qa_agent"
 QA_UI_FILE_PATTERN = (
     r"(^|\/)(board[^\/]*\.(js|css)|[^\/]*\.html|board_api\.py|dashboard\.py|routes\.py)$"
     r"|(^|\/)routes\/"
@@ -62,6 +64,10 @@ def request_layers(request: QaRequest) -> list[str]:
     if request.layers:
         return list(request.layers)
     return list(QA_DEFAULT_LAYERS)
+
+
+def qa_agent_enabled(options: Mapping[str, Any]) -> bool:
+    return options.get(QA_AGENT_FLAG) is True
 
 
 def transition(request: QaRequest, target: str, at: str) -> None:
@@ -111,11 +117,13 @@ class QaRequestStore:
         mode: str,
         nonce: str,
         layers: list[str] | None = None,
+        options: Mapping[str, Any] | None = None,
     ) -> QaRequest:
         if mode not in REQUEST_MODES:
             raise ValueError(f"unknown QA request mode: {mode}")
+        agent_on = qa_agent_enabled(options or {})
         for name in layers or []:
-            if name not in QA_LAYERS:
+            if name not in QA_LAYERS and not (name == QA_AGENT_LAYER and agent_on):
                 raise ValueError(f"unknown QA layer: {name}")
         with self._lock:
             self._expire(self._clock())

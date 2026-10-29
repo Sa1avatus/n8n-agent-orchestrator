@@ -136,6 +136,52 @@ def format_chunks(payload: dict[str, Any], k: int) -> str:
     return "\n".join(lines)
 
 
+def clamp_budget(budget: int) -> int:
+    return min(max(budget, MIN_BUDGET), MAX_BUDGET)
+
+
+# Search gate: when AHAWR_SEARCH_SKIP_PATH is set to a truthy value, skip
+# retrieval for queries that name an existing file/path in the working folder.
+SEARCH_SKIP_PATH_FLAG = os.environ.get("AHAWR_SEARCH_SKIP_PATH", "").lower() in ("1", "true", "on")
+
+
+def search_text(
+    query: str,
+    k: int,
+    budget: int,
+    root: str,
+    *,
+    url: str = DEFAULT_URL,
+    timeout: float = DEFAULT_TIMEOUT,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> str:
+    """Return the top *k* fragments of *query* under *root*, or the reason it is unavailable."""
+    resolved, unavailable = resolve_root(root)
+    if unavailable:
+        return unavailable
+    if SEARCH_SKIP_PATH_FLAG and os.path.exists(query):
+        # Check the query against the working folder (process cwd, not the root).
+        return f"search skipped: query names an existing path ({query})"
+    slug = corpus_slug(resolved)
+    try:
+        payload, reason = asyncio.run(
+            fetch_detailed(
+                url,
+                query,
+                clamp_budget(budget),
+                [slug],
+                {slug: resolved},
+                timeout,
+                transport=transport,
+            )
+        )
+    except (httpx.TimeoutException, httpx.HTTPError, OSError):
+        payload, reason = None, "the service cannot be reached"
+    if payload is None:
+        return f"retrieval unavailable: {reason}"
+    return format_chunks(payload, k)
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -213,37 +259,23 @@ def main(
     args.query = (args.query_option or " ".join(words)).strip()
     if not args.query:
         parser.error("a query is required")
-    budget = min(max(args.budget, MIN_BUDGET), MAX_BUDGET)
+    budget = clamp_budget(args.budget)
     if budget != args.budget:
         print(
             f"ahawr-search: --budget changed to {budget} (allowed {MIN_BUDGET}-{MAX_BUDGET})",
             file=sys.stderr,
         )
-
-    resolved, unavailable = resolve_root(root)
-    if unavailable:
-        print(unavailable)
-        return 0
-
-    slug = corpus_slug(resolved)
-    try:
-        payload, reason = asyncio.run(
-            fetch_detailed(
-                args.url,
-                args.query,
-                budget,
-                [slug],
-                {slug: resolved},
-                args.timeout,
-                transport=transport,
-            )
+    print(
+        search_text(
+            args.query,
+            args.k,
+            budget,
+            root,
+            url=args.url,
+            timeout=args.timeout,
+            transport=transport,
         )
-    except (httpx.TimeoutException, httpx.HTTPError, OSError):
-        payload, reason = None, "the service cannot be reached"
-    if payload is None:
-        print(f"retrieval unavailable: {reason}")
-        return 0
-    print(format_chunks(payload, args.k))
+    )
     return 0
 
 

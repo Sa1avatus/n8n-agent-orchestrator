@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.700 · October 28, 2026** — Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next
+**0.11.800 · October 29, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800; the JSON configuration comes next
 
-Current version: **0.11.700** · Missions completed: **26** · Missions in the queue: **25** · Next milestone: **0.12.0 · 1.0.0**
+Current version: **0.11.800** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -131,6 +131,15 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] ahawr-report-pack: a generated facts pack (report_facts.py), a Reviewer rubric and a Telegram notice after two failed report attempts, as a workflow patch behind the flag report_pack (off by default; the patch is imported into the live workflow, the flag is not turned on and the cloud Worker for reports is not set yet)
 - [x] 0.11.0 release: changelog, version, roadmap (committed, not pushed)
 
+### 0.11.800: the QA agent and RAG quality — Done (October 28 – 29)
+
+0.11.800 · A separate thinking-model QA role with a design contract, and offline measurement of the search quality · 4/4 milestones, 100%
+
+- [x] ahawr-qa-agent: design contract per mission, the role qa_agent (read-only tools, thinking on), deterministic screen capture, strict verdict parser with no false green, layer 'agent' of the QA request behind the flag qa_agent (off by default); two contracts (Providers, Guards). Not run live with a model yet; the Guards contract needs a stack with the Guards tab on
+- [x] ahawr-rag-quality: 90 real queries as an offline set, about 20 search variants measured on hashing and on e5, none passed the threshold; the search gate AHAWR_SEARCH_SKIP_PATH (on in docker-compose) and the usage metrics (precision, recall per role)
+- [x] Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md
+- [x] 0.11.800 release: changelog, version, roadmap
+
 ### 0.12.0: configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
 
 0.12.0 · hermes_config from 41 to 10 columns, one JSON setting per concern; claude-runner becomes ahawr-runner at a queue pause · 0/3 milestones, 0%
@@ -141,10 +150,9 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 
 ### Quality and reach (no version fixed) — Next (Q4 2026 – Q1 2027)
 
-after 0.11.0 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/3 milestones, 0%
+after 0.11.0 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
 
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
-- [ ] ahawr-rag-quality: offline evaluation and lexical precision
 - [ ] Dashboard over the local network and on mobile
 
 ### Version 1.0: more executors — Next (Q4 2026 – Q1 2027)

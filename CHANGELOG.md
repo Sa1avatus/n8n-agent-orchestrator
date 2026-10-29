@@ -3,7 +3,39 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.700** (claude-runner `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.11.800** (claude-runner `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-29 (0.11.800)
+
+Step: the QA agent, the RAG quality tools and the search gate. All new functions are behind flags that are off by default.
+
+- **QA agent** (`qa_contract.py`, `qa_capture.py`, `qa_agent_prompt.py`, `qa_agent_run.py`, `qa_agent_verdicts.py`, role `qa_agent` in
+  `roles_config.py` and `board_roles.js`, `docs/qa-agent.md`): a separate thinking-model role with read-only tools (Read, Glob,
+  Grep) compares the screens of a mission with an agreed design contract (`claude-runner/qa/contracts/<mission>/contract.md` and
+  reference images). The capture is deterministic (Playwright, no model); the agent answers one JSON array and a strict parser
+  fails any missing, unevidenced or malformed answer (no false green). The QA request gets the layer `agent`; the flag `qa_agent`
+  in the options of the `qa` role is off by default and with it off requests, verdicts and prompts are unchanged. Two contracts:
+  Providers and Guards.
+- **Fixes found in the first checks of the QA agent:** the capture ignored `QA_STACK_MODE` and asked for docker inside the QA
+  container (also in the worker path); a click step is followed by a wait for the network and a settle pause; the DOM text of a
+  frame (the dashboard shows the board in a frame) is part of the dump; the Providers contract used a prose step instead of a
+  selector; the Guards reference image had no visible text. Not run live with a model yet; the Guards contract needs a stack with
+  the Guards tab on.
+- **RAG quality** (`search_cli.py`, `retrieval-service` eval and `usage.py`, `docs/rag-quality.md`): an offline set of 90 real
+  queries (`ahawr-retrieval-eval run --dataset real`), about 20 variants of query shape, fusion, fragments and cutoff measured on
+  the hashing embedder and on e5: none passed the threshold, nothing is changed in the defaults. The search gate
+  `AHAWR_SEARCH_SKIP_PATH` (an `ahawr-search` query that is an existing path is skipped) is ON in `docker-compose.yml`; `usage`
+  shows precision and recall by role, query type and day. Comparison of rerankers and embedders on CPU (bge, jina, MiniLM, Horizon,
+  ettin; bge-small, jina, arctic): none beats e5-small without a reranker (`reports/ahawr-rag-quality-report-ru.md`).
+- **MCP servers and masking** (`mcp_search.py`, `mcp_board.py`, `redact.py`, `docs/mcp-search.md`, `docs/mcp-board.md`): an MCP
+  server for search and one for the board (reads, plan edits), the local Worker gets the search tool when `mcp_search` is on
+  (off by default); secrets are masked in text before it is stored or shown.
+- **Failover test** (`test_failover_patch.py`) follows the restore-nodes fix of the failover patch.
+- Tests: `test_qa_contract.py`, `test_qa_capture.py`, `test_qa_agent_*.py`, `test_qa.py`, `test_qa_worker.py`, `test_search_cli.py`,
+  `test_mcp_*.py`, `test_redact.py`, `test_claude_cli.py`, `test_config.py`; retrieval-service `test_usage.py`, `test_ranking*.py`,
+  `test_chunking.py`, `test_context.py`, `test_real_queries.py`, `test_eval_real.py`. On the Windows host `test_search_cli.py` and
+  `test_dashboard.py` fail for POSIX reasons (paths, fake CLI); in the QA container `test_search_cli.py` passes and
+  `test_dashboard.py::test_board_static_whitelist_pattern` fails (the Guards tab code in `dashboard.html`, from 0.11.400).
 
 ## 2026-10-28 (0.11.700)
 

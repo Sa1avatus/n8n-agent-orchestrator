@@ -146,7 +146,7 @@ class EvalRunner:
                 "tasks": len(self.dataset.tasks),
             },
             "index": index_stats,
-            "aggregate": self._aggregate(tasks, cache),
+            "aggregate": self._aggregate(tasks, cache, self.dataset.ks),
             "cache": cache,
             "tasks": tasks,
             "generated_at": time.time(),
@@ -242,11 +242,35 @@ class EvalRunner:
         }
 
     @staticmethod
-    def _aggregate(tasks: list[dict[str, Any]], cache: dict[str, Any]) -> dict[str, Any]:
+    def _aggregate(
+        tasks: list[dict[str, Any]], cache: dict[str, Any], ks: list[int]
+    ) -> dict[str, Any]:
         latencies = [t["latency_ms"] for t in tasks]
         rerank = [t["reranker_ms"] for t in tasks if t["reranker_ms"] is not None]
         strong = [t for t in tasks if not t["weak"]]
+        # flat summary: file-level precision/recall at every k the dataset declares
+        # (k=5 and k=8 for the 'real' dataset), file-level MRR and the p50/p95
+        # latency percentiles, so variant runs can be compared.
+        n = len(tasks)
+        summary: dict[str, Any] = {}
+        for k in ks:
+            summary[f"precision@{k}"] = (
+                sum(t["metrics"].get(f"file_Precision@{k}", 0.0) for t in tasks) / n
+                if n
+                else 0.0
+            )
+            summary[f"recall@{k}"] = (
+                sum(t["metrics"].get(f"file_Recall@{k}", 0.0) for t in tasks) / n
+                if n
+                else 0.0
+            )
+        summary["MRR"] = (
+            sum(t["metrics"].get("file_MRR", 0.0) for t in tasks) / n if n else 0.0
+        )
+        summary["p50_ms"] = percentile(latencies, 0.5)
+        summary["p95_ms"] = percentile(latencies, 0.95)
         result: dict[str, Any] = {
+            "summary": summary,
             "retrieval": mean(t["metrics"] for t in tasks),
             "system": {
                 "retrieval_latency_ms_mean": sum(latencies) / len(latencies) if latencies else 0,
@@ -273,12 +297,13 @@ def run_evaluation(
     dataset: EvalDataset,
     configs: list[EvalConfig],
     out_dir: str | Path,
-    ks: tuple[int, ...] = DEFAULT_KS,
+    ks: tuple[int, ...] | None = None,
     freshness_mode: str = "verify",
 ) -> dict[str, dict[str, Any]]:
+    effective = tuple(ks) if ks is not None else tuple(sorted(set([1, 3, *dataset.ks, 10])))
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    runner = EvalRunner(dataset, out / "work", ks, freshness_mode)
+    runner = EvalRunner(dataset, out / "work", effective, freshness_mode)
     results: dict[str, dict[str, Any]] = {}
     for config in configs:
         result = runner.run_config(config)

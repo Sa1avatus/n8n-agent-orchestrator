@@ -25,6 +25,11 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--config", action="append", required=True, help="repeatable")
     run.add_argument("--baseline", help="config name used as baseline (default: first)")
     run.add_argument("--out", required=True)
+    run.add_argument(
+        "--summary-out",
+        help="write the per-config flat summary (precision@5/8, recall@5/8, MRR, p50_ms, p95_ms) "
+        "as one JSON object per config for variant comparison",
+    )
     run.add_argument("--freshness-mode", default="verify", choices=["trust", "verify", "sync"])
 
     cmp_ = sub.add_parser("compare", help="compare saved result files")
@@ -55,10 +60,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         dataset = EvalDataset.load(args.dataset)
         configs = [EvalConfig.load(p) for p in args.config]
-        results = run_evaluation(dataset, configs, args.out, freshness_mode=args.freshness_mode)
+        out_path = Path(args.out)
+        results = run_evaluation(dataset, configs, out_path, freshness_mode=args.freshness_mode)
         baseline = args.baseline or configs[0].name
-        _write_reports(results, baseline, Path(args.out))
-        print((Path(args.out) / "report.md").read_text(encoding="utf-8"))
+        _write_reports(results, baseline, out_path)
+        if args.summary_out:
+            (Path(args.summary_out).parent).mkdir(parents=True, exist_ok=True)
+            Path(args.summary_out).write_text(
+                json.dumps(
+                    {name: results[name]["aggregate"]["summary"] for name in results},
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+        print((out_path / "report.md").read_text(encoding="utf-8"))
         return 0
 
     if args.command == "compare":

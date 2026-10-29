@@ -28,6 +28,30 @@
       "warnings": []
     },
     {
+      "name": "valid_qa_agent_options",
+      "input": "{\"qa_agent\": {\"1\": \"anthropic/haiku\", \"options\": {\"think\": \"off\", \"max_minutes\": 30, \"max_cost_usd\": 1.5}}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "valid_qa_agent_string_role",
+      "input": "{\"qa_agent\": \"anthropic/sonnet\"}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "qa_agent_unknown_option",
+      "input": "{\"qa_agent\": {\"1\": \"anthropic/haiku\", \"options\": {\"mode\": \"final\"}}}",
+      "errors": [
+        {
+          "code": "unknown_option",
+          "role": "qa_agent",
+          "element": "options.mode"
+        }
+      ],
+      "warnings": []
+    },
+    {
       "name": "valid_qa_layers",
       "input": "{\"qa\": {\"1\": \"anthropic/haiku\", \"options\": {\"layers\": [\"regression\", \"api\", \"ui\"]}}}",
       "errors": [],
@@ -656,6 +680,62 @@
       "expect": {
         "provider": "anthropic",
         "model": "haiku"
+      }
+    },
+    {
+      "name": "qa_agent_options_resolve_without_qa_defaults",
+      "global": {
+        "qa_agent": {
+          "1": "anthropic/haiku",
+          "options": {
+            "think": "off",
+            "max_minutes": 30,
+            "max_cost_usd": 1.5
+          }
+        },
+        "qa": "anthropic/sonnet"
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "qa_agent",
+      "attempt": 1,
+      "expect": {
+        "provider": "anthropic",
+        "model": "haiku",
+        "think": "off",
+        "options": {
+          "fresh": "auto",
+          "think": "off",
+          "max_minutes": 30,
+          "max_cost_usd": 1.5
+        }
+      }
+    },
+    {
+      "name": "qa_agent_absent_leaves_qa_entry_unchanged",
+      "global": {
+        "qa": {
+          "1": "anthropic/sonnet",
+          "options": {
+            "mode": "final",
+            "max_minutes": 20,
+            "max_cost_usd": 1
+          }
+        }
+      },
+      "mission": null,
+      "legacy": {},
+      "role": "qa",
+      "attempt": 1,
+      "expect": {
+        "provider": "anthropic",
+        "model": "sonnet",
+        "options": {
+          "fresh": "auto",
+          "mode": "final",
+          "max_minutes": 20,
+          "max_cost_usd": 1
+        }
       }
     },
     {

@@ -5,20 +5,20 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.11.700 · October 28, 2026",
-    "tag": "Host actions, the queue from the board, providers in the web UI and the report pack are in 0.11.0; the JSON configuration comes next",
+    "date": "0.11.800 · October 29, 2026",
+    "tag": "The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800; the JSON configuration comes next",
     "stats": [
       [
         "Current version",
-        "0.11.700"
+        "0.11.800"
       ],
       [
         "Missions completed",
-        "26"
+        "29"
       ],
       [
         "Missions in the queue",
-        "25"
+        "5"
       ],
       [
         "Next milestone",
@@ -404,6 +404,35 @@
       ]
     },
     {
+      "s": "done",
+      "when": "October 28 – 29",
+      "t": "0.11.800: the QA agent and RAG quality",
+      "v": "0.11.800",
+      "d": "A separate thinking-model QA role with a design contract, and offline measurement of the search quality",
+      "m": [
+        4,
+        4
+      ],
+      "items": [
+        [
+          "ok",
+          "ahawr-qa-agent: design contract per mission, the role qa_agent (read-only tools, thinking on), deterministic screen capture, strict verdict parser with no false green, layer 'agent' of the QA request behind the flag qa_agent (off by default); two contracts (Providers, Guards). Not run live with a model yet; the Guards contract needs a stack with the Guards tab on"
+        ],
+        [
+          "ok",
+          "ahawr-rag-quality: 90 real queries as an offline set, about 20 search variants measured on hashing and on e5, none passed the threshold; the search gate AHAWR_SEARCH_SKIP_PATH (on in docker-compose) and the usage metrics (precision, recall per role)"
+        ],
+        [
+          "ok",
+          "Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md"
+        ],
+        [
+          "ok",
+          "0.11.800 release: changelog, version, roadmap"
+        ]
+      ]
+    },
+    {
       "s": "next",
       "when": "Q1 2027",
       "t": "0.12.0: configuration columns to JSON and the rename to ahawr-runner",
@@ -436,16 +465,12 @@
       "d": "Reviewer calibration, retrieval quality and the dashboard on the local network",
       "m": [
         0,
-        3
+        2
       ],
       "items": [
         [
           "todo",
           "ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite"
-        ],
-        [
-          "todo",
-          "ahawr-rag-quality: offline evaluation and lexical precision"
         ],
         [
           "todo",

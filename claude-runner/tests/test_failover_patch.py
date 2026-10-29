@@ -50,6 +50,18 @@ WORKER_CODE = "\n".join([
 ])
 
 
+RESTORE_NAMES = (
+    "Restore Runner State — Run Context",
+    "Restore Runner State — Status",
+)
+RESTORE_CODE = "\n".join([
+    "const persisted = $json ?? {};",
+    "const runner = $('Evaluate Status').last().json ?? {};",
+    "return [{ json: { ...persisted, model: String(runner.model ?? ''), "
+    "handoff_from_session_id: String(runner.handoff_from_session_id ?? '') } }];",
+])
+
+
 def load() -> ModuleType:
     spec = importlib.util.spec_from_file_location("failover_patch", PATCH_PATH)
     assert spec is not None and spec.loader is not None
@@ -68,6 +80,7 @@ def workflow() -> dict[str, Any]:
             code_node("Normalize Request", NORMALIZE_CODE),
             code_node("Retry Controller", RETRY_CODE),
             code_node("Build Result", RESULT_CODE),
+            *[code_node(name, RESTORE_CODE) for name in RESTORE_NAMES],
         ]
     }
 
@@ -97,11 +110,12 @@ BASE = {
 }
 
 
-def test_the_patch_changes_four_nodes_once() -> None:
+def test_the_patch_changes_the_nodes_once() -> None:
     patch = load()
     wf = workflow()
     assert patch.patch(wf) == [
-        "Build Worker Run Input", "Normalize Request", "Retry Controller", "Build Result"
+        "Build Worker Run Input", "Normalize Request", "Retry Controller", "Build Result",
+        *RESTORE_NAMES,
     ]
     assert patch.patch(wf) == []
     worker = wf["nodes"][0]["parameters"]["jsCode"]
@@ -153,3 +167,23 @@ def test_without_a_fallback_the_behaviour_is_unchanged() -> None:
     state = {**BASE, "fallback_model": "", "fallback_provider": ""}
     assert run_controller(code, {**state, "retry_count": 2})["model"] == "free-model"
     assert run_controller(code, {**state, "retry_count": 6})["retry_exhausted"] is True
+
+
+def test_a_poll_rebuild_of_the_state_keeps_the_fallback_fields() -> None:
+    patch = load()
+    wf = workflow()
+    patch.patch(wf)
+    code = wf["nodes"][4]["parameters"]["jsCode"]
+    script = (
+        "const runner = JSON.parse(process.argv[1]);"
+        "const $ = () => ({ last: () => ({ json: runner }) });"
+        "const f = new Function('$json', '$', require('fs').readFileSync(0, 'utf8'));"
+        "process.stdout.write(JSON.stringify(f({ retry_count: 2 }, $)[0].json));"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, json.dumps(BASE)],
+        input=code, capture_output=True, text=True, check=True,
+    )
+    kept = json.loads(done.stdout)
+    assert (kept["fallback_provider"], kept["fallback_model"]) == ("local", "qwen")
+    assert kept["full_input"] == "FULL TASK" and kept["failed_over_from"] == ""

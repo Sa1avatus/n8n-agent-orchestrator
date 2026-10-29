@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 import pytest
 
-from claude_runner.search_cli import corpus_slug, fetch, main, resolve_root
+from claude_runner.search_cli import corpus_slug, fetch, main, resolve_root, search_text
 
 
 def _payload(chunks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -48,6 +48,44 @@ def _run(
     with redirect_stdout(buf):
         code = main(argv, transport=transport)
     return code, buf.getvalue()
+
+
+# --- exact CLI output (pinned) -----------------------------------------------
+
+
+def test_cli_stdout_is_pinned_for_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    chunks = [
+        {"path": "src/app.py", "start_line": 10, "end_line": 20, "content": "line a\nline b"},
+        {"path": "docs/guide.md", "start_line": 5, "end_line": 8, "content": "chunk2"},
+    ]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    code, out = _run(["q", "--k", "2", "--root", "/workspace"], transport, monkeypatch)
+    assert code == 0
+    assert out == "src/app.py:10-20\nline a\nline b\ndocs/guide.md:5-8\nchunk2\n"
+
+
+def test_cli_stdout_is_pinned_for_empty_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    code, out = _run(["q", "--root", "/workspace"], transport, monkeypatch)
+    assert code == 0
+    assert out == "\n"
+
+
+def test_cli_stdout_is_pinned_for_service_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(503, json={}))
+    code, out = _run(["q", "--root", "/workspace"], transport, monkeypatch)
+    assert code == 0
+    assert out == "retrieval unavailable: the service failed (HTTP 503)\n"
+
+
+def test_cli_stdout_is_pinned_for_folder_outside_allowed_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    code, out = _run(["q", "--root", "/home/user/secret"], transport, monkeypatch)
+    assert code == 0
+    assert out == "folder /home/user/secret is unavailable to the retrieval service\n"
+    assert transport.request is None
 
 
 # --- resolve_root -----------------------------------------------------------
@@ -259,6 +297,45 @@ def test_failure_message_says_what_to_do(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "retrieval unavailable: the service failed (HTTP 503)" in out
 
 
+# --- search_text: the text the CLI prints, without printing ------------------
+
+
+def test_search_text_returns_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
+    chunks = [{"path": "src/app.py", "start_line": 10, "end_line": 20, "content": "line a"}]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    text = search_text("q", 5, 1500, "/workspace", transport=transport)
+    assert text == "src/app.py:10-20\nline a"
+
+
+def test_search_text_returns_unavailable_text_on_service_failure() -> None:
+    down = _CapturingTransport(lambda r: httpx.Response(503, json={}))
+    text = search_text("q", 5, 1500, "/workspace", transport=down)
+    assert text == "retrieval unavailable: the service failed (HTTP 503)"
+
+
+def test_search_text_returns_unavailable_text_when_unreachable() -> None:
+    async def refused(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    text = search_text("q", 5, 1500, "/workspace", transport=_CapturingTransport(refused))
+    assert text == "retrieval unavailable: the service cannot be reached"
+
+
+def test_search_text_clamps_budget_and_sends_root(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    search_text("q", 5, 10**9, "/d/rag-tmp/proj", transport=transport)
+    body = json.loads(transport.request.content)
+    assert body["budget"] == {"max_tokens": 100_000}
+    assert body["corpus_roots"] == {"d-rag-tmp-proj": "/d/rag-tmp/proj"}
+
+
+def test_search_text_reports_folder_outside_allowed_roots() -> None:
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload([])))
+    text = search_text("q", 5, 1500, "/home/user/secret", transport=transport)
+    assert text == "folder /home/user/secret is unavailable to the retrieval service"
+    assert transport.request is None
+
+
 # --- direct fetch checks ----------------------------------------------------
 
 
@@ -280,3 +357,66 @@ def test_fetch_returns_none_on_4xx(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     )
     assert payload is None
+
+
+def test_search_gate_flag_off_behavior_unchanged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    import claude_runner.search_cli as sc
+    monkeypatch.setattr(sc, "SEARCH_SKIP_PATH_FLAG", False)
+    existing_file = tmp_path / "existing.py"
+    existing_file.write_text("print('hello')")
+    monkeypatch.chdir(tmp_path)
+    chunks = [{"path": "src/app.py", "start_line": 1, "end_line": 2, "content": "c"}]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    text = search_text("existing.py", 5, 1500, "/workspace", transport=transport)
+    assert text == "src/app.py:1-2\nc"
+    assert transport.request is not None
+
+
+def test_search_gate_flag_on_existing_path_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    monkeypatch.setenv("AHAWR_SEARCH_SKIP_PATH", "1")
+    # Reload flag by importing fresh; but we can monkeypatch the module-level constant directly.
+    import claude_runner.search_cli as sc
+    monkeypatch.setattr(sc, "SEARCH_SKIP_PATH_FLAG", True)
+    existing_file = tmp_path / "existing.py"
+    existing_file.write_text("print('hello')")
+    monkeypatch.chdir(tmp_path)
+    text = search_text(str(existing_file.name), 5, 1500, "/workspace")
+    assert "search skipped" in text
+    assert "existing path" in text
+
+
+def test_search_gate_flag_on_existing_dir_skipped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    monkeypatch.setenv("AHAWR_SEARCH_SKIP_PATH", "true")
+    import claude_runner.search_cli as sc
+    monkeypatch.setattr(sc, "SEARCH_SKIP_PATH_FLAG", True)
+    existing_dir = tmp_path / "existing_dir"
+    existing_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    text = search_text("existing_dir", 5, 1500, "/workspace")
+    assert "search skipped" in text
+
+
+def test_search_gate_flag_on_non_existing_path_called(monkeypatch: pytest.MonkeyPatch) -> None:
+    import claude_runner.search_cli as sc
+    monkeypatch.setattr(sc, "SEARCH_SKIP_PATH_FLAG", True)
+    chunks = [{"path": "f", "start_line": 1, "end_line": 1, "content": "c"}]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    text = search_text("non_existing_path_123", 5, 1500, "/workspace", transport=transport)
+    assert text == "f:1-1\nc"
+    assert transport.request is not None
+
+
+def test_search_gate_flag_on_normal_words_called(monkeypatch: pytest.MonkeyPatch) -> None:
+    import claude_runner.search_cli as sc
+    monkeypatch.setattr(sc, "SEARCH_SKIP_PATH_FLAG", True)
+    chunks = [{"path": "f", "start_line": 1, "end_line": 1, "content": "c"}]
+    transport = _CapturingTransport(lambda r: httpx.Response(200, json=_payload(chunks)))
+    text = search_text("where is retry delay", 5, 1500, "/workspace", transport=transport)
+    assert text == "f:1-1\nc"
+    assert transport.request is not None

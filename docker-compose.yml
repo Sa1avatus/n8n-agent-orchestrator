@@ -140,6 +140,8 @@ services:
         required: false
 
     environment:
+      # search gate (rag-quality, 2026-10-29): ahawr-search returns 'search skipped' when the query is an existing path; 0 = off
+      - AHAWR_SEARCH_SKIP_PATH=${AHAWR_SEARCH_SKIP_PATH:-1}
       - CLAUDE_RUNNER_WORKSPACE=/workspace
       - HOST_ACTIONS=${HOST_ACTIONS:-}
       - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
@@ -181,6 +183,7 @@ services:
       # gets BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=16000.
       - CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS=${AHAWR_LOCAL_TOOL_OUTPUT_LIMITS:-0}
       - CLAUDE_RUNNER_LOCAL_SHARED_PREFIX=${AHAWR_LOCAL_SHARED_PREFIX:-1}
+      - CLAUDE_RUNNER_MCP_SEARCH=${CLAUDE_RUNNER_MCP_SEARCH:-0}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).
@@ -192,8 +195,8 @@ services:
       # Claude Code sessions (transcripts) survive container restarts and rebuilds.
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
-      # the LiteLLM runtime switches (local_thinking): the runner writes it when a task runs too long
       - ahawr-provider-secrets:/secrets
+      # the LiteLLM runtime switches (local_thinking): the runner writes it when a task runs too long
       - ./litellm/runtime:/app/runtime
       # the Worker's scratch folder (missions use /tmp/dcfr-work) survives container recreation
       - type: bind
@@ -324,12 +327,12 @@ services:
     environment:
       - DASHBOARD_RUNNER_URL=http://claude-runner:8700
       - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
-      - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
       # provider keys (docs/providers.md, section 10): one encrypted file on a volume shared by the runner and the dashboard;
       # the master key stays in the host .env and is not passed to the Worker (the CLI env drops CLAUDE_RUNNER_*)
       - CLAUDE_RUNNER_PROVIDERS_DB=${CLAUDE_RUNNER_PROVIDERS_DB:-1}
       - CLAUDE_RUNNER_SECRETS_FILE=/secrets/provider-secrets.json
       - CLAUDE_RUNNER_SECRETS_KEY=${CLAUDE_RUNNER_SECRETS_KEY:-}
+      - DASHBOARD_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
       - CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY=${CLAUDE_RUNNER_HOST_ACTIONS_OPERATOR_KEY:-}
       # Empty HERMES_API_URL= turns the Hermes source off.
       - DASHBOARD_HERMES_URL=${HERMES_API_URL-http://host.docker.internal:8642}
@@ -344,8 +347,8 @@ services:
       - DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED=${DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED:-0}
       - DASHBOARD_GUARDS_TG_RELAY_ENABLED=${DASHBOARD_GUARDS_TG_RELAY_ENABLED:-0}
       - DASHBOARD_GUARDS_TAB=${DASHBOARD_GUARDS_TAB:-0}
-      - DASHBOARD_GUARDS_STATE_DIR=/guards/state
       - DASHBOARD_GUARDS_EDIT=${DASHBOARD_GUARDS_EDIT:-0}
+      - DASHBOARD_GUARDS_STATE_DIR=/guards/state
       - DASHBOARD_GUARDS_HEARTBEAT_DIR=/guards/heartbeat
       - DASHBOARD_GUARDS_QUEUE_REQUEST_DIR=/guards/requests
       - DASHBOARD_GUARDS_QUEUE_STATE_PATH=/guards/state/queue_seen.json
@@ -371,8 +374,8 @@ services:
           create_host_path: true
       # seen-state of the queue notices and the Telegram relay offset
       - ahawr-guards-state:/guards/state
-    extra_hosts:
       - ahawr-provider-secrets:/secrets
+    extra_hosts:
       # the Hermes API server on the Docker host
       - "host.docker.internal:host-gateway"
 
@@ -433,5 +436,5 @@ volumes:
   claude-runner-home:
   claude-runner-data:
   ahawr-guards-state:
-  qa-runs:
   ahawr-provider-secrets:
+  qa-runs:

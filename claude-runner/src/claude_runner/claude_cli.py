@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import cloud_think
-from .config import CREDENTIAL_VARS, ProviderProfile, RoleProfile, Settings
+from .config import CREDENTIAL_VARS, ProviderProfile, RoleProfile, Settings, provider_key
 
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
@@ -104,6 +104,22 @@ def _search_first_settings_path(every: int, compact_instructions: str) -> str:
     return str(path)
 
 
+def mcp_search_args(settings: Settings, role: str, provider: ProviderProfile | None) -> list[str]:
+    """``--mcp-config`` for ``ahawr-mcp-search``, only for the local Worker; no env, no secrets."""
+    if not (
+        settings.mcp_search
+        and role == "worker"
+        and provider is not None
+        and provider_key(provider.name) == "LOCAL"
+    ):
+        return []
+    path = config_dir() / "mcp-search.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"mcpServers": {"ahawr": {"command": "ahawr-mcp-search", "args": []}}}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return ["--mcp-config", str(path)]
+
+
 MEMORY_RULE = (
     "MEMORY RULE: the machine has a hard memory limit. A MemoryError, 'Killed' or exit code"
     " 137 means your script tried to hold too much in RAM (a whole big file, a huge slice "
@@ -128,6 +144,7 @@ def build_command(
     search_first: bool = False,
     memory_rule: bool = False,
     cloud_think: cloud_think.CloudThinkSetting | None = None,
+    role: str = "",
 ) -> list[str]:
     cmd = [settings.claude_bin, "-p", "--output-format", "stream-json", "--verbose"]
     if settings.live_tokens and not compact:
@@ -163,6 +180,7 @@ def build_command(
             cmd += ["--max-turns", str(max_turns)]
         if settings.max_budget_usd > 0:
             cmd += ["--max-budget-usd", f"{settings.max_budget_usd:g}"]
+        cmd += mcp_search_args(settings, role, provider)
     # The compact-instructions settings file is added only for the local provider, where
     # the small context makes the structured summary matter. Other providers keep the
     # stock summarizer and their prompt cache: the hook only fires on compaction, its text

@@ -17,6 +17,7 @@ Any failure degrades to the fused retrieval order and is reported in the respons
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 from collections.abc import Callable, Iterable, Sequence
@@ -25,6 +26,15 @@ from typing import Protocol
 
 import httpx
 
+# RETRIEVAL_RERANKER_THRESHOLD (applied only when > 0) strips reranker credit from
+# documents whose normalized score is below it: they lose the cross-encoder term in
+# ranking and fall back to the fused-only branch, but they are NOT removed from the
+# result. Only RETRIEVAL_RANKING_MIN_FINAL_SCORE (ranking.py) drops fragments.
+# Off (0.0) leaves behaviour byte-for-byte unchanged.
+_RERANKER_THRESHOLD = float(
+    os.environ.get("RETRIEVAL_RERANKER_THRESHOLD", "") or "0.0"
+)
+
 
 @dataclass
 class RerankOutcome:
@@ -32,6 +42,7 @@ class RerankOutcome:
     latency_ms: float = 0.0
     backend: str = "none"
     degraded_reason: str | None = None
+    dropped: int = 0  # documents the threshold filter removed from the scores
 
 
 class Reranker(Protocol):
@@ -105,9 +116,13 @@ class HttpReranker:
                 for result in response.json()["results"]:
                     raw = float(result["score"])
                     normalized = result.get("normalized_score")
+                    score = float(normalized) if normalized is not None else _sigmoid(raw)
+                    if _RERANKER_THRESHOLD > 0 and score < _RERANKER_THRESHOLD:
+                        outcome.dropped += 1
+                        continue
                     outcome.scores[str(result["id"])] = (
                         raw,
-                        float(normalized) if normalized is not None else _sigmoid(raw),
+                        score,
                     )
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
             outcome.scores = {}
@@ -195,7 +210,11 @@ class LocalReranker:
             if len(raw_scores) != len(documents):
                 raise ValueError("score count does not match document count")
             for (doc_id, _), raw in zip(documents, raw_scores, strict=True):
-                outcome.scores[doc_id] = (raw, _sigmoid(raw))
+                score = _sigmoid(raw)
+                if _RERANKER_THRESHOLD > 0 and score < _RERANKER_THRESHOLD:
+                    outcome.dropped += 1
+                    continue
+                outcome.scores[doc_id] = (raw, score)
         except Exception as exc:
             outcome.scores = {}
             outcome.degraded_reason = f"reranker_unavailable:{type(exc).__name__}"

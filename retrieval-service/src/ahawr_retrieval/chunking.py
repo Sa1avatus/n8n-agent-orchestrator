@@ -25,6 +25,10 @@ DOC_LANGUAGES = {
 # ranking (ranking.py), unless the query names the file. Overridable via
 # RETRIEVAL_LARGE_PATCH_LINES; the value is read once at import time.
 LARGE_PATCH_LINES = int(os.environ.get("RETRIEVAL_LARGE_PATCH_LINES", "1000") or 1000)
+# shortcut: shorter chunking via ChunkingConfig only affects chunk_file (in-memory/eval-time)
+# re-chunking; live retrieval needs a reindex (chunk boundaries are fixed at index time).
+RETRIEVAL_MAX_FRAGMENT_LINES = int(os.environ.get("RETRIEVAL_MAX_FRAGMENT_LINES", "0") or 0)
+RETRIEVAL_MAX_FRAGMENT_CHARS = int(os.environ.get("RETRIEVAL_MAX_FRAGMENT_CHARS", "0") or 0)
 
 CODE_LANGUAGES = {
     ".py": "python",
@@ -237,7 +241,25 @@ def classify_path(path: str) -> tuple[str, str] | None:
 
 
 def chunk_file(path: str, text: str, config: ChunkingConfig | None = None) -> ChunkedFile:
+    # shortcut: shorter chunking changes only chunk_file results; retrieval needs a reindex.
     cfg = config or ChunkingConfig()
+    if RETRIEVAL_MAX_FRAGMENT_LINES > 0 or RETRIEVAL_MAX_FRAGMENT_CHARS > 0:
+        new_lines = (
+            RETRIEVAL_MAX_FRAGMENT_LINES
+            if RETRIEVAL_MAX_FRAGMENT_LINES > 0
+            else cfg.max_lines
+        )
+        new_chars = (
+            RETRIEVAL_MAX_FRAGMENT_CHARS
+            if RETRIEVAL_MAX_FRAGMENT_CHARS > 0
+            else cfg.max_chars
+        )
+        cfg = ChunkingConfig(
+            max_lines=new_lines,
+            max_chars=new_chars,
+            window_overlap=cfg.window_overlap,
+            doc_max_chars=cfg.doc_max_chars,
+        )
     kind = classify_path(path)
     if kind is None:
         raise ValueError(f"unsupported file type: {path}")

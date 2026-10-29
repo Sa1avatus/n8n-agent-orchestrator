@@ -15,6 +15,7 @@ The vector index is still the in-memory ``VectorIndex`` filled from ``embeddings
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -116,11 +117,59 @@ def mapu(text: str) -> str:
     return text.replace("_", "zqz")
 
 
+def _bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Lexical query shaping flags (all off by default)
+_LEXICAL_BOOST_PATH = _bool_env("RETRIEVAL_LEXICAL_SHAPE_BOOST_PATH", False)
+_LEXICAL_KEEP_PHRASE = _bool_env("RETRIEVAL_LEXICAL_SHAPE_KEEP_PHRASE", False)
+_LEXICAL_DROP_NOISE = _bool_env("RETRIEVAL_LEXICAL_SHAPE_DROP_NOISE", False)
+
+_NOISE_TASK_PATTERN = re.compile(r"^T\d+$")
+_NOISE_WORDS = frozenset({
+    "task", "tasks", "work", "project", "review", "check", "test", "build",
+    "update", "change", "fix", "setup", "config", "deploy", "release",
+    "note", "report", "status", "plan", "step", "phase",
+})
+
+
+def _is_path_term(term: str) -> bool:
+    return "/" in term or "." in term
+
+
 def tsquery_from_match(match_query: str) -> str:
-    """FTS5 ``"a" OR "b"`` (see service.fts_match_query) -> ``a | b`` for ``to_tsquery``."""
+    """FTS5 ``"a" OR "b"`` (see service.fts_match_query) -> ``a | b`` for ``to_tsquery``.
+
+    Shaping flags, all off by default: a path term (``/`` or ``.``) becomes its word pieces kept
+    adjacent (``a <-> b``); a quoted phrase is kept as a phrase; noise terms (``T0xx`` task ids,
+    generic task words) are dropped. Off, the query is byte-for-byte the original.
+    """
     terms: list[str] = []
     for raw in _TERM.findall(match_query):
-        for word in re.findall(r"\w+", mapu(raw.replace('""', '"')), flags=re.UNICODE):
+        cleaned = raw.replace('""', '"')
+        if _LEXICAL_KEEP_PHRASE:
+            words_in_phrase = re.findall(r"\w+", mapu(cleaned), flags=re.UNICODE)
+            if words_in_phrase:
+                phrase_term = " <-> ".join(words_in_phrase)
+                if phrase_term not in terms:
+                    terms.append(phrase_term)
+            continue
+        if _LEXICAL_BOOST_PATH and _is_path_term(cleaned):
+            words_in_path = re.findall(r"\w+", mapu(cleaned), flags=re.UNICODE)
+            if words_in_path:
+                path_phrase = " <-> ".join(words_in_path)
+                if path_phrase not in terms:
+                    terms.append(path_phrase)
+            continue
+        for word in re.findall(r"\w+", mapu(cleaned), flags=re.UNICODE):
+            if _LEXICAL_DROP_NOISE and (
+                _NOISE_TASK_PATTERN.fullmatch(word) or word.lower() in _NOISE_WORDS
+            ):
+                continue
             if word not in terms:
                 terms.append(word)
     return " | ".join(terms)

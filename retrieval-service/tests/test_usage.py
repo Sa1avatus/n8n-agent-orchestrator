@@ -19,7 +19,9 @@ from ahawr_retrieval.usage import (
     compute_usage,
     normalize_path,
     opened_files_from_events,
+    query_type,
     selected_files,
+    usage_breakdown,
     usage_report,
 )
 
@@ -135,6 +137,17 @@ def _run(
         "mission_id": mission_id,
         "task_id": task_id,
     }
+
+
+def _query_log_row(
+    request_id: str, ts: float | None, profile: str, query: str
+) -> dict[str, Any]:
+    """A log row whose ``query_text`` carries a query for the query-type split."""
+    row = _log_row(request_id, ts if ts is not None else 0.0, profile, "m1", "T1", 100)
+    if ts is None:
+        row["ts"] = None
+    row["query_text"] = query
+    return row
 
 
 def _events(*entries: dict[str, Any]) -> list[dict[str, Any]]:
@@ -483,6 +496,310 @@ def test_compute_usage_empty_inputs() -> None:
     assert result == {}
 
 
+def test_usage_report_default_shape_has_no_breakdown_key(tmp_log: RetrievalLog) -> None:
+    # The default (opt-in off) usage_report result is the old profile dict: no
+    # top-level "breakdown" key; compute_usage([], [], [], {}) is {} again.
+    requests = [_log_row("r1", 100.0, "worker", "m1", "T1", 100)]
+    candidates = [_cand("r1", "c1", "ws", "app/parser.py", 30, True)]
+    _write_log(tmp_log, requests, candidates)
+
+    async def run():
+        async with respx.mock(assert_all_called=False) as mock:
+            mock.get(url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs\?limit=\d+$").respond(
+                json={"runs": []}
+            )
+            return await usage_report(tmp_log, RUNNER_URL)
+
+    report = asyncio.run(run())
+    assert "breakdown" not in report
+    assert report["worker"]["selected_files"] == 1
+
+
+def test_usage_breakdown_function() -> None:
+    # The public breakdown function splits per-request metrics by role, query type
+    # and day; empty splits stay as empty dicts and keys sort.
+    per_request = {
+        "r1": {
+            "profile": "worker",
+            "query_type": "path",
+            "day": "2023-11-14",
+            "n_selected": 2,
+            "n_opened": 1,
+            "n_selected_opened": 1,
+        },
+        "r2": {
+            "profile": "reviewer",
+            "query_type": "words",
+            "day": "",
+            "n_selected": 1,
+            "n_opened": 0,
+            "n_selected_opened": 0,
+        },
+    }
+    breakdown = usage_breakdown(per_request)
+    assert breakdown["role"]["worker"] == {
+        "requests": 1,
+        "selected_files": 2,
+        "precision": pytest.approx(0.5),
+        "recall": pytest.approx(1.0),
+    }
+    assert breakdown["role"]["reviewer"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert breakdown["query_type"]["path"] == {
+        "requests": 1,
+        "selected_files": 2,
+        "precision": pytest.approx(0.5),
+        "recall": pytest.approx(1.0),
+    }
+    assert breakdown["query_type"]["words"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert breakdown["day"][""] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert breakdown["day"]["2023-11-14"] == {
+        "requests": 1,
+        "selected_files": 2,
+        "precision": pytest.approx(0.5),
+        "recall": pytest.approx(1.0),
+    }
+
+
+def test_query_type_classifier() -> None:
+    assert query_type("Fix app/parser.py totals") == "path"
+    assert query_type("read /ws/app/parser.py and edit it") == "path"
+    assert query_type("compute_total must skip tax lines") == "code"
+    assert query_type("aBc identifier here") == "code"
+    assert query_type("sum invoice totals") == "words"
+    assert query_type("") == "words"
+    assert query_type("fix the parser file totals") == "words"
+
+
+def test_breakdown_by_role_query_type_and_day() -> None:
+    # Three requests across two roles, two query types and three UTC days (one request
+    # per day); R1 (worker) opens a file selected by r1, R3 (reviewer) opens a file
+    # selected by r3, and R3 also falls inside r2's window (so it counts for r2 too).
+    requests = [
+        _query_log_row("r1", 1700000000.0, "worker", "Fix app/parser.py totals"),
+        _query_log_row("r2", 1700086400.0, "reviewer", "sum invoice totals"),
+        _query_log_row("r3", 1700172800.0, "worker", "compute_total must skip tax lines"),
+    ]
+    candidates = [
+        _cand("r1", "c1", "ws", "app/parser.py", 30, True),
+        _cand("r1", "c2", "ws", "web/client.ts", 20, True),
+        _cand("r2", "c3", "ws", "tests/test_parser.py", 15, True),
+        _cand("r3", "c4", "ws", "other/file.py", 10, True),
+    ]
+    runs = [
+        _run("R1", 1700000100.0, mission_id="m1", task_id="T1"),
+        _run("R3", 1700172900.0, mission_id="m1", task_id="T1", role="reviewer"),
+    ]
+    events_r1 = _events(
+        {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/app/parser.py"}}
+    )
+    events_r3 = _events(
+        {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/other/file.py"}}
+    )
+    result, breakdown = compute_usage(
+        requests, candidates, runs, {"R1": events_r1, "R3": events_r3}, with_breakdown=True
+    )
+    # role: worker = r1 + r3 (n_selected 3, n_opened 1, n_selected_opened 1);
+    # reviewer = r2 (n_selected 1, n_opened 1, n_selected_opened 0 — R3 opens
+    # other/file.py, not r2's tests/test_parser.py).
+    role = breakdown["role"]
+    assert role["worker"] == {
+        "requests": 2,
+        "selected_files": 3,
+        "precision": pytest.approx(1 / 3),
+        "recall": pytest.approx(1.0),
+    }
+    assert role["reviewer"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    # query_type: path = r1 (path query, 1 of its 2 selected files opened);
+    # code = r3 (its opened file other/file.py was selected); words = r2 (no matched run).
+    by_type = breakdown["query_type"]
+    assert by_type["path"] == {
+        "requests": 1,
+        "selected_files": 2,
+        "precision": pytest.approx(0.5),
+        "recall": pytest.approx(1.0),
+    }
+    assert by_type["code"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert by_type["words"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    # day (UTC): one request per day.
+    by_day = breakdown["day"]
+    assert by_day["2023-11-14"] == {
+        "requests": 1,
+        "selected_files": 2,
+        "precision": pytest.approx(0.5),
+        "recall": pytest.approx(1.0),
+    }
+    assert by_day["2023-11-15"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert by_day["2023-11-16"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    # The existing profile metrics are unchanged and carry no breakdown of their own.
+    assert "breakdown" not in result["worker"]
+    assert result["worker"]["precision"] == pytest.approx(1 / 3)
+    assert result["reviewer"]["recall"] == pytest.approx(0.0)
+    # The profile dict alone (flag off) is the old output.
+    plain = compute_usage(requests, candidates, runs, {"R1": events_r1, "R3": events_r3})
+    assert "breakdown" not in plain
+    assert plain == result
+
+
+def test_breakdown_keeps_empty_query_type_and_day() -> None:
+    # A request with no query text classifies as "words"; a request with no timestamp
+    # gets day "" (kept as a key so nothing is silently dropped).
+    requests = [_query_log_row("r1", None, "worker", "")]
+    candidates = [_cand("r1", "c1", "ws", "app/parser.py", 30, True)]
+    result, breakdown = compute_usage(requests, candidates, [], {}, with_breakdown=True)
+    assert breakdown["query_type"]["words"] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+    assert breakdown["day"][""] == {
+        "requests": 1,
+        "selected_files": 1,
+        "precision": pytest.approx(0.0),
+        "recall": pytest.approx(0.0),
+    }
+
+
+def test_breakdown_e2e_in_usage_report(tmp_log: RetrievalLog) -> None:
+    # The end-to-end path (log + mocked runner API) also carries the breakdown.
+    requests = [
+        _query_log_row("r1", 100.0, "worker", "Fix app/parser.py totals"),
+        _query_log_row("r2", 200.0, "reviewer", "sum invoice totals"),
+    ]
+    candidates = [
+        _cand("r1", "c1", "ws", "app/parser.py", 30, True),
+        _cand("r2", "c2", "ws", "web/client.ts", 10, True),
+    ]
+    _write_log(tmp_log, requests, candidates)
+    runs = [_run("R1", 110.0, mission_id="m1", task_id="T1")]
+    run_events = {
+        "R1": _events(
+            {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/app/parser.py"}}
+        )
+    }
+
+    async def run():
+        async with respx.mock(assert_all_called=False) as mock:
+            mock.get(url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs\?limit=\d+$").respond(
+                json={"runs": runs}
+            )
+            mock.get(
+                url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs/{re.escape('R1')}/events\?after=\d+$"
+            ).respond(
+                json={"run": {"run_id": "R1"}, "events": run_events["R1"], "next": 1, "live": None}
+            )
+            return await usage_report(tmp_log, RUNNER_URL, with_breakdown=True)
+
+    report, breakdown = asyncio.run(run())
+    assert breakdown["role"]["worker"]["precision"] == pytest.approx(1.0)
+    assert breakdown["role"]["reviewer"]["precision"] == pytest.approx(0.0)
+    assert breakdown["query_type"]["path"]["requests"] == 1
+    assert breakdown["query_type"]["words"]["requests"] == 1
+    # Existing profile output is unchanged.
+    assert report["worker"]["selected_files"] == 1
+    assert report["worker"]["precision"] == pytest.approx(1.0)
+
+
+def test_cli_usage_command_prints_profiles_and_breakdowns(tmp_log: RetrievalLog, capsys) -> None:
+    # The CLI usage subcommand prints the profile table and the breakdown by role,
+    # query_type and day, and exits 0; with an empty log it prints "no usage data".
+    from ahawr_retrieval.cli import main
+
+    requests = [
+        _query_log_row("r1", 100.0, "worker", "Fix app/parser.py totals"),
+        _query_log_row("r2", 200.0, "reviewer", "sum invoice totals"),
+    ]
+    candidates = [
+        _cand("r1", "c1", "ws", "app/parser.py", 30, True),
+        _cand("r2", "c2", "ws", "web/client.ts", 10, True),
+    ]
+    _write_log(tmp_log, requests, candidates)
+    runs = [_run("R1", 110.0, mission_id="m1", task_id="T1")]
+    run_events = {
+        "R1": _events(
+            {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/app/parser.py"}}
+        )
+    }
+
+    async def serve():
+        async with respx.mock(assert_all_called=False) as mock:
+            mock.get(url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs\?limit=\d+$").respond(
+                json={"runs": runs}
+            )
+            mock.get(
+                url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs/R1/events\?after=\d+$"
+            ).respond(
+                json={"run": {"run_id": "R1"}, "events": run_events["R1"], "next": 1, "live": None}
+            )
+            code = main(["usage", "--runner-url", RUNNER_URL, "--db", tmp_log.path])
+            assert code == 0
+
+    asyncio.run(serve())
+    out = capsys.readouterr().out
+    # Profile table.
+    assert "worker" in out and "reviewer" in out
+    # Breakdown tables.
+    assert "breakdown by role" in out
+    assert "breakdown by query_type" in out
+    assert "breakdown by day" in out
+
+
+def test_cli_usage_empty_log_prints_no_usage_data(tmp_log: RetrievalLog, capsys) -> None:
+    from ahawr_retrieval.cli import main
+
+    async def serve():
+        async with respx.mock(assert_all_called=False) as mock:
+            mock.get(url__regex=rf"{re.escape(RUNNER_URL)}/v1/runs\?limit=\d+$").respond(
+                json={"runs": []}
+            )
+            code = main(["usage", "--runner-url", RUNNER_URL, "--db", tmp_log.path])
+            assert code == 0
+
+    asyncio.run(serve())
+    out = capsys.readouterr().out
+    assert "no usage data" in out
+
+
 # ---------------------------------------------------------------------------
 # End-to-end tests with a temporary sqlite log and respx-mocked runner API
 # ---------------------------------------------------------------------------
@@ -720,3 +1037,33 @@ def test_usage_counts_opened_files_for_runs_that_only_have_a_title() -> None:
     worker = compute_usage(requests, candidates, runs, {"W1": events})["worker"]
     assert worker["opened_files"] == 1 and worker["precision"] == 1.0
     assert worker["ahawr_search_calls"] == 1
+
+
+def test_usage_counts_mcp_search_only_transcript_as_search() -> None:
+    requests = [_log_row("r1", 100.0, "worker", "m1", "T1", 100)]
+    candidates = [_cand("r1", "c1", "ws", "app/parser.py", 30, True)]
+    runs = [_run("R1", 110.0, mission_id="m1", task_id="T1")]
+    events = _events(
+        {"kind": "tool_use", "name": "mcp__ahawr__ahawr_search", "input": {"query": "where"}},
+    )
+    worker = compute_usage(requests, candidates, runs, {"R1": events})["worker"]
+    assert worker["ahawr_search_calls"] == 1
+    assert worker["opened_files"] == 0
+
+
+def test_usage_counts_both_search_channels() -> None:
+    requests = [_log_row("r1", 100.0, "worker", "m1", "T1", 100)]
+    candidates = [_cand("r1", "c1", "ws", "app/parser.py", 30, True)]
+    runs = [_run("R1", 110.0, mission_id="m1", task_id="T1")]
+    events = _events(
+        {"kind": "tool_use", "name": "mcp__ahawr__ahawr_search", "input": {"query": "a"}},
+        {"kind": "tool_use", "name": "Bash", "input": {"command": "ahawr-search --corpus ws 'b'"}},
+        {"kind": "tool_use", "name": "mcp__ahawr__ahawr_search", "input": {"query": "c"}},
+        {"kind": "tool_use", "name": "Read", "input": {"file_path": "/ws/app/parser.py"}},
+    )
+    opened, searches = opened_files_from_events(events)
+    assert opened == {"/ws/app/parser.py"}
+    assert searches == 3
+    worker = compute_usage(requests, candidates, runs, {"R1": events})["worker"]
+    assert worker["ahawr_search_calls"] == 3
+    assert worker["opened_files"] == 1

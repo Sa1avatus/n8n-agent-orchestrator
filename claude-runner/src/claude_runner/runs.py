@@ -494,6 +494,7 @@ class RunManager:
                 search_first=self.settings.search_first_for(role, provider),
                 memory_rule=role == "worker" and self.settings.proc_data_limit_mb > 0,
                 cloud_think=ct_setting,
+                role=role,
             )
             timeout = (
                 self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds

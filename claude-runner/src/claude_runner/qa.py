@@ -18,9 +18,20 @@ from collections.abc import Callable, Collection, Mapping
 from pathlib import Path
 from typing import Any
 
-from . import board_pg, board_ready, qa_api, qa_regression, qa_runner, qa_smoke, qa_stack, qa_worker
+from . import (
+    board_pg,
+    board_ready,
+    qa_api,
+    qa_capture,
+    qa_contract,
+    qa_regression,
+    qa_runner,
+    qa_smoke,
+    qa_stack,
+    qa_worker,
+)
 from .board import BoardStore, InMemoryBoardStore
-from .qa_runner import TAGS
+from .qa_runner import PLAYWRIGHT_HINT, TAGS
 from .qa_stack import QA_FIXTURES, QaStackError, stack_from_id
 from .roles_config import resolve
 
@@ -105,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="wall-clock minutes for one crawl",
     )
     smoke.set_defaults(handler=_smoke)
+    capture = commands.add_parser(
+        "capture", help="capture the screens of a mission's contract and print the manifest path"
+    )
+    capture.add_argument("--contract", required=True, help="mission id whose contract is captured")
+    capture.set_defaults(handler=_capture)
     return parser
 
 
@@ -323,6 +339,41 @@ def _merged_smoke_verdict(runs: list[tuple[str, dict[str, Any]]]) -> dict[str, A
         findings.extend({**finding, "lang": lang} for finding in verdict.get("findings", []))
     merged["findings"] = findings
     return merged
+
+
+def _capture(args: argparse.Namespace) -> int:
+    mission_id = args.contract
+    result = qa_contract.load_contract(mission_id, contracts_root=qa_contract.CONTRACTS_ROOT)
+    if isinstance(result, qa_contract.NoContract):
+        raise ValueError(str(result))
+    errors = qa_contract.validate_contract(result, qa_contract.CONTRACTS_ROOT / mission_id)
+    if errors:
+        raise ValueError("; ".join(errors))
+    stack = qa_stack.stack_up(mode=_stack_mode(None))
+    try:
+        try:
+            manifest = _capture_screens(result, stack.dashboard_url)
+        except Exception as error:  # capture is the only step that can fail here
+            log.error("capture failed: %s", error)
+            raise ValueError(f"capture failed: {error}") from error
+    finally:
+        qa_stack.stack_down(stack)
+    print(f"manifest: {Path(manifest[0]['png']).parent}")
+    return 0
+
+
+def _capture_screens(contract: qa_contract.Contract, base_url: str) -> list[dict[str, str]]:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as error:
+        raise ValueError(PLAYWRIGHT_HINT) from error
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            return qa_capture.capture(contract, page, base_url)
+        finally:
+            browser.close()
 
 
 def _nightly_runners(

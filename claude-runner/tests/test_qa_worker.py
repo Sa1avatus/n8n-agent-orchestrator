@@ -18,9 +18,10 @@ from typing import Any, cast
 
 import pytest
 
-from claude_runner import qa_worker
+from claude_runner import qa_agent_run, qa_worker
 from claude_runner.guard_heartbeat import TIME_FORMAT
 from claude_runner.qa_requests import QA_UI_FILE_PATTERN
+from claude_runner.qa_stack import QaStack, QaStackError
 
 OPS_DIR = Path(__file__).resolve().parents[1].parent / "data-tables" / "ops"
 PATCH_FILE = OPS_DIR / "qa_workflow_patch.py"
@@ -444,6 +445,12 @@ def test_missing_regression_executable_is_reported_not_raised(tmp_path: Path) ->
 
 
 class _FakeResponse:
+    def __init__(self, payload: dict[str, Any] | bytes = b"{}") -> None:
+        if isinstance(payload, bytes):
+            self._data = payload
+        else:
+            self._data = json.dumps(payload).encode("utf-8")
+
     def __enter__(self) -> _FakeResponse:
         return self
 
@@ -451,7 +458,7 @@ class _FakeResponse:
         return None
 
     def read(self) -> bytes:
-        return b"{}"
+        return self._data
 
 
 def _fake_runner(
@@ -537,3 +544,289 @@ def test_layers_regression_ui_post_one_combined_list(
         "error": "",
     }
     assert calls == ["regression", "ui"]
+
+
+# --- T013: agent layer integration tests ---
+
+_NO_SLEEP = lambda _seconds: None  # noqa: E731
+
+
+def _fake_contracts_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    root = tmp_path / "contracts"
+    root.mkdir()
+    monkeypatch.setattr(qa_worker, "CONTRACTS_ROOT", root)
+    return root
+
+
+def _write_contract(root: Path, mission_id: str, items: list[str]) -> Path:
+    contract_dir = root / mission_id
+    contract_dir.mkdir(parents=True)
+    lines = [f"# Board: {mission_id}", ""]
+    lines.append("## Screen 1")
+    lines.append("- Open: route /home")
+    lines.append("- Viewport: 1280x800")
+    lines.append("- Layout: cards")
+    lines.append("- Reference image: ref.png")
+    for i, text in enumerate(items, start=1):
+        lines.append(f"- C{i}: {text}")
+    lines.append("")
+    (contract_dir / "contract.md").write_text("\n".join(lines), encoding="utf-8")
+    (contract_dir / "ref.png").write_text("fake-png", encoding="utf-8")
+    return contract_dir
+
+
+def _fake_capture(monkeypatch: pytest.MonkeyPatch, manifest: list[dict[str, str]]) -> None:
+    def fake_capture(contract: Any) -> tuple[list[dict[str, str]], str]:
+        return manifest, ""
+
+    monkeypatch.setattr(qa_worker, "_capture_agent_screens", fake_capture)
+
+
+class _FakeStack:
+    dashboard_url = "http://127.0.0.1:1234"
+
+
+def mock_stack() -> _FakeStack:
+    return _FakeStack()
+
+
+def _combined_urlopen(
+    monkeypatch: pytest.MonkeyPatch,
+    agent_payloads: list[dict[str, Any]] | None,
+) -> list[urllib.request.Request]:
+    """A urlopen fake that handles both QA worker API calls and agent run calls.
+
+    Non-run requests (claim, result) get ``{}``; run-related requests consume the
+    agent payloads in order.
+    """
+    sent: list[urllib.request.Request] = []
+    run_index = [0]
+
+    def urlopen(request: urllib.request.Request, timeout: float) -> _FakeResponse:
+        sent.append(request)
+        url = request.full_url
+        if "/v1/runs" in url:
+            if agent_payloads is None:
+                raise urllib.error.URLError("unexpected agent run call")
+            index = min(run_index[0], len(agent_payloads) - 1)
+            run_index[0] += 1
+            return _FakeResponse(json.dumps(agent_payloads[index]).encode("utf-8"))
+        return _FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return sent
+
+
+def _agent_all_pass_payloads() -> list[dict[str, Any]]:
+    final_text = json.dumps([
+        {"item": "C1", "verdict": "pass", "evidence": "run/Screen.png", "reason": ""},
+        {"item": "C2", "verdict": "pass", "evidence": "run/Screen 1.png", "reason": ""},
+    ])
+    return [
+        {"run_id": "run-agent-1"},
+        {"status": "completed", "output": final_text},
+    ]
+
+
+def _agent_payloads_with(final_text: str, run_id: str) -> list[dict[str, Any]]:
+    return [{"run_id": run_id}, {"status": "completed", "output": final_text}]
+
+
+def test_flag_off_without_layers_posts_t012_bytes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    monkeypatch.setattr(qa_worker, "_run_child", lambda: (["pass", "skipped"], None, ""))
+    sent = _fake_runner(monkeypatch)
+
+    qa_worker._serve_locked({"id": "req-golden"})
+
+    assert sent[1].data == b'{"verdicts": ["pass", "skipped"], "error": ""}'
+
+
+def test_flag_off_with_scripted_layers_has_no_agent_verdict(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    calls: list[str] = []
+    monkeypatch.setattr(qa_worker, "_layer_runners", lambda _row: _recording_runners(calls))
+    sent = _fake_runner(monkeypatch)
+
+    qa_worker._serve_locked({"id": "req-layers", "layers": ["regression", "ui"]})
+
+    body = json.loads(cast(bytes, sent[1].data or b""))
+    assert all("agent" not in str(v.get("layer", "")) for v in body["verdicts"])
+    assert body["error"] == ""
+
+
+def test_flag_off_with_agent_layer_runs_no_capture_no_agent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """With the flag off, layer 'agent' is ignored: no capture, no agent run."""
+    calls: list[str] = []
+
+    def _record_capture(_contract: Any) -> tuple[list[dict[str, str]], str]:
+        calls.append("capture")
+        return [], ""
+
+    def _record_run(_prompt: str, _wd: str, **_: Any) -> qa_agent_run.AgentOutcome:
+        calls.append("run_agent")
+        return qa_agent_run.AgentOutcome("completed", final_text="[]")
+
+    monkeypatch.setattr(qa_worker, "_capture_agent_screens", _record_capture)
+    monkeypatch.setattr(qa_agent_run, "run_agent", _record_run)
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    _fake_runner(monkeypatch)
+
+    qa_worker._serve_locked({
+        "id": "req-flagoff-agent",
+        "layers": ["agent"],
+        "mission_id": "mission-x",
+        "working_directory": str(tmp_path),
+        "options": {},
+    })
+
+    assert calls == []
+
+
+def test_flag_on_all_pass_gateway_passes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _fake_contracts_root(monkeypatch, tmp_path)
+    _write_contract(root, "mission-1", ["check C1", "check C2"])
+    _fake_capture(monkeypatch, [
+        {"screen": "Screen 1", "png": "run/Screen 1.png", "dom": "run/Screen 1.dom.txt", "error": ""},  # noqa: E501  # noqa: E501
+    ])
+    monkeypatch.setattr(qa_agent_run.time, "sleep", _NO_SLEEP)
+    monkeypatch.setattr(qa_worker, "stack_up", lambda mode="docker": mock_stack())
+    monkeypatch.setattr(qa_worker, "stack_down", lambda _stack: None)
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    sent = _combined_urlopen(monkeypatch, _agent_all_pass_payloads())
+
+    qa_worker._serve_locked({
+        "id": "req-agent",
+        "layers": ["agent"],
+        "mission_id": "mission-1",
+        "working_directory": "/w",
+        "options": {"qa_agent": True},
+    })
+
+    result_request = [r for r in sent if r.full_url.endswith("/result")][0]
+    body = json.loads(cast(bytes, result_request.data or b""))
+    agent_verdicts = [v for v in body["verdicts"] if v.get("layer") == "agent"]
+    assert len(agent_verdicts) == 2
+    assert all(v["verdict"] == "pass" for v in agent_verdicts)
+    assert body["error"] == ""
+
+
+def test_flag_on_one_fail_fails_the_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _fake_contracts_root(monkeypatch, tmp_path)
+    _write_contract(root, "mission-2", ["check C1"])
+    _fake_capture(monkeypatch, [
+        {"screen": "Screen 1", "png": "run/Screen 1.png", "dom": "run/Screen 1.dom.txt", "error": ""},  # noqa: E501
+    ])
+    final_text = json.dumps([
+        {"item": "C1", "verdict": "fail", "evidence": "run/Screen 1.png", "reason": "button missing"},  # noqa: E501
+    ])
+    monkeypatch.setattr(qa_agent_run.time, "sleep", _NO_SLEEP)
+    monkeypatch.setattr(qa_worker, "stack_up", lambda mode="docker": mock_stack())
+    monkeypatch.setattr(qa_worker, "stack_down", lambda _stack: None)
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    sent = _combined_urlopen(monkeypatch, _agent_payloads_with(final_text, "run-agent-2"))
+
+    qa_worker._serve_locked({
+        "id": "req-fail",
+        "layers": ["agent"],
+        "mission_id": "mission-2",
+        "working_directory": "/w",
+        "options": {"qa_agent": True},
+    })
+
+    result_request = [r for r in sent if r.full_url.endswith("/result")][0]
+    body = json.loads(cast(bytes, result_request.data or b""))
+    agent_verdicts = [v for v in body["verdicts"] if v.get("layer") == "agent"]
+    assert agent_verdicts[0]["verdict"] == "fail"
+    assert "C1" in body["error"]
+    assert "button missing" in body["error"]
+
+
+def test_flag_on_one_blocked_fails_the_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    root = _fake_contracts_root(monkeypatch, tmp_path)
+    _write_contract(root, "mission-3", ["check C1"])
+    _fake_capture(monkeypatch, [
+        {"screen": "Screen 1", "png": "run/Screen 1.png", "dom": "run/Screen 1.dom.txt", "error": ""},  # noqa: E501
+    ])
+    final_text = json.dumps([
+        {"item": "C1", "verdict": "blocked", "evidence": "", "reason": "route not found"},
+    ])
+    monkeypatch.setattr(qa_agent_run.time, "sleep", _NO_SLEEP)
+    monkeypatch.setattr(qa_worker, "stack_up", lambda mode="docker": mock_stack())
+    monkeypatch.setattr(qa_worker, "stack_down", lambda _stack: None)
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    sent = _combined_urlopen(monkeypatch, _agent_payloads_with(final_text, "run-agent-3"))
+
+    qa_worker._serve_locked({
+        "id": "req-blocked",
+        "layers": ["agent"],
+        "mission_id": "mission-3",
+        "working_directory": "/w",
+        "options": {"qa_agent": True},
+    })
+
+    result_request = [r for r in sent if r.full_url.endswith("/result")][0]
+    body = json.loads(cast(bytes, result_request.data or b""))
+    agent_verdicts = [v for v in body["verdicts"] if v.get("layer") == "agent"]
+    assert agent_verdicts[0]["verdict"] == "blocked"
+    assert "C1" in body["error"]
+    assert "route not found" in body["error"]
+
+
+def test_no_contract_keeps_scripted_verdicts_and_adds_note(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fake_contracts_root(monkeypatch, tmp_path)
+    _fake_capture(monkeypatch, [])
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    calls: list[str] = []
+    monkeypatch.setattr(qa_worker, "_layer_runners", lambda _row: _recording_runners(calls))
+    sent = _fake_runner(monkeypatch)
+
+    qa_worker._serve_locked({
+        "id": "req-nocontract",
+        "layers": ["regression", "ui", "agent"],
+        "mission_id": "mission-missing",
+        "working_directory": str(tmp_path),
+        "options": {"qa_agent": True},
+    })
+
+    result_request = [r for r in sent if r.full_url.endswith("/result")][0]
+    body = json.loads(cast(bytes, result_request.data or b""))
+    scripted = [v for v in body["verdicts"] if v.get("layer") in ("regression", "ui")]
+    assert len(scripted) == 2
+    assert all(v["verdict"] == "pass" for v in scripted)
+    agent = [v for v in body["verdicts"] if v.get("layer") == "agent"]
+    assert len(agent) == 1
+    assert agent[0]["verdict"] == "skipped"
+    assert body["error"] == ""
+    assert "no contract" in str(agent[0].get("failed_reason", ""))
+
+
+def test_agent_capture_uses_the_stack_mode_of_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    modes: list[str] = []
+
+    def fake_up(mode: str = "docker") -> QaStack:
+        modes.append(mode)
+        raise QaStackError("stop here")
+
+    monkeypatch.setenv("QA_STACK_MODE", "postgres")
+    monkeypatch.setattr(qa_worker, "stack_up", fake_up)
+    contract = cast(Any, object())
+    with pytest.raises(QaStackError):
+        qa_worker._capture_agent_screens(contract)
+    assert modes == ["postgres"]

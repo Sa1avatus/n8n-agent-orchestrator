@@ -1,0 +1,173 @@
+TASK T004 - scratchpad: board Execution page, mission save, statistics, readiness
+Scope root: /d/n8n/claude-runner/src/claude_runner
+No source file was changed by this task. This file is the only write.
+
+=== 1. Change targets (line ranges) ===
+
+board_edit_win.js (410 lines)
+- L23-28   PAGES: page "exec" keys (attempts_per_task, enabled, worker_model, worker_provider,
+           reviewer_model, reviewer_provider, architect_model, architect_provider, max_tasks,
+           worker_think_policy_from_task, worker_think_policy)
+- L29-33   ROLES: [labelKey, color, modelKey, providerKey] for worker / reviewer / architect
+- L75-109  summaryCard(): the summary card; "eff()" shows the control placeholder (profile default)
+           when the value is empty (L79-84); role lines at L87-89
+- L120-196 fillPages(): page 2 builds role rows at L159-179 (model + provider cells, original
+           rows hidden at L174)
+- L198-260 reviewHtml / problems / paint (review page and diff display)
+- L302-363 buildWindow()
+- L374-403 enhance(), watch(), export BoardEditWin (L403)
+
+board_mission.js (711 lines)
+- L51-59   MIDRUN_CONFIG_FIELDS (worker/reviewer/service model+provider, *_max_polls,
+           *_poll_seconds, *_max_retries, retry_delays, think policy) - mirrors board_plan.py
+- L66-70   NON_EDITABLE_CONFIG_FIELDS
+- L77-98   FORM_ROWS: [kind, key, labelKey, control]; provider/model rows at L85-90;
+           max_tasks L91; attempts row is rows[6] (L80-ish, via formHtml)
+- L141-170 fieldRow(): renders the input; placeholder = fallback from defaults (L157-160)
+- L182-209 formHtml(mission, queueEntry, config, running, defaults): fallbackKey maps
+           attempts_per_task -> max_attempts_per_task (L195)
+- L282-340 BoardMission(): loads /api/board/missions/{id} (detail.defaults) and
+           /api/board/queue, then calls render, renderTaskSection, BoardReadyUI.render,
+           BoardMissionSave.attachToBox (L330-337)
+- L683-696 local fetchJson(url)  (throws on !ok, err.status / err.body)
+
+board_mission_save.js (592 lines)
+- L30-40   esc()  (uses BoardLogic.esc, local fallback)
+- L72-94   readForm(box): reads [data-key]; kind from data-control / data-kind
+- L103-136 initialValue(kind, key, data, control)
+- L141-149 captureInitial(box, data)  (called by attachToBox)
+- L155-163 formDirty(box)
+- L167-181 currentDiff(box)  (BoardLogic.diffConfig, fallback at L168-179)
+- L184-200 diffHtml(diff, labels)  (escaped rows)
+- L270-292 onSave(box): diff -> window.confirm(t("save.confirm")) at L287 -> doSave
+- L297-346 doSave(box): splits changed fields into missionBody (POST /api/board/missions/{id},
+           expected_version = data.mission.updated_at) and configBody (POST
+           /api/board/missions/{id}/config, expected_version = data.version)  L321-329;
+           409 -> conflict banner + refresh (L331-333)
+- L349-352 kindOf(box, key)
+- L356-382 onReset ; L383-394 onCopy ; L395-449 loadSource / copyIntoForm / fetchServerData
+- L471-535 refresh(box, keepMessage)
+- L537-548 fetchJson(url)   (error body.error.message, err.status)
+- L553-570 postJson(url, body)
+- L580-592 export BoardMissionSave
+
+board_ready.py (668 lines) - see section 4 for the pattern.
+
+board.py (1263 lines): no script list here. The board.py/board_api.py files only expose data.
+
+=== 2. Where board scripts are registered ===
+
+- /d/n8n/claude-runner/src/claude_runner/board.html:34-58 : one <script src="/static/..."> per
+  module, in order. board_mission.js at line 39, board_mission_save.js at 46,
+  board_edit_win.js at 47, board_ready_ui.js at 44, board.js (last) at 58.
+  A new /static/board_roles.js must be added as a <script src="/static/board_roles.js"></script>
+  line here, BEFORE board_edit_win.js (line 47) and after the modules it needs
+  (board_mission_save.js, line 46) if it calls them at load.
+- The static route is generic: /d/n8n/claude-runner/src/claude_runner/dashboard.py:140
+  `_board_static = re.compile(r"^board[a-z0-9_]*[.](js|css|html)$")`, served at
+  dashboard.py:147-156 (`@app.get("/static/{name}")`). A file named board_roles.js
+  needs NO route change, only the file and the board.html line.
+- Node tests live in claude-runner/tests/*.test.js (one per module).
+
+=== 3. Statistics: files, functions, run fields ===
+
+Backend
+- board_stats.py
+  - L189 mission_card_stats(manager, board, state_key): mission card (runs via stats_for_runs)
+  - L268 _mission_figures ; L298 mission_figures ; L331 _refresh_figures ;
+    L339 cached_mission_figures  (10-minute cache for finished missions, per CHANGELOG)
+  - L364 task_stats(manager, board, state_key, task_id): per-task, attempts vs
+    max_attempts_per_task, attempts_detail (attempt, seconds, runs), Reviewer score/reason
+  - L44 _run_seconds ; L103 _cost_usd (uses run.get("provider") == "local", L106)
+  - L133-175 _attempt_reference_runs / _attempt_runs / _attempt_times_seconds
+  - L448 mission_timeline
+- mission_stats.py
+  - L63 stats_for_runs(manager, run_ids)   (shared with the card stats)
+  - L45 token_totals(manager, run_ids)
+  - L74-76 provider checks: run.get("provider") (local vs cloud)
+- board_api.py routes: L1149 GET /missions/{id}/stats ; L1166
+  GET /missions/{id}/tasks/{task_key}/stats ; L1183 timeline ; L1250 POST /thinking/stats
+- board_think.py: thinking-policy statistics (variant_stats L405, layout_preview L227).
+
+Frontend (rendering)
+- board_task.js L52-66 attemptHtml(detail): per-attempt block; L77-111 task view with
+  attempts_detail, used/max (L90-93), uses L("tk.attempt", ...) / L("tk.attempts", ...)
+- board_mission.js L361-381 fmtCount / statsText(stats); L382 taskModel
+- board_tasks.js: task table (uses L("...")).
+
+Run fields carrying provider and model
+- runs.py:162  StartRequest.provider (str, default "")
+- runs.py:320-321 record stores model=model and provider=request.provider.strip()
+- runs.py:471-475 model=model, provider=provider (second record path)
+- runs.py:834-875 provider_name from last event / model fallback
+- runs.py:275 run detail body (the API's run dict) carries "model" but NOT "provider"
+  (fields listed: run_id, session_id, role, model, output, cost_usd, num_turns, ...).
+  Provider is only on the stored record: api.py:296 "provider": provider is in the
+  run-list response (api.py:295-296, search filters api.py:295-296).
+- board_stats.py:106 and mission_stats.py:74,76 read run.get("provider").
+- board_edit_win.js/board_mission.js use the config keys worker_model / worker_provider etc.
+
+=== 4. board_ready.py check pattern (to follow for a new check) ===
+
+- L67-70 _item(check, status, reason, **extra) -> {"check", "status", "reason", ...extra}
+- Each check is its own function returning one _item, e.g.
+  - L86-103 check_working_folder: "ok" / "warning" (HOST_CHECK_NOTE when not host_visible,
+    L37) / "error"
+  - L209-216 check_plan_present(live): error for no plan, ok with count
+  - L227-232 check_not_running(board, mission_id)
+  - L235-255 check_preflight_fresh: error when none, warning when older than limit, else ok
+  - L164-206 check_llama_model: warning when settings missing ("probe URL is not set"),
+    error on unreachable / not listed, ok with context
+- Levels: "ok" | "warning" | "error" (docstring L3-5).
+  - warning = informational, does not block start.
+  - error = blocker; start_guard (L350-369) refuses unless confirmed; collect_readiness
+    adds items at L297-328 (settings None -> warnings L321-323).
+- _summarize (L331-347): status = error if any error, else warning if any warning, else ok;
+  returns {mission_id, status, items, errors, confirmed_needed = bool(errors)}.
+- Add a new check: write check_<name>(...) -> _item(...), call it from collect_readiness
+  (L311-327) in the items list, with a unit test in tests/test_board_ready.py (check name).
+- Console: board_ready_ui.js renders items as ok/warning/error rows (ReadyUI.render).
+
+=== 5. Existing helpers to reuse ===
+
+- esc: board_mission_save.js:30 esc() (BoardLogic.esc with fallback); board_mission.js:35 esc();
+  board_edit_win.js has NO esc (it uses textContent via mk() at L40). Do not add a new esc.
+- fetchJson: board_mission_save.js:537, board_mission.js:683, board_actions.js:49
+  (options arg), board_dnd.js:59, board_i18n.js:445 fetchJSON (no error body).
+  Five copies exist already; a new file must import/reuse, or say a shared module is needed.
+- postJson: board_mission_save.js:553, board_mission.js:517.
+- L(key, en, params): defined per module, e.g. board_history_ui.js:29 (reads t() and falls back
+  to the English text). Used in board_task.js, board_tasks.js, board_ready_ui.js,
+  board_plan_edit.js, board_think_ui.js.
+- t(key, params): board_i18n.js:412 (global; BUNDLED_EN at L19 is the English table).
+  board_edit_win.js tr() at L36 wraps t().
+- Confirm dialog: window.confirm(t("save.confirm")) at board_mission_save.js:287.
+  Other confirm texts: grep "window.confirm" in board*.js.
+- Diff display: BoardLogic.diffConfig (board_logic.js, fallback board_mission_save.js:168-179),
+  diffHtml at board_mission_save.js:184.
+- Header for UI writes: every POST/PUT/DELETE under /api/board must send
+  X-AHAWR-Dashboard: 1 (CLAUDE.md). postJson in board_mission_save.js:553 must be checked
+  for that header.
+
+=== 6. Facts relevant to the task ===
+
+- Execution page placeholders: the profile defaults come from the BoardMission response
+  `defaults` (board_mission.js:282-300, fieldRow fallback L157-160 -> placeholder +
+  title=t("form.default")). summaryCard eff() (board_edit_win.js:79-84) uses the control
+  placeholder when the value is empty.
+- Save of the Execution page: the controls keep data-key/data-kind (from fieldRow),
+  so readForm/doSave pick them up. Config fields go to POST .../config (kind "config");
+  enabled goes to mission route (kind "queue"); attempts_per_task is NOT posted (board_mission_save.js:313-316).
+- Running missions: MIDRUN_CONFIG_FIELDS (board_mission.js:51-59) lists fields editable
+  while running; the server mirror is board_plan.py:76-81 and update_mission_config (board_plan.py:490).
+- Polls and retries fields exist in config (MIDRUN_CONFIG_FIELDS lists worker/reviewer/architect
+  _max_polls, _poll_seconds, _max_retries, retry_delays) but the Execution page PAGES list
+  (board_edit_win.js:25-26) does NOT render them. They are edited elsewhere or not at all.
+- Each board module defines its own L and esc; no shared module exists.
+
+=== 7. Open items / not checked ===
+- Not run: any test or lint (research only). No checks needed for a read-only task.
+- Not checked: board_logic.js diffConfig body, board_i18n_en.json key list for ew.* keys,
+  tests/test_board_ready.py contents, and whether postJson sends X-AHAWR-Dashboard.
+- Risk: the notes above on runs.py:275 vs api.py:296 are from a grep and a partial read;
+  verify the run record shape before relying on a "provider" field in a new view.

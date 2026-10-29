@@ -30,9 +30,25 @@ from typing import Any
 
 from claude_runner.config import Settings, map_host_path
 from claude_runner.guard_heartbeat import TIME_FORMAT
-from claude_runner.qa_requests import QA_UI_FILE_PATTERN
+from claude_runner.qa_agent_prompt import build_qa_agent_prompt
+from claude_runner.qa_agent_verdicts import parse_agent_verdicts
+from claude_runner.qa_capture import capture
+from claude_runner.qa_contract import (
+    CONTRACT_FILE_NAME,
+    CONTRACTS_ROOT,
+    Contract,
+    NoContract,
+    load_contract,
+)
+from claude_runner.qa_requests import QA_AGENT_LAYER, QA_UI_FILE_PATTERN, qa_agent_enabled
 from claude_runner.qa_runner import build_verdict
-from claude_runner.qa_stack import QaStackError, stack_down, stack_from_id
+from claude_runner.qa_stack import (
+    QaStackError,
+    mode_from_env,
+    stack_down,
+    stack_from_id,
+    stack_up,
+)
 
 logger = logging.getLogger("claude_runner.qa_worker")
 
@@ -68,6 +84,10 @@ GIT_FAILED_REASON = (
 QA_SCENARIO = "qa"
 UI_FILE_RE = re.compile(QA_UI_FILE_PATTERN)
 STACK_ID_RE = re.compile(r"stack id: ([0-9a-f]{8})")
+ANSWER_SCHEMA = (
+    '[{"item": "C1", "verdict": "pass|fail|blocked", '
+    '"evidence": "screenshot file name or DOM line", "reason": "one sentence"}]'
+)
 
 
 class ChangeDetectionError(Exception):
@@ -399,7 +419,7 @@ def _run_layer(layer: str, runner: LayerRunner, deadline: float) -> list[dict[st
 
 
 def run_layers(layers: list[str], runners: Mapping[str, LayerRunner]) -> list[dict[str, Any]]:
-    unknown = sorted(set(layers) - set(LAYER_TIMEOUT_SECONDS))
+    unknown = sorted(set(layers) - set(LAYER_TIMEOUT_SECONDS) - {QA_AGENT_LAYER})
     if unknown:
         raise ValueError(f"unknown QA layer: {unknown}")
     deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
@@ -433,16 +453,168 @@ def _execute(request_row: dict[str, Any]) -> tuple[list[str], str]:
     return verdicts, error
 
 
+def _no_contract_note(mission_id: str) -> str:
+    return f"no contract for {mission_id!r}: qa_agent layer skipped"
+
+
+def _agent_item_verdict(item: dict[str, Any]) -> dict[str, Any]:
+    verdict = item["verdict"]
+    reason = item.get("reason", "").strip()
+    if verdict == "blocked":
+        return {
+            **build_verdict(
+                scenario=QA_AGENT_LAYER, blocked_reason=reason or "blocked by the agent"
+            ),
+            "layer": QA_AGENT_LAYER,
+        }
+    if verdict == "fail":
+        return {
+            **build_verdict(
+                scenario=QA_AGENT_LAYER,
+                failed_step=0,
+                failed_reason=reason or "failed by the agent",
+            ),
+            "layer": QA_AGENT_LAYER,
+        }
+    return {**build_verdict(scenario=QA_AGENT_LAYER), "layer": QA_AGENT_LAYER}
+
+
+def _capture_agent_screens(contract: Contract) -> tuple[list[dict[str, str]], str]:
+    """Start a throwaway stack, capture the contract screens against it, and tear it down.
+
+    Returns the manifest and an error string (empty on success). This function is
+    monkeypatchable in tests so capture can be faked.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError as error:
+        return [], f"playwright not available: {error}"
+    stack = stack_up(mode=mode_from_env())
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                manifest = capture(contract, page, stack.dashboard_url)
+            finally:
+                browser.close()
+        return manifest, ""
+    finally:
+        stack_down(stack)
+
+
+def _run_agent_layer(request_row: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    """Run the qa_agent layer: load the contract, capture screens, run the agent,
+    parse the verdicts, and merge them under the agent layer.
+
+    Returns one verdict dict per contract item, tagged with the agent layer, and a
+    gate error string: non-empty when the agent gate is fail or blocked, empty on pass.
+    A missing contract returns a single blocked "no contract" verdict without touching
+    the scripted layers.
+    """
+    mission_id = str(request_row.get("mission_id", ""))
+    contract = load_contract(mission_id, CONTRACTS_ROOT)
+    if isinstance(contract, NoContract):
+        note = _no_contract_note(mission_id)
+        logger.info(note)
+        verdict = {
+            **build_verdict(scenario=QA_AGENT_LAYER, failed_reason=note),
+            "verdict": "skipped",
+            "layer": QA_AGENT_LAYER,
+        }
+        return [verdict], ""
+    # lazy import: qa_agent_run depends on qa_worker (qa_worker._call), so importing
+    # it at module load would create a cycle when qa_worker is entered first.
+    from claude_runner.qa_agent_run import DEFAULT_MAX_POLLS, DEFAULT_POLL_SECONDS, run_agent
+
+    options = _agent_options(request_row)
+    max_polls = int(options.get("max_polls", DEFAULT_MAX_POLLS))
+    poll_seconds = float(options.get("poll_seconds", DEFAULT_POLL_SECONDS))
+    working_directory = str(request_row.get("working_directory", ""))
+    manifest, capture_error = _capture_agent_screens(contract)
+    if capture_error:
+        verdict = {
+            **build_verdict(scenario=QA_AGENT_LAYER, blocked_reason=capture_error),
+            "layer": QA_AGENT_LAYER,
+        }
+        return [verdict], capture_error
+    reference_paths = _reference_image_paths(contract, mission_id)
+    contract_text = _contract_text(mission_id)
+    prompt = build_qa_agent_prompt(contract_text, manifest, reference_paths, ANSWER_SCHEMA)
+    outcome = run_agent(prompt, working_directory, max_polls=max_polls, poll_seconds=poll_seconds)
+    parsed = parse_agent_verdicts(outcome.final_text, [item.id for item in contract.items])
+    item_verdicts = [_agent_item_verdict(entry) for entry in parsed["verdicts"]]
+    reason = parsed["reason"]
+    if outcome.status != "completed":
+        reason = reason or f"agent run {outcome.status}: {outcome.reason}"
+    if parsed["gate"] == "fail":
+        reason = _agent_gate_reason(parsed, outcome, reason)
+    return item_verdicts, reason
+
+
+def _agent_gate_reason(
+    parsed: dict[str, Any], outcome: Any, reason: str
+) -> str:
+    """The gate failure reason: the parse defect if any, else the failed/blocked items."""
+    if reason:
+        return reason
+    failed = [v for v in parsed["verdicts"] if v["verdict"] in ("fail", "blocked")]
+    if failed:
+        parts = []
+        for v in failed:
+            item_reason = v.get("reason", "").strip()
+            if item_reason:
+                parts.append(f"{v['item']} {v['verdict']}: {item_reason}")
+            elif v["verdict"] == "fail":
+                parts.append(f"{v['item']} failed by the agent")
+            else:
+                parts.append(f"{v['item']} blocked by the agent")
+        return "agent verdict: " + "; ".join(parts)
+    if outcome.status != "completed":
+        return f"agent run {outcome.status}: {outcome.reason}"
+    return "agent gate failed"
+
+
+def _agent_options(request_row: dict[str, Any]) -> dict[str, Any]:
+    return dict(request_row.get("options") or {})
+
+
+def _reference_image_paths(contract: Contract, mission_id: str) -> list[str]:
+    contract_dir = CONTRACTS_ROOT / mission_id
+    return [
+        str(contract_dir / screen.reference_image)
+        for screen in contract.screens
+        if screen.reference_image
+    ]
+
+
+def _contract_text(mission_id: str) -> str:
+    contract_path = CONTRACTS_ROOT / mission_id / CONTRACT_FILE_NAME
+    return contract_path.read_text(encoding="utf-8") if contract_path.is_file() else ""
+
+
 def _serve(request_row: dict[str, Any]) -> None:
     request_id = str(request_row["id"])
     claim(request_id)
     layers = request_row.get("layers")
+    options = request_row.get("options") or {}
+    agent_on = qa_agent_enabled(options)
+    agent_layer = QA_AGENT_LAYER if layers and QA_AGENT_LAYER in layers and agent_on else None
+    scripted_layers = [layer for layer in (layers or []) if layer != QA_AGENT_LAYER]
     verdicts: list[Any]
-    if layers:
-        verdicts = run_layers(list(layers), _layer_runners(request_row))
-        error = ""
+    if scripted_layers:
+        verdicts = list(run_layers(scripted_layers, _layer_runners(request_row)))
+        error: str = ""
+    elif layers is None or not layers:
+        exec_verdicts, error = _execute(request_row)
+        verdicts = list(exec_verdicts)
     else:
-        verdicts, error = _execute(request_row)
+        verdicts, error = [], ""
+    if agent_layer:
+        agent_verdicts, agent_error = _run_agent_layer(request_row)
+        verdicts.extend(agent_verdicts)
+        if agent_error:
+            error = agent_error if not error else f"{error}; {agent_error}"
     _call("POST", f"/v1/qa/requests/{request_id}/result", {"verdicts": verdicts, "error": error})
     logger.info("qa request %s reported with %d verdict(s)", request_id, len(verdicts))
     _write_heartbeat(f"reported {request_id}")
