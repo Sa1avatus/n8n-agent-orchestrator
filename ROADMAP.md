@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.910 · October 30, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next
+**0.11.920 · October 30, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next
 
-Current version: **0.11.910** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
+Current version: **0.11.920** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -121,9 +121,9 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [x] ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios (the crawl does not yet reproduce the three replayed bugs: a drag and a forced 409 are the next step)
 - [x] 0.10.0 release: changelog, version, roadmap. Open QA steps: make the in-process UI stack pass all 17 scenarios, take the regression baseline, retire the host worker, close the runner port (not before that)
 
-### 0.11.0 – 0.11.910: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality — Done (October 24 – 29)
+### 0.11.0 – 0.11.920: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality — Done (October 24 – 29)
 
-0.11.0 – 0.11.910 · Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality · 14/14 milestones, 100%
+0.11.0 – 0.11.920 · Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality · 14/14 milestones, 100%
 
 - [x] ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)
 - [x] ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list
@@ -137,8 +137,9 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [x] 0.11.800: the QA agent (design contract per mission, role qa_agent, strict verdict parser, flag qa_agent off by default), RAG quality tools (90 real queries, about 20 variants measured, none passed the threshold), search gate AHAWR_SEARCH_SKIP_PATH, MCP servers for search and board
 - [x] 0.11.900: the QA agent runs in missions (the QA Request sends the flag, a contract for the mobile dashboard mission, the agent may read its captures), drag a not-completed mission into the queue, local and cloud speed apart in every board view, the Reviewer reads a line range with sed -n, the Worker failover goes to the first local model
 - [x] 0.11.910: a failed mission put back in the queue is shown in the Queued column at once (the queue row with the retry flag decides), the QA agent reads its captures from the qa-runs volume of the runner
+- [x] 0.11.920: the QA fixture can seed providers with models (the default fixture has qa-cloud with a made-up key), so the QA agent checks the providers screens instead of blocking on them
 - [x] Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md
-- [x] 0.11.0 – 0.11.910 releases: changelog, versions, roadmap
+- [x] 0.11.0 – 0.11.920 releases: changelog, versions, roadmap
 
 ### 0.12.0: Configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
 
@@ -148,9 +149,9 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [ ] Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
 - [ ] 0.12.0 release: changelog, version, roadmap
 
-### After 0.11.910: Quality and reach — Next (Q4 2026 – Q1 2027)
+### After 0.11.920: Quality and reach — Next (Q4 2026 – Q1 2027)
 
-after 0.11.910 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
+after 0.11.920 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
 
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [ ] Dashboard over the local network and on mobile

@@ -434,5 +434,35 @@
       "verdict": "skipped",
       "reason": "no QA profile"
     }
+  ],
+  "providers": [
+    {
+      "name": "qa-cloud",
+      "label": "QA Cloud (fixture)",
+      "api_type": "openai-chat",
+      "base_url": "https://qa-cloud.invalid/v1",
+      "enabled": true,
+      "context_tokens": 128000,
+      "compact_pct": 80,
+      "max_output_tokens": 8192,
+      "notes": "fixture provider, no real key",
+      "api_key": "qa-fixture-not-a-key",
+      "models": [
+        {
+          "model": "qa-fast",
+          "alias": "fast",
+          "price_input_per_mtok_usd": 0.1,
+          "price_output_per_mtok_usd": 0.4,
+          "supports_thinking": false
+        },
+        {
+          "model": "qa-think",
+          "alias": "think",
+          "price_input_per_mtok_usd": 1.0,
+          "price_output_per_mtok_usd": 4.0,
+          "supports_thinking": true
+        }
+      ]
+    }
   ]
 }

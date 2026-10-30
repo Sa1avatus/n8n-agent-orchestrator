@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.11.910 · October 30, 2026",
+    "date": "0.11.920 · October 30, 2026",
     "tag": "The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next",
     "stats": [
       [
         "Current version",
-        "0.11.910"
+        "0.11.920"
       ],
       [
         "Missions completed",
@@ -373,8 +373,8 @@
     {
       "s": "done",
       "when": "October 24 – 29",
-      "t": "0.11.0 – 0.11.910: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality",
-      "v": "0.11.0 – 0.11.910",
+      "t": "0.11.0 – 0.11.920: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality",
+      "v": "0.11.0 – 0.11.920",
       "d": "Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality",
       "m": [
         14,
@@ -431,11 +431,15 @@
         ],
         [
           "ok",
+          "0.11.920: the QA fixture can seed providers with models (the default fixture has qa-cloud with a made-up key), so the QA agent checks the providers screens instead of blocking on them"
+        ],
+        [
+          "ok",
           "Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md"
         ],
         [
           "ok",
-          "0.11.0 – 0.11.910 releases: changelog, versions, roadmap"
+          "0.11.0 – 0.11.920 releases: changelog, versions, roadmap"
         ]
       ]
     },
@@ -467,8 +471,8 @@
     {
       "s": "next",
       "when": "Q4 2026 – Q1 2027",
-      "t": "After 0.11.910: Quality and reach",
-      "v": "after 0.11.910",
+      "t": "After 0.11.920: Quality and reach",
+      "v": "after 0.11.920",
       "d": "Reviewer calibration, retrieval quality and the dashboard on the local network",
       "m": [
         0,

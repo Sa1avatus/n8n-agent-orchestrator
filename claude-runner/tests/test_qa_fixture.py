@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from claude_runner.board import InMemoryBoardStore
-from claude_runner.qa_fixture import board_store_from_rows, load_fixture
+from claude_runner.qa_fixture import REQUIRED_TABLES, board_store_from_rows, load_fixture
 
 TESTS = Path(__file__).resolve().parent
 FIXTURES = TESTS.parent / "qa" / "fixtures"
@@ -61,3 +61,17 @@ def test_board_store_from_rows_seeds_missions_queue_and_live_state() -> None:
     assert len(store.list_live_states()) == len(rows.live_state)
     mission = store.get_mission("m01")
     assert mission is not None and mission.enabled is True and mission.version == 3.0
+
+
+def test_default_fixture_seeds_a_provider_with_models_and_no_secret_in_the_view() -> None:
+    store = board_store_from_rows(load_fixture(FIXTURES / "default.json"))
+    provider = store.get_provider("qa-cloud")
+    assert provider is not None
+    assert [m["model"] for m in provider["models"]] == ["qa-fast", "qa-think"]
+    assert "api_key" not in provider
+
+
+def test_providers_must_be_a_list_of_objects() -> None:
+    payload = {"tables": {t: [] for t in REQUIRED_TABLES}, "providers": ["x"]}
+    with pytest.raises(ValueError, match="providers"):
+        load_fixture(payload)

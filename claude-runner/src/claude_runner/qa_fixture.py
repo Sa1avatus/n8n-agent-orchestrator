@@ -21,6 +21,7 @@ class FixtureRows:
     missions: list[dict[str, Any]]
     live_state: list[dict[str, Any]]
     queue: list[dict[str, Any]]
+    providers: list[dict[str, Any]]
 
 
 def load_fixture(source: Path | dict[str, Any]) -> FixtureRows:
@@ -42,7 +43,16 @@ def load_fixture(source: Path | dict[str, Any]) -> FixtureRows:
         missions=tables[MISSIONS_TABLE],
         live_state=tables[LIVE_STATE_TABLE],
         queue=tables[QUEUE_TABLE],
+        providers=_providers(fixture.get("providers")),
     )
+
+
+def _providers(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise ValueError("fixture 'providers' is not a list of objects")
+    return value
 
 
 def board_store_from_rows(rows: FixtureRows) -> InMemoryBoardStore:
@@ -84,6 +94,11 @@ def board_store_from_rows(rows: FixtureRows) -> InMemoryBoardStore:
         )
         store._queue[entry.mission_id] = entry
         store._queue_order.append(entry.mission_id)
+    for row in rows.providers:
+        fields = {key: value for key, value in row.items() if key not in ("name", "models")}
+        store.create_provider(row["name"], fields)
+        for model in row.get("models", []):
+            store.add_model(row["name"], model["model"], model)
     return store
 
 
