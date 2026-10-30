@@ -196,6 +196,8 @@ services:
       - claude-runner-home:/home/node/.claude
       - claude-runner-data:/data
       - ahawr-provider-secrets:/secrets
+      # the captures of the QA agent (written by ahawr-qa); the qa_agent role reads them (--add-dir /qa-runs)
+      - qa-runs:/qa-runs:ro
       # the LiteLLM runtime switches (local_thinking): the runner writes it when a task runs too long
       - ./litellm/runtime:/app/runtime
       # the Worker's scratch folder (missions use /tmp/dcfr-work) survives container recreation

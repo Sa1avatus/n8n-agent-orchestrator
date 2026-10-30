@@ -217,8 +217,23 @@ function requeue(controls, ctx) {
   if (!col) return;
   const queue = controls.dnd.DndState.data && controls.dnd.DndState.data.queue
     ? controls.dnd.DndState.data.queue : [];
+  // the queue data is fresher than the summary of the last render: a failed mission put back in the
+  // queue (BoardDnd.requeueMission) is queued there, and its card leaves the Not completed column
+  const groups = (controls.dnd.DndState.data && controls.dnd.DndState.data.groups) || {};
+  const fresh = new Set(groups.queued || []);
   const byId = {};
-  for (const m of ctx.missions || []) if (stateOf(m) === "q") byId[m.mission_id] = m;
+  for (const m of ctx.missions || []) {
+    if (stateOf(m) === "q") byId[m.mission_id] = m;
+    else if (stateOf(m) === "bad" && fresh.has(m.mission_id)) {
+      byId[m.mission_id] = Object.assign({}, m, { state_group: "queued" });
+    }
+  }
+  const failedColumn = body.querySelector('[data-col="bad"]');
+  const failedCards = failedColumn ? failedColumn.querySelector(".kcol-cards") : null;
+  if (failedCards) {
+    const kept = [...failedCards.querySelectorAll(".kcard")].filter((card) => !fresh.has(card.dataset.missionId));
+    failedCards.replaceChildren(...kept);
+  }
   const ordered = queue
     .map((entry) => byId[entry.mission_id])
     .filter((m) => m);
@@ -230,6 +245,13 @@ function requeue(controls, ctx) {
     el("div", { class: "kcol-cards" }, ordered.map((m, i) => missionCard(ctx, m, i))),
   );
   attachQueuedCards(controls, [...col.querySelectorAll(".kcard")]);
+  setCount(col, ordered.length);
+  if (failedColumn) setCount(failedColumn, failedColumn.querySelectorAll(".kcard").length);
+}
+
+function setCount(column, count) {
+  const mark = column.querySelector("h3 .mono");
+  if (mark) mark.textContent = String(count);
 }
 
 function onRefresh() {

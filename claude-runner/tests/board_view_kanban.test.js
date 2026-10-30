@@ -526,7 +526,11 @@ test("dropping a not-completed card on the queued column puts the mission back i
       body: {
         missions: [],
         queue: order.map((id, i) => ({ mission_id: id, enabled: true, retry_failed: false, position: i })),
-        groups: { running: [], queued: ["q1", "q2"], not_completed: ["b1"] },
+        groups: {
+          running: [],
+          queued: order.includes("b1") ? ["q1", "q2", "b1"] : ["q1", "q2"],
+          not_completed: order.includes("b1") ? [] : ["b1"],
+        },
         version: QUEUE_VERSION,
       },
     };
@@ -548,4 +552,10 @@ test("dropping a not-completed card on the queued column puts the mission back i
   });
   assert.equal(posts[1].url, "/api/board/queue/move");
   assert.equal(JSON.parse(posts[1].body).to_position, 2);
+  const queued = byClass(body.querySelector('[data-col="q"]'), "kcard").map((c) => c.dataset.id);
+  assert.ok(queued.includes("b1"), "the card moved into the Queued column at once");
+  assert.ok(
+    !byClass(body.querySelector('[data-col="bad"]'), "kcard").some((c) => c.dataset.id === "b1"),
+    "and left the Not completed column",
+  );
 });

@@ -150,6 +150,24 @@ class TestMissionGroups:
         assert groups["queued"] == ["m1"]
         assert groups["not_completed"] == ["m2"]
 
+    def test_failed_mission_queued_with_the_retry_flag_waits_for_its_retry(
+        self, board: InMemoryBoardStore
+    ):
+        for mission_id, key in (("m1", "sk1"), ("m2", "sk2"), ("m3", "sk3")):
+            board._missions[mission_id] = _mission(mission_id, key)
+            board._live[key] = LiveState(state_key=key, status="failed")
+        board.set_queue(
+            [
+                QueueEntry(position=0, mission_id="m1", retry_failed=True),
+                QueueEntry(position=1, mission_id="m2"),
+                QueueEntry(position=2, mission_id="m3", retry_failed=True, enabled=False),
+            ],
+            None,
+        )
+        groups = board.mission_groups()
+        assert groups["queued"] == ["m1"]
+        assert groups["not_completed"] == ["m2", "m3"]
+
 
 class TestQueue:
     def test_move_queue_reorders_and_renumbers_contiguously(self, board: InMemoryBoardStore):
