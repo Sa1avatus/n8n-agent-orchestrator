@@ -187,3 +187,40 @@ def test_a_poll_rebuild_of_the_state_keeps_the_fallback_fields() -> None:
     kept = json.loads(done.stdout)
     assert (kept["fallback_provider"], kept["fallback_model"]) == ("local", "qwen")
     assert kept["full_input"] == "FULL TASK" and kept["failed_over_from"] == ""
+
+
+def pick_fallback(attempt: int, chain: dict[str, Any]) -> dict[str, Any]:
+    patch = load()
+    block = "\n".join(patch.RUN_NEW.split("\n")[1:])
+    script = (
+        "const chain = JSON.parse(process.argv[1]);"
+        "const __roleConfig = (role, n) => chain[Math.min(n, 4)] ?? chain[1];"
+        "const __report = null; const __run = chain.run;"
+        "const s = { task_attempt: Number(process.argv[2]) };"
+        + block
+        + ";process.stdout.write(JSON.stringify(__failover));"
+    )
+    done = subprocess.run(
+        ["node", "-e", script, json.dumps(chain), str(attempt)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return dict(json.loads(done.stdout))
+
+
+def test_the_failover_goes_to_the_first_local_model_when_the_model_repeats() -> None:
+    free = {"provider": "openrouter", "model": "laguna"}
+    local = {"provider": "local", "model": "qwen"}
+    paid = {"provider": "anthropic", "model": "sonnet"}
+    chain = {1: free, 2: free, 3: local, 4: paid, "run": free}
+    for attempt in (1, 2):
+        assert pick_fallback(attempt, chain) == {
+            "fallback_provider": "local",
+            "fallback_model": "qwen",
+        }
+    chain[2] = {"provider": "anthropic", "model": "haiku"}
+    assert pick_fallback(1, chain) == {
+        "fallback_provider": "anthropic",
+        "fallback_model": "haiku",
+    }

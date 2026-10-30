@@ -31,6 +31,10 @@ function escValue(v) { return typeof esc === "function" ? esc(v) : localEsc(v); 
 // a 503 is retried here, with a loading note, before any view reports the board as offline.
 const LOADING_RETRIES = 8;
 const LOADING_DELAY_MS = 2500;
+const OFFLINE_RETRIES = 20;     // after the board went offline, load again this many times
+const OFFLINE_DELAY_MS = 15000;
+let offlineTimer = 0;
+let offlineTries = 0;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function getJSON(url) {
@@ -94,6 +98,7 @@ function showScreen(hash) {
 // missing functions (the other board_*.js files are not present yet) are
 // reported instead of throwing.
 async function route() {
+  clearTimeout(offlineTimer);
   if (needLogic()) return;
   if (/^#board[/]view[/]/.test(location.hash)) return;   // the views draw themselves
   showScreen(location.hash);
@@ -122,12 +127,16 @@ async function route() {
     state(t("board.not_loaded"), "bad");
   } else {
     if (typeof BoardQueue === "function") {
-      try { await BoardQueue(); return; }
+      try { await BoardQueue(); offlineTries = 0; return; }
       catch (e) {
         // A 503 means the board store is not available (e.g. no DSN).
         const offline = e.status === 503 || /503/.test(String(e.message || ""));
         const reason = offline && e.body && e.body.reason ? String(e.body.reason) : "";
         state(reason ? t("board.offline_reason", { reason }) : t("board.offline"), "bad");
+        if (offline && offlineTries < OFFLINE_RETRIES) {
+          offlineTries += 1;
+          offlineTimer = setTimeout(route, OFFLINE_DELAY_MS);
+        }
       }
       return;
     }

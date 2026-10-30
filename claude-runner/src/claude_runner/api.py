@@ -36,7 +36,7 @@ from .host_actions import (
 from .mem_guard import MemGuard
 from .provider_registry import ProviderRegistry, env_provider_row
 from .provider_secrets import ProviderSecrets
-from .qa_requests import QaRequestStore, QaTransitionError
+from .qa_requests import QA_AGENT_LAYER, QaRequestStore, QaTransitionError, qa_agent_enabled
 from .report_facts import build_pack, collect_repo_facts, parse_digest
 from .roles_config import QA_LAYERS
 from .run_views import build_router
@@ -54,7 +54,7 @@ QA_VERDICT_TEXT_MAX_CHARS = 2000
 QA_VERDICTS_MAX = 100
 
 
-QaLayer = Literal["regression", "api", "ui"]
+QaLayer = Literal["regression", "api", "ui", "agent"]
 HostActionState = Literal[
     "pending", "confirmed", "running", "done", "failed", "rejected", "expired"
 ]
@@ -67,12 +67,15 @@ class QaRequestBody(BaseModel):
     mode: QaMode
     nonce: str = Field(min_length=1)
     layers: list[QaLayer] | None = Field(default=None)
+    options: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod
     def check_layers(cls, values: dict[str, Any]) -> dict[str, Any]:
         layers = values.get("layers")
-        if layers is not None and not all(name in QA_LAYERS for name in layers):
+        agent_on = qa_agent_enabled(values.get("options") or {})
+        allowed = (*QA_LAYERS, QA_AGENT_LAYER) if agent_on else QA_LAYERS
+        if layers is not None and not all(name in allowed for name in layers):
             raise ValueError(f"unknown QA layer: {layers}")
         return values
 
@@ -302,7 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.800", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.11.900", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -522,6 +525,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body.mode,
             body.nonce,
             layers,
+            body.options,
         )
         return qa_store(request).request_dict(created)
 

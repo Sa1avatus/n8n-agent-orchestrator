@@ -47,6 +47,8 @@ function figures(mission) {
     total: tasks.length,
     firstTry: firstTry.length,
     tps: numberOf(mission.tok_s),
+    tpsLocal: numberOf(mission.tok_s_local),
+    tpsCloud: numberOf(mission.tok_s_cloud),
     cache: cache === null ? null : Math.round(cache * 100),
     thinking: numberOf(mission.thinking_share) === null ? null : Math.round(numberOf(mission.thinking_share) * 100),
   };
@@ -171,6 +173,14 @@ function sprintColumn(ctx, title, tasks, planned) {
   ]);
 }
 
+// local and cloud speed side by side when both providers took part, else the one speed
+function speedText(tr, figs) {
+  if (figs.tpsLocal && figs.tpsCloud) {
+    return tr("s.tps_local", { n: Math.round(figs.tpsLocal) }) + " " + tr("s.tps_cloud", { n: Math.round(figs.tpsCloud) });
+  }
+  return figs.tps === null ? "—" : tr("s.tps", { n: Math.round(figs.tps) });
+}
+
 function kpi(ctx, label, value) {
   return ctx.el("div", { class: "kp" }, [
     ctx.el("span", { text: ctx.tr(label) }),
@@ -215,7 +225,7 @@ function render(body, ctx) {
     kpi(ctx, "kpi.done", tr("of", { a: figs.done, b: figs.total })),
     kpi(ctx, "kpi.first", tr("of", { a: figs.firstTry, b: figs.done })),
     kpi(ctx, "kpi.speed", [
-      figs.tps === null ? "—" : tr("s.tps", { n: Math.round(figs.tps) }),
+      speedText(tr, figs),
       figs.cache === null ? "—" : tr("s.cache", { n: figs.cache }),
       figs.thinking === null ? "—" : tr("s.think", { n: figs.thinking }),
     ].join(" · ")),

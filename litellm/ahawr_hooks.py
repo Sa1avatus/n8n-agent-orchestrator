@@ -262,6 +262,7 @@ class MidSystemMessageHook(CustomLogger):
         self, user_api_key_dict: Any, cache: Any, data: dict[str, Any], call_type: Any
     ) -> dict[str, Any]:
         messages = data.get("messages")
+        compaction = False
         if isinstance(messages, list):
             data["messages"] = move_mid_system_messages(messages)
             # Flag AHAWR_STABLE_PREFIX=1 (default 0): move the variable inserts (total
@@ -270,7 +271,8 @@ class MidSystemMessageHook(CustomLogger):
             # those values share the same prefix up to the variable tail.
             if os.environ.get("AHAWR_STABLE_PREFIX", "0") == "1":
                 data["messages"] = move_variable_reminders_to_tail(data["messages"])
-            if _is_compaction_request(data["messages"]):
+            compaction = _is_compaction_request(data["messages"])
+            if compaction:
                 data["max_tokens"] = COMPACTION_MAX_TOKENS
         # Local Qwen: Claude Code turns its thinking setting into reasoning_effort=high, which the Qwen chat template
         # rejects (it knows xhigh/medium/low only). Drop the setting; the template default and the llama-server
@@ -278,7 +280,10 @@ class MidSystemMessageHook(CustomLogger):
         if not str(data.get("model", "")).startswith("claude"):
             for key in ("thinking", "reasoning_effort"):
                 data.pop(key, None)
-            if local_thinking_off():
+            # Flag AHAWR_COMPACTION_THINKING_OFF=1 (default 0): a compaction request of a local model never thinks. With thinking
+            # on, the model spent the whole COMPACTION_MAX_TOKENS cap on reasoning, wrote no summary and Claude Code retried
+            # (4 x 200 s lost in run_a7a49bd3f0b1, 2026-10-29).
+            if local_thinking_off() or (compaction and os.environ.get("AHAWR_COMPACTION_THINKING_OFF", "0") == "1"):
                 extra = data.get("extra_body")
                 extra = dict(extra) if isinstance(extra, dict) else {}
                 kwargs = dict(extra.get("chat_template_kwargs") or {})

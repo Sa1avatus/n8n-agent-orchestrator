@@ -279,6 +279,8 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
         "cost_usd": cost_usd,
         "local_cost_usd": round(cost_usd, 2) if local else None,
         "tok_per_s": stats["tok_per_s"],
+        "tok_per_s_local": stats["tok_per_s_local"],
+        "tok_per_s_cloud": stats["tok_per_s_cloud"],
         "cache_ratio": stats["cache_ratio"],
         "compactions": stats["compactions"],
         "thinking_runs": on_steps,
@@ -318,6 +320,8 @@ def _mission_figures(manager: RunManager, board: BoardStore, state_key: str) -> 
             "cache_ratio": card["cache_ratio"],
             "cost": card["cost_usd"],
             "tok_s": card["tok_per_s"],
+            "tok_s_local": card["tok_per_s_local"],
+            "tok_s_cloud": card["tok_per_s_cloud"],
             "thinking_share": (
                 card["thinking_runs"] / thinking_steps if thinking_steps else None
             ),
@@ -330,6 +334,8 @@ def _mission_figures(manager: RunManager, board: BoardStore, state_key: str) -> 
             "cache_ratio": None,
             "cost": None,
             "tok_s": None,
+            "tok_s_local": None,
+            "tok_s_cloud": None,
             "thinking_share": None,
         }
 
@@ -453,6 +459,8 @@ def task_stats(
         "cost_real_usd": stats["cost_real_usd"],
         "cost_usd": cost_usd,
         "tok_per_s": stats["tok_per_s"],
+        "tok_per_s_local": stats["tok_per_s_local"],
+        "tok_per_s_cloud": stats["tok_per_s_cloud"],
         "cache_ratio": stats["cache_ratio"],
         "compactions": stats["compactions"],
         "thinking_runs": on_steps,

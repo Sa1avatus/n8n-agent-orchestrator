@@ -57,6 +57,46 @@ function attachQueuedCards(controls, cards) {
   }
 }
 
+// A not-completed card is dragged into the Queued column to put the mission back in the queue
+// (the column handles a drop beside the cards; a drop on a card is handled by the card).
+function attachRequeueDrag(controls, body) {
+  const dnd = controls.dnd;
+  const column = body.querySelector('[data-col="q"]');
+  const failedColumn = body.querySelector('[data-col="bad"]');
+  for (const card of failedColumn ? failedColumn.querySelectorAll(".kcard") : []) {
+    card.setAttribute("draggable", "true");
+    card.addEventListener("dragstart", (e) => {
+      dnd.DndState.dragId = card.dataset.missionId;
+      e.dataTransfer.setData("text/plain", card.dataset.missionId);
+    });
+    card.addEventListener("dragend", () => {
+      dnd.DndState.dragId = null;
+      if (column) column.classList.remove("drop");
+    });
+  }
+  if (!column) return;
+  const notCompleted = (id) => {
+    const data = dnd.DndState.data;
+    return Boolean(id && data && data.groups && (data.groups.not_completed || []).includes(id));
+  };
+  column.addEventListener("dragover", (e) => {
+    if (!notCompleted(dnd.DndState.dragId)) return;
+    e.preventDefault();
+    column.classList.add("drop");
+  });
+  column.addEventListener("dragleave", (e) => {
+    if (!column.contains(e.relatedTarget)) column.classList.remove("drop");
+  });
+  column.addEventListener("drop", (e) => {
+    column.classList.remove("drop");
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    const dragId = e.dataTransfer.getData("text/plain") || dnd.DndState.dragId;
+    dnd.DndState.dragId = null;
+    if (notCompleted(dragId)) dnd.requeueMission(dragId, null, null);
+  });
+}
+
 function newMissionButton(controls, ctx) {
   if (!controls.actions || typeof controls.actions.toggleNewMission !== "function") {
     return null;
@@ -130,6 +170,8 @@ function figureChips(ctx, mission, done, total) {
   const hours = num(mission.hours);
   const cost = num(mission.cost);
   const tps = num(mission.tok_s);
+  const tpsLocal = num(mission.tok_s_local);
+  const tpsCloud = num(mission.tok_s_cloud);
   const cache = num(mission.cache_ratio);
   const think = num(mission.thinking_share);
   const chips = [tr("of", { a: done, b: total })];
@@ -142,7 +184,9 @@ function figureChips(ctx, mission, done, total) {
   if (attempts) chips.push(tr("att", { n: attempts }));
   if (hours) chips.push(tr("hours", { n: hours.toFixed(1) }));
   if (cost) chips.push("$" + cost.toFixed(2));
-  if (tps) chips.push(tr("s.tps", { n: Math.round(tps) }));
+  if (tpsLocal && tpsCloud) {
+    chips.push(tr("s.tps_local", { n: Math.round(tpsLocal) }), tr("s.tps_cloud", { n: Math.round(tpsCloud) }));
+  } else if (tps) chips.push(tr("s.tps", { n: Math.round(tps) }));
   if (cache) chips.push(tr("cache", { n: Math.round(cache * 100) }));
   if (think !== null) chips.push(tr("think", { n: Math.round(think * 100) }));
   return chips.map((text) => el("span", { class: "ch", text }));
@@ -222,6 +266,7 @@ function render(body, ctx) {
     controls,
   ))));
   if (!dnd || !actions) return;
+  attachRequeueDrag(controls, body);
   if (dnd.DndState.data) attachQueuedCards(controls, queued);
   else loadQueueData(controls, queued, ctx);
   // Re-render the queued column when a move lands (BoardDnd.applyMove

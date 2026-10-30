@@ -121,6 +121,12 @@ function missionRow(ctx, mission) {
   const cache = numberOf(mission.cache_ratio);
   const cost = numberOf(mission.cost);
   const tps = numberOf(mission.tok_s);
+  const tpsLocal = numberOf(mission.tok_s_local);
+  const tpsCloud = numberOf(mission.tok_s_cloud);
+  // both providers took part: local / cloud
+  const tpsText = tpsLocal && tpsCloud
+    ? formatNumber(tpsLocal, 1) + " / " + formatNumber(tpsCloud, 1)
+    : formatNumber(tps, 1);
   return el("tr", {
     class: "row bv-card" + (selectedId === id ? " sel" : ""),
     "data-id": id,
@@ -139,7 +145,7 @@ function missionRow(ctx, mission) {
     el("td", { class: "num", text: formatNumber(hours, 1) }),
     el("td", { class: "num", text: cache === null ? "—" : String(Math.round(cache * 100)) }),
     el("td", { class: "num", text: formatNumber(cost, 2) }),
-    el("td", { class: "num", text: formatNumber(tps, 1) }),
+    el("td", { class: "num", text: tpsText }),
   ]);
 }
 

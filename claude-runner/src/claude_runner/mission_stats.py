@@ -60,10 +60,16 @@ def token_totals(manager: RunManager, run_ids: list[str]) -> dict[str, int]:
     return totals
 
 
+def _tok_per_s(out_tokens: int, gen_ms: int) -> float:
+    return round(out_tokens / (gen_ms / 1000), 1) if gen_ms else 0.0
+
+
 def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
     minutes = dict.fromkeys(ROLES, 0.0)
     cost = cost_real = 0.0
-    out_tokens = gen_ms = uncached = cached = compactions = 0
+    uncached = cached = compactions = 0
+    # output tokens and generation ms of the worker steps
+    speed = {"local": [0, 0], "cloud": [0, 0]}
     runs = _run_ids_with_compactions(manager, run_ids)
     for run in runs:
         role = run.get("role") or ""
@@ -73,7 +79,7 @@ def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
         cost += value
         if (run.get("provider") or "") != "local":
             cost_real += value
-        local_worker = role == "worker" and (run.get("provider") or "") == "local"
+        side = "local" if (run.get("provider") or "") == "local" else "cloud"
         entries, _ = manager.events.read(run["run_id"], 0)
         for entry in entries:
             kind = entry.get("kind")
@@ -82,11 +88,11 @@ def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
             elif kind == "step":
                 uncached += int(entry.get("input_tokens") or 0)
                 cached += int(entry.get("cache_read_tokens") or 0)
-                if local_worker and entry.get(
+                if role == "worker" and entry.get(
                     "generation_ms"
                 ):  # steps the proxy sent at once have no measured speed
-                    out_tokens += int(entry.get("output_tokens") or 0)
-                    gen_ms += int(entry.get("generation_ms") or 0)
+                    speed[side][0] += int(entry.get("output_tokens") or 0)
+                    speed[side][1] += int(entry.get("generation_ms") or 0)
     return {
         "runs": len(runs),
         "worker_hours": round(minutes["worker"] / 60, 2),
@@ -94,7 +100,11 @@ def stats_for_runs(manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
         "architect_minutes": round(minutes["architect"], 1),
         "cost_estimate_usd": round(cost, 2),
         "cost_real_usd": round(cost_real, 2),
-        "tok_per_s": round(out_tokens / (gen_ms / 1000), 1) if gen_ms else 0.0,
+        "tok_per_s": _tok_per_s(
+            speed["local"][0] + speed["cloud"][0], speed["local"][1] + speed["cloud"][1]
+        ),
+        "tok_per_s_local": _tok_per_s(*speed["local"]),
+        "tok_per_s_cloud": _tok_per_s(*speed["cloud"]),
         "cache_ratio": round(cached / (cached + uncached), 3) if cached + uncached else 0.0,
         "compactions": compactions,
     }

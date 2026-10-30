@@ -58,6 +58,7 @@ class QaRequest:
     verdicts: list[str | dict[str, Any]] = field(default_factory=list)
     error: str = ""
     layers: list[str] | None = None
+    options: dict[str, Any] = field(default_factory=dict)
 
 
 def request_layers(request: QaRequest) -> list[str]:
@@ -139,6 +140,7 @@ class QaRequestStore:
                 nonce=nonce,
                 created_at=self._clock(),
                 layers=list(layers) if layers else None,
+                options=dict(options or {}),
             )
             self._requests.append(request)
             self._trim()
@@ -206,6 +208,8 @@ class QaRequestStore:
         data = asdict(request)
         if request.layers is None:
             data.pop("layers", None)
+        if not request.options:
+            data.pop("options", None)
         return data
 
     def _save(self) -> None:

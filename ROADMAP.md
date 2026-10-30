@@ -10,26 +10,26 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.800 · October 29, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800; the JSON configuration comes next
+**0.11.900 · October 30, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next
 
-Current version: **0.11.800** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
+Current version: **0.11.900** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
 ## Timeline
 
-### Foundations — Done (September 2026)
+### before 0.1.0: Foundations — Done (September 2026)
 
-First workflows · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestones, 100%
+before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestones, 100%
 
 - [x] First n8n and Hermes workflows (AHAWR, Run Manager)
 - [x] Data Tables for config, prompts and missions
 - [x] Dockerfile and scripts
 - [x] Bug fixes
 
-### AHAWR on Claude Code — Done (September 27 – October 11)
+### 0.1.0 – 0.2.0: AHAWR on Claude Code — Done (September 27 – October 11)
 
-claude-runner + LiteLLM + local llama · One runner API for Claude Code and the local model · 8/8 milestones, 100%
+0.1.0 – 0.2.0 · claude-runner + LiteLLM + local llama: one runner API for Claude Code and the local model · 8/8 milestones, 100%
 
 - [x] claude-runner runs the Claude Code CLI headless behind /v1/runs
 - [x] LiteLLM between Claude Code and the local llama.cpp
@@ -40,7 +40,7 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Prefill and speed missions on llama.cpp
 - [x] Model benchmark: cloud and local Workers
 
-### Postgres and thinking switch — Done (October 12)
+### 0.3.0: Postgres and thinking switch — Done (October 12)
 
 0.3.0 · A stable store and per-request thinking control · 5/5 milestones, 100%
 
@@ -50,18 +50,18 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Worker scratch folder survives container recreation
 - [x] Reviewer can search any folder
 
-### Dashboard filters and search — Done (October 14 – 15)
+### 0.4.0 – 0.4.200: Dashboard filters and search — Done (October 14 – 15)
 
-0.4.0 · 0.4.100 · 0.4.200 · Clickable filter values and full-text search over runs · 4/4 milestones, 100%
+0.4.0 – 0.4.200 · Clickable filter values and full-text search over runs · 4/4 milestones, 100%
 
 - [x] Every value of a run is a click-filter, combined with AND/OR
 - [x] Filter persisted in the URL hash
 - [x] Full-text search over event logs
 - [x] Run-list fixes and the version rule
 
-### Mission board — Done (October 17)
+### 0.5.0 – 0.5.510: Mission board — Done (October 17 – 18)
 
-0.5.0 · 0.5.100 · The queue and the missions as cards · 6/6 milestones, 100%
+0.5.0 – 0.5.510 · The queue and the missions as cards · 6/6 milestones, 100%
 
 - [x] Five groups of cards with statistics
 - [x] Queue drag-and-drop with version checks
@@ -70,9 +70,9 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Run page scroll and polling fixes
 - [x] Roadmap page (GitHub Pages), ROADMAP.md and the new README (0.5.200 – 0.5.300)
 
-### Board 0.6: views, task cards, operations control — Done (October 18 – 19)
+### 0.6.0 – 0.6.100: Board views, task cards, operations control — Done (October 18 – 19)
 
-0.6.0 · 0.6.100 · Four board missions in one release: operations control, task cards, views and translations · 5/5 milestones, 100%
+0.6.0 – 0.6.100 · Four board missions in one release: operations control, task cards, views and translations · 5/5 milestones, 100%
 
 - [x] Operations control: process control, loop protection (ops-control)
 - [x] Task cards, plan editing, thinking panel, readiness and history (board-ui2)
@@ -80,16 +80,16 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Board views part 2: smart task ordering, Lanes and Sprint views (Haiku 5.5, report of the last task written by hand)
 - [x] Releases 0.6.0 and 0.6.100: tests and browser checks
 
-### Board 0.7: settings window and board fixes — Done (October 19)
+### 0.7.0 – 0.7.400: Settings window and board fixes — Done (October 19)
 
-0.7.0 · 0.7.100 – 0.7.400 · Mission settings in a step-by-step window; fixes of statuses, languages and Kanban drag-and-drop · 4/4 milestones, 100%
+0.7.0 – 0.7.400 · Mission settings in a step-by-step window; fixes of statuses, languages and Kanban drag-and-drop · 4/4 milestones, 100%
 
 - [x] Launch settings window with steps, Review table and expand (0.7.0); data tables no longer bloat
 - [x] Fixes 0.7.100 – 0.7.400: launch settings fields, task statuses, board languages, Kanban drag-and-drop and the queue
 - [x] Documentation cleaned: mission run notes and reports removed from docs/
 - [x] Releases 0.7.0 – 0.7.400: tests and browser checks
 
-### 0.8.0: guards in the dashboard, cloud thinking, adaptive split — Done (October 21)
+### 0.8.0: Guards in the dashboard, cloud thinking, adaptive split — Done (October 21)
 
 0.8.0 · Guard supervisor, thinking control for cloud runs, plan size gate with automatic split, the agent guide · 4/4 milestones, 100%
 
@@ -108,9 +108,9 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] Guards tab in the dashboard: cards, flow and timelines with a history of checks (0.9.0)
 - [x] Logo: the Result gear is replaced by a QA gear
 
-### 0.10.0: features config and all of QA — Done (October 22 – 23)
+### 0.10.0 – 0.10.100: Features config and all of QA — Done (October 22 – 23)
 
-0.10.0 · Workflow features as one JSON setting with a live adaptive split, and all of QA in one version: a request queue, its own container, regression, API and UI layers, and a smoke crawl · 8/8 milestones, 100%
+0.10.0 – 0.10.100 · Workflow features as one JSON setting with a live adaptive split, and all of QA in one version: a request queue, its own container, regression, API and UI layers, and a smoke crawl · 8/8 milestones, 100%
 
 - [x] ahawr-features-config: features_json for the workflow features, surgical split patch, Features section in the launch settings, Telegram progress numbers; the live proof of the split is an operator step
 - [x] ahawr-qa-gate: QA runs on the host through a request queue in the runner, the workflow asks and waits; a fail sends the mission back at most twice, a blocked QA never rejects (switched on 2026-10-22, the first live mission with UI changes is still to come)
@@ -121,26 +121,25 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [x] ahawr-qa-smoke: universal QA smoke crawl without per-mission scenarios (the crawl does not yet reproduce the three replayed bugs: a drag and a forced 409 are the next step)
 - [x] 0.10.0 release: changelog, version, roadmap. Open QA steps: make the in-process UI stack pass all 17 scenarios, take the regression baseline, retire the host worker, close the runner port (not before that)
 
-### 0.11.0: host actions, the queue from the board, providers and report tasks — Done (October 24 – 27)
+### 0.11.0 – 0.11.900: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality — Done (October 24 – 29)
 
-0.11.0 · Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review · 5/5 milestones, 100%
+0.11.0 – 0.11.900 · Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality · 13/13 milestones, 100%
 
 - [x] ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)
 - [x] ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list
 - [x] ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI
 - [x] ahawr-report-pack: a generated facts pack (report_facts.py), a Reviewer rubric and a Telegram notice after two failed report attempts, as a workflow patch behind the flag report_pack (off by default; the patch is imported into the live workflow, the flag is not turned on and the cloud Worker for reports is not set yet)
-- [x] 0.11.0 release: changelog, version, roadmap (committed, not pushed)
-
-### 0.11.800: the QA agent and RAG quality — Done (October 28 – 29)
-
-0.11.800 · A separate thinking-model QA role with a design contract, and offline measurement of the search quality · 4/4 milestones, 100%
-
-- [x] ahawr-qa-agent: design contract per mission, the role qa_agent (read-only tools, thinking on), deterministic screen capture, strict verdict parser with no false green, layer 'agent' of the QA request behind the flag qa_agent (off by default); two contracts (Providers, Guards). Not run live with a model yet; the Guards contract needs a stack with the Guards tab on
-- [x] ahawr-rag-quality: 90 real queries as an offline set, about 20 search variants measured on hashing and on e5, none passed the threshold; the search gate AHAWR_SEARCH_SKIP_PATH (on in docker-compose) and the usage metrics (precision, recall per role)
+- [x] 0.11.100 – 0.11.110: a guard against a Worker wiping uncommitted work (compare with HEAD); the providers database switched on, cryptography as a runtime dependency, keys in a separate secrets volume
+- [x] 0.11.200: lessons library (board.lessons, the Lessons panel in the mission and task views), review calibration with task types and escalation to the Architect after 3 rejections (flag, off by default), stuck detector for the local Worker
+- [x] 0.11.300 – 0.11.400: Providers page as master and detail with fetch models, import from the environment; Guards page with a switch and interval per guard; escalation block from_attempt; dashboard tabs keep the reader in place
+- [x] 0.11.500: runs use providers of the database, failover to a second provider on 429 and 5xx, fetch models for gateways, repository guide for container inputs
+- [x] 0.11.600 – 0.11.700: every QA request is a run of the role qa in the dashboard with one event per scenario, role names spelled out, smoke failure reason
+- [x] 0.11.800: the QA agent (design contract per mission, role qa_agent, strict verdict parser, flag qa_agent off by default), RAG quality tools (90 real queries, about 20 variants measured, none passed the threshold), search gate AHAWR_SEARCH_SKIP_PATH, MCP servers for search and board
+- [x] 0.11.900: the QA agent runs in missions (the QA Request sends the flag, a contract for the mobile dashboard mission, the agent may read its captures), drag a not-completed mission into the queue, local and cloud speed apart in every board view, the Reviewer reads a line range with sed -n, the Worker failover goes to the first local model
 - [x] Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md
-- [x] 0.11.800 release: changelog, version, roadmap
+- [x] 0.11.0 – 0.11.900 releases: changelog, versions, roadmap
 
-### 0.12.0: configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
+### 0.12.0: Configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
 
 0.12.0 · hermes_config from 41 to 10 columns, one JSON setting per concern; claude-runner becomes ahawr-runner at a queue pause · 0/3 milestones, 0%
 
@@ -148,14 +147,14 @@ claude-runner + LiteLLM + local llama · One runner API for Claude Code and the 
 - [ ] Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
 - [ ] 0.12.0 release: changelog, version, roadmap
 
-### Quality and reach (no version fixed) — Next (Q4 2026 – Q1 2027)
+### After 0.11.900: Quality and reach — Next (Q4 2026 – Q1 2027)
 
-after 0.11.0 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
+after 0.11.900 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
 
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [ ] Dashboard over the local network and on mobile
 
-### Version 1.0: more executors — Next (Q4 2026 – Q1 2027)
+### 1.0.0: More executors — Next (Q4 2026 – Q1 2027)
 
 1.0.0 · Codex as a third executor next to Hermes and Claude Code · 0/5 milestones, 0%
 
@@ -165,9 +164,9 @@ after 0.11.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [ ] Stable provider-block configuration and event format
 - [ ] 1.0.0 release: changelog, README “What 1.0 means”, roadmap
 
-### Parallel missions and Hermes parity — Later (2027)
+### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 
-after 1.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
+after 1.0.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
 
 - [ ] ahawr-parallel-missions: one workflow, per-mission model and folder
 - [ ] Hermes runs on par with Claude Code on the dashboard

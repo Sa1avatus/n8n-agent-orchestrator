@@ -69,6 +69,18 @@ function fmtPercent(ratio, parts) {
   return Math.round(r * 100) + "%";
 }
 
+// Speed of the Worker's steps; when both a local and a cloud provider took part, both speeds with their names.
+function fmtSpeed(stats) {
+  if (!stats || stats.tok_per_s == null) return "—";
+  const local = Number(stats.tok_per_s_local) || 0;
+  const cloud = Number(stats.tok_per_s_cloud) || 0;
+  if (local > 0 && cloud > 0) {
+    return L("s.tps_local", "local {n} tok/s", { n: Math.round(local) }) + " · " +
+      L("s.tps_cloud", "cloud {n} tok/s", { n: Math.round(cloud) });
+  }
+  return L("s.tps", "{n} tok/s", { n: Math.round(Number(stats.tok_per_s)) });
+}
+
 // One task card: id, title, status, attempts used/max, time, tokens, cache
 // share, cost, speed, thinking share.  stats is the task's own stats object
 // or null while it has not arrived yet; every figure then renders "—".
@@ -83,7 +95,7 @@ function taskCardHtml(missionId, task, stats) {
   const tokens = stats ? fmtTokens((Number(stats.input_tokens) || 0) + (Number(stats.output_tokens) || 0)) : "—";
   const cache = stats ? fmtPercent(stats.cache_ratio, (Number(stats.cache_read_tokens) || 0) + (Number(stats.cache_write_tokens) || 0)) : "—";
   const cost = stats && stats.cost_usd != null ? "$" + Number(stats.cost_usd).toFixed(2) : "—";
-  const speed = stats && stats.tok_per_s != null ? L("s.tps", "{n} tok/s", { n: Math.round(Number(stats.tok_per_s)) }) : "—";
+  const speed = fmtSpeed(stats);
   const thinking = stats ? fmtPercent(
     stats.thinking_steps ? stats.thinking_runs / stats.thinking_steps : 0,
     stats.thinking_steps,

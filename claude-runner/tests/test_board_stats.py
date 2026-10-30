@@ -296,9 +296,9 @@ class TestTaskStats:
         assert stats["cache_read_tokens"] == 100_000
         assert stats["cache_write_tokens"] == 0
         assert stats["cache_ratio"] == pytest.approx(100_000 / 1_610_000, abs=0.001)
-        # speed: tok_per_s is computed only for local worker runs; these
-        # non-local runs have no speed figure (0.0)
-        assert stats["tok_per_s"] == 0.0
+        # speed: the worker steps of these non-local runs count as cloud speed
+        assert stats["tok_per_s_local"] == 0.0
+        assert stats["tok_per_s_cloud"] == stats["tok_per_s"] == 50000.0
         # thinking: run_w1's first step started while on was in force, the
         # second after the switch; run_r1 has no mode entries and defaults to on
         assert stats["thinking_runs"] == 2

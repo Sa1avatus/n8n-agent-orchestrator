@@ -830,3 +830,28 @@ def test_agent_capture_uses_the_stack_mode_of_the_environment(
     with pytest.raises(QaStackError):
         qa_worker._capture_agent_screens(contract)
     assert modes == ["postgres"]
+
+
+def test_flag_on_without_layers_runs_the_default_run_and_the_agent(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The workflow sends only the flag: the default run stays and the agent runs beside it."""
+    _patch_heartbeat(monkeypatch, tmp_path / "heartbeat" / "qa_worker.json")
+    calls: list[str] = []
+
+    def _execute(_row: dict[str, Any]) -> tuple[list[Any], str]:
+        calls.append("default")
+        return ["pass"], ""
+
+    def _agent(_row: dict[str, Any]) -> tuple[list[Any], str]:
+        calls.append("agent")
+        return ["agent-pass"], ""
+
+    monkeypatch.setattr(qa_worker, "_execute", _execute)
+    monkeypatch.setattr(qa_worker, "_run_agent_layer", _agent)
+    sent = _fake_runner(monkeypatch)
+
+    qa_worker._serve_locked({"id": "req-flag-only", "options": {"qa_agent": True}})
+
+    assert calls == ["default", "agent"]
+    assert json.loads(cast(bytes, sent[1].data or b""))["verdicts"] == ["pass", "agent-pass"]

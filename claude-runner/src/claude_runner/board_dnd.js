@@ -81,11 +81,16 @@ async function loadBoardData() {
 // raises an error carrying the "план изменился, обновите" message.
 async function postMoveQueue(mission_id, to_position) {
   const version = DndState.data ? DndState.data.version : null;
-  const res = await fetch("/api/board/queue/move", {
+  return postQueueJson("/api/board/queue/move", { mission_id, to_position, expected_version: version });
+}
+
+// POST one queue API call with the dashboard header; errors as in postMoveQueue.
+async function postQueueJson(url, payload) {
+  const res = await fetch(url, {
     method: "POST",
     cache: "no-store",
     headers: { "Content-Type": "application/json", "X-AHAWR-Dashboard": "1" },
-    body: JSON.stringify({ mission_id, to_position, expected_version: version }),
+    body: JSON.stringify(payload),
   });
   let body = null;
   try { body = await res.json(); } catch (e) { /* keep the status */ }
@@ -225,6 +230,11 @@ function moveByStep(missionId, dir) {
 // "план изменился, обновите" and the board is reloaded too.
 async function applyMove(missionId, targetId, side) {
   if (!DndState.data) return;
+  const groups = DndState.data.groups || {};
+  if ((groups.not_completed || []).includes(missionId)) {
+    await requeueMission(missionId, targetId, side);
+    return;
+  }
   const queue = DndState.data.queue || [];
   let newQueue;
   try {
@@ -253,6 +263,36 @@ async function applyMove(missionId, targetId, side) {
   if (typeof document !== "undefined" && document.dispatchEvent) {
     document.dispatchEvent(new CustomEvent("board:refresh"));
   }
+}
+
+// Put a not-completed mission back in the queue: enable it with the retry flag (add it when the
+// queue table has no row), then move it to the drop slot, or behind the last waiting mission when
+// the drop was on the column and not on a card.
+async function requeueMission(missionId, targetId, side) {
+  try {
+    const data = await loadBoardData();
+    const known = (data.queue || []).some((e) => e.mission_id === missionId);
+    if (known) {
+      const entries = data.queue.map((e) => (e.mission_id === missionId
+        ? Object.assign({}, e, { enabled: true, retry_failed: true }) : e));
+      await postQueueJson("/api/board/queue", { entries, expected_version: data.version });
+    } else {
+      await postQueueJson("/api/board/queue/add", {
+        mission_id: missionId, enabled: true, retry_failed: true, expected_version: data.version,
+      });
+    }
+    DndState.data = await loadBoardData();
+    const { queue, groups } = DndState.data;
+    const waiting = new Set([...(groups.running || []), ...(groups.queued || [])]);
+    const lastWaiting = queue.filter((e) => e.mission_id !== missionId && waiting.has(e.mission_id)).pop();
+    const target = targetId || (lastWaiting ? lastWaiting.mission_id : null);
+    const at = BoardLogic.dropPosition(queue, missionId, target, targetId ? side : "after", groups);
+    await postMoveQueue(missionId, at);
+  } catch (e) {
+    showState(e.status === 409 ? t("conflict.plan_changed") : (e.message || t("move.failed")));
+  }
+  await refreshBoard();
+  document.dispatchEvent(new CustomEvent("board:refresh"));
 }
 
 // Re-render the DOM from the server: BoardQueue() (board_queue.js) refetches
@@ -374,6 +414,7 @@ const BoardDnd = {
   attachCard,
   attachDnd,
   applyMove,
+  requeueMission,
   moveByStep,
   moveInData,
   postMoveQueue,

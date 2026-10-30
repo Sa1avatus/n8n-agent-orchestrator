@@ -108,6 +108,7 @@ _REVIEWER_READ_CMDS = [
     "pwd",
     "cd",
     "bash -n",
+    "sed -n",  # prints a line range; sed -i and redirections stay denied
 ]
 _REVIEWER_GIT_READ = [
     "diff",
@@ -351,6 +352,7 @@ DEFAULT_PROFILES: dict[str, RoleProfile] = {
         "dontAsk",
         disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY,
         tools="Read,Glob,Grep",
+        add_dirs=["/qa-runs"],  # the captures of the screens live outside the working directory
     ),
     "generic": RoleProfile("dontAsk", disallowed_tools=_READ_ONLY_DENY + _SECRET_DENY),
 }
@@ -525,7 +527,7 @@ class Settings:
                 append_system_prompt=env.get(prefix + "APPEND_SYSTEM_PROMPT", "").strip(),
                 max_turns=_int(env, prefix + "MAX_TURNS", 0),
                 tools=tools,
-                add_dirs=_list(env.get(prefix + "ADD_DIRS")) or [],
+                add_dirs=_list(env.get(prefix + "ADD_DIRS")) or base.add_dirs,
             )
         # Empty env var = "use Claude Code's built-in summarizer" (no custom instructions);
         # unset = use the built-in default instruction text.

@@ -599,7 +599,9 @@ def _serve(request_row: dict[str, Any]) -> None:
     layers = request_row.get("layers")
     options = request_row.get("options") or {}
     agent_on = qa_agent_enabled(options)
-    agent_layer = QA_AGENT_LAYER if layers and QA_AGENT_LAYER in layers and agent_on else None
+    # flag on: the agent runs beside the default run (no layers), or when named in the layers
+    agent_named = not layers or QA_AGENT_LAYER in layers
+    agent_layer = QA_AGENT_LAYER if agent_named and agent_on else None
     scripted_layers = [layer for layer in (layers or []) if layer != QA_AGENT_LAYER]
     verdicts: list[Any]
     if scripted_layers:

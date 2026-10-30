@@ -3,7 +3,31 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.800** (claude-runner `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.11.900** (claude-runner `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-10-30 (0.11.900)
+
+Step: the first live checks of the QA agent and the fixes they found, the board fixes from the operator's screenshots. Bug-fix step with two small functions.
+
+Fixed bugs:
+
+- **The QA agent could not read its captures.** The role runs in `dontAsk` with Read, Glob and Grep and may read only the working directory; the captures are in `/qa-runs`, so all items came back `blocked`. The role now has `--add-dir /qa-runs` (`config.py`; an empty `ADD_DIRS` in the environment no longer drops a profile default).
+- **The QA request API refused the layer `agent` (422) and dropped `options`.** `QaLayer` and `QaRequestBody.options`, `check_layers` and the store keep the options; the layer needs the flag `qa_agent`.
+- **The QA agent never ran inside a mission:** the `QA Request` node sent no options. `qa_workflow_patch.py` takes an `agent` flag (read from the `qa` options of `roles_json` by `launch_mission.sh`) and adds `options: { qa_agent: true }` to the body, also in a workflow patched earlier; the QA worker runs the agent beside the default run when the flag is on and no layers are named.
+- **A Worker kept calling a provider that answered 429.** When the next attempt uses the same model, the failover goes to the first later attempt that uses the local model (`failover_patch.py`, `tests/test_failover_patch.py`).
+- **The mission board showed "503" until a manual reload.** The board retries every 15 seconds, at most 20 times, then stops.
+- **The redundant "Runs" link on the board and the Providers panel showing in other tabs** (`board.html`, `board.css`).
+- **The mission card showed 0 tok/s for a mission whose Worker used a cloud provider.** The speed is counted per side: `tok_per_s_local`, `tok_per_s_cloud` next to the combined `tok_per_s` (`mission_stats.py`, `board_stats.py`); the cards, Kanban, Sprint and Grid show both when both providers took part.
+- **The Reviewer could not read a line range** (`sed -n` was denied in `dontAsk`, so the check of a report was blind); `sed -n` is on its read-only list, `sed -i` and redirections stay denied.
+
+Small functions:
+
+- **Drag a not-completed mission into the queue:** in Kanban a card of the column "Not completed" is dragged onto the Queued column (or onto a queued card); the mission is enabled with the retry flag, added when the queue has no row for it, and moved to the drop slot (`board_dnd.js`, `board_view_kanban.js`).
+- **A design contract for the mobile dashboard mission** (`claude-runner/qa/contracts/ahawr-dashboard-lan-mobile`, 8 items, the reference image is a capture from before the mission).
+
+Also in this commit (earlier work, flags as before): the compaction request of LiteLLM can run with thinking off (`AHAWR_COMPACTION_THINKING_OFF`, default on in `docker-compose.yml`), the MCP search default, the roadmap files.
+
+Checks: `node --test tests/*.test.js` 321 pass, 0 fail; the touched pytest files (`test_config.py`, `test_qa_worker.py`, `test_qa_workflow_patch.py`, `test_qa_requests_api.py`, `test_failover_patch.py`, `test_mission_stats.py`, `test_board_stats.py`) pass; ruff clean for the touched source files. Old failures stay: `test_board_js_escaping` (`${dash(r.reason)}`), the Windows-path tests, 4 unused imports in `test_mission_stats.py`.
 
 ## 2026-10-29 (0.11.800)
 

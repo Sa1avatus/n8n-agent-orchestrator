@@ -15,7 +15,7 @@
 "grid.empty":"No missions yet.","grid.hint":"A click highlights a row, a double click opens the mission with its tasks. Sort by clicking a header.","h.mission":"Mission","h.project":"Project","h.state":"State","h.tasks":"Tasks","h.att":"Attempts","h.time":"Time, h","h.cache":"Cache %","h.cost":"Cost","h.tps":"Tok/s",
 "m.runs":"Runs of this mission","m.hint":"Drag the unfinished tasks (⠿). A task cannot go after one that depends on it, or above one it depends on: you can cancel or move it together with the dependents. A new dependency that closes a cycle is rejected.","t.task":"Task","t.desc":"Description","t.status":"Status","t.att":"Att.","t.stat":"Statistics","t.dep":"Depends on","t.need":"Needed by","dep.add":"+ dependency",
 "runs.crumb":"Runs dashboard","runs.filter":"mission: {id}","runs.auto":"the mission filter is set automatically","runs.empty":"No runs yet",
-"s.min":"{n} min","s.tok":"{n}K tok","s.cache":"cache {n}%","s.tps":"{n} tok/s","s.think":"thinking {n}%",
+"s.min":"{n} min","s.tok":"{n}K tok","s.cache":"cache {n}%","s.tps":"{n} tok/s","s.tps_local":"local {n} tok/s","s.tps_cloud":"cloud {n} tok/s","s.think":"thinking {n}%",
 "tr.title":"Translations","tr.hint":"Stored in the database (board.i18n_strings). A missing translation falls back to English and is highlighted.","tr.lang":"Language","tr.add":"Add language","tr.code":"code (e.g. fr)","tr.name":"name (e.g. Français)","tr.missing":"only missing","tr.key":"Key","tr.en":"English","tr.tr":"Translation","tr.saved":"Saved to the database (demo: in memory). Missing: {n} of {total}.",
 "switcher.label":"View","part2.note":"Coming in part 2",
 "nav.missions":"Missions","nav.runs":"Runs","board.loading":"Loading the board…",

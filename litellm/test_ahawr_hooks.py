@@ -575,3 +575,25 @@ if __name__ == "__main__":
     test_flag_off_keeps_original_message()
     test_cache_trace_first_diff(__import__("pathlib").Path(__import__("tempfile").mkdtemp()))
     print("hook unit tests passed")
+
+
+def test_compaction_thinking_off_flag(monkeypatch) -> None:
+    import ahawr_hooks
+
+    hook = MidSystemMessageHook()
+    compaction = [{"role": "user", "content": "work"}, {"role": "user", "content": "CRITICAL: Respond with TEXT ONLY. summary"}]
+    ordinary = [{"role": "user", "content": "work"}]
+
+    def call(model: str, messages: list) -> dict:
+        ahawr_hooks._thinking_cache = (0.0, False)
+        return asyncio.run(hook.async_pre_call_hook(None, None, {"model": model, "messages": copy.deepcopy(messages)}, "completion"))
+
+    monkeypatch.setattr(ahawr_hooks, "RUNTIME_DIR", "/nonexistent")
+    # flag off (default): behaviour is unchanged, a compaction request keeps thinking
+    monkeypatch.delenv("AHAWR_COMPACTION_THINKING_OFF", raising=False)
+    assert "extra_body" not in call("qwen3.8-27b", compaction)
+    # flag on: only a compaction request of a local model is told not to think
+    monkeypatch.setenv("AHAWR_COMPACTION_THINKING_OFF", "1")
+    assert call("qwen3.8-27b", compaction)["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert "extra_body" not in call("qwen3.8-27b", ordinary)
+    assert "extra_body" not in call("claude-sonnet-5-5", compaction)

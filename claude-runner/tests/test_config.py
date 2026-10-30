@@ -16,6 +16,9 @@ def test_qa_agent_profile_has_read_only_tools() -> None:
         assert tool in prof.disallowed_tools
     # No allowed_tools (the --allowedTools flag is not set); the tools set does the work.
     assert prof.allowed_tools == []
+    # The captures live in /qa-runs, outside the working directory: the agent may read there.
+    assert prof.add_dirs == ["/qa-runs"]
+    assert s.profile("worker").add_dirs == []
     # The Worker and Reviewer profiles are unchanged (pinned).
     worker = s.profile("worker")
     assert worker.permission_mode == "bypassPermissions"
@@ -26,3 +29,6 @@ def test_qa_agent_profile_has_read_only_tools() -> None:
     assert reviewer.permission_mode == "dontAsk"
     assert "Bash(ahawr-search *)" in reviewer.allowed_tools
     assert "Edit" in reviewer.disallowed_tools
+    # the Reviewer reads a line range itself; an in-place sed edit is not on its list
+    assert "Bash(sed -n *)" in reviewer.allowed_tools
+    assert "Bash(sed *)" not in reviewer.allowed_tools

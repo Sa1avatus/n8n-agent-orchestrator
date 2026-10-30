@@ -15,6 +15,7 @@ from claude_runner.board_stats import mission_card_stats, task_stats
 from claude_runner.config import Settings
 from claude_runner.events import EventLog
 from claude_runner.local_pricing import LocalPricing
+from claude_runner.mission_stats import stats_for_runs
 from claude_runner.runs import RunManager
 from claude_runner.store import Store
 
@@ -359,3 +360,23 @@ def test_task_stats_with_per_attempt_time(manager: RunManager, settings: Setting
     assert empty["attempt_seconds"] == []
     assert empty["cost_estimate_usd"] == 0.0
     assert empty["last_review_score"] is None
+
+
+def test_speed_is_split_between_the_local_and_the_cloud_provider(manager: RunManager) -> None:
+    base = datetime(2026, 1, 1, 10, 0)
+    add_run(manager.store, "run_loc", "s1", "worker", base, base + timedelta(minutes=5), 0.0,
+            provider="local")
+    add_run(manager.store, "run_cld", "s2", "worker", base, base + timedelta(minutes=5), 0.0,
+            provider="openrouter")
+    write_events(manager.events, "run_loc", [
+        {"kind": "step", "step": 1, "output_tokens": 200, "generation_ms": 10_000},
+    ])
+    write_events(manager.events, "run_cld", [
+        {"kind": "step", "step": 1, "output_tokens": 800, "generation_ms": 10_000},
+    ])
+    both = stats_for_runs(manager, ["run_loc", "run_cld"])
+    speeds = (both["tok_per_s_local"], both["tok_per_s_cloud"], both["tok_per_s"])
+    assert speeds == (20.0, 80.0, 50.0)
+    cloud_only = stats_for_runs(manager, ["run_cld"])
+    speeds = (cloud_only["tok_per_s_local"], cloud_only["tok_per_s_cloud"], cloud_only["tok_per_s"])
+    assert speeds == (0.0, 80.0, 80.0)

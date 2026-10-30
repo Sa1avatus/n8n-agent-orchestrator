@@ -511,3 +511,41 @@ test("double-clicking a card opens the runs dashboard filtered by the mission, w
   assert.equal(globalThis.location.href, "/#mission=q1&from=board%2Fview%2Fkan");
   delete globalThis.location;
 });
+
+test("dropping a not-completed card on the queued column puts the mission back in the queue", async () => {
+  resetDom();
+  let order = ["q1", "q2"];
+  const calls = stubFetch((url, opts) => {
+    if (opts && opts.method === "POST" && url === "/api/board/queue/add") {
+      order = order.concat(JSON.parse(opts.body).mission_id);
+      return { status: 200, body: { ok: true } };
+    }
+    if (opts && opts.method === "POST") return { status: 200, body: { ok: true } };
+    if (url === "/api/board/queue") return {
+      status: 200,
+      body: {
+        missions: [],
+        queue: order.map((id, i) => ({ mission_id: id, enabled: true, retry_failed: false, position: i })),
+        groups: { running: [], queued: ["q1", "q2"], not_completed: ["b1"] },
+        version: QUEUE_VERSION,
+      },
+    };
+    return { status: 200, body: { missions: [] } };
+  });
+  const views = freshKanban();
+  const { body } = renderWith(views, { data: {}, missions: MISSIONS });
+  await flush();
+  const broken = byClass(body, "kcard").find((c) => c.dataset.id === "b1");
+  assert.equal(broken.getAttribute("draggable"), "true");
+  const data = { getData: () => "b1", setData() {} };
+  broken.dispatch("dragstart", { dataTransfer: data });
+  body.querySelector('[data-col="q"]').dispatch("drop", { dataTransfer: data });
+  await flush();
+  const posts = calls.filter((c) => c.method === "POST");
+  assert.equal(posts[0].url, "/api/board/queue/add");
+  assert.deepEqual(JSON.parse(posts[0].body), {
+    mission_id: "b1", enabled: true, retry_failed: true, expected_version: QUEUE_VERSION,
+  });
+  assert.equal(posts[1].url, "/api/board/queue/move");
+  assert.equal(JSON.parse(posts[1].body).to_position, 2);
+});

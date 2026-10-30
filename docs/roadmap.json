@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.11.800 · October 29, 2026",
-    "tag": "The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800; the JSON configuration comes next",
+    "date": "0.11.900 · October 30, 2026",
+    "tag": "The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next",
     "stats": [
       [
         "Current version",
-        "0.11.800"
+        "0.11.900"
       ],
       [
         "Missions completed",
@@ -31,8 +31,8 @@
     {
       "s": "done",
       "when": "September 2026",
-      "t": "Foundations",
-      "v": "First workflows",
+      "t": "before 0.1.0: Foundations",
+      "v": "before 0.1.0",
       "d": "n8n + Hermes, Data Tables, prompts and missions",
       "m": [
         4,
@@ -60,9 +60,9 @@
     {
       "s": "done",
       "when": "September 27 – October 11",
-      "t": "AHAWR on Claude Code",
-      "v": "claude-runner + LiteLLM + local llama",
-      "d": "One runner API for Claude Code and the local model",
+      "t": "0.1.0 – 0.2.0: AHAWR on Claude Code",
+      "v": "0.1.0 – 0.2.0",
+      "d": "claude-runner + LiteLLM + local llama: one runner API for Claude Code and the local model",
       "m": [
         8,
         8
@@ -105,7 +105,7 @@
     {
       "s": "done",
       "when": "October 12",
-      "t": "Postgres and thinking switch",
+      "t": "0.3.0: Postgres and thinking switch",
       "v": "0.3.0",
       "d": "A stable store and per-request thinking control",
       "m": [
@@ -138,8 +138,8 @@
     {
       "s": "done",
       "when": "October 14 – 15",
-      "t": "Dashboard filters and search",
-      "v": "0.4.0 · 0.4.100 · 0.4.200",
+      "t": "0.4.0 – 0.4.200: Dashboard filters and search",
+      "v": "0.4.0 – 0.4.200",
       "d": "Clickable filter values and full-text search over runs",
       "m": [
         4,
@@ -166,9 +166,9 @@
     },
     {
       "s": "done",
-      "when": "October 17",
-      "t": "Mission board",
-      "v": "0.5.0 · 0.5.100",
+      "when": "October 17 – 18",
+      "t": "0.5.0 – 0.5.510: Mission board",
+      "v": "0.5.0 – 0.5.510",
       "d": "The queue and the missions as cards",
       "m": [
         6,
@@ -204,8 +204,8 @@
     {
       "s": "done",
       "when": "October 18 – 19",
-      "t": "Board 0.6: views, task cards, operations control",
-      "v": "0.6.0 · 0.6.100",
+      "t": "0.6.0 – 0.6.100: Board views, task cards, operations control",
+      "v": "0.6.0 – 0.6.100",
       "d": "Four board missions in one release: operations control, task cards, views and translations",
       "items": [
         [
@@ -237,8 +237,8 @@
     {
       "s": "done",
       "when": "October 19",
-      "t": "Board 0.7: settings window and board fixes",
-      "v": "0.7.0 · 0.7.100 – 0.7.400",
+      "t": "0.7.0 – 0.7.400: Settings window and board fixes",
+      "v": "0.7.0 – 0.7.400",
       "d": "Mission settings in a step-by-step window; fixes of statuses, languages and Kanban drag-and-drop",
       "items": [
         [
@@ -266,7 +266,7 @@
     {
       "s": "done",
       "when": "October 21",
-      "t": "0.8.0: guards in the dashboard, cloud thinking, adaptive split",
+      "t": "0.8.0: Guards in the dashboard, cloud thinking, adaptive split",
       "v": "0.8.0",
       "d": "Guard supervisor, thinking control for cloud runs, plan size gate with automatic split, the agent guide",
       "items": [
@@ -328,8 +328,8 @@
     {
       "s": "done",
       "when": "October 22 – 23",
-      "t": "0.10.0: features config and all of QA",
-      "v": "0.10.0",
+      "t": "0.10.0 – 0.10.100: Features config and all of QA",
+      "v": "0.10.0 – 0.10.100",
       "d": "Workflow features as one JSON setting with a live adaptive split, and all of QA in one version: a request queue, its own container, regression, API and UI layers, and a smoke crawl",
       "m": [
         8,
@@ -372,13 +372,13 @@
     },
     {
       "s": "done",
-      "when": "October 24 – 27",
-      "t": "0.11.0: host actions, the queue from the board, providers and report tasks",
-      "v": "0.11.0",
-      "d": "Container actions by request with operator confirmation, board.queue as the single source of the mission order, providers in the web UI and reports that pass review",
+      "when": "October 24 – 29",
+      "t": "0.11.0 – 0.11.900: Host actions, the queue from the board, providers and report tasks, the QA agent and RAG quality",
+      "v": "0.11.0 – 0.11.900",
+      "d": "Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality",
       "m": [
-        5,
-        5
+        13,
+        13
       ],
       "items": [
         [
@@ -399,28 +399,31 @@
         ],
         [
           "ok",
-          "0.11.0 release: changelog, version, roadmap (committed, not pushed)"
-        ]
-      ]
-    },
-    {
-      "s": "done",
-      "when": "October 28 – 29",
-      "t": "0.11.800: the QA agent and RAG quality",
-      "v": "0.11.800",
-      "d": "A separate thinking-model QA role with a design contract, and offline measurement of the search quality",
-      "m": [
-        4,
-        4
-      ],
-      "items": [
-        [
-          "ok",
-          "ahawr-qa-agent: design contract per mission, the role qa_agent (read-only tools, thinking on), deterministic screen capture, strict verdict parser with no false green, layer 'agent' of the QA request behind the flag qa_agent (off by default); two contracts (Providers, Guards). Not run live with a model yet; the Guards contract needs a stack with the Guards tab on"
+          "0.11.100 – 0.11.110: a guard against a Worker wiping uncommitted work (compare with HEAD); the providers database switched on, cryptography as a runtime dependency, keys in a separate secrets volume"
         ],
         [
           "ok",
-          "ahawr-rag-quality: 90 real queries as an offline set, about 20 search variants measured on hashing and on e5, none passed the threshold; the search gate AHAWR_SEARCH_SKIP_PATH (on in docker-compose) and the usage metrics (precision, recall per role)"
+          "0.11.200: lessons library (board.lessons, the Lessons panel in the mission and task views), review calibration with task types and escalation to the Architect after 3 rejections (flag, off by default), stuck detector for the local Worker"
+        ],
+        [
+          "ok",
+          "0.11.300 – 0.11.400: Providers page as master and detail with fetch models, import from the environment; Guards page with a switch and interval per guard; escalation block from_attempt; dashboard tabs keep the reader in place"
+        ],
+        [
+          "ok",
+          "0.11.500: runs use providers of the database, failover to a second provider on 429 and 5xx, fetch models for gateways, repository guide for container inputs"
+        ],
+        [
+          "ok",
+          "0.11.600 – 0.11.700: every QA request is a run of the role qa in the dashboard with one event per scenario, role names spelled out, smoke failure reason"
+        ],
+        [
+          "ok",
+          "0.11.800: the QA agent (design contract per mission, role qa_agent, strict verdict parser, flag qa_agent off by default), RAG quality tools (90 real queries, about 20 variants measured, none passed the threshold), search gate AHAWR_SEARCH_SKIP_PATH, MCP servers for search and board"
+        ],
+        [
+          "ok",
+          "0.11.900: the QA agent runs in missions (the QA Request sends the flag, a contract for the mobile dashboard mission, the agent may read its captures), drag a not-completed mission into the queue, local and cloud speed apart in every board view, the Reviewer reads a line range with sed -n, the Worker failover goes to the first local model"
         ],
         [
           "ok",
@@ -428,14 +431,14 @@
         ],
         [
           "ok",
-          "0.11.800 release: changelog, version, roadmap"
+          "0.11.0 – 0.11.900 releases: changelog, versions, roadmap"
         ]
       ]
     },
     {
       "s": "next",
       "when": "Q1 2027",
-      "t": "0.12.0: configuration columns to JSON and the rename to ahawr-runner",
+      "t": "0.12.0: Configuration columns to JSON and the rename to ahawr-runner",
       "v": "0.12.0",
       "d": "hermes_config from 41 to 10 columns, one JSON setting per concern; claude-runner becomes ahawr-runner at a queue pause",
       "m": [
@@ -460,8 +463,8 @@
     {
       "s": "next",
       "when": "Q4 2026 – Q1 2027",
-      "t": "Quality and reach (no version fixed)",
-      "v": "after 0.11.0",
+      "t": "After 0.11.900: Quality and reach",
+      "v": "after 0.11.900",
       "d": "Reviewer calibration, retrieval quality and the dashboard on the local network",
       "m": [
         0,
@@ -481,7 +484,7 @@
     {
       "s": "next",
       "when": "Q4 2026 – Q1 2027",
-      "t": "Version 1.0: more executors",
+      "t": "1.0.0: More executors",
       "v": "1.0.0",
       "d": "Codex as a third executor next to Hermes and Claude Code",
       "m": [
@@ -514,8 +517,8 @@
     {
       "s": "later",
       "when": "2027",
-      "t": "Parallel missions and Hermes parity",
-      "v": "after 1.0",
+      "t": "After 1.0.0: Parallel missions and Hermes parity",
+      "v": "after 1.0.0",
       "d": "Several missions at once and Hermes parity",
       "m": [
         0,
@@ -560,11 +563,11 @@
     "status": [
       [
         "✅ **Done**",
-        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10)"
+        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) · host actions, the queue from the board, providers, report tasks, lessons library, QA agent and RAG quality tools (0.11.0 – 0.11.800)"
       ],
       [
         "🔄 **Now**",
-        "Host actions, the queue from the board, providers and report tasks → **0.11.0**"
+        "The mission queue and stability checks of the local model → next release **0.12.0**"
       ],
       [
         "➡️ **Next**",

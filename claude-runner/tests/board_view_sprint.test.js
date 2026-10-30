@@ -122,11 +122,18 @@ const MISSIONS = [
 test("figures count done tasks, first-attempt acceptance, speed and cache", () => {
   const views = freshSprint();
   assert.deepEqual(views.figures(MISSIONS[0]), {
-    done: 1, total: 3, firstTry: 1, tps: 20, cache: 50, thinking: null,
+    done: 1, total: 3, firstTry: 1, tps: 20, tpsLocal: null, tpsCloud: null, cache: 50, thinking: null,
   });
   assert.deepEqual(views.figures(MISSIONS[1]), {
-    done: 0, total: 0, firstTry: 0, tps: null, cache: null, thinking: null,
+    done: 0, total: 0, firstTry: 0, tps: null, tpsLocal: null, tpsCloud: null, cache: null, thinking: null,
   });
+});
+
+test("figures keep the local and the cloud speed apart", () => {
+  const views = freshSprint();
+  const figs = views.figures({ tasks: [], tok_s: 40, tok_s_local: 12, tok_s_cloud: 56 });
+  assert.equal(figs.tpsLocal, 12);
+  assert.equal(figs.tpsCloud, 56);
 });
 
 test("a retried acceptance is done but not accepted on the first attempt", () => {

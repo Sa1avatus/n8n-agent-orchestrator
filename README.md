@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.11.800** | **29** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **0.11.900** | **29** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -41,8 +41,8 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- status:start -->
 | | |
 |---|---|
-| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) |
-| 🔄 **Now** | Host actions, the queue from the board, providers and report tasks → **0.11.0** |
+| ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) · host actions, the queue from the board, providers, report tasks, lessons library, QA agent and RAG quality tools (0.11.0 – 0.11.800) |
+| 🔄 **Now** | The mission queue and stability checks of the local model → next release **0.12.0** |
 | ➡️ **Next** | Configuration columns to JSON and the runner rename to `ahawr-runner` (**0.12.0**) · code review and refactoring · **1.0.0: Codex as the third executor** |
 <!-- status:end -->
 

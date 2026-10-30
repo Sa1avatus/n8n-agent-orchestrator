@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "claude-runner"
-version = "0.11.800"
+version = "0.11.900"
 description = "Hermes-compatible run API (/v1/runs) that executes AHAWR roles with the Claude Code CLI"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,6 +26,7 @@ ahawr-dashboard = "claude_runner.dashboard:main"
 ahawr-search = "claude_runner.search_cli:main"
 ahawr-mcp-search = "claude_runner.mcp_search:main"
 ahawr-mcp-board = "claude_runner.mcp_board:main"
+ahawr-dashboard-hash-password = "claude_runner.dashboard_auth_crypto:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claude_runner"]

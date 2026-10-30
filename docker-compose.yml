@@ -183,7 +183,7 @@ services:
       # gets BASH_MAX_OUTPUT_LENGTH=12000 and CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=16000.
       - CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS=${AHAWR_LOCAL_TOOL_OUTPUT_LIMITS:-0}
       - CLAUDE_RUNNER_LOCAL_SHARED_PREFIX=${AHAWR_LOCAL_SHARED_PREFIX:-1}
-      - CLAUDE_RUNNER_MCP_SEARCH=${CLAUDE_RUNNER_MCP_SEARCH:-0}
+      - CLAUDE_RUNNER_MCP_SEARCH=${CLAUDE_RUNNER_MCP_SEARCH:-1}
 
     volumes:
       # The same workspace the retrieval container indexes; the Worker edits it (read-write).
@@ -415,6 +415,8 @@ services:
       # 1 = drop the thinking of earlier steps from the context of local models (ahawr_hooks.drop_history_thinking)
       - AHAWR_DROP_HISTORY_THINKING=${AHAWR_DROP_HISTORY_THINKING:-0}
       - AHAWR_CACHE_TRACE=${AHAWR_CACHE_TRACE:-1}
+      # 1 = a compaction request of a local model never thinks (the 3000-token cap went to reasoning, the summary was empty)
+      - AHAWR_COMPACTION_THINKING_OFF=${AHAWR_COMPACTION_THINKING_OFF:-1}
 
     volumes:
       - ./litellm/config.yaml:/app/config.yaml:ro

@@ -352,3 +352,15 @@ def test_every_scenario_is_an_event_of_the_qa_run(qa: TestClient) -> None:
         ("", "skipped"),
     ]
     assert scenarios[1]["reason"] == "step 3; no toast"
+
+
+def test_agent_layer_needs_the_flag_in_the_options(qa: TestClient) -> None:
+    refused = qa.post(REQUESTS, json=_create_body(nonce="n4", layers=["agent"]), headers=AUTH)
+    assert 400 <= refused.status_code < 500
+    body = {**_create_body(nonce="n5", layers=["agent"]), "options": {"qa_agent": True}}
+    response = qa.post(REQUESTS, json=body, headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["layers"] == ["agent"]
+    assert response.json()["options"] == {"qa_agent": True}
+    stored = qa.get(ONE.format(request_id=response.json()["id"]), headers=AUTH).json()
+    assert stored["options"] == {"qa_agent": True}

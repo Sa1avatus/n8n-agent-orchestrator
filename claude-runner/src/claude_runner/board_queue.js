@@ -66,6 +66,17 @@ function fmtTime(workerHours, reviewerMinutes) {
 }
 
 // A ratio (0..1) as a percent; "—" when there is nothing to count.
+// Speed of the Worker's steps; when both a local and a cloud provider took part, both speeds with their names.
+function fmtSpeed(stats) {
+  if (!stats || stats.tok_per_s == null) return "—";
+  const local = Number(stats.tok_per_s_local) || 0;
+  const cloud = Number(stats.tok_per_s_cloud) || 0;
+  if (local > 0 && cloud > 0) {
+    return t("s.tps_local", { n: Math.round(local) }) + " · " + t("s.tps_cloud", { n: Math.round(cloud) });
+  }
+  return t("s.tps", { n: Math.round(Number(stats.tok_per_s)) });
+}
+
 function fmtPercent(ratio, parts) {
   const total = Number(parts) || 0;
   if (total <= 0) return "—";
@@ -96,7 +107,7 @@ function cardHtml(mission, position, groupKey, card) {
   const tokens = stats ? fmtTokens((Number(stats.input_tokens) || 0) + (Number(stats.output_tokens) || 0)) : "—";
   const cache = stats ? fmtPercent(stats.cache_ratio, (Number(stats.cache_read_tokens) || 0) + (Number(stats.cache_write_tokens) || 0)) : "—";
   const cost = stats && stats.cost_usd != null ? "$" + Number(stats.cost_usd).toFixed(2) : "—";
-  const speed = stats && stats.tok_per_s != null ? t("s.tps", { n: Math.round(Number(stats.tok_per_s)) }) : "—";
+  const speed = fmtSpeed(stats);
   const thinking = stats ? fmtPercent(
     stats.thinking_steps ? stats.thinking_runs / stats.thinking_steps : 0,
     stats.thinking_steps,

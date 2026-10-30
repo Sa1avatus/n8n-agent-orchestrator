@@ -266,6 +266,8 @@ const BUNDLED_EN = {
   "s.tok": "{n}K tok",
   "s.cache": "cache {n}%",
   "s.tps": "{n} tok/s",
+  "s.tps_local": "local {n} tok/s",
+  "s.tps_cloud": "cloud {n} tok/s",
   "s.think": "thinking {n}%",
   "tr.title": "Translations",
   "tr.hint": "Stored in the database (board.i18n_strings). A missing translation falls back to English and is highlighted.",
