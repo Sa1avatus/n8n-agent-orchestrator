@@ -298,11 +298,30 @@ A model that returns no reasoning shows only answers and tool calls.
 * **Separate container, read-only except Stop.**
   * The dashboard cannot start or compact runs; its Stop button cancels a queued or running Claude Code run (the request needs the `X-AHAWR-Dashboard` header, so another site cannot send it). The run API (8700) stays unpublished.
   * The Hermes key lives only in `ahawr-dashboard`. The claude-runner Worker runs arbitrary commands, and with that key it could drive Hermes on the host.
-  * The dashboard is published on `127.0.0.1` only and answers only to the host names in `DASHBOARD_HOSTS` (default `localhost,127.0.0.1`), which guards against DNS rebinding.
+  * By default the dashboard is published on `127.0.0.1` only (`AHAWR_DASHBOARD_BIND`, see the LAN section below) and answers only to the host names in `DASHBOARD_HOSTS` (default `localhost,127.0.0.1`), which guards against DNS rebinding.
   * It shows prompts, code and command output, so do not publish it more widely.
 * **Storage.** Claude Code activity is kept in `/data/events/<run_id>.jsonl` in the `claude-runner-data` volume for `CLAUDE_RUNNER_EVENT_RETENTION_DAYS` days (default 14). Tool results are clipped to 20k characters per entry. Hermes data is read live from Hermes and not copied.
 * **Live tokens.** `CLAUDE_RUNNER_LIVE_TOKENS=false` turns off the token stream (`--include-partial-messages`). Finished blocks and token counts still appear, but step timings do not.
 * **Data API.** claude-runner serves the same data at `GET /v1/runs` and `GET /v1/runs/{id}/events`, with bearer auth when `CLAUDE_RUNNER_API_KEY` is set.
+
+### Dashboard on the LAN
+
+By default the dashboard listens on loopback and needs no login. To open it to a phone or another PC on the LAN, set the variables below in `.env`. The full guide is [docs/dashboard-lan-access.md](../docs/dashboard-lan-access.md).
+
+* `AHAWR_DASHBOARD_BIND`: the LAN address of this PC (default `127.0.0.1`). `0.0.0.0` publishes on every interface, so avoid it.
+* `DASHBOARD_USER` and `DASHBOARD_PASSWORD_HASH`: password login. Create the hash on the host with `docker compose run --rm -i ahawr-dashboard ahawr-dashboard-hash-password`.
+* `DASHBOARD_SESSION_SECRET`: signs the session cookie; set it together with the hash. `DASHBOARD_TOKEN` is an optional bearer token for scripts and grants full access.
+* `DASHBOARD_READONLY=1`: refuses Stop from the network. It does not make the dashboard read-only: board and host-action writes still need the password or token.
+* `DASHBOARD_HOSTS_EXTRA`: extra host names accepted in the `Host` header, comma-separated.
+* **HTTPS:** `DASHBOARD_TLS_CERT` and `DASHBOARD_TLS_KEY` (paths inside the container) turn HTTPS on and mark the session cookie `Secure`. Use a self-signed LAN certificate kept outside the repository, and copy only the `.crt` to the phone (guide, section 5).
+
+**Mobile layout:** the page adapts to narrow screens and reflows on rotation. The header button **View: Auto** cycles Auto → Mobile → Desktop; Auto follows the screen size. The choice is stored in localStorage (`ahawr-dashboard-view`; Auto removes the key). Buttons are at least 44 px on touch screens.
+
+Risks:
+
+* Without HTTPS the password, the token and the session cookie cross the LAN in clear text.
+* The dashboard shows prompts, code and command output. Anyone who can log in sees them, so open it only to people you trust.
+* Keep `DASHBOARD_PASSWORD_HASH`, `DASHBOARD_SESSION_SECRET` and `DASHBOARD_TOKEN` out of Git, reports and chats.
 
 ## Providers per role (like Hermes): Claude and a local llama.cpp model
 

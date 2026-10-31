@@ -28,9 +28,10 @@
   of the summary sit side by side.
 - C4: the main text is readable on the phone: body text, status words and tab labels
   look at least 14 px high, no line of normal text is tiny or overlapping another.
-- C5: the tabs "Runs", "Missions", "Providers" and "Guards" are all visible in one
-  row or wrap to a second row without overlapping, and each tab is tall enough to tap
-  (about 44 px high or more).
+- C5: the tabs "Runs", "Missions" and "Providers" are all visible in one row or wrap to
+  a second row without overlapping, and each tab is tall enough to tap (about 44 px
+  high or more). Guards is the status strip above the tab row (shown when the guards
+  are on), not a tab: when it is shown it does not overlap the tabs.
 - C6: the theme button ("Theme: Auto" or the chosen theme) is visible in the header and
   is large enough to tap; the colors of the page are readable (dark text on a light
   page or light text on a dark page, never grey on grey).

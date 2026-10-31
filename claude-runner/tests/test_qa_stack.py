@@ -416,3 +416,13 @@ def test_stack_down_still_removes_objects_that_remain(docker: FakeDocker) -> Non
         ["network", "rm", "qa-abc-net"],
         ["rmi", "-f", "qa-dashboard:abc"],
     ]
+
+
+def test_seed_sql_inserts_the_fixture_providers_without_their_key() -> None:
+    from claude_runner.qa_stack import _seed_sql
+
+    lines = [line for line in _seed_sql("default").split("\n") if "board.provider" in line]
+    assert len(lines) == 3
+    assert lines[0].startswith("INSERT INTO board.providers ") and "'qa-cloud'" in lines[0]
+    assert all("api_key" not in line and "qa-fixture-not-a-key" not in line for line in lines)
+    assert not [line for line in _seed_sql("empty").split("\n") if "board.provider" in line]

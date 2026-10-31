@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -40,6 +41,9 @@ from .board_pg import DSN_ENV
 from .board_providers_api import add_provider_routes
 from .board_stats import _mission_run_ids
 from .config import _bool
+from .dashboard_auth import AuthGuard, login_routes, request_is_readonly
+from .dashboard_auth_config import DashboardAuthSettings, validate_startup
+from .dashboard_auth_limit import LoginLimiter
 from .guard_heartbeat import HeartbeatSettings, HostHeartbeatGuard
 from .guard_queue import IdleGuard, MissionNoticeGuard, SeenStore
 from .guard_relay import TelegramRelay
@@ -144,6 +148,7 @@ def create_dashboard_app(
     settings: DashboardSettings | None = None, transport: httpx.AsyncBaseTransport | None = None
 ) -> FastAPI:
     settings = settings or DashboardSettings.from_env()
+    auth_settings = DashboardAuthSettings.from_env(dict(os.environ))
     qa_fixture = _qa_fixture_path(dict(os.environ))
 
     @asynccontextmanager
@@ -193,7 +198,11 @@ def create_dashboard_app(
     app = FastAPI(
         title="AHAWR dashboard", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
     )
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.hosts))
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=list(settings.hosts) + list(auth_settings.extra_hosts),
+    )
+    app.add_middleware(AuthGuard, settings=auth_settings)
     page = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
     if _bool(dict(os.environ), "DASHBOARD_OPS_TAB", False):
         page = re.sub(r"<!--/?ops-tab-->\n", "", page)
@@ -215,6 +224,7 @@ def create_dashboard_app(
         return await call_next(request)
 
     app.middleware("http")(board_header_guard)
+    app.routes.extend(login_routes(auth_settings, LoginLimiter()))
     if qa_fixture is not None:
         app.state.board_store = board_store_from_rows(load_fixture(qa_fixture))
     board_api.add_board_routes(app, settings)
@@ -248,6 +258,10 @@ def create_dashboard_app(
     def sources(request: Request) -> list[Any]:
         return [s for s in (request.app.state.runner, request.app.state.hermes) if s]
 
+    @app.get("/api/ui-mode")
+    async def ui_mode() -> dict[str, bool]:
+        return {"readonly": request_is_readonly(auth_settings)}
+
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
         return HTMLResponse(page, headers={"Cache-Control": "no-store"})
@@ -279,6 +293,17 @@ def create_dashboard_app(
     @app.get("/healthz")
     async def healthz(request: Request) -> dict[str, Any]:
         return {"status": "ok", "sources": [s.name for s in sources(request)]}
+
+    # Public install metadata: no run data, no service worker, no caching.
+    @app.get("/manifest.json")
+    async def manifest() -> Response:
+        body = resources.files("claude_runner").joinpath("dashboard_manifest.json").read_bytes()
+        return Response(body, media_type="application/manifest+json")
+
+    @app.get("/icon.svg")
+    async def icon() -> Response:
+        body = resources.files("claude_runner").joinpath("dashboard_icon.svg").read_bytes()
+        return Response(body, media_type="image/svg+xml")
 
     @app.get("/api/guards")
     async def api_guards(request: Request) -> dict[str, Any]:
@@ -524,6 +549,8 @@ def create_dashboard_app(
     async def cancel_run(request: Request, run_id: str) -> Any:
         if request.headers.get("x-ahawr-dashboard") != "1":
             return JSONResponse({"error": "missing X-AHAWR-Dashboard header"}, status_code=403)
+        if request_is_readonly(auth_settings):
+            return JSONResponse({"error": "dashboard is in read-only mode"}, status_code=403)
         if run_id.startswith(HERMES_PREFIX):
             return JSONResponse(
                 {"error": "Hermes sessions are stopped in Hermes itself"}, status_code=400
@@ -656,7 +683,8 @@ def _build_guards(settings: GuardSettings, notifier: Notifier) -> list[Guard]:
     ops_store = _ops_store(env)
     guards.append(
         IdleGuard(
-            lambda: _queue_alive(ops_store), lambda: _queue_running(ops_store),
+            lambda: _queue_alive(ops_store),
+            lambda: _queue_running(ops_store),
             notifier,
             interval=settings.interval("idle"),
             dry_run=lambda: settings.dry_run_for("idle"),
@@ -666,7 +694,10 @@ def _build_guards(settings: GuardSettings, notifier: Notifier) -> list[Guard]:
     seen = SeenStore(seen_path) if seen_path else _EmptySeenStore()
     guards.append(
         MissionNoticeGuard(
-            ops_store, _mission_events(ops_store), seen, notifier,
+            ops_store,
+            _mission_events(ops_store),
+            seen,
+            notifier,
             interval=settings.interval("mission_notice"),
             dry_run=lambda: settings.dry_run_for("mission_notice"),
         )
@@ -675,14 +706,16 @@ def _build_guards(settings: GuardSettings, notifier: Notifier) -> list[Guard]:
     request_path = f"{request_dir}/queue_restart.req" if request_dir else ""
     guards.append(
         QueueRestartGuard(
-            _queue_state(ops_store), request_path,
+            _queue_state(ops_store),
+            request_path,
             interval=settings.interval("queue_restart"),
             dry_run=lambda: settings.dry_run_for("queue_restart"),
         )
     )
     guards.append(
         HostHeartbeatGuard(
-            HeartbeatSettings.from_env(env), notifier,
+            HeartbeatSettings.from_env(env),
+            notifier,
             interval=settings.interval("host_heartbeat"),
             dry_run=lambda: settings.dry_run_for("host_heartbeat"),
         )
@@ -691,9 +724,7 @@ def _build_guards(settings: GuardSettings, notifier: Notifier) -> list[Guard]:
     return guards
 
 
-def _heartbeat_entries(
-    guards: list[Guard], settings: GuardSettings
-) -> list[dict[str, object]]:
+def _heartbeat_entries(guards: list[Guard], settings: GuardSettings) -> list[dict[str, object]]:
     """The two host heartbeat entries (docker_watchdog, gpu_power_governor)."""
     for guard in guards:
         if isinstance(guard, HostHeartbeatGuard):
@@ -894,8 +925,10 @@ class _RelayGuard(Guard):
         if self._task is None and self._configured:
             self._stop_event = asyncio.Event()
             self._task = asyncio.create_task(self._run())
-        state = "dry-run" if (self._configured and self._dry_run) else (
-            "running" if self._configured else "unconfigured"
+        state = (
+            "dry-run"
+            if (self._configured and self._dry_run)
+            else ("running" if self._configured else "unconfigured")
         )
         if state != self._last_state:
             self._last_state = state
@@ -927,5 +960,42 @@ def main(argv: list[str] | None = None) -> int:
 
     import uvicorn
 
-    uvicorn.run(create_dashboard_app(), host=args.host, port=args.port, log_level="warning")
+    settings = DashboardAuthSettings.from_env(dict(os.environ))
+    # The container binds 0.0.0.0 inside; the published address is
+    # AHAWR_DASHBOARD_BIND when set and non-empty, otherwise the container
+    # is only reachable on loopback.
+    # shortcut: inside the container the published bind is only known via
+    # AHAWR_DASHBOARD_BIND; when it is absent or empty, treat as loopback.
+    bind_host = (
+        settings.bind_address
+        if "AHAWR_DASHBOARD_BIND" in os.environ and settings.bind_address
+        else "127.0.0.1"
+    )
+
+    try:
+        validate_startup(settings, bind_host)
+    except ValueError as exc:
+        print(f"dashboard startup check failed: {exc}", file=sys.stderr)
+        return 1
+
+    uvicorn_kwargs: dict[str, Any] = {
+        "host": args.host,
+        "port": args.port,
+        "log_level": "warning",
+    }
+    if settings.tls_cert is not None and settings.tls_key is not None:
+        for label, path in (
+            ("DASHBOARD_TLS_CERT", settings.tls_cert),
+            ("DASHBOARD_TLS_KEY", settings.tls_key),
+        ):
+            if not Path(path).is_file():
+                print(
+                    f"dashboard startup check failed: {label}={path} does not exist on disk",
+                    file=sys.stderr,
+                )
+                return 1
+        uvicorn_kwargs["ssl_certfile"] = settings.tls_cert
+        uvicorn_kwargs["ssl_keyfile"] = settings.tls_key
+
+    uvicorn.run(create_dashboard_app(), **uvicorn_kwargs)
     return 0

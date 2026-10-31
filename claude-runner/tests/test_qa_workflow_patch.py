@@ -242,6 +242,51 @@ def test_final_mode_inserts_each_qa_node_exactly_once(
 
 
 @needs_live_export
+def test_the_normal_end_of_a_mission_goes_through_the_final_acceptance(
+    qwp: ModuleType,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    before = _live_workflow(live_copy)["connections"][qwp.STATE_SAVE_DONE_NODE]["main"][0]
+    assert before == _branch(qwp.APPROVED_NODE)
+    _run_main(qwp, monkeypatch, live_copy, "final")
+    after = _live_workflow(live_copy)["connections"][qwp.STATE_SAVE_DONE_NODE]["main"]
+    assert after[0] == _branch(qwp.FINAL_NODE)
+    assert after[1] == _branch("Continue Workflow?")
+
+
+@needs_live_export
+def test_mode_off_keeps_the_end_of_a_mission_as_it_was(
+    qwp: ModuleType,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "off")
+    after = _live_workflow(live_copy)["connections"][qwp.STATE_SAVE_DONE_NODE]["main"][0]
+    assert after == _branch(qwp.APPROVED_NODE)
+
+
+@needs_live_export
+def test_a_stale_qa_review_code_is_replaced_by_the_current_one(
+    qwp: ModuleType,
+    live_copy: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _run_main(qwp, monkeypatch, live_copy, "final")
+    raw = json.loads(live_copy.read_text(encoding="utf-8"))
+    workflow = raw[0] if isinstance(raw, list) else raw
+    review = next(n for n in workflow["nodes"] if n["name"] == qwp.QA_REVIEW)
+    current = review["parameters"]["jsCode"]
+    review["parameters"]["jsCode"] = "return []; // old"
+    live_copy.write_text(json.dumps(raw), encoding="utf-8")
+    _run_main(qwp, monkeypatch, live_copy, "final")
+    refreshed = _live_workflow(live_copy)
+    assert next(n for n in refreshed["nodes"] if n["name"] == qwp.QA_REVIEW)["parameters"][
+        "jsCode"
+    ] == current
+
+
+@needs_live_export
 def test_second_run_on_the_patched_export_changes_nothing(
     qwp: ModuleType,
     live_copy: Path,

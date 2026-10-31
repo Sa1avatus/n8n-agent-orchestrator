@@ -360,16 +360,21 @@ def test_guards_route_reports_dry_run_and_no_env_values(
         # the queue and mission-notice sources are unconfigured here, so they
         # report unknown state and never act
         names = [g["name"] for g in body["guards"]]
-        assert names == ["idle", "mission_notice", "queue_restart",
-                        "host_heartbeat", "tg_relay"]
+        assert names == ["idle", "mission_notice", "queue_restart", "host_heartbeat", "tg_relay"]
         assert all(g["dry_run"] is True for g in body["guards"])
         # the two host heartbeat entries carry every required field;
         # dry_run is True under DASHBOARD_GUARDS_DRY_RUN=1
         hb_names = [h["name"] for h in body["heartbeats"]]
         assert hb_names == ["docker_watchdog", "gpu_power_governor"]
         for h in body["heartbeats"]:
-            assert set(h.keys()) == {"name", "status", "time", "last_action",
-                                    "last_result", "dry_run"}
+            assert set(h.keys()) == {
+                "name",
+                "status",
+                "time",
+                "last_action",
+                "last_result",
+                "dry_run",
+            }
             assert h["dry_run"] is True
         text = body.__repr__()
         assert token not in text and chat not in text
@@ -935,8 +940,13 @@ def test_dashboard_main_runs_uvicorn(monkeypatch: Any) -> None:
 
     seen: dict[str, Any] = {}
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
-    assert module.main(["--port", "9999"]) == 0
+    monkeypatch.delenv("AHAWR_DASHBOARD_BIND", raising=False)
+    assert module.main(["--host", "127.0.0.1", "--port", "9999"]) == 0
+    assert seen["host"] == "127.0.0.1"
     assert seen["port"] == 9999
+    assert seen["log_level"] == "warning"
+    assert "ssl_certfile" not in seen
+    assert "ssl_keyfile" not in seen
 
 
 # ------------------------------------------------------------------ RAG and export
@@ -1080,7 +1090,14 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
     assert pat.fullmatch("board_mission_save.js").group(1) == "js"
     assert pat.fullmatch("board_claude_md.js").group(1) == "js"
     # the names the pattern must refuse
-    for bad in ("dashboard.html", "board.7js", "board.js.map", "boardx", "index.html", "board.html.bak"):
+    for bad in (
+        "dashboard.html",
+        "board.7js",
+        "board.js.map",
+        "boardx",
+        "index.html",
+        "board.html.bak",
+    ):
         assert pat.fullmatch(bad) is None
     # and the route honours it
     with dashboard(client) as dash:
@@ -1092,7 +1109,7 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
         assert dash.get("/static/index.html").status_code == 404
         # the tab bar is wired in the main script block of the page
         page = dash.get("/").text
-        main = page[page.rfind("<script>"):]
+        main = page[page.rfind("<script>") :]
         assert "tabboard" in main and "addEventListener" in main
         m = page.split("function fromHash")
         assert len(m) == 2 and "run=" in m[1]
@@ -1103,7 +1120,7 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
         i_content = page.index('id="content"')
         i_viewtabs = page.index('id="viewtabs"')
         i_boardpane = page.index('id="boardpane"')
-        i_main = page.index("<main id=\"main\">")
+        i_main = page.index('<main id="main">')
         i_endmain = page.index("</main>")
         i_endcontent = page.rindex("</div>")
         assert i_content < i_viewtabs, "content must be before viewtabs"
@@ -1112,7 +1129,7 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
         assert i_viewtabs < i_boardpane < i_main
         assert i_main < i_endmain
         assert i_endmain < i_endcontent, "main must be closed before content"
-        assert "getElementById(\"viewtabs\")" not in page
+        assert 'getElementById("viewtabs")' not in page
         # the run content now goes into #runview, not #main
         assert '$("#runview").innerHTML' in main
         i_runview = page.index('id="runview"')
@@ -1121,7 +1138,7 @@ def test_board_static_whitelist_pattern(client: TestClient) -> None:
         # the <style> block is syntactically balanced (no rule lost its
         # closing brace) and the new #content rules sit after the last
         # @media block's closing brace, not inside it
-        style = page[page.index("<style>"):page.index("</style>")]
+        style = page[page.index("<style>") : page.index("</style>")]
         assert style.count("{") == style.count("}"), "style braces unbalanced"
         i_content_rule = style.index("#content {")
         i_media_close = style.rindex("}", 0, i_content_rule)
@@ -1147,8 +1164,14 @@ def test_poll_keeps_running_after_a_drawing_error_and_has_a_request_timeout() ->
     from importlib import resources
 
     html = resources.files("claude_runner").joinpath("dashboard.html").read_text("utf-8")
-    poll = html[html.index("async function poll()"):html.index("// ---------------------------------------------------------------- RAG")]
-    assert "catch (e)" in poll and poll.index("catch (e)", poll.index("grew")) < poll.index("S.timer = setTimeout(poll, isActive")
+    poll = html[
+        html.index("async function poll()") : html.index(
+            "// ---------------------------------------------------------------- RAG"
+        )
+    ]
+    assert "catch (e)" in poll and poll.index("catch (e)", poll.index("grew")) < poll.index(
+        "S.timer = setTimeout(poll, isActive"
+    )
     assert "AbortController" in html and "25000" in html
 
 

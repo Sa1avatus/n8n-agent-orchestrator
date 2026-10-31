@@ -323,10 +323,20 @@ services:
     command: ["ahawr-dashboard", "--host", "0.0.0.0", "--port", "8701"]
 
     ports:
-      - "127.0.0.1:${AHAWR_DASHBOARD_PORT:-8701}:8701"
+      - "${AHAWR_DASHBOARD_BIND:-127.0.0.1}:${AHAWR_DASHBOARD_PORT:-8701}:8701"
 
     # Only what the dashboard needs (not the whole .env).
     environment:
+      # non-loopback bind needs auth (validate_startup); empty = loopback only, auth off
+      - AHAWR_DASHBOARD_BIND=${AHAWR_DASHBOARD_BIND:-127.0.0.1}
+      - DASHBOARD_USER=${DASHBOARD_USER:-}
+      - DASHBOARD_PASSWORD_HASH=${DASHBOARD_PASSWORD_HASH:-}
+      - DASHBOARD_SESSION_SECRET=${DASHBOARD_SESSION_SECRET:-}
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN:-}
+      - DASHBOARD_READONLY=${DASHBOARD_READONLY:-0}
+      - DASHBOARD_HOSTS_EXTRA=${DASHBOARD_HOSTS_EXTRA:-}
+      - DASHBOARD_TLS_CERT=${DASHBOARD_TLS_CERT:-}
+      - DASHBOARD_TLS_KEY=${DASHBOARD_TLS_KEY:-}
       - DASHBOARD_RUNNER_URL=http://claude-runner:8700
       - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
       # provider keys (docs/providers.md, section 10): one encrypted file on a volume shared by the runner and the dashboard;
@@ -377,6 +387,11 @@ services:
       # seen-state of the queue notices and the Telegram relay offset
       - ahawr-guards-state:/guards/state
       - ahawr-provider-secrets:/secrets
+      # TLS (DASHBOARD_TLS_CERT / DASHBOARD_TLS_KEY), commented example, not active:
+      # - type: bind
+      #   source: D:\n8n\certs
+      #   target: /certs
+      #   read_only: true
     extra_hosts:
       # the Hermes API server on the Docker host
       - "host.docker.internal:host-gateway"

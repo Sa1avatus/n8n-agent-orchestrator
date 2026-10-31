@@ -18,6 +18,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger("claude_runner.qa_stack")
 QA_PREFIX = "qa-"
@@ -403,9 +404,8 @@ def _seed_verdict_files(run_id: str, fixture: str) -> None:
 
 def _seed_sql(fixture: str) -> str:
     fixture_path = FIXTURE_DIR / f"{fixture}.json"
-    tables: dict[str, list[dict[str, object]]] = json.loads(
-        fixture_path.read_text(encoding="utf-8")
-    )["tables"]
+    fixture_data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    tables: dict[str, list[dict[str, object]]] = fixture_data["tables"]
     statements = _n8n_table_statements()
     for table, rows in tables.items():
         for row in rows:
@@ -414,7 +414,21 @@ def _seed_sql(fixture: str) -> str:
                 statements.append(_insert_statement(f'public."{name}"', row, quoted=True))
             else:
                 statements.append(_insert_statement(f"board.{_identifier(table)}", row))
+    statements.extend(_provider_statements(fixture_data.get("providers") or []))
     return "\n".join(statements)
+
+
+def _provider_statements(providers: list[dict[str, Any]]) -> list[str]:
+    """INSERTs of the fixture providers and their models; the api_key is not stored in the
+    database (it lives in the secrets file), so it is left out."""
+    statements = []
+    for provider in providers:
+        fields = {k: v for k, v in provider.items() if k not in ("models", "api_key")}
+        statements.append(_insert_statement("board.providers", fields))
+        for model in provider.get("models", []):
+            row = {"provider": provider["name"], **model}
+            statements.append(_insert_statement("board.provider_models", row))
+    return statements
 
 
 def _n8n_table_statements() -> list[str]:

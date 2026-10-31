@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — AHAWR dashboard</title>
+<script>
+(function () {
+  try {
+    const t = localStorage.getItem("ahawr-dashboard-theme");
+    const el = document.documentElement;
+    if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
+    else el.removeAttribute("data-theme"); // Auto
+  } catch (e) { /* keep Auto */ }
+})();
+</script>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2130; --muted: #6a7385;
+  --line: #e6e8ee; --accent: #2f6fde; --err: #d03b30; --shadow: rgba(0,0,0,.15);
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+:root[data-theme="light"] { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8;
+    --line: #262c37; --accent: #6f9ef6; --err: #f2766b; --shadow: rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8;
+  --line: #262c37; --accent: #6f9ef6; --err: #f2766b; --shadow: rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100%; background: var(--bg); color: var(--ink);
+  padding: 12px;
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+form {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 28px; width: 100%; max-width: 340px;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+form h1 { margin: 0 0 20px; font-size: 20px; font-weight: 600; }
+.field { margin-bottom: 16px; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.error {
+  color: var(--err); font-size: 14px; padding: 10px 12px; border-radius: 6px;
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+  margin-bottom: 16px;
+}
+.error:empty { display: none; }
+input {
+  width: 100%; font: 16px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink); min-height: 44px;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+button {
+  width: 100%; font: 16px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  padding: 12px; border: none; border-radius: 6px; background: var(--accent);
+  color: #fff; cursor: pointer; min-height: 44px; font-weight: 600;
+}
+button:hover { opacity: .9; }
+</style>
+</head>
+<body>
+<form method="post" action="/login" autocomplete="on">
+  <h1>AHAWR dashboard</h1>
+  <div class="error" role="alert">{{error}}</div>
+  <div class="field">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off">
+  </div>
+  <div class="field">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password">
+  </div>
+  <div class="field">
+    <label for="token">Token</label>
+    <input type="password" id="token" name="token" autocomplete="one-time-code">
+  </div>
+  <button type="submit">Sign in</button>
+</form>
+</body>
+</html>

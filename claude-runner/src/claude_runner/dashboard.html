@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AHAWR Trajectory</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <script>
 (function () {
   try {
@@ -12,6 +14,36 @@
     if (t === "light" || t === "dark") el.setAttribute("data-theme", t);
     else el.removeAttribute("data-theme"); // Auto
   } catch (e) { /* keep Auto */ }
+})();
+(function () {
+  const root = document.documentElement;
+  const KEY = "ahawr-dashboard-view";
+  const narrow = matchMedia("(max-width: 760px)");
+  const coarse = matchMedia("(pointer: coarse) and (hover: none) and (max-width: 1100px)");
+  const mobileAgent = /Mobi|Android|iPhone|iPad|iPod/i;
+  function mode() {
+    try {
+      const v = localStorage.getItem(KEY);
+      return v === "mobile" || v === "desktop" ? v : "auto";
+    } catch (e) { return "auto"; }
+  }
+  function autoMobile() {
+    // the user agent is only a hint: a mobile device that is also narrow or coarse-pointed counts as mobile
+    const hint = navigator.userAgentData ? navigator.userAgentData.mobile === true : mobileAgent.test(navigator.userAgent || "");
+    return hint && (narrow.matches || coarse.matches);
+  }
+  function apply(v) {
+    root.classList.toggle("view-mobile", v === "mobile" || (v === "auto" && autoMobile()));
+    root.classList.toggle("view-desktop", v === "desktop");
+  }
+  function set(v) {
+    try { v === "auto" ? localStorage.removeItem(KEY) : localStorage.setItem(KEY, v); } catch (e) { /* keep the choice for this page only */ }
+    apply(v);
+  }
+  window.ahawrView = { mode, set };
+  apply(mode());
+  narrow.addEventListener("change", () => apply(mode()));
+  coarse.addEventListener("change", () => apply(mode()));
 })();
 </script>
 <style>
@@ -125,6 +157,7 @@ mark { background: color-mix(in srgb, var(--accent) 25%, transparent); color: va
 .exports { display: flex; gap: 6px; align-items: center; margin-left: auto; font-size: 12px; color: var(--muted); }
 .exports a { color: var(--accent); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; background: var(--bg); }
 .exports a:hover { border-color: var(--accent); }
+html[data-readonly="1"] .stop, html[data-readonly="1"] #tabprov { display: none; }
 .stop { font: inherit; font-size: 12px; font-weight: 600; color: var(--err); background: var(--bg); border: 1px solid color-mix(in srgb, var(--err) 45%, var(--line)); border-radius: 6px; padding: 2px 10px; cursor: pointer; }
 .stop:hover { background: color-mix(in srgb, var(--err) 12%, var(--bg)); }
 .stop:disabled { opacity: .55; cursor: default; }
@@ -238,13 +271,60 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 #guardstrip .g .st.error { color: var(--err); }
 #guardstrip button { border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; padding: 2px 9px; font-size: 12px; }
 #guardstrip button:hover { background: var(--hover); }
+/* mobile view: the view switch forces it, or a narrow or touch screen not set to desktop; desktop rules stay as they are */
+.ov-open, .ov-back { display: none; }
+html.view-mobile body { font-size: 15px; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+html.view-mobile #side { width: 100%; max-width: 100%; }
+html.view-mobile[data-pane="board"] #side, html.view-mobile[data-pane="guards"] #side { display: none; }
+html.view-mobile #list .item { margin: 6px 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+html.view-mobile #list .item .t, html.view-mobile #head h2 { white-space: normal; overflow-wrap: anywhere; }
+html.view-mobile #head .meta, html.view-mobile .stats, html.view-mobile .exports { flex-direction: column; align-items: flex-start; margin-left: 0; }
+html.view-mobile .kv { grid-template-columns: minmax(0, 1fr); }
+html.view-mobile button, html.view-mobile select, html.view-mobile .exports a, html.view-mobile .meta a, html.view-mobile #toolbar label { min-height: 44px; min-width: 44px; }
+html.view-mobile #theme { display: flex; flex-wrap: wrap; gap: 8px; }
+html.view-mobile #theme button { font-size: 15px; }
+html.view-mobile #viewtabs, html.view-mobile #toolbar { flex-wrap: wrap; }
+html.view-mobile #toolbar input[type=search] { width: 100%; margin-left: 0; }
+html.view-mobile .item, html.view-mobile .meta, html.view-mobile .stat, html.view-mobile .kv, html.view-mobile .prose, html.view-mobile .steprow, html.view-mobile .tabs button, html.view-mobile #toolbar, html.view-mobile #guardstrip { font-size: 15px; }
+html.view-mobile pre, html.view-mobile code, html.view-mobile .liverow .txt, html.view-mobile .sect { max-width: 100%; overflow-x: auto; }
+html.view-mobile table.chunks { display: block; overflow-x: auto; }
+html.view-mobile #insp { position: fixed; inset: 0; width: auto; max-width: 100%; z-index: 10; }
+html.view-mobile #insp .ih button { font-size: 22px; color: var(--ink); }
+html.view-mobile .ov-open { display: block; margin: 6px 14px; }
+html.view-mobile #overview:not(.mpanel-open) { display: none; }
+html.view-mobile #overview.mpanel-open { position: fixed; inset: 0; overflow-y: auto; z-index: 10; background: var(--panel); }
+html.view-mobile #overview.mpanel-open + .ov-back { display: block; position: fixed; right: 12px; bottom: 12px; z-index: 11; font-size: 15px; }
+@media (max-width: 430px), (pointer: coarse) and (max-width: 1100px) {
+  html:not(.view-desktop) body { font-size: 15px; flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  html:not(.view-desktop) #side { width: 100%; max-width: 100%; }
+  html:not(.view-desktop)[data-pane="board"] #side, html:not(.view-desktop)[data-pane="guards"] #side { display: none; }
+  html:not(.view-desktop) #list .item { margin: 6px 8px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  html:not(.view-desktop) #list .item .t, html:not(.view-desktop) #head h2 { white-space: normal; overflow-wrap: anywhere; }
+  html:not(.view-desktop) #head .meta, html:not(.view-desktop) .stats, html:not(.view-desktop) .exports { flex-direction: column; align-items: flex-start; margin-left: 0; }
+  html:not(.view-desktop) .kv { grid-template-columns: minmax(0, 1fr); }
+  html:not(.view-desktop) button, html:not(.view-desktop) select, html:not(.view-desktop) .exports a, html:not(.view-desktop) .meta a, html:not(.view-desktop) #toolbar label { min-height: 44px; min-width: 44px; }
+  html:not(.view-desktop) #theme { display: flex; flex-wrap: wrap; gap: 8px; }
+  html:not(.view-desktop) #theme button { font-size: 15px; }
+  html:not(.view-desktop) #viewtabs, html:not(.view-desktop) #toolbar { flex-wrap: wrap; }
+  html:not(.view-desktop) #toolbar input[type=search] { width: 100%; margin-left: 0; }
+  html:not(.view-desktop) .item, html:not(.view-desktop) .meta, html:not(.view-desktop) .stat, html:not(.view-desktop) .kv, html:not(.view-desktop) .prose, html:not(.view-desktop) .steprow, html:not(.view-desktop) .tabs button, html:not(.view-desktop) #toolbar, html:not(.view-desktop) #guardstrip { font-size: 15px; }
+  html:not(.view-desktop) .item .m, html:not(.view-desktop) .role, html:not(.view-desktop) .tag, html:not(.view-desktop) .tag.all, html:not(.view-desktop) .taghint, html:not(.view-desktop) .sg, html:not(.view-desktop) .sres .snip, html:not(.view-desktop) #srcstate, html:not(.view-desktop) .errline, html:not(.view-desktop) .stop, html:not(.view-desktop) #overview { font-size: 14px; }
+  html:not(.view-desktop) pre, html:not(.view-desktop) code, html:not(.view-desktop) .liverow .txt, html:not(.view-desktop) .sect { max-width: 100%; overflow-x: auto; }
+  html:not(.view-desktop) table.chunks { display: block; overflow-x: auto; }
+  html:not(.view-desktop) #insp { position: fixed; inset: 0; width: auto; max-width: 100%; z-index: 10; }
+  html:not(.view-desktop) #insp .ih button { font-size: 22px; color: var(--ink); }
+  html:not(.view-desktop) .ov-open { display: block; margin: 6px 14px; }
+  html:not(.view-desktop) #overview:not(.mpanel-open) { display: none; }
+  html:not(.view-desktop) #overview.mpanel-open { position: fixed; inset: 0; overflow-y: auto; z-index: 10; background: var(--panel); }
+  html:not(.view-desktop) #overview.mpanel-open + .ov-back { display: block; position: fixed; right: 12px; bottom: 12px; z-index: 11; font-size: 15px; }
+}
 </style>
 </head>
 <body>
 <aside id="side">
   <header>
     <h1>AHAWR <small>trajectory</small></h1>
-    <div id="theme"><button id="themebtn" type="button" data-theme="auto" aria-label="Theme: Auto" title="Theme: Auto">Theme: Auto</button></div>
+    <div id="theme"><button id="themebtn" type="button" data-theme="auto" aria-label="Theme: Auto" title="Theme: Auto">Theme: Auto</button> <button id="viewbtn" type="button" data-view="auto" aria-label="View: Auto" title="View: Auto">View: Auto</button></div>
     <div id="tags" class="tags" hidden></div>
     <div id="taghint" class="taghint" hidden>Fields are combined with AND; values of one field are combined with OR.</div>
     <div id="srcstate"></div>
@@ -267,6 +347,7 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
 </div>
 </main>
 </div>
+<script>fetch("/api/ui-mode", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)).then((m) => { if (m && m.readonly) document.documentElement.dataset.readonly = "1"; }).catch(() => {});</script>
 <script>
 (function () {
   const KEY = "ahawr-dashboard-theme";
@@ -308,6 +389,25 @@ pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wr
   // if canvas-drawn charts are added later, read the palette via
   // getComputedStyle(document.documentElement).getPropertyValue("--...") and
   // repaint on this toggle and on matchMedia("(prefers-color-scheme: dark)").change
+})();
+(function () {
+  const names = ["auto", "mobile", "desktop"];
+  const b = document.getElementById("viewbtn");
+  if (!b) return;
+  let cur = window.ahawrView.mode();
+  const show = () => {
+    const label = "View: " + cur[0].toUpperCase() + cur.slice(1);
+    b.textContent = label;
+    b.setAttribute("data-view", cur);
+    b.setAttribute("aria-label", label);
+    b.setAttribute("title", label);
+  };
+  show();
+  b.onclick = () => {
+    cur = names[(names.indexOf(cur) + 1) % 3];
+    window.ahawrView.set(cur);
+    show();
+  };
 })();
 </script>
 <script>
@@ -652,13 +752,17 @@ function select(id, keepTab) {
     <div id="toolbar"><label><input type="checkbox" id="o-think" ${S.show.thinking ? "checked" : ""}> thinking</label>
       <label><input type="checkbox" id="o-sys" ${S.show.system ? "checked" : ""}> system rows</label>
       <input type="search" id="o-q" placeholder="Search" value="${esc(S.q)}"></div>
+    <button class="ov-open" type="button">Timeline</button>
     <section id="overview"></section>
+    <button class="ov-back" type="button">Back</button>
     <div id="body"><div id="ledger"></div><aside id="insp" hidden></aside></div>`;
   $("#o-think").onchange = (e) => { S.show.thinking = e.target.checked; render(); };
   $("#o-sys").onchange = (e) => { S.show.system = e.target.checked; render(); };
   $("#o-q").oninput = (e) => { S.q = e.target.value; render(); };
   $("#ledger").addEventListener("click", onLedgerClick);
   $("#overview").addEventListener("click", onLedgerClick);
+  $(".ov-open").onclick = () => { $("#overview").classList.add("mpanel-open"); syncMobileHistory(); };
+  $(".ov-back").onclick = () => { $("#overview").classList.remove("mpanel-open"); syncMobileHistory(); };
   $("#head").addEventListener("click", (e) => {
     const b = e.target.closest("[data-stop]");
     if (b) { stopRun(b.dataset.stop); return; }
@@ -676,6 +780,26 @@ function select(id, keepTab) {
   clearTimeout(S.timer);
   poll();
 }
+// mobile panels (timeline, inspector): one history entry per open session, so the phone's back gesture closes them
+const MPANEL_KEY = "mpanel";
+function isMobileView() { return document.documentElement.classList.contains("view-mobile"); }
+function mobilePanelOpen() {
+  const ov = $("#overview"), insp = $("#insp");
+  return isMobileView() && ((ov && ov.classList.contains("mpanel-open")) || (insp && !insp.hidden));
+}
+function syncMobileHistory() {
+  if (!isMobileView() && !(history.state && history.state[MPANEL_KEY])) return;
+  const open = mobilePanelOpen();
+  const pushed = !!(history.state && history.state[MPANEL_KEY]);
+  if (open && !pushed) history.pushState({ [MPANEL_KEY]: true }, "");
+  else if (!open && pushed) history.back();
+}
+window.addEventListener("popstate", () => {
+  if (!isMobileView()) return;
+  const ov = $("#overview");
+  if (ov) ov.classList.remove("mpanel-open");
+  if (S.pick) { S.pick = null; render(); }
+});
 async function stopRun(id) {
   if (!confirm("Stop this run? The Claude Code process and every tool it started are killed. The n8n workflow is not stopped by this.")) return;
   S.stopping = id; render();
@@ -793,6 +917,7 @@ function render() {
   renderOverview(m);
   renderLedger(m);
   renderInspector(m);
+  syncMobileHistory();
 }
 function renderHead(m) {
   const r = S.run, t = totals(m);
@@ -1047,7 +1172,8 @@ function renderInspector(m) {
     }
   }
   if (!tabs.includes(S.tab)) S.tab = tabs[0];
-  setHTML(box, `<div class="ih">${head}<button title="Close" data-close>✕</button></div>
+  const mobile = isMobileView();
+  setHTML(box, `<div class="ih">${head}<button title="${mobile ? "Back" : "Close"}" data-close>${mobile ? "Back" : "✕"}</button></div>
     <div class="tabs">${tabs.map((t) => `<button class="${t === S.tab ? "on" : ""}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join("")}</div>${body}`);
   box.onclick = (ev) => {
     const tb = ev.target.closest("[data-tab]");
@@ -1237,6 +1363,7 @@ function setTab(name) {
   const board = name === "board";
   const guards = name === "guards";
   TAB = name;
+  document.documentElement.dataset.pane = name;  // the phone layout hides the runs column on the other tabs
   const mainEl = document.getElementById("main");
   if (mainEl) mainEl.hidden = !runs;  // the runs column would otherwise squeeze the board pane to a strip
   const tabruns = document.getElementById("tabruns");

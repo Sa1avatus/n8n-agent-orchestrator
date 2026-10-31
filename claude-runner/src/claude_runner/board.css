@@ -219,6 +219,9 @@ button { font: inherit; color: inherit; }
 }
 @media (max-width: 760px) {
   #boardbar { flex-wrap: wrap; gap: 8px; }
+  /* the phone shows the whole mission page: it scrolls as one page, no pinned blocks above a small scroll area */
+  #board:not(.provopen):not(.bd-mission) { height: auto; min-height: 100%; }
+  #board:not(.provopen):not(.bd-mission) #boardviewbody { flex: none; overflow: visible; }
   .qitem { flex-wrap: wrap; }
   .qitem .pos { min-width: 0; }
 }
@@ -361,7 +364,8 @@ button { font: inherit; color: inherit; }
   #boardviewbody .spr { grid-template-columns: 1fr; }
   #boardviewbody .lane { grid-template-columns: 110px repeat(5, minmax(110px, 1fr)); overflow-x: auto; }
 }
-@media (max-width: 520px) { #boardviewbody .kb { grid-template-columns: 1fr; } }
+/* the phone keeps the status columns side by side (two per row); a single column hid the board structure */
+@media (max-width: 520px) { #boardviewbody .kb { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } #boardviewbody .kcard { padding: 8px; } }
 
 /* pages of the mission screen: tab bar, one block per page, pager (board_tabs.js) ------------- */
 #board.bd-mission { background: var(--bg); }
