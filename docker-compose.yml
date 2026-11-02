@@ -374,8 +374,11 @@ services:
       # Telegram token and chat id for the guards; the values stay in the host .env
       - DASHBOARD_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - DASHBOARD_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - QA_RUNS_DIR=/qa-runs
 
     volumes:
+      # the verdicts and captures of the QA agent (written by ahawr-qa), read-only: the board shows them
+      - qa-runs:/qa-runs:ro
       # heartbeat files of the host watchers, read-only
       - type: bind
         source: D:\n8n\data-tables\ops\heartbeat
