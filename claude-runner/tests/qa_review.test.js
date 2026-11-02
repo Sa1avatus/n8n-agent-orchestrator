@@ -38,8 +38,8 @@ function runReview(testCase) {
     if (!(name in nodes)) throw new Error(`no node named ${name}`);
     return { first: () => nodes[name], last: () => nodes[name] };
   };
-  const run = new Function("$", "$getWorkflowStaticData", QA_REVIEW_JS);
-  const [item] = run(lookup, () => staticData);
+  const run = new Function("$", "$input", "$getWorkflowStaticData", QA_REVIEW_JS);
+  const [item] = run(lookup, { first: () => ({ json: {} }) }, () => staticData);
   return { json: item.json, staticData };
 }
 

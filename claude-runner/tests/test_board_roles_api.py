@@ -5,6 +5,7 @@ in-memory store only, no database."""
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -90,6 +91,59 @@ async def test_put_global_roles_invalid_json_is_400(roles_client: AsyncClient) -
     assert "not valid JSON" in r.json()["error"]["message"]
 
 
+def _worker_text(options: dict[str, Any]) -> str:
+    return json.dumps({"worker": {"1": "anthropic/haiku", "options": options}})
+
+
+POLLING_OPTIONS = {"max_polls": 40, "poll_seconds": 2.5, "max_retries": 0}
+
+
+async def test_put_global_roles_valid_polling_options_are_saved(roles_client: AsyncClient) -> None:
+    text = _worker_text(POLLING_OPTIONS)
+    r = await roles_client.put("/api/board/roles", headers=HEADER, json={"roles_json": text})
+    assert r.status_code == 200
+    assert await _global_roles(roles_client) == text
+
+
+async def test_put_global_roles_absent_options_are_saved(roles_client: AsyncClient) -> None:
+    r = await roles_client.put("/api/board/roles", headers=HEADER, json={"roles_json": VALID})
+    assert r.status_code == 200
+    assert await _global_roles(roles_client) == VALID
+
+
+@pytest.mark.parametrize(("options", "reason"), [
+    ({"max_polls": 0}, "option 'max_polls' must be a whole number of at least 1"),
+    ({"max_polls": "3"}, "option 'max_polls' must be a whole number of at least 1"),
+    ({"max_retries": -1}, "option 'max_retries' must be a whole number of at least 0"),
+    ({"poll_seconds": 0}, "option 'poll_seconds' must be a positive number"),
+    ({"poll_seconds": True}, "option 'poll_seconds' must be a positive number"),
+    ({"max_poll": 3}, "unknown option 'max_poll'"),
+])
+async def test_put_global_roles_invalid_polling_option_is_400_with_reason(
+    roles_client: AsyncClient, options: dict[str, Any], reason: str,
+) -> None:
+    r = await roles_client.put("/api/board/roles", headers=HEADER,
+                               json={"roles_json": _worker_text(options)})
+    assert r.status_code == 400
+    message = r.json()["error"]["message"]
+    assert "role 'worker'" in message and reason in message
+    assert await _global_roles(roles_client) == ""
+
+
+async def test_put_mission_roles_polling_options_stale_version_is_409(
+    roles_client: AsyncClient,
+) -> None:
+    saved = await roles_client.put("/api/board/missions/m1/roles", headers=HEADER,
+                                   json={"roles_json": VALID})
+    assert saved.status_code == 200
+    stale = await roles_client.put("/api/board/missions/m1/roles", headers=HEADER, json={
+        "roles_json": _worker_text(POLLING_OPTIONS), "expected_version": STALE,
+    })
+    assert stale.status_code == 409
+    got = await roles_client.get("/api/board/missions/m1/roles")
+    assert got.json()["roles_json"] == VALID
+
+
 async def test_put_global_roles_valid_save_writes_history(roles_client: AsyncClient) -> None:
     version = await _version(roles_client, "/roles")
     r = await roles_client.put("/api/board/roles", headers=HEADER, json={
@@ -162,3 +216,48 @@ async def test_put_mission_roles_empty_clears_the_value(roles_client: AsyncClien
 async def test_mission_roles_unknown_mission_is_404(roles_client: AsyncClient) -> None:
     r = await roles_client.get("/api/board/missions/nope/roles")
     assert r.status_code == 404
+
+
+ENGINE = '{"max_attempts_per_task": 3, "runner_url": "http://runner-a:8700/"}'
+
+
+async def test_put_engine_without_header_is_403(roles_client: AsyncClient) -> None:
+    r = await roles_client.put("/api/board/engine", json={"engine_json": ENGINE})
+    assert r.status_code == 403
+    assert (await roles_client.get("/api/board/engine")).json()["engine_json"] == ""
+
+
+async def test_put_engine_valid_save_at_current_version(roles_client: AsyncClient) -> None:
+    before = await _version(roles_client, "/engine")
+    r = await roles_client.put("/api/board/engine", headers=HEADER,
+                               json={"engine_json": ENGINE, "expected_version": before})
+    assert r.status_code == 200
+    got = (await roles_client.get("/api/board/engine")).json()
+    assert got["engine_json"] == ENGINE
+    assert got["version"] != before
+    assert r.json()["version"] == got["version"]
+
+
+async def test_put_engine_stale_version_is_409(roles_client: AsyncClient) -> None:
+    saved = await roles_client.put("/api/board/engine", headers=HEADER,
+                                   json={"engine_json": ENGINE})
+    assert saved.status_code == 200
+    stale = await roles_client.put("/api/board/engine", headers=HEADER, json={
+        "engine_json": '{"max_attempts_per_task": 9}', "expected_version": STALE,
+    })
+    assert stale.status_code == 409
+    assert (await roles_client.get("/api/board/engine")).json()["engine_json"] == ENGINE
+
+
+@pytest.mark.parametrize(("text", "reason"), [
+    ('{"max_attempts_per_task": "x"}', "max_attempts_per_task must be a number"),
+    ('{"max_attempts_per_task": 3', "is not valid JSON"),
+])
+async def test_put_engine_invalid_value_is_rejected_and_not_stored(
+    roles_client: AsyncClient, text: str, reason: str,
+) -> None:
+    r = await roles_client.put("/api/board/engine", headers=HEADER,
+                               json={"engine_json": text})
+    assert r.status_code == 400
+    assert reason in r.text
+    assert (await roles_client.get("/api/board/engine")).json()["engine_json"] == ""

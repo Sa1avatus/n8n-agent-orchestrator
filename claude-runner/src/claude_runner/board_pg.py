@@ -16,10 +16,13 @@ and are never built from values.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
+from collections.abc import Iterable
 from typing import Any
 
+from . import overrides_config
 from .board import (
     _PROVIDER_FIELDS,
     _PROVIDER_MODEL_FIELDS,
@@ -41,6 +44,8 @@ __all__ = [
 ]
 
 DSN_ENV = "DASHBOARD_BOARD_PG_DSN"
+
+logger = logging.getLogger(__name__)
 
 # Physical names of the four n8n data tables (public schema), per
 # docs/board-data-model.md.  Fixed identifiers, never interpolated from values.
@@ -70,6 +75,13 @@ _MODEL_SELECT = ", ".join(
     ("provider", "model", "probe_result", "probed_at", *_PROVIDER_MODEL_FIELDS, "updated_at")
 )
 _MODEL_JSON_COLUMNS = ("capability_overrides", "probe_result")
+# Legacy mission columns are read via the row JSON: a dropped column gives NULL, not an error.
+_MISSION_SELECT = ", ".join((
+    "mission_id", "name", "objective", "working_directory", "version", "enabled", "rules_json",
+    "acceptance_criteria_json", "overrides_json", '"createdAt"', '"updatedAt"',
+    f"to_jsonb({_MISSIONS_TABLE}) ->> 'state_namespace' AS state_namespace",
+    f"to_jsonb({_MISSIONS_TABLE}) ->> 'retrieval_corpora_json' AS retrieval_corpora_json",
+))
 
 _DDL = [
     "CREATE SCHEMA IF NOT EXISTS board",
@@ -293,6 +305,50 @@ class UnavailableBoardStore(BoardStore):
         self._refuse()
 
 
+def _json_text(value: Any) -> str | None:
+    """A JSON column as text for the overrides core (a blank text is unset)."""
+    if isinstance(value, str):
+        return value if value.strip() else None
+    return None if value is None else json.dumps(value)
+
+
+def _mission_corpora(row: dict[str, Any]) -> list[str] | None:
+    legacy = {"retrieval_corpora_json": _json_text(row.get("retrieval_corpora_json"))}
+    try:
+        corpora: list[str] | None = overrides_config.resolve(
+            _json_text(row.get("overrides_json")), legacy
+        )["retrieval_corpora"]
+    except ValueError as exc:
+        logger.warning(
+            "mission %s: retrieval corpora read from the legacy column: %s",
+            row["mission_id"],
+            exc,
+        )
+        fallback = _read_json(row.get("retrieval_corpora_json"))
+        return fallback if isinstance(fallback, list) else None
+    return corpora
+
+
+def _mission_from_row(r: dict[str, Any]) -> Mission:
+    namespace = r.get("state_namespace")
+    return Mission(
+        mission_id=r["mission_id"],
+        # shortcut: mission_id stands in when state_namespace is gone, confirm before dropping it
+        state_namespace=r["mission_id"] if namespace is None else namespace,
+        name=r["name"] or "",
+        objective=r["objective"] or "",
+        working_directory=r["working_directory"],
+        version=r["version"],
+        enabled=bool(r["enabled"]),
+        rules=_read_json(r["rules_json"]) or [],
+        acceptance_criteria=_read_json(r["acceptance_criteria_json"]) or [],
+        retrieval_corpora=_mission_corpora(r),
+        overrides_json=_json_text(r.get("overrides_json")),
+        created_at=_iso(r["createdAt"]),
+        updated_at=_iso(r["updatedAt"]),
+    )
+
+
 def _read_json(value: Any) -> Any:
     """Parse a JSON text column (``None`` stays ``None``)."""
     if value is None or (isinstance(value, str) and not value.strip()):
@@ -331,6 +387,7 @@ class PgBoardStore(BoardStore):
         from psycopg.rows import dict_row
 
         self._lock = threading.RLock()
+        self._columns: dict[str, frozenset[str]] = {}
         self._dsn = dsn
         self._conn = psycopg.connect(
             dsn, row_factory=dict_row, autocommit=True, prepare_threshold=None
@@ -400,63 +457,33 @@ class PgBoardStore(BoardStore):
             return value.isoformat()
         return str(value)
 
+    def _present_names(self, table: str, names: Iterable[str]) -> list[str]:
+        """The names that are columns of the table (all of them when the lookup finds none)."""
+        if table not in self._columns:
+            rows = self._conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+                (table.strip('"'),),
+            ).fetchall()
+            self._columns[table] = frozenset(r["column_name"] for r in rows)
+        present = self._columns[table]
+        return [n for n in names if not present or n in present]
+
     def _conflict(self, kind: str, key: str, expected: str, stored: str) -> None:
         raise ConflictError(f"{kind} {key!r}: expected version {expected}, got {stored}")
 
     # ---- reads -----------------------------------------------------------------
     def list_missions(self) -> list[Mission]:
         rows = self._conn.execute(
-            f"SELECT mission_id, state_namespace, name, objective, "
-            f"working_directory, version, enabled, rules_json, "
-            f"acceptance_criteria_json, retrieval_corpora_json, "
-            f"\"createdAt\", \"updatedAt\" FROM {_MISSIONS_TABLE} "
-            "ORDER BY mission_id"
+            f"SELECT {_MISSION_SELECT} FROM {_MISSIONS_TABLE} ORDER BY mission_id"
         ).fetchall()
-        missions = []
-        for r in rows:
-            missions.append(
-                Mission(
-                    mission_id=r["mission_id"],
-                    state_namespace=r["state_namespace"],
-                    name=r["name"] or "",
-                    objective=r["objective"] or "",
-                    working_directory=r["working_directory"],
-                    version=r["version"],
-                    enabled=bool(r["enabled"]),
-                    rules=_read_json(r["rules_json"]) or [],
-                    acceptance_criteria=_read_json(r["acceptance_criteria_json"]) or [],
-                    retrieval_corpora=_read_json(r["retrieval_corpora_json"]),
-                    created_at=_iso(r["createdAt"]),
-                    updated_at=_iso(r["updatedAt"]),
-                )
-            )
-        return missions
+        return [_mission_from_row(r) for r in rows]
 
     def get_mission(self, mission_id: str) -> Mission | None:
         row = self._conn.execute(
-            f"SELECT mission_id, state_namespace, name, objective, "
-            f"working_directory, version, enabled, rules_json, "
-            f"acceptance_criteria_json, retrieval_corpora_json, "
-            f"\"createdAt\", \"updatedAt\" FROM {_MISSIONS_TABLE} "
-            "WHERE mission_id = %s",
+            f"SELECT {_MISSION_SELECT} FROM {_MISSIONS_TABLE} WHERE mission_id = %s",
             (mission_id,),
         ).fetchone()
-        if row is None:
-            return None
-        return Mission(
-            mission_id=row["mission_id"],
-            state_namespace=row["state_namespace"],
-            name=row["name"] or "",
-            objective=row["objective"] or "",
-            working_directory=row["working_directory"],
-            version=row["version"],
-            enabled=bool(row["enabled"]),
-            rules=_read_json(row["rules_json"]) or [],
-            acceptance_criteria=_read_json(row["acceptance_criteria_json"]) or [],
-            retrieval_corpora=_read_json(row["retrieval_corpora_json"]),
-            created_at=_iso(row["createdAt"]),
-            updated_at=_iso(row["updatedAt"]),
-        )
+        return _mission_from_row(row) if row is not None else None
 
     def list_live_states(self) -> list[LiveState]:
         rows = self._conn.execute(
@@ -682,12 +709,12 @@ class PgBoardStore(BoardStore):
                 known_mission_cols = {
                     "state_namespace", "name", "objective", "working_directory",
                     "version", "enabled", "rules_json", "acceptance_criteria_json",
-                    "retrieval_corpora_json",
+                    "overrides_json",
                 }
-                field_names = [
-                    n for n in fields
-                    if n != "mission_id" and n in known_mission_cols
-                ]
+                field_names = self._present_names(
+                    _MISSIONS_TABLE,
+                    [n for n in fields if n != "mission_id" and n in known_mission_cols],
+                )
                 if not field_names:
                     raise ValueError("no updatable fields")
                 before = self.get_mission(mission_id)
@@ -827,17 +854,19 @@ class PgBoardStore(BoardStore):
                     "retrieval_label", "runner_url", "run_manager_workflow_id",
                     "worker_think_policy", "worker_think_policy_from_task",
                     "worker_think_off_after_seconds", "worker_think_off_after_steps",
-                    "roles_json", "features_json",
+                    "roles_json", "features_json", "thinking_json", "retrieval_json",
+                    "engine_json",
                 }
-                sets = ", ".join(
-                    f"{name} = %s"
-                    for name in fields
-                    if name != "profile_id" and name in known_hermes_cols
+                field_names = self._present_names(
+                    _HERMES_TABLE,
+                    [n for n in fields if n != "profile_id" and n in known_hermes_cols],
                 )
+                if not field_names:
+                    raise ValueError("no updatable fields")
+                sets = ", ".join(f"{name} = %s" for name in field_names)
                 self._conn.execute(
                     f"UPDATE {_HERMES_TABLE} SET {sets}, \"updatedAt\" = %s WHERE profile_id = %s",
-                    [v for n, v in fields.items()
-                     if n != "profile_id" and n in known_hermes_cols] + [now(), _HERMES_PROFILE],
+                    [fields[n] for n in field_names] + [now(), _HERMES_PROFILE],
                 )
             return self.hermes_config()
 
@@ -1014,27 +1043,28 @@ class PgBoardStore(BoardStore):
     ) -> None:
         with self._lock:
             with self._conn.transaction():
+                mission_values = {
+                    "mission_id": mission.mission_id,
+                    "state_namespace": mission.state_namespace,
+                    "name": mission.name,
+                    "objective": mission.objective,
+                    "working_directory": mission.working_directory,
+                    "version": mission.version,
+                    "enabled": mission.enabled,
+                    "rules_json": json.dumps(mission.rules),
+                    "acceptance_criteria_json": json.dumps(mission.acceptance_criteria),
+                    "retrieval_corpora_json": json.dumps(mission.retrieval_corpora)
+                    if mission.retrieval_corpora is not None
+                    else None,
+                }
+                # shortcut: create drops corpora without the legacy column; see overrides_json
+                cols = self._present_names(_MISSIONS_TABLE, mission_values)
+                col_list = ", ".join(cols)
+                placeholders = ", ".join(["%s"] * len(cols))
                 self._conn.execute(
-                    f'INSERT INTO {_MISSIONS_TABLE} '
-                    "(mission_id, state_namespace, name, objective, "
-                    "working_directory, version, enabled, rules_json, "
-                    "acceptance_criteria_json, retrieval_corpora_json, "
-                    '"createdAt", "updatedAt") '
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), now())",
-                    (
-                        mission.mission_id,
-                        mission.state_namespace,
-                        mission.name,
-                        mission.objective,
-                        mission.working_directory,
-                        mission.version,
-                        mission.enabled,
-                        json.dumps(mission.rules),
-                        json.dumps(mission.acceptance_criteria),
-                        json.dumps(mission.retrieval_corpora)
-                        if mission.retrieval_corpora is not None
-                        else None,
-                    ),
+                    f"INSERT INTO {_MISSIONS_TABLE} ({col_list}, \"createdAt\", \"updatedAt\") "
+                    f"VALUES ({placeholders}, now(), now())",
+                    [mission_values[c] for c in cols],
                 )
                 self._conn.execute(
                     f"INSERT INTO {_LIVE_STATE_TABLE} "

@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import socket
 import sys
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -259,8 +260,8 @@ def create_dashboard_app(
         return [s for s in (request.app.state.runner, request.app.state.hermes) if s]
 
     @app.get("/api/ui-mode")
-    async def ui_mode() -> dict[str, bool]:
-        return {"readonly": request_is_readonly(auth_settings)}
+    async def ui_mode(request: Request) -> dict[str, bool]:
+        return {"readonly": request_is_readonly(auth_settings, request)}
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
@@ -549,7 +550,7 @@ def create_dashboard_app(
     async def cancel_run(request: Request, run_id: str) -> Any:
         if request.headers.get("x-ahawr-dashboard") != "1":
             return JSONResponse({"error": "missing X-AHAWR-Dashboard header"}, status_code=403)
-        if request_is_readonly(auth_settings):
+        if request_is_readonly(auth_settings, request):
             return JSONResponse({"error": "dashboard is in read-only mode"}, status_code=403)
         if run_id.startswith(HERMES_PREFIX):
             return JSONResponse(
@@ -952,6 +953,16 @@ class _RelayGuard(Guard):
         self._stop_event = None
 
 
+def _listen_sockets(host: str, ports: list[int | None]) -> list[socket.socket]:
+    sockets = []
+    for port in filter(None, ports):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+        sockets.append(sock)
+    return sockets
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ahawr-dashboard")
     parser.add_argument("--host", default="0.0.0.0")
@@ -971,6 +982,8 @@ def main(argv: list[str] | None = None) -> int:
         if "AHAWR_DASHBOARD_BIND" in os.environ and settings.bind_address
         else "127.0.0.1"
     )
+    # With DASHBOARD_LAN_PORT the container listens on two ports: --port is published on
+    # loopback only (open, writable), the LAN port needs a login and is read-only if asked.
 
     try:
         validate_startup(settings, bind_host)
@@ -997,5 +1010,10 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn_kwargs["ssl_certfile"] = settings.tls_cert
         uvicorn_kwargs["ssl_keyfile"] = settings.tls_key
 
-    uvicorn.run(create_dashboard_app(), **uvicorn_kwargs)
+    if settings.lan_port is None:
+        uvicorn.run(create_dashboard_app(), **uvicorn_kwargs)
+        return 0
+    # shortcut: TLS (when set) covers both ports, so loopback tools need https; upgrade: per-port
+    server = uvicorn.Server(uvicorn.Config(create_dashboard_app(), **uvicorn_kwargs))
+    server.run(sockets=_listen_sockets(args.host, [args.port, settings.lan_port]))
     return 0

@@ -306,12 +306,12 @@ A model that returns no reasoning shows only answers and tool calls.
 
 ### Dashboard on the LAN
 
-By default the dashboard listens on loopback and needs no login. To open it to a phone or another PC on the LAN, set the variables below in `.env`. The full guide is [docs/dashboard-lan-access.md](../docs/dashboard-lan-access.md).
+By default the dashboard is published on loopback only and needs no login. To open it to a phone or another PC on the LAN, set the variables below in `.env`. The full guide is [docs/dashboard-lan-access.md](../docs/dashboard-lan-access.md).
 
-* `AHAWR_DASHBOARD_BIND`: the LAN address of this PC (default `127.0.0.1`). `0.0.0.0` publishes on every interface, so avoid it.
+* `DASHBOARD_LAN_PORT=8702`: the same container listens on a second port. `AHAWR_DASHBOARD_PORT` (8701) is always published on `127.0.0.1` only, open and writable, for the operator's tools; the LAN port needs the login. `AHAWR_DASHBOARD_LAN_BIND`: the LAN address of this PC the second port is published on (default `127.0.0.1`; `0.0.0.0` publishes on every interface, so avoid it); `AHAWR_DASHBOARD_LAN_PORT` (default 8702).
 * `DASHBOARD_USER` and `DASHBOARD_PASSWORD_HASH`: password login. Create the hash on the host with `docker compose run --rm -i ahawr-dashboard ahawr-dashboard-hash-password`.
 * `DASHBOARD_SESSION_SECRET`: signs the session cookie; set it together with the hash. `DASHBOARD_TOKEN` is an optional bearer token for scripts and grants full access.
-* `DASHBOARD_READONLY=1`: refuses Stop from the network. It does not make the dashboard read-only: board and host-action writes still need the password or token.
+* `DASHBOARD_READONLY=1`: the LAN port refuses every write with 403 and the page hides the write controls; the loopback port stays writable.
 * `DASHBOARD_HOSTS_EXTRA`: extra host names accepted in the `Host` header, comma-separated.
 * **HTTPS:** `DASHBOARD_TLS_CERT` and `DASHBOARD_TLS_KEY` (paths inside the container) turn HTTPS on and mark the session cookie `Secure`. Use a self-signed LAN certificate kept outside the repository, and copy only the `.crt` to the phone (guide, section 5).
 

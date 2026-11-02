@@ -1,0 +1,258 @@
+{
+  "description": "Shared cases for the overrides_json core (Python and JS). parse[].overrides_json is the raw text of missions.overrides_json (null = column missing). parse[].legacy holds the legacy column values (null = absent): retrieval_corpora_json is JSON text, the other retrieval_* values use their JSON type. parse[].mission_id and state_namespace feed the state key. validate returns the error strings; flatten(overrides_json, legacy) returns the retrieval keys below (roles and features are only checked for type here, their contents are covered by roles_cases.json and features_cases.json). expect.errors_contain lists exact error strings that must appear in the actual list; expect.errors is the full list; expect.flatten_equals is the full result (\"legacy_constants\" = the defaults); expect.flatten_partial lists the keys to check; expect.state_key is the resolved state key. Values other than the defaults are made up. Golden: a missing, empty or {} overrides_json with empty legacy columns flattens to legacy_constants.",
+  "legacy_constants": {
+    "retrieval_enabled": false,
+    "retrieval_url": "http://ahawr-retrieval:8500",
+    "retrieval_corpora": [],
+    "retrieval_timeout_ms": 120000,
+    "retrieval_worker_max_tokens": 6000,
+    "retrieval_reviewer_max_tokens": 5000,
+    "retrieval_label": ""
+  },
+  "parse": [
+    {
+      "name": "golden_missing",
+      "overrides_json": null,
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants", "state_key": "made-mission-1" }
+    },
+    {
+      "name": "golden_empty_text",
+      "overrides_json": "",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_empty_object",
+      "overrides_json": "{}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_null_legacy_values",
+      "overrides_json": "{}",
+      "legacy": {
+        "retrieval_enabled": null,
+        "retrieval_url": null,
+        "retrieval_corpora_json": null,
+        "retrieval_timeout_ms": null,
+        "retrieval_worker_max_tokens": null,
+        "retrieval_reviewer_max_tokens": null,
+        "retrieval_label": ""
+      },
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "full_valid_object",
+      "overrides_json": "{\"roles\": {\"worker\": \"made-a/made-model-1\"}, \"features\": {\"plan_no_truncate\": {\"enabled\": true, \"max_tasks\": 20}}, \"retrieval\": {\"enabled\": true, \"url\": \"http://made-retrieval-a:9000\", \"corpora\": [\"made-corpus-a\", \"made-corpus-b\"], \"timeout_ms\": 60000, \"worker_max_tokens\": 4000, \"reviewer_max_tokens\": 3000, \"label\": \"made-label-a\"}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_url": "http://made-retrieval-a:9000",
+          "retrieval_corpora": ["made-corpus-a", "made-corpus-b"],
+          "retrieval_timeout_ms": 60000,
+          "retrieval_worker_max_tokens": 4000,
+          "retrieval_reviewer_max_tokens": 3000,
+          "retrieval_label": "made-label-a"
+        }
+      }
+    },
+    {
+      "name": "partial_retrieval_section",
+      "overrides_json": "{\"retrieval\": {\"timeout_ms\": 45000}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors": [],
+        "flatten_partial": { "retrieval_timeout_ms": 45000, "retrieval_enabled": false, "retrieval_corpora": [] }
+      }
+    },
+    {
+      "name": "partial_roles_section_only",
+      "overrides_json": "{\"roles\": {\"worker\": \"made-a/made-model-1\"}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "partial_features_section_only",
+      "overrides_json": "{\"features\": {\"run_hygiene\": {\"enabled\": true}}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "unknown_top_level_key",
+      "overrides_json": "{\"warp\": {\"enabled\": true}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: unknown key \"warp\""] }
+    },
+    {
+      "name": "unknown_retrieval_key",
+      "overrides_json": "{\"retrieval\": {\"speed\": 3}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: unknown key \"retrieval.speed\""] }
+    },
+    {
+      "name": "section_not_object",
+      "overrides_json": "{\"retrieval\": []}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: retrieval must be an object"] }
+    },
+    {
+      "name": "root_not_object",
+      "overrides_json": "[1, 2]",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: must be a JSON object"] }
+    },
+    {
+      "name": "invalid_json_text",
+      "overrides_json": "{\"retrieval\": ",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: invalid JSON"] }
+    },
+    {
+      "name": "non_boolean_enabled",
+      "overrides_json": "{\"retrieval\": {\"enabled\": \"yes\"}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: retrieval.enabled must be true or false, got \"yes\""] }
+    },
+    {
+      "name": "timeout_as_string",
+      "overrides_json": "{\"retrieval\": {\"timeout_ms\": \"120000\"}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors_contain": ["overrides_json: retrieval.timeout_ms must be an integer >= 1000, got \"120000\""]
+      }
+    },
+    {
+      "name": "token_and_timeout_below_minimum",
+      "overrides_json": "{\"retrieval\": {\"timeout_ms\": 500, \"worker_max_tokens\": 50, \"reviewer_max_tokens\": 99}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors_contain": [
+          "overrides_json: retrieval.timeout_ms must be an integer >= 1000, got 500",
+          "overrides_json: retrieval.worker_max_tokens must be an integer >= 100, got 50",
+          "overrides_json: retrieval.reviewer_max_tokens must be an integer >= 100, got 99"
+        ]
+      }
+    },
+    {
+      "name": "corpus_item_not_string",
+      "overrides_json": "{\"retrieval\": {\"corpora\": [\"made-corpus-a\", 7]}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: retrieval.corpora[1] must be a string, got 7"] }
+    },
+    {
+      "name": "label_not_string",
+      "overrides_json": "{\"retrieval\": {\"label\": 5}}",
+      "legacy": {},
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": { "errors_contain": ["overrides_json: retrieval.label must be a string, got 5"] }
+    },
+    {
+      "name": "json_wins_over_legacy",
+      "overrides_json": "{\"retrieval\": {\"enabled\": true, \"url\": \"http://made-retrieval-a:9000\", \"corpora\": [\"made-corpus-a\"], \"timeout_ms\": 45000, \"worker_max_tokens\": 4000, \"reviewer_max_tokens\": 3000, \"label\": \"made-label-a\"}}",
+      "legacy": {
+        "retrieval_enabled": false,
+        "retrieval_url": "http://made-retrieval-b:9001",
+        "retrieval_corpora_json": "[\"made-corpus-b\"]",
+        "retrieval_timeout_ms": 60000,
+        "retrieval_worker_max_tokens": 5000,
+        "retrieval_reviewer_max_tokens": 2500,
+        "retrieval_label": "made-label-b"
+      },
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_url": "http://made-retrieval-a:9000",
+          "retrieval_corpora": ["made-corpus-a"],
+          "retrieval_timeout_ms": 45000,
+          "retrieval_worker_max_tokens": 4000,
+          "retrieval_reviewer_max_tokens": 3000,
+          "retrieval_label": "made-label-a"
+        }
+      }
+    },
+    {
+      "name": "legacy_fallback_per_key",
+      "overrides_json": "{\"retrieval\": {\"timeout_ms\": 45000}}",
+      "legacy": {
+        "retrieval_enabled": true,
+        "retrieval_url": "http://made-retrieval-b:9001",
+        "retrieval_corpora_json": "[\"made-corpus-b\"]",
+        "retrieval_timeout_ms": 60000,
+        "retrieval_worker_max_tokens": 5000,
+        "retrieval_reviewer_max_tokens": 2500,
+        "retrieval_label": "made-label-b"
+      },
+      "mission_id": "made-mission-1",
+      "state_namespace": null,
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_url": "http://made-retrieval-b:9001",
+          "retrieval_corpora": ["made-corpus-b"],
+          "retrieval_timeout_ms": 45000,
+          "retrieval_worker_max_tokens": 5000,
+          "retrieval_reviewer_max_tokens": 2500,
+          "retrieval_label": "made-label-b"
+        }
+      }
+    },
+    {
+      "name": "state_namespace_null_resolves_to_mission_id",
+      "overrides_json": "{}",
+      "legacy": {},
+      "mission_id": "made-mission-2",
+      "state_namespace": null,
+      "expect": { "errors": [], "state_key": "made-mission-2" }
+    },
+    {
+      "name": "state_namespace_equal_to_mission_id",
+      "overrides_json": "{}",
+      "legacy": {},
+      "mission_id": "made-mission-2",
+      "state_namespace": "made-mission-2",
+      "expect": { "errors": [], "state_key": "made-mission-2" }
+    }
+  ]
+}

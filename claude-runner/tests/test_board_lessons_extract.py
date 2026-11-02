@@ -14,6 +14,8 @@ from claude_runner.board_lessons import (
     LessonCandidate,
     LessonKind,
     LessonStatus,
+    promote_min_missions,
+    promoted_scope,
 )
 from claude_runner.board_lessons_extract import (
     BLOCK_HEADING,
@@ -24,6 +26,7 @@ from claude_runner.board_lessons_extract import (
     decide,
     find_duplicate,
     normalise,
+    other_missions_matched,
     redact,
     render_lessons_block,
     repeats_mission_rule,
@@ -103,6 +106,14 @@ def test_redact_removes_personal_home_prefix(path: str, kept_tail: str) -> None:
     assert f"error in {kept_tail} line 3" in out
 
 
+def test_redact_removes_email_addresses() -> None:
+    out = redact("ask fake.person@example.test about it")
+
+    assert "fake.person@example.test" not in out
+    assert "ask" in out
+    assert "about it" in out
+
+
 def test_redact_keeps_repository_relative_paths() -> None:
     text = "see claude-runner/src/claude_runner/board_lessons.py and docs/home/readme.md"
 
@@ -176,6 +187,15 @@ def test_retry_pair_gives_fixed_after_retry_with_both_reasons_as_evidence() -> N
         "accepted_attempt": 2,
         "touched_paths": ["src/parser.py"],
     }
+
+
+def test_same_events_give_the_same_candidate() -> None:
+    events = [
+        _review(1, "needs_changes", "the parser drops empty lines", 40, next_task="keep lines"),
+        _review(2, "pass", "fixed", 90),
+    ]
+
+    assert _build(events) == _build(list(events))
 
 
 def test_first_attempt_pass_returns_none() -> None:
@@ -317,6 +337,32 @@ def test_lesson_repeating_a_mission_rule_is_dropped() -> None:
 
     assert repeats_mission_rule(candidate, MISSION_TEXT, LESSONS_DEDUP_RATIO)
     assert decide(candidate, [], MISSION_TEXT) == "drop"
+
+
+def test_matching_lesson_from_another_mission_is_not_a_bump() -> None:
+    other = EXISTING.model_copy(update={"mission": "other-mission"})
+    candidate = _candidate("the parser drops the empty lines", "keep empty lines in the parser")
+
+    assert decide(candidate, [other], UNRELATED_MISSION) == "add"
+
+
+def test_matches_from_three_missions_feed_the_promotion_threshold() -> None:
+    candidate = _candidate("the parser drops the empty lines", "keep empty lines in the parser")
+    lessons = [
+        EXISTING.model_copy(update={"id": 1, "mission": "mission-a"}),
+        EXISTING.model_copy(update={"id": 2, "mission": "mission-b"}),
+        EXISTING.model_copy(update={"id": 3, "mission": "mission-c"}),
+        EXISTING.model_copy(update={"id": 4, "mission": "fake-mission"}),
+        _active(5, "docker build is slow", "rebuild the image").model_copy(
+            update={"mission": "mission-d"}
+        ),
+    ]
+
+    missions = other_missions_matched(candidate, lessons)
+
+    assert missions == {"mission-a", "mission-b", "mission-c"}
+    threshold = promote_min_missions({})
+    assert promoted_scope(EXISTING, len(missions), None, threshold, True) == "project"
 
 
 def test_retired_lesson_does_not_count_as_duplicate() -> None:

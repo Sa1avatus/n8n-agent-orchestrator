@@ -21,6 +21,14 @@ const MAX_SCORE = 100;
 const FRESH_KEY = "fresh";
 const FRESH_AUTO = "auto";
 const LEGACY_OPTION_KEYS = ["think", "max_polls", "poll_seconds", "max_retries"];
+const MIN_MAX_POLLS = 1;
+const MIN_MAX_RETRIES = 0;
+const FLAT_ROLES = ["architect", "worker", "reviewer", "service"];
+const POLLING_DEFAULTS = {
+  architect: { max_polls: 30, poll_seconds: 3, max_retries: 5 },
+  worker: { max_polls: 30, poll_seconds: 3, max_retries: 3 },
+  reviewer: { max_polls: 20, poll_seconds: 3, max_retries: 5 },
+};
 const FALLBACK_ROLES = new Map([
   ["qa", ["qa", "reviewer"]],
   ["report", ["report", "worker"]],
@@ -276,6 +284,32 @@ function checkLayers(name, layers) {
   return errors;
 }
 
+function isWholeNumber(value, minimum) {
+  return Number.isInteger(value) && value >= minimum;
+}
+
+function isPositiveNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function checkPolling(name, options) {
+  const errors = [];
+  for (const [key, minimum] of [
+    ["max_polls", MIN_MAX_POLLS],
+    ["max_retries", MIN_MAX_RETRIES],
+  ]) {
+    if (options.has(key) && !isWholeNumber(options.get(key), minimum)) {
+      errors.push(
+        `role ${name}: option ${pyRepr(key)} must be a whole number of at least ${minimum}`,
+      );
+    }
+  }
+  if (options.has("poll_seconds") && !isPositiveNumber(options.get("poll_seconds"))) {
+    errors.push(`role ${name}: option ${pyRepr("poll_seconds")} must be a positive number`);
+  }
+  return errors;
+}
+
 function checkOptions(role, options) {
   const name = pyRepr(role);
   if (!isDict(options)) return [`role ${name}: ${pyRepr(OPTIONS_KEY)} must be an object`];
@@ -286,6 +320,7 @@ function checkOptions(role, options) {
   if (role === "qa" && asMap(options).has("layers")) {
     errors.push(...checkLayers(name, asMap(options).get("layers")));
   }
+  errors.push(...checkPolling(name, asMap(options)));
   return errors;
 }
 
@@ -302,12 +337,12 @@ function mergeRoles(globalRoles, missionRoles) {
 }
 
 function legacyRole(columns, role) {
-  const provider = columns[`${role}_provider`];
-  const model = columns[`${role}_model`];
+  const provider = columns?.[`${role}_provider`];
+  const model = columns?.[`${role}_model`];
   const options = {};
   for (const key of LEGACY_OPTION_KEYS) {
-    const option = columns[`${role}_${key}`];
-    if (option != null) options[key] = option;
+    const option = columns?.[`${role}_${key}`];
+    if (option != null && option !== "") options[key] = option;
   }
   const value = new Map([[OPTIONS_KEY, options]]);
   if (provider && model) value.set(FIRST_ATTEMPT_KEY, `${provider}${MODEL_SEPARATOR}${model}`);
@@ -459,15 +494,15 @@ function qaPlaceholders() {
   return Object.fromEntries(Object.entries(QA_DEFAULT_OPTIONS).map(([k, v]) => [k, String(v)]));
 }
 
-function qaEntryOf(roles) {
-  const current = roles.qa;
+function entryOf(roles, role) {
+  const current = roles[role];
   return typeof current === "string" ? { [FIRST_ATTEMPT_KEY]: current } : { ...(current ?? {}) };
 }
 
 // Sets or clears the QA options listed in QA_SETTABLE_OPTIONS; other options are kept.
 function withQaOptions(text, options) {
   const roles = text.trim() === "" ? {} : JSON.parse(text);
-  const qa = qaEntryOf(roles);
+  const qa = entryOf(roles, "qa");
   const stored = qa[OPTIONS_KEY] ?? {};
   const touched = QA_SETTABLE_OPTIONS.some((k) => k in stored || k in options);
   if (!touched) return text;
@@ -488,7 +523,7 @@ function qaModelFrom(provider, model) {
 // Sets or clears the QA model (attempt 1 of the qa role).
 function withQaModel(text, model) {
   const roles = text.trim() === "" ? {} : JSON.parse(text);
-  const qa = qaEntryOf(roles);
+  const qa = entryOf(roles, "qa");
   if (model === "") delete qa[FIRST_ATTEMPT_KEY];
   else qa[FIRST_ATTEMPT_KEY] = model;
   if (Object.keys(qa).length === 0) delete roles.qa;
@@ -499,7 +534,7 @@ function withQaModel(text, model) {
 // The QA values of a stored roles text, as the strings the QA controls show.
 function qaValuesOf(text) {
   const roles = text.trim() === "" ? {} : JSON.parse(text);
-  const qa = qaEntryOf(roles);
+  const qa = entryOf(roles, "qa");
   const model = typeof qa[FIRST_ATTEMPT_KEY] === "string" ? qa[FIRST_ATTEMPT_KEY] : "";
   const [provider, name] = model === "" ? ["", ""] : splitModel(model);
   const options = qa[OPTIONS_KEY] ?? {};
@@ -548,6 +583,69 @@ function modelChoices(providers, provider) {
   return row ? row.models.map((m) => m.model) : [];
 }
 
+function flatten(roles, legacy) {
+  const givenRoles = asMap(roles ?? {});
+  const flat = {};
+  for (const role of FLAT_ROLES) {
+    const model = modelForAttempt(givenRoles.get(role), 1);
+    if (model === null) {
+      flat[`${role}_provider`] = legacy?.[`${role}_provider`] || null;
+      flat[`${role}_model`] = legacy?.[`${role}_model`] || null;
+    } else {
+      [flat[`${role}_provider`], flat[`${role}_model`]] = splitModel(model);
+    }
+  }
+  for (const [role, defaults] of Object.entries(POLLING_DEFAULTS)) {
+    const options = {
+      ...legacyRole(legacy, role).get(OPTIONS_KEY),
+      ...optionsOf(givenRoles.get(role)),
+    };
+    for (const [key, fallback] of Object.entries(defaults)) {
+      flat[`${role}_${key}`] = key in options ? options[key] : fallback;
+    }
+  }
+  return flat;
+}
+
+const POLLING_ROLES = Object.keys(POLLING_DEFAULTS);
+const POLLING_KEYS = ["max_polls", "poll_seconds", "max_retries"];
+
+// Effective polling values of each role as strings: roles_json options, else the legacy column, else the default.
+function pollingValuesOf(text, config) {
+  const flat = flatten(text.trim() === "" ? {} : JSON.parse(text), config);
+  return Object.fromEntries(
+    POLLING_ROLES.map((role) => [
+      role,
+      Object.fromEntries(POLLING_KEYS.map((key) => [key, String(flat[`${role}_${key}`])])),
+    ]),
+  );
+}
+
+// Changed polling fields as { role, key, old, new } rows; an empty list means nothing to save.
+function pollingDiffRows(initial, current) {
+  const rows = [];
+  for (const role of POLLING_ROLES) {
+    for (const key of POLLING_KEYS) {
+      if (initial[role][key] !== current[role][key]) {
+        rows.push({ role, key, old: initial[role][key], new: current[role][key] });
+      }
+    }
+  }
+  return rows;
+}
+
+// Writes the changed polling options into roles_json; the legacy columns are never written.
+function pollingRolesText(text, rows) {
+  const roles = text.trim() === "" ? {} : JSON.parse(text);
+  for (const row of rows) {
+    const entry = entryOf(roles, row.role);
+    const value = row.new.trim() === "" ? row.new : Number(row.new);
+    entry[OPTIONS_KEY] = { ...(entry[OPTIONS_KEY] ?? {}), [row.key]: value };
+    roles[row.role] = entry;
+  }
+  return JSON.stringify(roles, null, 2);
+}
+
 // === end pure roles core ===
 
 // === export (browser global + CommonJS module.exports) ===
@@ -571,6 +669,12 @@ const BoardRoles = {
   saveQaRoles,
   providerChoices,
   modelChoices,
+  flatten,
+  POLLING_ROLES,
+  POLLING_KEYS,
+  pollingValuesOf,
+  pollingDiffRows,
+  pollingRolesText,
 };
 if (typeof module !== "undefined" && module.exports) {
   module.exports = BoardRoles;

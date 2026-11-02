@@ -51,6 +51,10 @@
   [
    "updatedAt",
    "timestamp with time zone"
+  ],
+  [
+   "overrides_json",
+   "text"
   ]
  ],
  "data_table_user_Yn9lOhVhQ9gFymNs": [
@@ -388,6 +392,22 @@
   ],
   [
    "features_json",
+   "text"
+  ],
+  [
+   "lessons_enabled",
+   "boolean"
+  ],
+  [
+   "thinking_json",
+   "text"
+  ],
+  [
+   "retrieval_json",
+   "text"
+  ],
+  [
+   "engine_json",
    "text"
   ]
  ]

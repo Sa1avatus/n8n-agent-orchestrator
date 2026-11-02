@@ -48,6 +48,9 @@ const ui = {
   check("shown and helped cells", html.includes("<td>12</td>") && html.includes("<td>9</td>"));
   check("active lesson offers retire", html.includes('data-action="retire" data-id="7"'));
   check("active lesson has no restore", !html.includes('data-action="restore"'));
+  check("mission-scope lesson offers promote", html.includes('data-action="promote" data-id="7"'));
+  const projectScoped = Lessons.listHtml([{ ...ACTIVE, scope: "project" }], ui);
+  check("project-scope lesson has no promote", !projectScoped.includes('data-action="promote"'));
 
   const retired = Lessons.listHtml([RETIRED], ui);
   check("retired lesson offers restore", retired.includes('data-action="restore" data-id="8"'));
@@ -116,6 +119,12 @@ async function runFlow() {
     put.method === "PUT" && put.url === "/api/board/lessons/7" &&
     put.body.lesson === "New text" && put.body.situation === ACTIVE.situation &&
     put.body.expected_version === ACTIVE.updated_at);
+
+  await clickOn(container, "promote", 7);
+  const promoted = sent[sent.length - 1];
+  check("promote posts expected_version to the promote route",
+    promoted.method === "POST" && promoted.url === "/api/board/lessons/7/promote" &&
+    promoted.body.expected_version === ACTIVE.updated_at);
 
   await clickOn(container, "delete", 7);
   const del = sent[sent.length - 1];

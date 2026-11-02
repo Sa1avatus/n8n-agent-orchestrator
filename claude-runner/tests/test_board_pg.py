@@ -13,6 +13,7 @@ from claude_runner.board import ConflictError
 from claude_runner.board_pg import (
     _EVENT_LOG_TABLE,
     _LIVE_STATE_TABLE,
+    _MISSIONS_TABLE,
     PgBoardStore,
     get_board_store,
 )
@@ -464,3 +465,107 @@ class TestHermesFeaturesJson:
         sql, params = updates[0]
         assert "features_json = %s" in sql
         assert "{}" in params
+
+    def test_update_hermes_config_writes_engine_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("updatedAt", [{"updatedAt": datetime(2026, 1, 1, tzinfo=UTC)}])
+        store.update_hermes_config(None, engine_json='{"max_attempts_per_task": 3}')
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert "engine_json = %s" in sql
+        assert '{"max_attempts_per_task": 3}' in params
+
+
+class TestMissionRetrievalReaders:
+    @staticmethod
+    def _row(**fields):
+        row = {
+            "mission_id": "m1",
+            "state_namespace": "ns-1",
+            "name": "n",
+            "objective": "o",
+            "working_directory": None,
+            "version": 1.0,
+            "enabled": True,
+            "rules_json": "[]",
+            "acceptance_criteria_json": "[]",
+            "retrieval_corpora_json": None,
+            "overrides_json": None,
+            "createdAt": None,
+            "updatedAt": None,
+        }
+        row.update(fields)
+        return row
+
+    @staticmethod
+    def _read_both(monkeypatch, row):
+        store, conn = _make_store(monkeypatch)
+        conn._responses.clear()
+        conn.set_response(_MISSIONS_TABLE, [row])
+        return [store.list_missions()[0], store.get_mission("m1")]
+
+    @pytest.mark.parametrize("overrides", [None, "", "{}"])
+    @pytest.mark.parametrize(("legacy", "expected"), [('["a", "b"]', ["a", "b"]), (None, None)])
+    def test_unset_overrides_read_legacy_corpora(self, monkeypatch, overrides, legacy, expected):
+        row = self._row(overrides_json=overrides, retrieval_corpora_json=legacy)
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora == expected
+
+    def test_row_without_overrides_column_reads_legacy_corpora(self, monkeypatch):
+        row = self._row(retrieval_corpora_json='["a"]')
+        del row["overrides_json"]
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora == ["a"]
+
+    def test_overrides_corpora_win_over_legacy(self, monkeypatch):
+        row = self._row(
+            overrides_json='{"retrieval": {"corpora": ["x"]}}', retrieval_corpora_json='["a"]'
+        )
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora == ["x"]
+
+    def test_overrides_already_decoded_by_driver_are_read(self, monkeypatch):
+        row = self._row(
+            overrides_json={"retrieval": {"corpora": ["x"]}}, retrieval_corpora_json='["a"]'
+        )
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora == ["x"]
+
+    @pytest.mark.parametrize("overrides", ["not json", '{"x": 1}'])
+    def test_unreadable_overrides_fall_back_to_legacy_corpora(self, monkeypatch, overrides):
+        row = self._row(overrides_json=overrides, retrieval_corpora_json='["a"]')
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora == ["a"]
+
+    @pytest.mark.parametrize("overrides", [None, ""])
+    def test_unreadable_legacy_corpora_read_as_none(self, monkeypatch, overrides):
+        row = self._row(overrides_json=overrides, retrieval_corpora_json="not json")
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.retrieval_corpora is None
+
+    @pytest.mark.parametrize("state_namespace", ["ns-1", ""])
+    def test_state_namespace_read_as_stored(self, monkeypatch, state_namespace):
+        row = self._row(state_namespace=state_namespace)
+        for mission in self._read_both(monkeypatch, row):
+            assert mission.state_namespace == state_namespace
+
+
+class TestMissionOverridesSave:
+    def test_save_writes_overrides_json_and_never_the_legacy_column(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn._responses.clear()
+        conn.set_response("FOR UPDATE", [{"updatedAt": datetime(2026, 1, 1, tzinfo=UTC)}])
+        store.update_mission(
+            "m1",
+            None,
+            overrides_json='{"retrieval": {"enabled": true}}',
+            retrieval_corpora_json='["legacy"]',
+        )
+        updates = [(sql, params) for sql, params in conn.executed if sql.startswith("UPDATE ")]
+        assert len(updates) == 1
+        sql, params = updates[0]
+        assert "overrides_json = %s" in sql
+        assert "retrieval_corpora_json" not in sql
+        assert '{"retrieval": {"enabled": true}}' in params
+        assert '["legacy"]' not in params

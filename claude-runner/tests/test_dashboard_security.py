@@ -396,3 +396,18 @@ def test_writes_are_not_blocked_when_readonly_is_off() -> None:
             "/api/board/missions/create", headers=cookie | DASHBOARD_HEADER, json={}
         )
         assert response.status_code != 403
+
+
+def test_board_save_without_dashboard_header_is_refused_with_403() -> None:
+    save = {"expected_version": "2026-01-01T00:00:00+00:00", "overrides_json": "{}"}
+    path = "/api/board/missions/m1"
+    app = create_dashboard_app(DashboardSettings(), transport=httpx.MockTransport(_refuse_runner))
+    with TestClient(app, base_url=BASE_URL, follow_redirects=False) as client:
+        value = _login(client)
+        refused = client.post(path, headers=_cookie_header(value) | JSON_ACCEPT, json=save)
+        allowed = client.post(
+            path, headers=_cookie_header(value) | DASHBOARD_HEADER | JSON_ACCEPT, json=save
+        )
+    assert refused.status_code == 403
+    assert refused.json() == {"error": "missing X-AHAWR-Dashboard header"}
+    assert allowed.status_code != 403

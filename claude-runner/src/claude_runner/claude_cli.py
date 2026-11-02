@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from . import cloud_think
+from .board_engine import match_error_rule
 from .config import CREDENTIAL_VARS, ProviderProfile, RoleProfile, Settings, provider_key
 
 UUID_RE = re.compile(
@@ -417,6 +418,7 @@ def classify(
     timed_out: bool = False,
     cancelled: bool = False,
     timeout_seconds: int = 0,
+    error_rules: list[dict[str, Any]] | None = None,
 ) -> Outcome:
     """Map a finished CLI process to the Hermes run contract used by the Run Manager."""
     result = state.result or {}
@@ -497,4 +499,12 @@ def classify(
         text += " (rate limit)"
     if code == "overloaded" and "overloaded" not in text.lower():
         text += " (overloaded)"
+    # shortcut: code/http keep TRANSIENT_HTTP, not LEGACY; upgrade to read the rule
+    rule = match_error_rule(error_rules, api_status, code, text)
+    if rule is not None:
+        details["error_rule"] = {
+            "id": rule["id"],
+            "action": rule["action"],
+            "retries": rule["retries"],
+        }
     return Outcome("failed", partial, code, text, http_code, details)

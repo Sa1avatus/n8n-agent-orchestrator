@@ -1,0 +1,216 @@
+{
+  "description": "Shared cases for the retrieval core. retrieval_json is the raw text of the column (a JSON string, a dict, or null); legacy is the row of retrieval_* hermes_config columns keyed by column name (missing or null = empty). flatten(retrieval_json, legacy) returns the legacy constants; validate(retrieval_json) returns the error messages. Golden: an empty or missing retrieval_json with empty legacy columns flattens to the constants read by today's workflow (docs/config-retrieval.md, Constants node).",
+  "legacy_constants": {
+    "retrieval_enabled": false,
+    "retrieval_url": "http://ahawr-retrieval:8500",
+    "retrieval_corpora_json": [],
+    "retrieval_timeout_ms": 120000,
+    "retrieval_worker_max_tokens": 6000,
+    "retrieval_reviewer_max_tokens": 5000,
+    "retrieval_label": ""
+  },
+  "parse": [
+    {
+      "name": "golden_missing",
+      "retrieval_json": null,
+      "legacy": {},
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_empty_string",
+      "retrieval_json": "",
+      "legacy": {},
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_empty_object",
+      "retrieval_json": "{}",
+      "legacy": {},
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "legacy_only",
+      "retrieval_json": "",
+      "legacy": {
+        "retrieval_enabled": true,
+        "retrieval_url": "http://legacy-retrieval:8500",
+        "retrieval_corpora_json": ["handbook"],
+        "retrieval_timeout_ms": 5000,
+        "retrieval_worker_max_tokens": 700,
+        "retrieval_reviewer_max_tokens": 800,
+        "retrieval_label": "hybrid-v1"
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_url": "http://legacy-retrieval:8500",
+          "retrieval_corpora_json": ["handbook"],
+          "retrieval_timeout_ms": 5000,
+          "retrieval_worker_max_tokens": 700,
+          "retrieval_reviewer_max_tokens": 800,
+          "retrieval_label": "hybrid-v1"
+        }
+      }
+    },
+    {
+      "name": "json_wins_over_legacy",
+      "retrieval_json": "{\"enabled\":true,\"timeout_ms\":30000,\"worker_max_tokens\":900}",
+      "legacy": {
+        "retrieval_enabled": false,
+        "retrieval_timeout_ms": 5000,
+        "retrieval_worker_max_tokens": 700,
+        "retrieval_reviewer_max_tokens": 800
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_timeout_ms": 30000,
+          "retrieval_worker_max_tokens": 900,
+          "retrieval_reviewer_max_tokens": 800
+        }
+      }
+    },
+    {
+      "name": "partial_json_defaults",
+      "retrieval_json": "{\"label\":\"hybrid-v1\"}",
+      "legacy": {},
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": false,
+          "retrieval_url": "http://ahawr-retrieval:8500",
+          "retrieval_timeout_ms": 120000,
+          "retrieval_label": "hybrid-v1"
+        }
+      }
+    },
+    {
+      "name": "partial_json_legacy_fallback",
+      "retrieval_json": "{\"timeout_ms\":2000}",
+      "legacy": { "retrieval_url": "http://legacy-retrieval:8500" },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_url": "http://legacy-retrieval:8500",
+          "retrieval_timeout_ms": 2000
+        }
+      }
+    },
+    {
+      "name": "dict_input",
+      "retrieval_json": { "enabled": true, "corpora": ["handbook", "faq"] },
+      "legacy": {},
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "retrieval_enabled": true,
+          "retrieval_corpora_json": ["handbook", "faq"]
+        }
+      }
+    },
+    {
+      "name": "label_is_trimmed",
+      "retrieval_json": "{\"label\":\"  hybrid-v1 \"}",
+      "legacy": {},
+      "expect": { "errors": [], "flatten_partial": { "retrieval_label": "hybrid-v1" } }
+    },
+    {
+      "name": "invalid_type_enabled",
+      "retrieval_json": "{\"enabled\":\"yes\"}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: enabled must be true or false"]
+      }
+    },
+    {
+      "name": "invalid_type_timeout_string",
+      "retrieval_json": "{\"timeout_ms\":\"120000\"}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: timeout_ms must be an integer >= 1000"]
+      }
+    },
+    {
+      "name": "invalid_type_timeout_bool",
+      "retrieval_json": "{\"timeout_ms\":true}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: timeout_ms must be an integer >= 1000"]
+      }
+    },
+    {
+      "name": "out_of_range_timeout_ms",
+      "retrieval_json": "{\"timeout_ms\":999}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: timeout_ms must be an integer >= 1000"]
+      }
+    },
+    {
+      "name": "out_of_range_worker_max_tokens",
+      "retrieval_json": "{\"worker_max_tokens\":99}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: worker_max_tokens must be an integer >= 100"]
+      }
+    },
+    {
+      "name": "corpora_not_array",
+      "retrieval_json": "{\"corpora\":\"handbook,faq\"}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: corpora must be an array of non-empty strings"]
+      }
+    },
+    {
+      "name": "corpora_empty_item",
+      "retrieval_json": "{\"corpora\":[\"handbook\",\"\"]}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: corpora must be an array of non-empty strings"]
+      }
+    },
+    {
+      "name": "empty_url",
+      "retrieval_json": "{\"url\":\"  \"}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: url must be a non-empty string"]
+      }
+    },
+    {
+      "name": "unknown_key",
+      "retrieval_json": "{\"timeouts\":5}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: unknown key \"timeouts\""]
+      }
+    },
+    {
+      "name": "not_valid_json",
+      "retrieval_json": "{not json",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: not valid JSON"]
+      }
+    },
+    {
+      "name": "nan_is_not_valid_json",
+      "retrieval_json": "{\"timeout_ms\":NaN}",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: not valid JSON"]
+      }
+    },
+    {
+      "name": "json_array_not_object",
+      "retrieval_json": "[1,2]",
+      "legacy": {},
+      "expect": {
+        "errors_contain": ["retrieval_json: must be a JSON object"]
+      }
+    }
+  ]
+}

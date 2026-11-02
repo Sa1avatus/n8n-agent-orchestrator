@@ -462,3 +462,13 @@ def test_main_empty_dashboard_bind_starts_without_auth(
     assert seen["log_level"] == "warning"
     assert "ssl_certfile" not in seen
     assert "ssl_keyfile" not in seen
+
+
+def test_lan_port_is_read_from_the_environment_and_off_by_default() -> None:
+    assert DashboardAuthSettings.from_env({}).lan_port is None
+    assert DashboardAuthSettings.from_env({"DASHBOARD_LAN_PORT": "8702"}).lan_port == 8702
+
+
+def test_a_lan_port_without_authentication_refuses_to_start() -> None:
+    with pytest.raises(ValueError, match="authentication"):
+        validate_startup(DashboardAuthSettings(lan_port=8702), "127.0.0.1")

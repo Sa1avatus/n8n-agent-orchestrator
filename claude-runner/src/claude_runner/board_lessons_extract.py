@@ -24,6 +24,7 @@ from claude_runner.board_lessons import (
     LessonKind,
 )
 from claude_runner.board_ops_redact import scrub
+from claude_runner.provider_secrets import REDACTED_TEXT
 
 ELLIPSIS = "..."
 ACCEPTED_STATUS = "pass"
@@ -51,13 +52,15 @@ _PERSONAL_HOME = re.compile(
     r"(?<![\w.-])(?:[A-Za-z]:[\\/]Users[\\/]|/d/Users/|/home/|/Users/)[^\\/\s'\"`]+[\\/]",
     re.IGNORECASE,
 )
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PUNCTUATION = re.compile(r"[^\w\s]")
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
 def redact(text: str) -> str:
-    """Remove secrets and the personal home prefix of absolute paths."""
-    return _PERSONAL_HOME.sub("", report_facts.redact(scrub(text)))
+    """Remove secrets, email addresses and the personal home prefix of absolute paths."""
+    without_secrets = _PERSONAL_HOME.sub("", report_facts.redact(scrub(text)))
+    return _EMAIL.sub(REDACTED_TEXT, without_secrets)
 
 
 def normalise(text: str) -> str:
@@ -187,10 +190,26 @@ def decide(
 ) -> Literal["add", "drop"] | tuple[Literal["bump"], int]:
     if repeats_mission_rule(candidate, mission_text, LESSONS_DEDUP_RATIO):
         return "drop"
-    duplicate = find_duplicate(candidate, active_lessons, LESSONS_DEDUP_RATIO)
+    same_mission = [lesson for lesson in active_lessons if lesson.mission == candidate.mission]
+    duplicate = find_duplicate(candidate, same_mission, LESSONS_DEDUP_RATIO)
     if duplicate is None:
         return "add"
     return ("bump", duplicate.id)
+
+
+def other_missions_matched(
+    candidate: LessonCandidate,
+    active_lessons: list[Lesson],
+) -> frozenset[str]:
+    """Distinct other missions whose active lessons match the candidate at the dedup ratio."""
+    text = _dedup_text(candidate)
+    return frozenset(
+        lesson.mission
+        for lesson in active_lessons
+        if lesson.status == "active"
+        and lesson.mission != candidate.mission
+        and _ratio(text, _dedup_text(lesson)) >= LESSONS_DEDUP_RATIO
+    )
 
 
 def _scope_words(text: str) -> set[str]:

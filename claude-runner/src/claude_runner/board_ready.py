@@ -38,7 +38,7 @@ from .board import (
     Mission,
 )
 from .context_probe import ctx_from_models
-from .roles_config import QA_MODES, merge, resolve
+from .roles_config import QA_MODES, flatten, merge, resolve
 from .sources import RunnerSource, _check
 
 HOST_CHECK_NOTE = "checked on the host"
@@ -398,7 +398,11 @@ def _service_urls(settings: Any) -> tuple[str, str, str, str, str]:
         config = settings.hermes_config() if hasattr(settings, "hermes_config") else {}
     except Exception:
         config = {}
-    worker_model = str(config.get("worker_model") or "")
+    try:
+        roles = _parse_roles(config.get("roles_json"))
+    except ValueError:
+        roles = {}
+    worker_model = str(flatten(roles, config)["worker_model"] or "")
     return runner_url, litellm_url, probe_url, probe_key, worker_model
 
 

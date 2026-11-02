@@ -29,6 +29,8 @@ const MESSAGE_FRAGMENTS = {
   unknown_layer: "unknown layer",
   repeated_layer: "repeats layer",
   layers_not_list: "must be a list of layer names",
+  bad_whole_number: "must be a whole number",
+  bad_positive_number: "must be a positive number",
 };
 
 function matches(expected, message) {
@@ -51,6 +53,12 @@ for (const bundle of CASES.validation) {
     const report = BoardRoles.validateRolesJson(bundle.input, PROVIDERS);
     assertExpected(bundle.errors, report.errors);
     assertExpected(bundle.warnings, report.warnings);
+  });
+}
+
+for (const bundle of CASES.flatten) {
+  test(`flatten: ${bundle.name}`, () => {
+    assert.deepEqual(BoardRoles.flatten(bundle.roles, bundle.legacy), bundle.expect);
   });
 }
 
@@ -278,4 +286,55 @@ test("board_mission_save.js postJson sends the dashboard header (source-level ch
   const src = fs.readFileSync(path.join(__dirname, "..", "src", "claude_runner", "board_mission_save.js"), "utf8");
   assert.ok(src.includes('"X-AHAWR-Dashboard": "1"'));
   assert.ok(src.includes("async function postJson(url, body, method = \"POST\", headers = {})"));
+});
+
+test("pollingValuesOf: roles_json options win, then the legacy column, then the default", () => {
+  const text = JSON.stringify({ worker: { "1": "claude/m", options: { max_polls: 40 } } });
+  const values = BoardRoles.pollingValuesOf(text, { worker_poll_seconds: 7, reviewer_max_retries: 2 });
+  assert.equal(values.worker.max_polls, "40");
+  assert.equal(values.worker.poll_seconds, "7");
+  assert.equal(values.worker.max_retries, "3");
+  assert.equal(values.reviewer.max_retries, "2");
+  assert.equal(values.architect.max_polls, "30");
+});
+
+test("pollingRolesText: writes only the changed option and keeps the model and the legacy columns out", () => {
+  const text = JSON.stringify({ worker: { "1": "claude/m", options: { max_polls: 40 } } });
+  const initial = BoardRoles.pollingValuesOf(text, {});
+  const current = structuredClone(initial);
+  current.worker.poll_seconds = "5";
+  const rows = BoardRoles.pollingDiffRows(initial, current);
+  assert.deepEqual(rows.map((r) => [r.role, r.key]), [["worker", "poll_seconds"]]);
+  const written = JSON.parse(BoardRoles.pollingRolesText(text, rows));
+  assert.deepEqual(written, { worker: { "1": "claude/m", options: { max_polls: 40, poll_seconds: 5 } } });
+  assert.equal(Object.keys(written).some((k) => k.endsWith("_max_polls")), false);
+});
+
+test("pollingDiffRows: nothing edited means no rows, so no PUT", () => {
+  const initial = BoardRoles.pollingValuesOf("", {});
+  assert.deepEqual(BoardRoles.pollingDiffRows(initial, structuredClone(initial)), []);
+});
+
+test("legacy columns: an empty column reads like a missing one (same as the python core)", () => {
+  const empty = { worker_provider: "", worker_model: "", worker_poll_seconds: "" };
+  assert.deepEqual(BoardRoles.flatten({}, empty), BoardRoles.flatten({}, {}));
+  assert.equal(BoardRoles.flatten(null, empty).worker_provider, null);
+  assert.equal(BoardRoles.flatten(null, empty).worker_poll_seconds, 3);
+  assert.throws(() => BoardRoles.resolveRole({}, "worker", 1, empty), /no model configured/);
+});
+
+test("legacy columns: an absent legacy object reads as no columns", () => {
+  assert.deepEqual(BoardRoles.flatten(null, undefined), BoardRoles.flatten(null, {}));
+  const roles = BoardRoles.mergeRoles({ worker: "anthropic/haiku" }, undefined);
+  assert.equal(BoardRoles.resolveRole(roles, "worker", 1, undefined).model, "haiku");
+});
+
+test("pollingRolesText: an emptied retry count is kept empty and fails validation", () => {
+  const initial = BoardRoles.pollingValuesOf("", {});
+  const current = structuredClone(initial);
+  current.architect.max_retries = "";
+  const rows = BoardRoles.pollingDiffRows(initial, current);
+  const report = BoardRoles.validateRolesJson(BoardRoles.pollingRolesText("", rows), []);
+  assert.equal(report.errors.length, 1);
+  assert.match(report.errors[0], /max_retries/);
 });

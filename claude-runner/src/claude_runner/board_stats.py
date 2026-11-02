@@ -18,10 +18,12 @@ import threading
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .board import BoardStore
+from .board import BoardStore, Mission
+from .board_engine import ENGINE_COLUMN, LEGACY_COLUMNS, flatten, parse_engine
 from .board_lessons import InMemoryLessonStore, PgLessonStore
 from .board_order import task_sort_key
 from .board_ready import effective_roles
@@ -180,14 +182,26 @@ def _attempt_times_seconds(
     return [_run_seconds(manager, _attempt_runs(board, state_key, task_id, a)) for a in attempts]
 
 
+def configured_value(row: dict[str, Any], key: str) -> Any:
+    """The engine core's value for ``key`` (``engine_json`` wins, then the legacy
+    column); None when neither sets it, so the core's default is not filled in."""
+    engine = row.get(ENGINE_COLUMN)
+    accepted, _ = parse_engine(engine)
+    if key not in accepted and row.get(LEGACY_COLUMNS[key]) in (None, ""):
+        return None
+    return flatten(engine, row)[key]
+
+
 def _max_attempts(board: BoardStore, mission_id: str) -> float | None:
     """The cap of attempts per task: the mission's queue override when set,
     else the hermes config's ``max_attempts_per_task``."""
     for entry in board.queue():
         if entry.mission_id == mission_id and entry.attempts_per_task is not None:
             return float(entry.attempts_per_task)
-    config = board.hermes_config()
-    value = config.get("max_attempts_per_task")
+    try:
+        value = configured_value(board.hermes_config(), "max_attempts_per_task")
+    except ValueError:
+        return None
     if isinstance(value, int | float):
         return float(value)
     return None
@@ -510,9 +524,10 @@ def lesson_block_shown(config: dict[str, Any], task_index: int) -> bool:
 
 def _attempts_and_verdicts(
     board: BoardStore, state_key: str
-) -> tuple[dict[int, set[int]], dict[int, Any]]:
-    """Per task index: the attempt numbers seen, and the ``review_status`` of the
-    first attempt (its lowest ``task_attempt``) when a review was parsed."""
+) -> tuple[dict[int, set[int]], dict[int, Any], set[int]]:
+    """Per task index: the attempt numbers seen, the ``review_status`` of the first
+    attempt (its lowest ``task_attempt``) when a review was parsed, and the set of
+    tasks with a parsed ``needs_changes`` review on any attempt."""
     rows = [
         e for e in board.events(state_key)
         if e.get("task_index") is not None and e.get("task_attempt") is not None
@@ -521,13 +536,78 @@ def _attempts_and_verdicts(
     for e in rows:
         attempts.setdefault(int(float(e["task_index"])), set()).add(int(float(e["task_attempt"])))
     verdicts: dict[int, Any] = {}
+    flagged: set[int] = set()
     for e in rows:
+        if e.get("event_type") != "review_parsed":
+            continue
         index = int(float(e["task_index"]))
-        if e.get("event_type") == "review_parsed" and int(float(e["task_attempt"])) == min(
-            attempts[index]
-        ):
+        if e.get("review_status") == "needs_changes":
+            flagged.add(index)
+        if int(float(e["task_attempt"])) == min(attempts[index]):
             verdicts[index] = e.get("review_status")
-    return attempts, verdicts
+    return attempts, verdicts, flagged
+
+
+@dataclass(frozen=True)
+class _TaskFigure:
+    attempts: int
+    first_passed: bool | None  # None: no review was parsed for the first attempt
+    needs_changes: bool
+    with_lesson: bool
+    before_first_lesson: bool
+
+
+def _mission_tasks(
+    board: BoardStore,
+    lessons: InMemoryLessonStore | PgLessonStore,
+    state_key: str,
+    mission_id: str,
+) -> list[_TaskFigure]:
+    attempts, verdicts, flagged = _attempts_and_verdicts(board, state_key)
+    with_block = lessons.task_indexes_with_lessons(mission_id)
+    shown = [index for index in attempts if index in with_block]
+    first_shown = min(shown, default=None)
+    return [
+        _TaskFigure(
+            attempts=len(attempts[index]),
+            first_passed=verdicts[index] == "pass" if index in verdicts else None,
+            needs_changes=index in flagged,
+            with_lesson=index in with_block,
+            before_first_lesson=first_shown is None or index < first_shown,
+        )
+        for index in sorted(attempts)
+    ]
+
+
+def _lesson_figures(tasks: list[_TaskFigure]) -> dict[str, Any]:
+    with_lesson = [t for t in tasks if t.with_lesson]
+    without_lesson = [t for t in tasks if not t.with_lesson]
+    before = [t for t in tasks if t.before_first_lesson]
+    after = [t for t in tasks if not t.before_first_lesson]
+
+    def pass_rate(group: list[_TaskFigure]) -> float | None:
+        judged = [t.first_passed for t in group if t.first_passed is not None]
+        return sum(judged) / len(judged) if judged else None
+
+    def mean_attempts(group: list[_TaskFigure]) -> float | None:
+        return sum(t.attempts for t in group) / len(group) if group else None
+
+    return {
+        "needs_changes_share": (
+            sum(t.needs_changes for t in tasks) / len(tasks) if tasks else None
+        ),
+        "mean_attempts_per_task": mean_attempts(tasks),
+        "with_lessons": {
+            "tasks": len(with_lesson), "first_attempt_pass_rate": pass_rate(with_lesson),
+        },
+        "without_lessons": {
+            "tasks": len(without_lesson), "first_attempt_pass_rate": pass_rate(without_lesson),
+        },
+        "attempts_per_task": {
+            "before_first_lesson": mean_attempts(before),
+            "after_first_lesson": mean_attempts(after),
+        },
+    }
 
 
 def lessons_stats(
@@ -536,40 +616,29 @@ def lessons_stats(
     state_key: str,
     mission_id: str,
 ) -> dict[str, Any]:
-    """The mission's lesson figures: the first-attempt pass rate and task count of the
-    tasks with and without a lesson block, the mean attempts per task before and after
-    the first task that got a block, and the lesson counts by status.  A task with no
-    block is one that ``lessons_for_task`` returns nothing for."""
-    attempts, verdicts = _attempts_and_verdicts(board, state_key)
-    shown = sorted(index for index in attempts if lessons.lessons_for_task(mission_id, index))
-    without = sorted(set(attempts) - set(shown))
-    first_shown = shown[0] if shown else None
-    before = [i for i in sorted(attempts) if first_shown is None or i < first_shown]
-    after = [i for i in sorted(attempts) if first_shown is not None and i >= first_shown]
-
-    def pass_rate(indexes: list[int]) -> float | None:
-        judged = [verdicts[i] for i in indexes if i in verdicts]
-        return sum(v == "pass" for v in judged) / len(judged) if judged else None
-
-    def mean_attempts(indexes: list[int]) -> float | None:
-        return sum(len(attempts[i]) for i in indexes) / len(indexes) if indexes else None
-
+    """The mission's lesson figures (see ``_lesson_figures``) and its lesson counts by
+    status.  A task with no block is one that no lesson was shown to."""
     by_status = Counter(lesson.status for lesson in lessons.list(mission_id))
     return {
         "state_key": state_key,
         "mission_id": mission_id,
         "lessons": {"active": by_status["active"], "retired": by_status["retired"]},
-        "with_lessons": {
-            "tasks": len(shown), "first_attempt_pass_rate": pass_rate(shown),
-        },
-        "without_lessons": {
-            "tasks": len(without), "first_attempt_pass_rate": pass_rate(without),
-        },
-        "attempts_per_task": {
-            "before_first_lesson": mean_attempts(before),
-            "after_first_lesson": mean_attempts(after),
-        },
+        **_lesson_figures(_mission_tasks(board, lessons, state_key, mission_id)),
     }
+
+
+def lessons_stats_overall(
+    board: BoardStore,
+    lessons: InMemoryLessonStore | PgLessonStore,
+    missions: list[Mission],
+) -> dict[str, Any]:
+    """The lesson figures pooled over the tasks of ``missions``; zeros and nulls for none."""
+    tasks = [
+        task
+        for mission in missions
+        for task in _mission_tasks(board, lessons, mission.state_namespace, mission.mission_id)
+    ]
+    return {"missions": len(missions), **_lesson_figures(tasks)}
 
 
 def _iso(value: Any) -> Any:

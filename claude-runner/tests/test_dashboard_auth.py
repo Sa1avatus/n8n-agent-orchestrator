@@ -232,3 +232,33 @@ def test_no_secrets_in_logs(caplog: pytest.LogCaptureFixture) -> None:
         text = record.getMessage()
         for secret in _SECRET_VALUES:
             assert secret not in text, f"secret {secret!r} leaked in log: {text}"
+
+
+def _two_port_client(port: int) -> TestClient:
+    async def page(request: Request) -> JSONResponse:
+        return JSONResponse({"ok": True})
+
+    settings = DashboardAuthSettings(
+        token=TOKEN, readonly=True, lan_port=8702, session_secret=SECRET
+    )
+    app = Starlette(
+        routes=[Route("/page", page, methods=["GET", "POST"])],
+        middleware=[Middleware(AuthGuard, settings=settings)],
+    )
+    return TestClient(app, base_url=f"http://testserver:{port}")
+
+
+def test_loopback_port_stays_open_and_writable_when_a_lan_port_is_set() -> None:
+    client = _two_port_client(8701)
+
+    assert client.get("/page").status_code == 200
+    assert client.post("/page").status_code == 200
+
+
+def test_lan_port_needs_a_login_and_refuses_writes() -> None:
+    client = _two_port_client(8702)
+    bearer = {"Authorization": f"Bearer {TOKEN}"}
+
+    assert client.get("/page").status_code == 401
+    assert client.get("/page", headers=bearer).status_code == 200
+    assert client.post("/page", headers=bearer).status_code == 403

@@ -27,6 +27,7 @@ class DashboardAuthSettings:
     session_secret: str = field(default="", repr=False)
     session_seconds: int = DEFAULT_SESSION_S
     readonly: bool = False
+    lan_port: int | None = None
     tls_cert: str | None = None
     tls_key: str | None = None
 
@@ -45,6 +46,7 @@ class DashboardAuthSettings:
             session_secret=env.get("DASHBOARD_SESSION_SECRET", "").strip(),
             session_seconds=int(env.get("DASHBOARD_SESSION_SECONDS", str(DEFAULT_SESSION_S))),
             readonly=env.get("DASHBOARD_READONLY", "").strip() in ("1", "true"),
+            lan_port=int(env.get("DASHBOARD_LAN_PORT", "").strip() or 0) or None,
             tls_cert=env.get("DASHBOARD_TLS_CERT", "").strip() or None,
             tls_key=env.get("DASHBOARD_TLS_KEY", "").strip() or None,
         )
@@ -72,7 +74,7 @@ def validate_startup(settings: DashboardAuthSettings, bind_host: str) -> None:
     - a TLS certificate without a key;
     - password login (a hash) without a session secret;
     - a username without a password hash;
-    - a non-loopback bind host with no authentication.
+    - a non-loopback bind host, or a LAN port, with no authentication.
     """
     if settings.tls_cert is not None and settings.tls_key is None:
         raise ValueError(
@@ -92,7 +94,7 @@ def validate_startup(settings: DashboardAuthSettings, bind_host: str) -> None:
             "a password hash is required with a username."
         )
 
-    if not is_loopback(bind_host) and not auth_enabled(settings):
+    if (settings.lan_port is not None or not is_loopback(bind_host)) and not auth_enabled(settings):
         raise ValueError(
             "Binding to a non-loopback host requires authentication: "
             "set DASHBOARD_TOKEN, or set DASHBOARD_USER with "

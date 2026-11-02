@@ -14,13 +14,15 @@ Defaults are taken from `docker-compose.yml` (service `ahawr-dashboard`, lines 3
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AHAWR_DASHBOARD_BIND` | `127.0.0.1` | Host address the port is published on (compose line 326). Loopback = this PC only. |
-| `AHAWR_DASHBOARD_PORT` | `8701` | Published port (compose line 326). |
+| `DASHBOARD_LAN_PORT` | empty | Container port of the second, LAN listener (use `8702`). Empty = no LAN listener. It needs the login below and is read-only when `DASHBOARD_READONLY=1`. |
+| `AHAWR_DASHBOARD_LAN_BIND` | `127.0.0.1` | Host address the LAN port is published on. Loopback = this PC only. |
+| `AHAWR_DASHBOARD_LAN_PORT` | `8702` | Host port of the LAN listener. |
+| `AHAWR_DASHBOARD_PORT` | `8701` | Open, writable port for the operator's tools; always published on `127.0.0.1`. |
 | `DASHBOARD_USER` | empty | Login name for password login. Needs a hash. |
 | `DASHBOARD_PASSWORD_HASH` | empty | scrypt hash of the password (section 2). Needs a session secret. |
 | `DASHBOARD_SESSION_SECRET` | empty | Key that signs session cookies. Needs to be set with the hash. |
 | `DASHBOARD_TOKEN` | empty | Bearer token for scripts and the login form. Grants full access. |
-| `DASHBOARD_READONLY` | `0` | `1` refuses the Stop action (section 4). |
+| `DASHBOARD_READONLY` | `0` | `1` makes the LAN port read-only: every write gets 403 and the write controls are hidden (section 4). |
 | `DASHBOARD_HOSTS_EXTRA` | empty | Extra host names accepted in the `Host` header, comma-separated. |
 | `DASHBOARD_TLS_CERT` | empty | Path inside the container to the certificate (section 5). |
 | `DASHBOARD_TLS_KEY` | empty | Path inside the container to the private key (section 5). |
@@ -67,7 +69,8 @@ Put these in the repository-root `.env`, which git ignores (`.gitignore:1-2`). V
 placeholders:
 
 ```
-AHAWR_DASHBOARD_BIND=LAN_IP_OF_THIS_PC
+DASHBOARD_LAN_PORT=8702
+AHAWR_DASHBOARD_LAN_BIND=LAN_IP_OF_THIS_PC
 DASHBOARD_USER=LOGIN_NAME_HERE
 DASHBOARD_PASSWORD_HASH=PASTE_HASH_LINE_HERE
 DASHBOARD_SESSION_SECRET=PASTE_SESSION_SECRET_HERE
@@ -75,17 +78,15 @@ DASHBOARD_TOKEN=PASTE_TOKEN_HERE
 DASHBOARD_READONLY=1
 ```
 
-`AHAWR_DASHBOARD_BIND=0.0.0.0` publishes on every interface, including Wi-Fi networks you did not mean to open.
+`AHAWR_DASHBOARD_LAN_BIND=0.0.0.0` publishes on every interface, including Wi-Fi networks you did not mean to open.
 Use the LAN address of this PC where possible. Leave `DASHBOARD_TOKEN` empty if you only want the password.
 
 ## 4. Read-only mode for the network
 
-Set `DASHBOARD_READONLY=1` for a LAN session. Read the limit first: the flag is checked in one place only, the
-Stop route (`claude-runner/src/claude_runner/dashboard.py:548`, test
-`test_stop_is_forbidden_in_readonly_mode` in `tests/test_dashboard_security.py`). It refuses Stop with a 403
-"read-only" answer. It does not stop the board or the host-action writes under `/api/board/` and
-`/api/host-actions/`. Those still need the password or token and the dashboard header (section 7). Treat
-read-only as "no Stop from the network", not as a read-only dashboard.
+Set `DASHBOARD_READONLY=1` for the LAN port. Every write request that arrives on that port (POST, PUT, PATCH,
+DELETE) gets a 403 "read-only" answer, and `GET /api/ui-mode` tells the page to hide the write controls
+(`dashboard_auth.py`, `board_readonly.js`; tests in `tests/test_dashboard_auth.py` and `tests/test_dashboard_security.py`).
+The loopback port (8701) is not affected: the operator's tools write through it. It is published on `127.0.0.1` only.
 
 ## 5. HTTPS with a self-signed LAN certificate
 

@@ -1,0 +1,199 @@
+{
+  "legacy": [
+    {
+      "id": "legacy-context-code",
+      "match": {
+        "codes": [
+          "context_window"
+        ]
+      },
+      "action": "compact",
+      "retries": 3
+    },
+    {
+      "id": "legacy-context-words",
+      "match": {
+        "words": [
+          "context window exceeded",
+          "contextwindow exceeded",
+          "context windowexceeded",
+          "contextwindowexceeded",
+          "exceeds the available context",
+          "context length",
+          "prompt is too long",
+          "maximum context"
+        ]
+      },
+      "action": "compact",
+      "retries": 3
+    },
+    {
+      "id": "legacy-transient-http",
+      "match": {
+        "http": [
+          400,
+          408,
+          409,
+          425,
+          429,
+          500,
+          502,
+          503,
+          504,
+          529
+        ]
+      },
+      "action": "retry",
+      "retries": 3
+    },
+    {
+      "id": "legacy-transient-words",
+      "match": {
+        "words": [
+          "temporarily overloaded",
+          "upstream error",
+          "upstream request failed",
+          "service unavailable",
+          "overloaded",
+          "timeout",
+          "timed out",
+          "connection reset",
+          "connection refused",
+          "rate limit",
+          "too many requests",
+          "no longer available",
+          "no provider serves",
+          "model not found"
+        ]
+      },
+      "action": "retry",
+      "retries": 3
+    }
+  ],
+  "recommended": [
+    {
+      "id": "weekly-limit-text",
+      "match": {
+        "words": [
+          "weekly limit"
+        ]
+      },
+      "action": "retry",
+      "retries": 2
+    },
+    {
+      "id": "rate-limit-429",
+      "match": {
+        "http": [
+          429
+        ],
+        "words": [
+          "rate limit",
+          "too many requests"
+        ]
+      },
+      "action": "retry",
+      "retries": 2
+    },
+    {
+      "id": "transient-5xx",
+      "match": {
+        "http": [
+          408,
+          409,
+          425,
+          500,
+          502,
+          503,
+          504,
+          529
+        ],
+        "words": [
+          "timeout",
+          "overloaded",
+          "upstream",
+          "connection reset"
+        ]
+      },
+      "action": "retry",
+      "retries": 2
+    },
+    {
+      "id": "model-gone",
+      "match": {
+        "http": [
+          400,
+          404
+        ],
+        "words": [
+          "no longer available",
+          "no provider serves",
+          "model not found",
+          "does not exist"
+        ]
+      },
+      "action": "failover",
+      "retries": 0
+    },
+    {
+      "id": "credits-402",
+      "match": {
+        "http": [
+          402
+        ],
+        "words": [
+          "insufficient credits",
+          "credit balance",
+          "quota exceeded",
+          "usage limit"
+        ]
+      },
+      "action": "failover",
+      "retries": 0
+    },
+    {
+      "id": "auth-401-403",
+      "match": {
+        "http": [
+          401,
+          403
+        ],
+        "words": [
+          "invalid api key",
+          "expired"
+        ]
+      },
+      "action": "failover",
+      "retries": 0
+    },
+    {
+      "id": "context-413",
+      "match": {
+        "http": [
+          413
+        ],
+        "words": [
+          "context length"
+        ]
+      },
+      "action": "compact",
+      "retries": 2
+    },
+    {
+      "id": "other-400",
+      "match": {
+        "http": [
+          400
+        ]
+      },
+      "action": "retry",
+      "retries": 2
+    },
+    {
+      "id": "else-fail",
+      "match": {},
+      "action": "fail",
+      "retries": 0
+    }
+  ]
+}

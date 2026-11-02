@@ -800,3 +800,27 @@ def test_settings_without_providers_do_not_break_the_service_urls(monkeypatch):
     runner_url, litellm_url, *_ = board_ready._service_urls(DashboardSettings())
     assert litellm_url == "http://litellm:4000"
     assert runner_url == "" or runner_url.startswith("http")
+
+
+class _HermesSettings:
+    def __init__(self, config):
+        self._config = config
+
+    def hermes_config(self):
+        return self._config
+
+
+def test_service_urls_worker_model_comes_from_the_column_without_roles_json():
+    settings = _HermesSettings({"worker_model": "qwen", "roles_json": ""})
+    assert board_ready._service_urls(settings)[4] == "qwen"
+
+
+def test_service_urls_roles_json_worker_model_wins_over_the_column():
+    roles = {"worker": {"1": "local/qwen-next"}}
+    config = {"worker_model": "qwen", "roles_json": json.dumps(roles)}
+    assert board_ready._service_urls(_HermesSettings(config))[4] == "qwen-next"
+
+
+def test_service_urls_unparseable_roles_json_keeps_the_column():
+    config = {"worker_model": "qwen", "roles_json": "{not json"}
+    assert board_ready._service_urls(_HermesSettings(config))[4] == "qwen"

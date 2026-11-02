@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from claude_runner import overrides_config
 from claude_runner.board import InMemoryBoardStore, LiveState, Mission, QueueEntry
 from claude_runner.board_pg import _LIVE_STATE_TABLE, _MISSIONS_TABLE, _QUEUE_TABLE
 
@@ -60,7 +61,9 @@ def board_store_from_rows(rows: FixtureRows) -> InMemoryBoardStore:
     for row in rows.missions:
         mission = Mission(
             mission_id=row["mission_id"],
-            state_namespace=row["state_namespace"],
+            state_namespace=overrides_config.resolve_state_key(
+                row["mission_id"], row.get("state_namespace")
+            ),
             name=row.get("name") or "",
             objective=row.get("objective") or "",
             working_directory=row.get("working_directory") or None,
@@ -68,7 +71,9 @@ def board_store_from_rows(rows: FixtureRows) -> InMemoryBoardStore:
             enabled=row.get("enabled", True),
             rules=json.loads(row.get("rules_json") or "[]"),
             acceptance_criteria=json.loads(row.get("acceptance_criteria_json") or "[]"),
-            retrieval_corpora=json.loads(row.get("retrieval_corpora_json") or "null"),
+            retrieval_corpora=overrides_config.resolve(
+                row.get("overrides_json"), row
+            )["retrieval_corpora"],
             created_at=row.get("createdAt"),
             updated_at=row.get("updatedAt"),
         )

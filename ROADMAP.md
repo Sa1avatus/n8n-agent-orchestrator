@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.11.930 · October 31, 2026** — The QA agent (a thinking model checks the screens against the agreed design), the search gate and the RAG quality tools are in 0.11.800 and run in missions since 0.11.900; the JSON configuration comes next
+**0.12.0 · November 2, 2026** — The configuration lives in JSON now (roles, thinking, retrieval, engine, mission overrides, features) and the adaptive split of long tasks is wired into the launch; the rename to ahawr-runner and the code review come next
 
-Current version: **0.11.930** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.0 · 1.0.0**
+Current version: **0.12.0** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.x rename · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -142,17 +142,18 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [x] Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md
 - [x] 0.11.0 – 0.11.930 releases: changelog, versions, roadmap
 
-### 0.12.0: Configuration columns to JSON and the rename to ahawr-runner — Next (Q1 2027)
+### 0.12.0: Configuration columns to JSON (released); the rename to ahawr-runner is next — In progress (November 2026)
 
-0.12.0 · hermes_config from 41 to 10 columns, one JSON setting per concern; claude-runner becomes ahawr-runner at a queue pause · 0/3 milestones, 0%
+0.12.0 · Six JSON settings in hermes_config and the missions (roles, thinking, retrieval, engine with error rules, overrides, features); the legacy columns stay as the fallback and are removed one release later · 3/4 milestones, 75%
 
-- [ ] Configuration columns to JSON (docs/config-columns-plan.md): roles_json, thinking_json, retrieval_json, engine_json, missions overrides_json; the legacy columns are removed one release after the JSON works
+- [x] Configuration columns to JSON (docs/config-columns-plan.md): roles_json, thinking_json, retrieval_json, engine_json (with error_rules), missions overrides_json, features_json; the legacy columns stay as the fallback, their removal is planned one release later (docs/config-cutover.md)
+- [x] Adaptive split of long tasks, the plan gate and run hygiene in the launch script (flags in features_json); the dashboard with two ports; the QA stack knows the new columns
 - [ ] Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
-- [ ] 0.12.0 release: changelog, version, roadmap
+- [x] 0.12.0 release: changelog, version, roadmap
 
-### After 0.11.930: Quality and reach — Next (Q4 2026 – Q1 2027)
+### After 0.12.0: Quality and reach — Next (Q4 2026 – Q1 2027)
 
-after 0.11.930 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
+after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
 
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [ ] Dashboard over the local network and on mobile

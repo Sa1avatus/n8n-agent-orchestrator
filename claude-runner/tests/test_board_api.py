@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import copy
 import json
-from contextlib import asynccontextmanager
+import threading
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from claude_runner import board_api
-from claude_runner.board import InMemoryBoardStore, Mission, QueueEntry
+from claude_runner.board import InMemoryBoardStore, LiveState, Mission, QueueEntry
+from claude_runner.board_pg import _MISSIONS_TABLE, PgBoardStore
 from claude_runner.qa_runner import build_verdict
 
 
@@ -1773,3 +1776,198 @@ class TestMissionQa:
                      "qa-ab12/%2e%2e%2fsecret.png", "qa-ab12/notes.txt"):
             response = await board_client.get(f"/api/board/qa/screenshots/{path}")
             assert response.status_code == 404, path
+
+
+OVERRIDES_VALID = '{"retrieval": {"enabled": true, "corpora": ["made-corpus-a"]}}'
+
+
+async def _mission_version(board_client) -> str:
+    return (await board_client.get("/api/board/missions/m1")).json()["mission"]["updated_at"]
+
+
+async def _stored_overrides(board_client) -> str | None:
+    mission = (await board_client.get("/api/board/missions/m1")).json()["mission"]
+    return mission["overrides_json"]
+
+
+async def test_save_overrides_json_through_the_version_check(board_client):
+    r = await board_client.post("/api/board/missions/m1", json={
+        "expected_version": await _mission_version(board_client),
+        "overrides_json": OVERRIDES_VALID,
+    })
+    assert r.status_code == 200
+    assert r.json()["mission"]["overrides_json"] == OVERRIDES_VALID
+    assert r.json()["mission"]["retrieval_corpora"] == ["corpus"]
+
+
+async def test_invalid_overrides_json_is_rejected_and_not_stored(board_client):
+    r = await board_client.post("/api/board/missions/m1", json={
+        "expected_version": await _mission_version(board_client),
+        "overrides_json": '{"retrieval": {"timeout_ms": 500}, "warp": 1}',
+    })
+    assert r.status_code == 400
+    assert r.json()["error"]["message"] == (
+        "overrides_json: retrieval.timeout_ms must be an integer >= 1000, got 500; "
+        'overrides_json: unknown key "warp"'
+    )
+    assert await _stored_overrides(board_client) is None
+
+
+async def test_overrides_json_text_that_is_not_json_is_rejected(board_client):
+    r = await board_client.post("/api/board/missions/m1", json={
+        "expected_version": await _mission_version(board_client),
+        "overrides_json": '{"retrieval": ',
+    })
+    assert r.status_code == 400
+    assert r.json()["error"]["message"] == "overrides_json: invalid JSON"
+
+
+async def test_overrides_json_save_with_stale_version_is_409(board_client):
+    r = await board_client.post("/api/board/missions/m1", json={
+        "expected_version": "2000-01-01T00:00:00+00:00",
+        "overrides_json": OVERRIDES_VALID,
+    })
+    assert r.status_code == 409
+    assert await _stored_overrides(board_client) is None
+
+
+class _FakePgCursor:
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self._rows
+
+    def fetchone(self) -> dict[str, Any] | None:
+        return self._rows[0] if self._rows else None
+
+
+class _FakePgConn:
+    def __init__(self, rows: list[dict[str, Any]], columns: set[str] | None = None) -> None:
+        self.rows = rows
+        self.columns = columns or set()
+        self.sql: list[str] = []
+        self.executed: list[tuple[str, Any]] = []
+
+    def execute(self, sql: str, params: Any = ()) -> _FakePgCursor:
+        self.sql.append(sql)
+        self.executed.append((sql, params))
+        if "information_schema" in sql:
+            return _FakePgCursor([{"column_name": c} for c in sorted(self.columns)])
+        if "count(*)" in sql:
+            return _FakePgCursor([{"count": 0}])
+        return _FakePgCursor(self.rows)
+
+    def transaction(self) -> nullcontext[None]:
+        return nullcontext()
+
+
+def _pg_store(
+    rows: list[dict[str, Any]], columns: set[str] | None = None
+) -> tuple[PgBoardStore, _FakePgConn]:
+    store = PgBoardStore.__new__(PgBoardStore)
+    conn = _FakePgConn(rows, columns)
+    store._conn = cast(Any, conn)
+    store._lock = threading.RLock()
+    store._columns = {}
+    return store, conn
+
+
+def _pg_mission_row(**over: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "mission_id": "m1", "name": "Mission", "objective": "do it", "working_directory": "/w",
+        "version": 1.0, "enabled": True, "rules_json": "[]", "acceptance_criteria_json": "[]",
+        "overrides_json": None, "createdAt": None, "updatedAt": None,
+        "state_namespace": "m1", "retrieval_corpora_json": '["legacy"]',
+    }
+    row.update(over)
+    return row
+
+
+def test_pg_mission_with_legacy_keys_reads_them() -> None:
+    store, conn = _pg_store([_pg_mission_row(state_namespace="ns-1")])
+    mission = store.get_mission("m1")
+    assert mission is not None
+    assert mission.state_namespace == "ns-1"
+    assert mission.retrieval_corpora == ["legacy"]
+    assert "->> 'retrieval_corpora_json' AS retrieval_corpora_json" in conn.sql[0]
+
+
+def test_pg_mission_without_legacy_keys_reads_without_error() -> None:
+    row = _pg_mission_row()
+    del row["state_namespace"]
+    del row["retrieval_corpora_json"]
+    store, _ = _pg_store([row])
+    missions = store.list_missions()
+    assert [m.mission_id for m in missions] == ["m1"]
+    assert missions[0].state_namespace == "m1"
+    assert missions[0].retrieval_corpora is None
+
+
+def test_pg_mission_legacy_and_json_only_rows_are_equal_with_equal_json() -> None:
+    overrides = '{"retrieval": {"corpora": ["from-json"]}}'
+    with_legacy, _ = _pg_store([_pg_mission_row(overrides_json=overrides)])
+    row = _pg_mission_row(overrides_json=overrides)
+    del row["state_namespace"]
+    del row["retrieval_corpora_json"]
+    without_legacy, _ = _pg_store([row])
+    assert with_legacy.get_mission("m1") == without_legacy.get_mission("m1")
+    assert with_legacy.get_mission("m1").retrieval_corpora == ["from-json"]
+
+
+_MISSION_COLUMNS = {
+    "mission_id", "name", "objective", "working_directory", "version", "enabled", "rules_json",
+    "acceptance_criteria_json", "overrides_json", "createdAt", "updatedAt",
+}
+_LEGACY_COLUMNS = {"state_namespace", "retrieval_corpora_json"}
+_HERMES_COLUMNS = {
+    "profile_id", "enabled", "architect_model", "worker_provider", "worker_model",
+    "max_tasks", "roles_json", "features_json", "thinking_json", "retrieval_json",
+    "engine_json", "updatedAt",
+}
+
+
+def _create_pg_mission(columns: set[str]) -> _FakePgConn:
+    store, conn = _pg_store([], columns)
+    mission = Mission(mission_id="m1", state_namespace="ns-1", retrieval_corpora=["a"])
+    store.create_mission_rows(mission, LiveState(state_key="ns-1"), None)
+    return conn
+
+
+def _mission_insert(conn: _FakePgConn) -> tuple[str, Any]:
+    return next(
+        (sql, params) for sql, params in conn.executed
+        if sql.startswith(f"INSERT INTO {_MISSIONS_TABLE} ")
+    )
+
+
+def test_pg_create_without_legacy_columns_omits_them() -> None:
+    sql, params = _mission_insert(_create_pg_mission(_MISSION_COLUMNS))
+    assert "state_namespace" not in sql
+    assert "retrieval_corpora_json" not in sql
+    assert "m1" in params
+    assert '["a"]' not in params
+
+
+def test_pg_create_with_legacy_columns_writes_them() -> None:
+    sql, params = _mission_insert(_create_pg_mission(_MISSION_COLUMNS | _LEGACY_COLUMNS))
+    assert "state_namespace" in sql
+    assert "retrieval_corpora_json" in sql
+    assert "ns-1" in params
+    assert '["a"]' in params
+
+
+def test_pg_update_drops_legacy_field_when_column_is_gone() -> None:
+    store, conn = _pg_store([_pg_mission_row()], _MISSION_COLUMNS)
+    store.update_mission("m1", None, name="renamed", state_namespace="ns-2")
+    update = next(sql for sql, _ in conn.executed if sql.startswith("UPDATE "))
+    assert "name = %s" in update
+    assert "state_namespace" not in update
+
+
+def test_pg_update_hermes_drops_legacy_field_when_column_is_gone() -> None:
+    store, conn = _pg_store([{"updatedAt": "2026-01-01T00:00:00+00:00"}], _HERMES_COLUMNS)
+    store.update_hermes_config(None, max_tasks=3, retrieval_url="http://example.invalid")
+    update = next(sql for sql, _ in conn.executed if sql.startswith("UPDATE "))
+    assert "max_tasks = %s" in update
+    assert "retrieval_url" not in update

@@ -2,12 +2,52 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from claude_runner import mcp_search
-from claude_runner.claude_cli import build_command, mcp_search_args
+from claude_runner.board_engine import RECOMMENDED_ERROR_RULES
+from claude_runner.claude_cli import (
+    Outcome,
+    StreamState,
+    build_command,
+    classify,
+    mcp_search_args,
+)
 from claude_runner.config import Settings
+
+POOLSIDE_400_LINE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": True,
+        "api_error_status": 400,
+        "result": (
+            "API Error: 400 poolside/laguna-s-2.1:free is no longer available on OpenRouter: "
+            "no provider serves this model anymore"
+        ),
+    }
+)
+
+
+def _classify_line(line: str, error_rules: list[dict[str, Any]] | None) -> Outcome:
+    state = StreamState()
+    state.feed(line)
+    return classify(state, 1, "", error_rules=error_rules)
+
+
+def test_classify_recommended_rules_fail_over_poolside_400() -> None:
+    outcome = _classify_line(POOLSIDE_400_LINE, RECOMMENDED_ERROR_RULES)
+    assert outcome.error_code == "api_error" and outcome.http_code is None
+    assert outcome.details["error_rule"] == {"id": "model-gone", "action": "failover", "retries": 0}
+
+
+def test_classify_empty_rule_list_uses_legacy_rules() -> None:
+    outcome = _classify_line(POOLSIDE_400_LINE, [])
+    assert outcome.error_code == "api_error" and outcome.http_code is None
+    assert outcome.details["error_rule"]["id"] == "legacy-transient-http"
+    assert outcome.details["error_rule"]["action"] == "retry"
 
 
 @pytest.fixture

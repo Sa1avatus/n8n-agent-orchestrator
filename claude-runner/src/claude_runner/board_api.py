@@ -32,13 +32,17 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import (
+    board_engine,
     board_order,
     board_plan,
     board_ready,
     board_stats,
     board_think,
     features_config,
+    overrides_config,
+    retrieval_config,
     roles_config,
+    thinking_config,
 )
 from .board import (
     BoardStore,
@@ -55,7 +59,7 @@ from .board_ops_redact import scrub
 from .board_pg import UnavailableBoardStore
 from .board_plan import update_mission_config
 from .board_ready import MissionIdError, create_mission, rollback, save_template, start_guard
-from .board_stats import lesson_block_shown, lessons_stats
+from .board_stats import lesson_block_shown, lessons_stats, lessons_stats_overall
 from .qa import NIGHTLY_VERDICT_PATH
 from .qa_runner import RUN_DIR_PREFIX, RUNS_DIR
 
@@ -497,14 +501,37 @@ _DEFAULT_KEYS = (
 )
 
 
+def _thinking_fields(row: dict[str, Any]) -> dict[str, Any]:
+    flat = thinking_config.flatten(row.get("thinking_json"), row)
+    return {
+        key: value
+        for key, value in flat.items()
+        if value != thinking_config.DEFAULTS[key] or row.get(key) not in (None, "")
+    }
+
+
 def _config_defaults(store: BoardStore) -> dict[str, Any]:
     try:
         row = store.hermes_config() or {}
     except Exception:
         return {}
+    try:
+        roles = board_ready._parse_roles(row.get("roles_json"))
+    except ValueError:
+        roles = {}
+    try:
+        thinking = _thinking_fields(row)
+    except ValueError:
+        thinking = {}
+    try:
+        max_attempts = board_stats.configured_value(row, "max_attempts_per_task")
+        engine = {"max_attempts_per_task": max_attempts}
+    except ValueError:
+        engine = {}
+    flat = {**roles_config.flatten(roles, row), **thinking, **engine}
     out: dict[str, Any] = {}
     for key in _DEFAULT_KEYS:
-        value = row.get(key)
+        value = flat.get(key, row.get(key))
         if value in (None, ""):
             continue
         if isinstance(value, float) and value == int(value):
@@ -744,6 +771,12 @@ def _build_router() -> APIRouter:
         fields = {k: v for k, v in body.items() if k not in ("who", "mission_id")}
         if not fields:
             raise ValueError("no fields to update")
+        if "overrides_json" in fields:
+            text = _features_text(fields, "overrides_json")
+            errors = overrides_config.validate(text)
+            if errors:
+                raise ValueError("; ".join(errors))
+            fields["overrides_json"] = text
         updated = store.update_mission(mission_id, expected, who=body.get("who", ""), **fields)
         return {"mission": updated.model_dump()}
 
@@ -1606,6 +1639,60 @@ def _build_router() -> APIRouter:
         return {"features_json": text, "version": _stamp(
             (store.hermes_config() or {}).get("updatedAt"))}
 
+    @router.get("/thinking")
+    def get_thinking(request: Request) -> dict[str, Any]:
+        row = _store_guard(request).hermes_config() or {}
+        return {"thinking_json": row.get("thinking_json") or "", "version": _stamp(
+            row.get("updatedAt"))}
+
+    @router.put("/thinking")
+    def put_thinking(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        text = _features_text(body, "thinking_json")
+        errors = thinking_config.validate(text)
+        if errors:
+            raise ValueError("; ".join(errors))
+        store.update_hermes_config(body.get("expected_version"), thinking_json=text)
+        return {"thinking_json": text, "version": _stamp(
+            (store.hermes_config() or {}).get("updatedAt"))}
+
+    @router.get("/retrieval")
+    def get_retrieval(request: Request) -> dict[str, Any]:
+        row = _store_guard(request).hermes_config() or {}
+        return {"retrieval_json": row.get("retrieval_json") or "", "version": _stamp(
+            row.get("updatedAt"))}
+
+    @router.put("/retrieval")
+    def put_retrieval(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        text = _features_text(body, "retrieval_json")
+        errors = retrieval_config.validate(text)
+        if errors:
+            raise ValueError("; ".join(errors))
+        store.update_hermes_config(body.get("expected_version"), retrieval_json=text)
+        return {"retrieval_json": text, "version": _stamp(
+            (store.hermes_config() or {}).get("updatedAt"))}
+
+    @router.get("/engine")
+    def get_engine(request: Request) -> dict[str, Any]:
+        row = _store_guard(request).hermes_config() or {}
+        return {"engine_json": row.get("engine_json") or "", "version": _stamp(
+            row.get("updatedAt"))}
+
+    @router.put("/engine")
+    def put_engine(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        store = _store_guard(request)
+        text = _features_text(body, "engine_json")
+        errors = board_engine.validate_engine_json(text)
+        if errors:
+            raise ValueError("; ".join(errors))
+        store.update_hermes_config(body.get("expected_version"), engine_json=text)
+        return {"engine_json": text, "version": _stamp(
+            (store.hermes_config() or {}).get("updatedAt"))}
+
     @router.get("/missions/{mission_id}/features")
     def get_mission_features(request: Request, mission_id: str) -> dict[str, Any]:
         store = _store_guard(request)
@@ -1682,6 +1769,11 @@ def _build_router() -> APIRouter:
             store, _lessons_store(request), _state_key_of(store, mission_id), mission_id
         )
 
+    @router.get("/lessons/stats")
+    def all_lessons_stats(request: Request) -> dict[str, Any]:
+        store = _store_guard(request)
+        return lessons_stats_overall(store, _lessons_store(request), store.list_missions())
+
     @router.get("/missions/{mission_id}/tasks/{task_id}/lessons")
     def task_lessons(request: Request, mission_id: str, task_id: str) -> dict[str, Any]:
         store = _store_guard(request)
@@ -1713,6 +1805,12 @@ def _build_router() -> APIRouter:
     def retire_lesson(request: Request, lesson_id: int, body: dict[str, Any]) -> dict[str, Any]:
         _require_dashboard_header(request)
         lesson = _lessons_store(request).set_status(lesson_id, "retired", _lesson_version(body))
+        return {"lesson": lesson.model_dump()}
+
+    @router.post("/lessons/{lesson_id}/promote")
+    def promote_lesson(request: Request, lesson_id: int, body: dict[str, Any]) -> dict[str, Any]:
+        _require_dashboard_header(request)
+        lesson = _lessons_store(request).promote(lesson_id, _lesson_version(body))
         return {"lesson": lesson.model_dump()}
 
     @router.post("/lessons/{lesson_id}/restore")

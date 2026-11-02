@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 
 from claude_runner.board import InMemoryBoardStore, Mission
-from claude_runner.board_stats import mission_card_stats, task_stats
+from claude_runner.board_stats import _max_attempts, mission_card_stats, task_stats
 from claude_runner.config import Settings
 from claude_runner.events import EventLog
 from claude_runner.runs import RunManager
@@ -521,3 +521,26 @@ class TestRoleRows:
         rows = mission_card_stats(run_manager, board, "sk1")["roles"]
         assert rows["qa"]["runs"] == 1
         assert rows["qa"]["model"] == "anthropic/sonnet"
+
+
+class _ConfigBoard:
+    def __init__(self, row: dict[str, Any]) -> None:
+        self.row = row
+
+    def queue(self) -> list[Any]:
+        return []
+
+    def hermes_config(self) -> dict[str, Any]:
+        return self.row
+
+
+def test_max_attempts_legacy_column_and_engine_json_wins():
+    assert _max_attempts(_ConfigBoard({"max_attempts_per_task": 2}), "m1") == 2.0
+    row = {"max_attempts_per_task": 2, "engine_json": '{"max_attempts_per_task": 7}'}
+    assert _max_attempts(_ConfigBoard(row), "m1") == 7.0
+    assert _max_attempts(_ConfigBoard({}), "m1") is None
+
+
+def test_max_attempts_invalid_engine_json_or_legacy_value_gives_none():
+    assert _max_attempts(_ConfigBoard({"engine_json": '{"bogus": 1}'}), "m1") is None
+    assert _max_attempts(_ConfigBoard({"max_attempts_per_task": "abc"}), "m1") is None

@@ -6,6 +6,8 @@ the manager stub from ``create_app``, no database."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -125,6 +127,109 @@ def test_config_defaults_whitelist_only_safe_profile_keys():
     assert got == {"worker_model": "qwen", "max_attempts_per_task": 5}
 
 
+def test_config_defaults_max_attempts_engine_json_wins_over_the_column():
+    from claude_runner import board_api
+
+    class Store:
+        def hermes_config(self):
+            return {"max_attempts_per_task": 2, "engine_json": '{"max_attempts_per_task": 7}'}
+
+    assert board_api._config_defaults(Store()) == {"max_attempts_per_task": 7}
+
+
+def test_config_defaults_pin_provider_and_model_columns_without_roles_json():
+    from claude_runner import board_api
+
+    columns = {
+        "architect_provider": "anthropic", "architect_model": "opus",
+        "worker_provider": "local", "worker_model": "qwen",
+        "reviewer_provider": "anthropic", "reviewer_model": "sonnet",
+    }
+
+    class Store:
+        def hermes_config(self):
+            return {**columns, "roles_json": ""}
+
+    assert board_api._config_defaults(Store()) == columns
+
+
+def test_config_defaults_roles_json_wins_over_the_columns():
+    from claude_runner import board_api
+
+    roles = {"worker": {"1": "anthropic/sonnet"}}
+
+    class Store:
+        def hermes_config(self):
+            return {
+                "worker_provider": "local", "worker_model": "qwen",
+                "roles_json": json.dumps(roles),
+            }
+
+    got = board_api._config_defaults(Store())
+    assert got == {"worker_provider": "anthropic", "worker_model": "sonnet"}
+
+
+def _think_store(row):
+    class Store:
+        def hermes_config(self):
+            return row
+
+    return Store()
+
+
+def test_config_defaults_thinking_json_wins_over_the_think_columns():
+    from claude_runner import board_api
+
+    row = {
+        "worker_think_policy_from_task": 1,
+        "worker_think_off_after_seconds": 600,
+        "worker_think_off_after_steps": 30,
+        "thinking_json": '{"from_task": 2, "off_after_seconds": 1800, "off_after_steps": 40}',
+    }
+    assert board_api._config_defaults(_think_store(row)) == {"worker_think_policy_from_task": 2}
+
+
+def test_config_defaults_think_column_is_the_fallback_per_key():
+    from claude_runner import board_api
+
+    row = {
+        "worker_think_policy_from_task": 1,
+        "thinking_json": '{"off_after_seconds": 1800}',
+    }
+    assert board_api._config_defaults(_think_store(row)) == {"worker_think_policy_from_task": 1}
+
+
+def test_config_defaults_invalid_thinking_json_falls_back_to_the_think_column():
+    from claude_runner import board_api
+
+    row = {"worker_think_policy_from_task": 1, "thinking_json": '{"bad": 1}'}
+    assert board_api._config_defaults(_think_store(row)) == {"worker_think_policy_from_task": 1}
+
+
+def test_config_defaults_empty_thinking_json_keeps_the_column_output():
+    from claude_runner import board_api
+
+    empty_columns = {
+        "worker_model": "qwen",
+        "worker_think_policy": "",
+        "worker_think_policy_from_task": None,
+        "worker_think_off_after_seconds": None,
+        "worker_think_off_after_steps": None,
+        "thinking_json": "",
+    }
+    assert board_api._config_defaults(_think_store(empty_columns)) == {"worker_model": "qwen"}
+
+    stored_zero = {
+        "worker_think_policy_from_task": 0,
+        "worker_think_off_after_seconds": -1,
+        "worker_think_off_after_steps": -1,
+        "thinking_json": "",
+    }
+    assert board_api._config_defaults(_think_store(stored_zero)) == {
+        "worker_think_policy_from_task": 0,
+    }
+
+
 def test_i18n_view_fills_new_shipped_keys_of_every_shipped_language_and_keeps_edits():
     """A key added to board_i18n_ru.json after the database was seeded still reaches the board;
     a text edited in the database wins over the shipped one."""
@@ -148,3 +253,35 @@ def test_in_memory_store_reports_first_and_last_event_time_per_mission():
     store.append_event("m1", {"task_id": "T001", "event_type": "x", "created_at": "2026-10-12T10:00:00Z"})
     store.append_event("m1", {"task_id": "T001", "event_type": "y", "created_at": "2026-10-13T11:00:00Z"})
     assert store.mission_times() == {"m1": {"first": "2026-10-12T10:00:00Z", "last": "2026-10-13T11:00:00Z"}}
+
+
+RETRIEVAL_HEADER = {"X-AHAWR-Dashboard": "1"}
+RETRIEVAL_VALID = '{"enabled": true, "timeout_ms": 60000}'
+RETRIEVAL_STALE = "2000-01-01T00:00:00+00:00"
+
+
+async def test_put_retrieval_without_header_is_403(board_client):
+    r = await board_client.put("/api/board/retrieval", json={"retrieval_json": RETRIEVAL_VALID})
+    assert r.status_code == 403
+
+
+async def test_put_retrieval_invalid_json_is_400(board_client):
+    r = await board_client.put("/api/board/retrieval", headers=RETRIEVAL_HEADER,
+                               json={"retrieval_json": "{"})
+    assert r.status_code == 400
+    assert "not valid JSON" in r.json()["error"]["message"]
+
+
+async def test_put_retrieval_stale_version_is_409(board_client):
+    r = await board_client.put("/api/board/retrieval", headers=RETRIEVAL_HEADER, json={
+        "retrieval_json": RETRIEVAL_VALID, "expected_version": RETRIEVAL_STALE,
+    })
+    assert r.status_code == 409
+
+
+async def test_put_retrieval_valid_is_saved_and_read_back(board_client):
+    r = await board_client.put("/api/board/retrieval", headers=RETRIEVAL_HEADER,
+                               json={"retrieval_json": RETRIEVAL_VALID})
+    assert r.status_code == 200
+    got = await board_client.get("/api/board/retrieval")
+    assert got.json()["retrieval_json"] == RETRIEVAL_VALID

@@ -350,7 +350,15 @@
         }
       ],
       "warnings": []
-    }
+    },
+    {"name": "polling_options_at_bounds", "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"options\": {\"max_polls\": 1, \"poll_seconds\": 0.5, \"max_retries\": 0}}}", "errors": [], "warnings": []},
+    {"name": "polling_max_polls_zero", "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"options\": {\"max_polls\": 0}}}", "errors": [{"code": "bad_whole_number", "role": "worker", "element": "options.max_polls"}], "warnings": []},
+    {"name": "polling_max_polls_fraction", "input": "{\"worker\": {\"1\": \"anthropic/haiku\", \"options\": {\"max_polls\": 2.5}}}", "errors": [{"code": "bad_whole_number", "role": "worker", "element": "options.max_polls"}], "warnings": []},
+    {"name": "polling_max_retries_negative", "input": "{\"reviewer\": {\"1\": \"anthropic/sonnet\", \"options\": {\"max_retries\": -1}}}", "errors": [{"code": "bad_whole_number", "role": "reviewer", "element": "options.max_retries"}], "warnings": []},
+    {"name": "polling_max_retries_bool", "input": "{\"reviewer\": {\"1\": \"anthropic/sonnet\", \"options\": {\"max_retries\": true}}}", "errors": [{"code": "bad_whole_number", "role": "reviewer", "element": "options.max_retries"}], "warnings": []},
+    {"name": "polling_poll_seconds_zero", "input": "{\"architect\": {\"1\": \"anthropic/opus\", \"options\": {\"poll_seconds\": 0}}}", "errors": [{"code": "bad_positive_number", "role": "architect", "element": "options.poll_seconds"}], "warnings": []},
+    {"name": "polling_poll_seconds_string", "input": "{\"architect\": {\"1\": \"anthropic/opus\", \"options\": {\"poll_seconds\": \"3\"}}}", "errors": [{"code": "bad_positive_number", "role": "architect", "element": "options.poll_seconds"}], "warnings": []},
+    {"name": "polling_qa_max_polls_zero", "input": "{\"qa\": {\"1\": \"anthropic/sonnet\", \"options\": {\"max_polls\": 0}}}", "errors": [{"code": "bad_whole_number", "role": "qa", "element": "options.max_polls"}], "warnings": []}
   ],
   "resolve": [
     {
@@ -1385,6 +1393,374 @@
       "expect": {
         "provider": "anthropic",
         "model": "sonnet"
+      }
+    }
+  ],
+  "flatten": [
+    {
+      "name": "golden_empty_roles_json",
+      "roles": {},
+      "legacy": {
+        "architect_model": "opus",
+        "architect_provider": "anthropic",
+        "reviewer_provider": "anthropic",
+        "architect_max_polls": 30,
+        "worker_max_polls": 30,
+        "reviewer_max_polls": 20,
+        "architect_poll_seconds": 3,
+        "worker_poll_seconds": 3,
+        "reviewer_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_retries": 3,
+        "reviewer_max_retries": 5
+      },
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "golden_missing_roles_json",
+      "roles": null,
+      "legacy": {
+        "architect_model": "opus",
+        "architect_provider": "anthropic",
+        "reviewer_provider": "anthropic",
+        "architect_max_polls": 30,
+        "worker_max_polls": 30,
+        "reviewer_max_polls": 20,
+        "architect_poll_seconds": 3,
+        "worker_poll_seconds": 3,
+        "reviewer_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_retries": 3,
+        "reviewer_max_retries": 5
+      },
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "no_roles_and_no_legacy_gives_polling_defaults",
+      "roles": {},
+      "legacy": {},
+      "expect": {
+        "architect_provider": null,
+        "architect_model": null,
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": null,
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "explicit_options_override_legacy_and_defaults",
+      "roles": {
+        "worker": {
+          "1": "local/qwen",
+          "options": {
+            "max_polls": 7,
+            "poll_seconds": 20,
+            "max_retries": 2
+          }
+        }
+      },
+      "legacy": {
+        "worker_max_polls": 9
+      },
+      "expect": {
+        "architect_provider": null,
+        "architect_model": null,
+        "worker_provider": "local",
+        "worker_model": "qwen",
+        "reviewer_provider": null,
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 7,
+        "worker_poll_seconds": 20,
+        "worker_max_retries": 2,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "partial_options_fall_back_to_legacy_then_defaults",
+      "roles": {
+        "reviewer": {
+          "1": "anthropic/sonnet",
+          "options": {
+            "max_retries": 0
+          }
+        }
+      },
+      "legacy": {
+        "reviewer_max_polls": 15
+      },
+      "expect": {
+        "architect_provider": null,
+        "architect_model": null,
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": "sonnet",
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 15,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 0
+      }
+    },
+    {
+      "name": "legacy_columns_with_empty_roles_json_resolve_to_constants",
+      "roles": {},
+      "legacy": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "reviewer_provider": "anthropic",
+        "reviewer_model": "sonnet",
+        "architect_max_polls": 12,
+        "architect_poll_seconds": 2,
+        "architect_max_retries": 4,
+        "worker_max_polls": 25,
+        "worker_poll_seconds": 4,
+        "worker_max_retries": 2,
+        "reviewer_max_polls": 15,
+        "reviewer_poll_seconds": 5,
+        "reviewer_max_retries": 1
+      },
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": "sonnet",
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 12,
+        "architect_poll_seconds": 2,
+        "architect_max_retries": 4,
+        "worker_max_polls": 25,
+        "worker_poll_seconds": 4,
+        "worker_max_retries": 2,
+        "reviewer_max_polls": 15,
+        "reviewer_poll_seconds": 5,
+        "reviewer_max_retries": 1
+      }
+    },
+    {
+      "name": "same_values_in_roles_json_without_legacy_keys_match_legacy_case",
+      "roles": {
+        "architect": {
+          "1": "anthropic/opus",
+          "options": {
+            "max_polls": 12,
+            "poll_seconds": 2,
+            "max_retries": 4
+          }
+        },
+        "worker": {
+          "options": {
+            "max_polls": 25,
+            "poll_seconds": 4,
+            "max_retries": 2
+          }
+        },
+        "reviewer": {
+          "1": "anthropic/sonnet",
+          "options": {
+            "max_polls": 15,
+            "poll_seconds": 5,
+            "max_retries": 1
+          }
+        }
+      },
+      "legacy": {},
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": "sonnet",
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 12,
+        "architect_poll_seconds": 2,
+        "architect_max_retries": 4,
+        "worker_max_polls": 25,
+        "worker_poll_seconds": 4,
+        "worker_max_retries": 2,
+        "reviewer_max_polls": 15,
+        "reviewer_poll_seconds": 5,
+        "reviewer_max_retries": 1
+      }
+    },
+    {
+      "name": "no_legacy_keys_and_empty_roles_json_give_documented_defaults",
+      "roles": {},
+      "legacy": {},
+      "expect": {
+        "architect_provider": null,
+        "architect_model": null,
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": null,
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "legacy_columns_with_empty_roles_json_give_the_constants",
+      "roles": {},
+      "legacy": {
+        "architect_model": "opus",
+        "architect_provider": "anthropic",
+        "reviewer_provider": "anthropic",
+        "architect_max_polls": 30,
+        "worker_max_polls": 30,
+        "reviewer_max_polls": 20,
+        "architect_poll_seconds": 3,
+        "worker_poll_seconds": 3,
+        "reviewer_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_retries": 3,
+        "reviewer_max_retries": 5
+      },
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": "anthropic",
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "no_legacy_columns_with_filled_roles_json_give_the_constants",
+      "roles": {
+        "architect": {
+          "1": "anthropic/opus",
+          "options": {"max_polls": 30, "poll_seconds": 3, "max_retries": 5}
+        },
+        "worker": {"options": {"max_polls": 30, "poll_seconds": 3, "max_retries": 3}},
+        "reviewer": {"options": {"max_polls": 20, "poll_seconds": 3, "max_retries": 5}}
+      },
+      "expect": {
+        "architect_provider": "anthropic",
+        "architect_model": "opus",
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": null,
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
+      }
+    },
+    {
+      "name": "no_legacy_columns_and_empty_roles_json_give_the_documented_defaults",
+      "roles": {},
+      "expect": {
+        "architect_provider": null,
+        "architect_model": null,
+        "worker_provider": null,
+        "worker_model": null,
+        "reviewer_provider": null,
+        "reviewer_model": null,
+        "service_provider": null,
+        "service_model": null,
+        "architect_max_polls": 30,
+        "architect_poll_seconds": 3,
+        "architect_max_retries": 5,
+        "worker_max_polls": 30,
+        "worker_poll_seconds": 3,
+        "worker_max_retries": 3,
+        "reviewer_max_polls": 20,
+        "reviewer_poll_seconds": 3,
+        "reviewer_max_retries": 5
       }
     }
   ]

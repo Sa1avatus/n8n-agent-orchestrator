@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import json
 import threading
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -20,9 +21,12 @@ TASK_INDEX_MAX = 999
 ELLIPSIS = "..."
 LESSONS_RETIRE_MIN_SHOWN = 10
 LESSONS_RETIRE_MIN_PASS_RATE = 0.5
+LESSONS_PROMOTE_MIN_MISSIONS = 3
+LESSONS_PROMOTE_MIN_MISSIONS_KEY = "lessons_promote_min_missions"
 
 LessonKind = Literal["fixed-after-retry", "gave-up"]
 LessonStatus = Literal["active", "retired"]
+LessonScope = Literal["mission", "project"]
 
 
 def _cut(text: str, max_chars: int) -> str:
@@ -51,6 +55,33 @@ def _is_retire_due(lesson: Lesson, min_shown: int, min_pass_rate: float) -> bool
     )
 
 
+def promote_min_missions(hermes_config: Mapping[str, Any]) -> int:
+    value: object = hermes_config.get(
+        LESSONS_PROMOTE_MIN_MISSIONS_KEY, LESSONS_PROMOTE_MIN_MISSIONS
+    )
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError(
+            f"{LESSONS_PROMOTE_MIN_MISSIONS_KEY} must be an integer of at least 1, got {value!r}"
+        )
+    return value
+
+
+def promoted_scope(
+    lesson: Lesson,
+    distinct_missions: int,
+    operator_mark: LessonScope | None,
+    min_missions: int,
+    enabled: bool,
+) -> LessonScope:
+    if not enabled:
+        return lesson.scope
+    if operator_mark is not None:
+        return operator_mark
+    if lesson.scope == "project" or distinct_missions >= min_missions:
+        return "project"
+    return lesson.scope
+
+
 class LessonCandidate(BaseModel):
     """What the writer hands to the store: a lesson before it gets an id and counters."""
 
@@ -69,6 +100,7 @@ class Lesson(LessonCandidate):
     id: int
     created_at: str
     status: LessonStatus
+    scope: LessonScope = "mission"
     times_shown: int
     times_first_attempt_passed_after: int
     times_seen: int
@@ -100,12 +132,16 @@ class InMemoryLessonStore:
             raise KeyError(f"lesson {lesson_id} not found")
         return lesson
 
-    def list(self, mission: str, status: LessonStatus | None = None) -> builtins.list[Lesson]:
+    def list(
+        self, mission: str, status: LessonStatus | None = None, scope: LessonScope | None = None
+    ) -> builtins.list[Lesson]:
         with self._lock:
             return [
                 lesson.model_copy()
                 for lesson in self._lessons.values()
-                if lesson.mission == mission and status in (None, lesson.status)
+                if lesson.mission == mission
+                and status in (None, lesson.status)
+                and scope in (None, lesson.scope)
             ]
 
     def get(self, lesson_id: int) -> Lesson | None:
@@ -164,6 +200,14 @@ class InMemoryLessonStore:
             self._lessons[lesson_id] = changed
             return changed.model_copy()
 
+    def promote(self, lesson_id: int, expected_version: str | None) -> Lesson:
+        with self._lock:
+            row = self._row(lesson_id)
+            _check_version(row, expected_version)
+            changed = row.model_copy(update={"scope": "project", "updated_at": now()})
+            self._lessons[lesson_id] = changed
+            return changed.model_copy()
+
     def delete(self, lesson_id: int, confirm: bool) -> None:
         with self._lock:
             if not confirm:
@@ -214,12 +258,16 @@ class InMemoryLessonStore:
             links = self._shown.get((mission, task_index), {})
             return [self._lessons[lesson_id].model_copy() for lesson_id in sorted(links)]
 
+    def task_indexes_with_lessons(self, mission: str) -> set[int]:
+        with self._lock:
+            return {index for (m, index), links in self._shown.items() if m == mission and links}
+
 
 _LESSON_TABLE = "board.lessons"
 _SHOWN_TABLE = "board.lesson_shown"
 _LESSON_COLUMNS = (
     "id, mission, task_id, task_index, kind, situation, lesson, evidence, created_at, status, "
-    "times_shown, times_first_attempt_passed_after, times_seen, version, updated_at"
+    "scope, times_shown, times_first_attempt_passed_after, times_seen, version, updated_at"
 )
 
 
@@ -276,14 +324,23 @@ class PgLessonStore:
             raise ConflictError(f"lesson {lesson.id}: changed while it was being saved")
         return updated
 
-    def list(self, mission: str, status: LessonStatus | None = None) -> builtins.list[Lesson]:
-        sql = f"SELECT {_LESSON_COLUMNS} FROM {_LESSON_TABLE} WHERE mission = %s"
+    def list(
+        self, mission: str, status: LessonStatus | None = None, scope: LessonScope | None = None
+    ) -> builtins.list[Lesson]:
+        where = ["mission = %s"]
         params: tuple[Any, ...] = (mission,)
         if status is not None:
-            sql += " AND status = %s"
-            params = (mission, status)
+            where.append("status = %s")
+            params += (status,)
+        if scope is not None:
+            where.append("scope = %s")
+            params += (scope,)
         with self._lock:
-            rows = self._conn.execute(f"{sql} ORDER BY id", params).fetchall()
+            rows = self._conn.execute(
+                f"SELECT {_LESSON_COLUMNS} FROM {_LESSON_TABLE} WHERE {' AND '.join(where)} "
+                "ORDER BY id",
+                params,
+            ).fetchall()
         return [_lesson_from_row(row) for row in rows]
 
     def get(self, lesson_id: int) -> Lesson | None:
@@ -330,6 +387,12 @@ class PgLessonStore:
             row = self._locked(lesson_id)
             _check_version(row, expected_version)
             return self._update(row, "status = %s", (status,))
+
+    def promote(self, lesson_id: int, expected_version: str | None) -> Lesson:
+        with self._lock, self._conn.transaction():
+            row = self._locked(lesson_id)
+            _check_version(row, expected_version)
+            return self._update(row, "scope = %s", ("project",))
 
     def delete(self, lesson_id: int, confirm: bool) -> None:
         if not confirm:
@@ -416,3 +479,11 @@ class PgLessonStore:
                 (mission, task_index),
             ).fetchall()
         return [_lesson_from_row(row) for row in rows]
+
+    def task_indexes_with_lessons(self, mission: str) -> set[int]:
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT DISTINCT task_index FROM {_SHOWN_TABLE} WHERE mission = %s",
+                (mission,),
+            ).fetchall()
+        return {int(row["task_index"]) for row in rows}

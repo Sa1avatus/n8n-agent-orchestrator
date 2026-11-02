@@ -264,14 +264,14 @@ def run_command(
     )
 
 
-def _verdicts_from_output(output: str) -> tuple[list[str], str]:
+def _verdicts_from_output(output: str) -> tuple[list[dict[str, Any]], str]:
     try:
         parsed = json.loads(output)
     except ValueError:
         return [], "run printed no JSON verdicts"
     if not isinstance(parsed, list):
         return [], "run printed no JSON verdicts"
-    return [str(item.get("verdict")) for item in parsed if isinstance(item, dict)], ""
+    return [item for item in parsed if isinstance(item, dict)], ""
 
 
 def _verdict_dicts_from_output(output: str) -> list[dict[str, Any]]:
@@ -364,7 +364,7 @@ def _layer_runners(request_row: dict[str, Any]) -> dict[str, LayerRunner]:
     }
 
 
-def _run_child() -> tuple[list[str], str | None, str]:
+def _run_child() -> tuple[list[dict[str, Any]], str | None, str]:
     environment = {**os.environ, "QA_RUN_TIMEOUT_MINUTES": str(QA_RUN_TIMEOUT_MINUTES)}
     process = subprocess.Popen(
         [sys.executable, "-m", "claude_runner.qa", "run"],
@@ -434,12 +434,12 @@ def smoke_enabled(options: Mapping[str, Any]) -> bool:
     return options.get("smoke") is True and importlib.util.find_spec(SMOKE_MODULE) is not None
 
 
-def _execute(request_row: dict[str, Any]) -> tuple[list[str], str]:
+def _execute(request_row: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
     working_directory = str(request_row.get("working_directory", ""))
     if working_directory:
         early = early_verdict(QA_SCENARIO, working_directory)
         if early is not None:
-            return [str(early["verdict"])], ""
+            return [early], ""
     stack_id: str | None = None
     try:
         verdicts, stack_id, error = _run_child()

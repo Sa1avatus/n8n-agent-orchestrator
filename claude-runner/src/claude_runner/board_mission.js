@@ -180,6 +180,7 @@ function presetButtons(disabled) {
 // greyed fields and explanations for a running mission.  Returns the escaped
 // HTML string of the form.
 function formHtml(mission, queueEntry, config, running, defaults) {
+  const values = config ? configValues(config) : null;
   const rows = [];
   for (const [kind, key, labelKey, control] of FORM_ROWS) {
     let value;
@@ -188,7 +189,7 @@ function formHtml(mission, queueEntry, config, running, defaults) {
       // a mission that is not in board.queue yet: its own enabled flag is the best answer
       value = queueEntry && queueEntry[key] != null ? queueEntry[key] : (key === "enabled" ? mission.enabled : null);
     }
-    else value = config ? config[key] : null;
+    else value = values ? values[key] : null;
     const shown = control === "listarea" ? fmtLines(value)
       : control === "json" ? fmtJson(value)
       : control === "bool" ? (value === true || String(value).toLowerCase() === "true")
@@ -353,6 +354,24 @@ let tasksView = null;
 function orderRules() {
   if (typeof BoardOrder !== "undefined") return BoardOrder;
   return require("./board_order.js");
+}
+
+function rolesCore() {
+  if (typeof BoardRoles !== "undefined") return BoardRoles;
+  return require("./board_roles.js");
+}
+
+// The config with its model and provider values taken from roles_json where it sets them;
+// unparseable roles_json leaves the legacy columns in place.
+function configValues(config) {
+  let roles;
+  try {
+    const text = config.roles_json || "";
+    roles = text.trim() === "" ? {} : JSON.parse(text);
+  } catch {
+    return { ...config };
+  }
+  return { ...config, ...rolesCore().flatten(roles, config) };
 }
 
 function tOr(key, fallback) {

@@ -855,3 +855,18 @@ def test_flag_on_without_layers_runs_the_default_run_and_the_agent(
 
     assert calls == ["default", "agent"]
     assert json.loads(cast(bytes, sent[1].data or b""))["verdicts"] == ["pass", "agent-pass"]
+
+
+def test_run_verdicts_keep_the_scenario_name_and_the_reason() -> None:
+    output = json.dumps(
+        [
+            {"scenario": "open the board", "verdict": "pass"},
+            {"scenario": "edit a task", "verdict": "fail", "failed_step": 2},
+        ]
+    )
+
+    verdicts, error = qa_worker._verdicts_from_output(output)
+
+    assert error == ""
+    assert [v["scenario"] for v in verdicts] == ["open the board", "edit a task"]
+    assert verdicts[1]["failed_step"] == 2

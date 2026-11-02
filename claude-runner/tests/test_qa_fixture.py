@@ -75,3 +75,39 @@ def test_providers_must_be_a_list_of_objects() -> None:
     payload = {"tables": {t: [] for t in REQUIRED_TABLES}, "providers": ["x"]}
     with pytest.raises(ValueError, match="providers"):
         load_fixture(payload)
+
+
+def test_fixture_retrieval_corpora_read_legacy_column_when_no_overrides() -> None:
+    rows = load_fixture(FIXTURES / "default.json")
+    row = rows.missions[0]
+    row["retrieval_corpora_json"] = '["a"]'
+    row["overrides_json"] = None
+    assert board_store_from_rows(rows).get_mission(row["mission_id"]).retrieval_corpora == ["a"]
+    row["retrieval_corpora_json"] = None
+    assert board_store_from_rows(rows).get_mission(row["mission_id"]).retrieval_corpora is None
+
+
+def test_fixture_overrides_corpora_win_over_legacy_column() -> None:
+    rows = load_fixture(FIXTURES / "default.json")
+    row = rows.missions[0]
+    row["retrieval_corpora_json"] = '["a"]'
+    row["overrides_json"] = '{"retrieval": {"corpora": ["x"]}}'
+    assert board_store_from_rows(rows).get_mission(row["mission_id"]).retrieval_corpora == ["x"]
+
+
+def test_fixture_mission_without_state_namespace_falls_back_to_mission_id() -> None:
+    rows = load_fixture(FIXTURES / "default.json")
+    row = rows.missions[0]
+    del row["state_namespace"]
+    assert board_store_from_rows(rows).get_mission(row["mission_id"]).state_namespace == (
+        row["mission_id"]
+    )
+
+
+def test_fixture_mission_keeps_state_namespace_when_present() -> None:
+    rows = load_fixture(FIXTURES / "default.json")
+    row = rows.missions[0]
+    row["state_namespace"] = "sk_custom"
+    assert board_store_from_rows(rows).get_mission(row["mission_id"]).state_namespace == (
+        "sk_custom"
+    )

@@ -1,6 +1,6 @@
 # Save is a POST (board_mission_save.js postJson) to /api/board/missions/<id> or .../config,
 # with X-AHAWR-Dashboard: 1. The save confirm is accepted by the runner's dialog handler.
-# A made-up (non-JSON) value in worker_think_policy blocks the save (board_edit_win.js
+# A made-up (non-JSON) value in the Thinking settings (JSON) field blocks the save (board_edit_win.js
 # problems()); the last step must be the persistence check because reload_persistence
 # rechecks only the LAST step's text_visible/order (qa_runner.py _recheck_after_reload).
 name: mission save blocks a bad JSON policy, then a valid model change persists
@@ -29,9 +29,9 @@ steps:
     expect:
       no_console_error: true
       no_mutation_without_header: true
-  # A made-up value (a non-JSON string) into the thinking policy field.
+  # A made-up value (a non-JSON string) into the thinking settings field.
   - type:
-      into: worker_think_policy
+      into: Thinking settings (JSON)
       text: not-valid-json
     expect:
       no_console_error: true
@@ -47,12 +47,12 @@ steps:
   # Trigger the validation error: Save changes on the Review page runs the check and returns to Execution.
   - click: "Save changes"
     expect:
-      text_visible: ["The thinking policy is not valid JSON."]
+      text_visible: ["Thinking settings: thinking_json: not valid JSON"]
       no_console_error: true
       no_mutation_without_header: true
-  # Clear the bad policy value so the save can proceed (re-focus, select all, delete).
+  # Clear the bad thinking value so the save can proceed (re-focus, select all, delete).
   - type:
-      into: worker_think_policy
+      into: Thinking settings (JSON)
       text: x
     expect:
       no_console_error: true
@@ -71,7 +71,7 @@ steps:
     expect:
       text_visible: [Review]
       no_console_error: true
-  # Save: the model change persists (the policy is now empty, so validation passes).
+  # Save: the model change persists (the thinking settings are now empty, so validation passes).
   - click: "Save changes"
     expect:
       text_visible: [claude-sonnet-check]

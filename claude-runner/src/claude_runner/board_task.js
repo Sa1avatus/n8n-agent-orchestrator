@@ -77,14 +77,14 @@ function loadingHtml() {
 // loaded, a plain list otherwise (the lesson texts are still esc()-wrapped).
 function givenLessonsHtml(lessons) {
   const list = Array.isArray(lessons) ? lessons : [];
+  if (!list.length) return "";
   if (typeof BoardLessonsUI !== "undefined" && typeof BoardLessonsUI.givenHtml === "function") {
     const ui = { L: (key, en, params) => L(key, en, params) };
     return BoardLessonsUI.givenHtml(list, ui);
   }
   const items = list.map((l) => `<li>` + esc(l.situation) + ": " + esc(l.lesson) + `</li>`).join("");
   return `<h4>` + esc(L("lessons.given.title", "Lessons given to this task")) + `</h4>` +
-    (items ? `<ul>` + items + `</ul>`
-      : `<p>` + esc(L("lessons.given.empty", "No lessons were given to this task.")) + `</p>`);
+    `<ul>` + items + `</ul>`;
 }
 
 // Pure render: the task header (id, title, objective, status), then the

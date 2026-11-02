@@ -340,8 +340,7 @@ async function renderThinkUI(container, missionId) {
     return;
   }
   const config = (detail && detail.config) || {};
-  const policyValue = config.worker_think_policy;
-  render(container, missionId, policyText(policyValue), null, null, null, null);
+  render(container, missionId, policyText(config.worker_think_policy), null, null, null, null);
 }
 
 // Error state: put the escaped message in a .tkerror div in the container

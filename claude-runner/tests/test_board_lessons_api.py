@@ -95,6 +95,7 @@ WRITE_ROUTES = [
     ("PUT", "/api/board/lessons/{id}", {"situation": "s", "lesson": "l"}),
     ("POST", "/api/board/lessons/{id}/retire", {}),
     ("POST", "/api/board/lessons/{id}/restore", {}),
+    ("POST", "/api/board/lessons/{id}/promote", {}),
     ("DELETE", "/api/board/lessons/{id}?confirm=true", None),
 ]
 
@@ -115,6 +116,7 @@ STALE_ROUTES = [
     ("PUT", "/api/board/lessons/{id}", {"situation": "s", "lesson": "l"}),
     ("POST", "/api/board/lessons/{id}/retire", {}),
     ("POST", "/api/board/lessons/{id}/restore", {}),
+    ("POST", "/api/board/lessons/{id}/promote", {}),
 ]
 
 
@@ -173,6 +175,19 @@ async def test_retire_then_restore_changes_the_status(
                                  json={"expected_version": retired.json()["lesson"]["updated_at"]})
     assert restored.status_code == 200
     assert restored.json()["lesson"]["status"] == "active"
+
+
+async def test_promote_sets_the_scope_to_project(
+    lessons_client: LessonsClient,
+) -> None:
+    client, store = lessons_client
+    lesson = _seed(store)
+    r = await client.post(f"/api/board/lessons/{lesson.id}/promote", headers=HEADER,
+                          json={"expected_version": lesson.updated_at})
+    assert r.status_code == 200
+    assert r.json()["lesson"]["scope"] == "project"
+    stored = store.get(lesson.id)
+    assert stored is not None and stored.scope == "project"
 
 
 async def test_delete_without_confirm_is_refused(
@@ -305,7 +320,6 @@ async def test_flag_off_write_select_and_outcome_store_nothing(
     assert selected.json() == {"block": "", "lesson_ids": []}
     assert outcome.json() == {"recorded": False}
     assert store.list("m1") == [lesson]
-
 
 
 def _seed_mission(app: FastAPI, tasks: list[str]) -> None:

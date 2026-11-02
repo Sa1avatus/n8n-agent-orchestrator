@@ -44,6 +44,7 @@ from .runs import RunManager, RunnerError, StartRequest
 from .search import DEFAULT_LIMIT, MAX_LIMIT
 from .search import search as run_search
 from .think_switch import ThinkSwitch
+from .thinking_config import flatten
 
 logger = logging.getLogger("claude_runner.api")
 
@@ -164,6 +165,7 @@ class RunBody(BaseModel):
     think_policy_from_task: int = 0
     think_off_after_seconds: int = -1
     think_off_after_steps: int = -1
+    thinking_json: str = ""
 
 
 class CompactBody(BaseModel):
@@ -224,8 +226,6 @@ async def _send_confirm_notice(notifier: Notifier, created: HostActionRequest) -
         return
     if not delivered:
         logger.warning("host action %s: confirm notice not delivered", created.id)
-
-
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -305,7 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.11.930", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.12.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -387,6 +387,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         x_hermes_working_directory: str = Header(default=""),
         x_ahawr_role: str = Header(default=""),
     ) -> dict[str, Any]:
+        try:
+            thinking = flatten(
+                body.thinking_json,
+                {
+                    "worker_think_policy": body.think_policy.strip().lower(),
+                    "worker_think_policy_from_task": body.think_policy_from_task,
+                    "worker_think_off_after_seconds": body.think_off_after_seconds,
+                    "worker_think_off_after_steps": body.think_off_after_steps,
+                },
+            )
+        except ValueError as exc:
+            raise RunnerError("bad_thinking_json", str(exc), 422) from None
         return await manager(request).start(
             StartRequest(
                 input=body.input,
@@ -395,10 +407,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 session_id=body.session_id or x_hermes_session_id,
                 working_directory=body.working_directory or x_hermes_working_directory,
                 role=body.role or x_ahawr_role,
-                think_policy=body.think_policy.strip().lower(),
-                think_policy_from_task=body.think_policy_from_task,
-                think_off_after_seconds=body.think_off_after_seconds,
-                think_off_after_steps=body.think_off_after_steps,
+                think_policy=thinking["worker_think_policy"],
+                think_policy_from_task=thinking["worker_think_policy_from_task"],
+                think_off_after_seconds=thinking["worker_think_off_after_seconds"],
+                think_off_after_steps=thinking["worker_think_off_after_steps"],
             )
         )
 
@@ -549,9 +561,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return claimed
 
     @app.post("/v1/qa/requests/{request_id}/result", dependencies=[Depends(authorize)])
-    def finish_qa_request(
-        request_id: str, body: QaResultBody, request: Request
-    ) -> dict[str, Any]:
+    def finish_qa_request(request_id: str, body: QaResultBody, request: Request) -> dict[str, Any]:
         with _qa_refusals(request_id):
             finished = qa_store(request).request_dict(
                 qa_store(request).finish(
@@ -576,6 +586,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except ValueError as exc:
             raise RunnerError("invalid_report_facts", str(exc)) from exc
         return {"markdown": markdown}
+
     if host_actions_on:
         host_notifier = Notifier()
 
@@ -627,9 +638,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @app.post(
             "/v1/host-actions/{action_id}/operator", dependencies=[Depends(authorize_operator)]
         )
-        async def operator_host_action(
-            action_id: str, request: Request
-        ) -> dict[str, Any]:
+        async def operator_host_action(action_id: str, request: Request) -> dict[str, Any]:
             body = await _json_body(request, HostActionOperatorBody)
             with _host_action_refusals(action_id):
                 if body.approved:

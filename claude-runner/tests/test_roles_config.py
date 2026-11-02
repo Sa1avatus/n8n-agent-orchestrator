@@ -11,6 +11,7 @@ from claude_runner.provider_registry import ProviderRegistry
 from claude_runner.provider_secrets import ProviderSecrets
 from claude_runner.roles_config import (
     RolesReport,
+    flatten,
     legacy_role,
     merge,
     qa_layers,
@@ -44,6 +45,8 @@ MESSAGE_FRAGMENTS = {
     "unknown_layer": "unknown layer",
     "repeated_layer": "repeats layer",
     "layers_not_list": "must be a list of layer names",
+    "bad_whole_number": "must be a whole number",
+    "bad_positive_number": "must be a positive number",
 }
 
 
@@ -64,6 +67,11 @@ def test_shared_validation_case(case: dict[str, Any]) -> None:
     report = validate_roles_json(case["input"], PROVIDERS)
     _assert_expected(case["errors"], report.errors)
     _assert_expected(case["warnings"], report.warnings)
+
+
+@pytest.mark.parametrize("case", CASES["flatten"], ids=lambda case: case["name"])
+def test_shared_flatten_case(case: dict[str, Any]) -> None:
+    assert flatten(case["roles"], case.get("legacy", {})) == case["expect"]
 
 
 @pytest.mark.parametrize("case", CASES["resolve"], ids=lambda case: case["name"])
@@ -101,6 +109,12 @@ def test_merge_without_either_side_is_empty() -> None:
 
 def test_legacy_role_without_provider_column_has_no_first_attempt() -> None:
     assert legacy_role({"worker_model": "haiku"}, "worker") == {"options": {}}
+
+
+def test_empty_legacy_columns_read_like_missing_ones() -> None:
+    empty = {"worker_provider": "", "worker_model": "", "worker_max_polls": ""}
+    assert legacy_role(empty, "worker") == legacy_role({}, "worker")
+    assert flatten({}, empty) == flatten({}, {})
 
 
 def test_resolve_legacy_model_without_provider_column_raises() -> None:

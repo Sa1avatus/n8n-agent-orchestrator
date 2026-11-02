@@ -511,11 +511,47 @@ async function s8d() {
   }
 }
 
+// --- 9. model and provider rows read through the roles core: the legacy
+// columns when roles_json is empty, roles_json wins when it sets the role ---
+function formValue(html, key) {
+  const m = new RegExp(`name="${key}"[^>]*value="([^"]*)"`).exec(html);
+  return m ? m[1] : null;
+}
+function s9() {
+  const legacy = {
+    worker_model: "claude-opus-4-8", worker_provider: "anthropic",
+    reviewer_model: "claude-sonnet-4-5", reviewer_provider: "anthropic",
+    architect_model: "claude-opus-4-8", architect_provider: "anthropic",
+  };
+  const formFor = (cfg) => BM.formHtml(mission, queue[0], cfg, false, {});
+  const legacyHtml = formFor(legacy);
+  for (const key of Object.keys(legacy)) {
+    check(`roles empty: ${key} keeps the legacy value`, formValue(legacyHtml, key) === legacy[key]);
+  }
+  const emptyHtml = formFor({ ...legacy, roles_json: "" });
+  for (const key of Object.keys(legacy)) {
+    check(`roles_json "": ${key} keeps the legacy value`, formValue(emptyHtml, key) === legacy[key]);
+  }
+  const winHtml = formFor({ ...legacy, roles_json: JSON.stringify({
+    worker: "anthropic/claude-haiku-4-5", reviewer: "openai/gpt-x",
+  }) });
+  check("roles_json wins: worker_model", formValue(winHtml, "worker_model") === "claude-haiku-4-5");
+  check("roles_json wins: worker_provider", formValue(winHtml, "worker_provider") === "anthropic");
+  check("roles_json wins: reviewer_model", formValue(winHtml, "reviewer_model") === "gpt-x");
+  check("roles_json wins: reviewer_provider", formValue(winHtml, "reviewer_provider") === "openai");
+  check("roles_json leaves an unset role on the legacy value",
+    formValue(winHtml, "architect_model") === legacy.architect_model);
+  const badHtml = formFor({ ...legacy, roles_json: "{bad" });
+  check("invalid roles_json: worker_model keeps the legacy value",
+    formValue(badHtml, "worker_model") === legacy.worker_model);
+}
+
 (async () => {
   await s8b();
   await s8c();
   await s7();
   await s8d();
+  s9();
   // lessonsStatsHtml: each figure sits after its own label, a missing one is a dash
   const lessonsHtml = BM.lessonsStatsHtml({
     with_lessons: { tasks: 5, first_attempt_pass_rate: 0.5 },

@@ -3,7 +3,54 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.11.930** (claude-runner `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.12.0** (claude-runner `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-02 (0.12.0)
+
+Step: the configuration of `hermes_config` and of the missions moves into JSON settings, one per concern, with the legacy
+columns as the fallback; the adaptive split is wired into the launch; the dashboard has two ports. New functions: middle
+number + 1 from 0.11.930. No column is removed in this release (`docs/config-cutover.md` lists the order and the rollback).
+
+- `roles_json` (Worker, Architect, Reviewer, service: provider, model and per-attempt chains, polling options),
+  `thinking_json`, `retrieval_json`, `engine_json` (attempts, retry delays, runner URL, run manager, Telegram chat),
+  `features_json` (plan gate, adaptive split, run hygiene) and the mission `overrides_json`. A key given in the JSON wins,
+  then the legacy column when it is set, then the code default; an empty JSON keeps today's behaviour. Python cores
+  (`roles_config.py`, `thinking_config.py`, `retrieval_config.py`, `overrides_config.py`, `board_engine.py`) with the same
+  checks in the browser (`board_roles.js`, `board_thinking.js`, `board_retrieval.js`, `board_overrides.js`,
+  `board_engine.js`); the launch window edits them; `GET`/`PUT /api/board/thinking`, `/retrieval`, `/engine` with the
+  version check. Operator steps and rollback: `docs/config-*.md`.
+- Error rules: a failed poll is matched against `engine_json.error_rules` (first match wins); an empty list keeps the
+  legacy rules (`LEGACY_ERROR_RULES`, `RECOMMENDED_ERROR_RULES`, `match_error_rule` in `claude_cli.py`); the rule table is
+  in the engine settings.
+- Lessons library: the `scope` field and the operator promote route (`POST /lessons/{id}/promote`); the library stays OFF
+  (`lessons_enabled`); `claude-runner/docs/lessons_scope.sql` is not applied. Memory layers: `docs/memory.md`.
+- The launch script now applies `engine_config_patch`, `retrieval_config_patch`, `overrides_config_patch`,
+  `features_config_patch`, `adaptive_split_patch` (also on the report-pack forms of the Worker and Architect input),
+  `legacy_columns_optional_patch` (Constants reads a legacy column only when it is set); the mission `overrides_json` is
+  handed on by the Mission node. The adaptive flags are read from `features_json`; they are ON in the live
+  `features_json`, so the next launch plans the whole mission and splits a task the Worker cannot finish.
+- Dashboard on two ports: 8701 loopback only, open and writable; 8702 (`DASHBOARD_LAN_PORT`) with the login and the
+  read-only mode (`AHAWR_DASHBOARD_LAN_BIND`, `AHAWR_DASHBOARD_LAN_PORT`).
+
+Bug fixes in this step:
+
+- The QA stack database had no `overrides_json`, `engine_json`, `thinking_json`, `retrieval_json` and `lessons_enabled`
+  columns, so every board call of a QA run answered 500 and all UI scenarios failed (`qa/fixtures/n8n_tables.json`,
+  `test_qa_table_layout_has_the_columns_the_board_reads`).
+- The QA review at a mission end read the poll node of the last loop run only and reported "runner unreachable" after many
+  polls; it now finds the finished poll (`qa_review.test.js`, `test_review_reads_the_finished_poll_after_many_polls`).
+- `legacy_columns_optional_patch` inserted its role fallback inside `num()` and lacked the roles core; the mission
+  `overrides_json` was never passed on by the Mission node; the retrieval and overrides patches clashed on their anchors
+  in either order.
+- QA fixture names and the `lan_port` check in the dashboard (`dashboard_auth.py`) typed for mypy.
+- The QA scenario `mission save blocks a bad JSON policy...` typed into the removed `worker_think_policy` field; it uses the
+  `Thinking settings (JSON)` field of the launch window now. The QA failure notice names the scenarios and reasons
+  (`QA failed (ui 3 of 20 scenarios):` and the first three) instead of `ui, ui, ui, ...`.
+- Known, not fixed: the two QA scenarios of the Providers page fail on HEAD as well (the Providers button is not shown by
+  the throwaway dashboard); the dashboard container has no `qa-runs` volume, so the board does not show QA captures.
+
+Checks: see the commit message. Not tested live: the adaptive split on a real task (the flags turn ON at the next launch),
+the JSON settings with non-empty values in a running mission.
 
 ## 2026-10-31 (0.11.930)
 

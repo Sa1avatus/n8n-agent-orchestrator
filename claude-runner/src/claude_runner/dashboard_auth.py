@@ -69,9 +69,21 @@ _LOGIN_PAGE = resources.files("claude_runner").joinpath("dashboard_login.html").
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 
-def request_is_readonly(settings: DashboardAuthSettings) -> bool:
+def request_on_lan_port(settings: DashboardAuthSettings, request: Request | None) -> bool:
+    """True when the request must obey the login and read-only rules.
+
+    Without ``lan_port`` every request does (one listener). With it, only the requests that
+    arrived on that port do; the other port is published on loopback only and stays open.
+    """
+    if settings.lan_port is None:
+        return True
+    server = request.scope.get("server") if request is not None else None
+    return bool(server and server[1] == settings.lan_port)
+
+
+def request_is_readonly(settings: DashboardAuthSettings, request: Request | None = None) -> bool:
     """True when DASHBOARD_READONLY is on: the dashboard refuses every write."""
-    return settings.readonly
+    return settings.readonly and request_on_lan_port(settings, request)
 
 
 def _client_addr(request: Request) -> str:
@@ -132,11 +144,12 @@ class AuthGuard(BaseHTTPMiddleware):
         self._settings = settings
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        if self._settings is None:
+        if self._settings is None or not request_on_lan_port(self._settings, request):
             return await call_next(request)
 
         is_open = (request.method, request.url.path) in _OPEN_METHOD_PATHS
-        if not is_open and request.method in _WRITE_METHODS and request_is_readonly(self._settings):
+        is_write = request.method in _WRITE_METHODS
+        if not is_open and is_write and request_is_readonly(self._settings, request):
             return JSONResponse({"error": "dashboard is in read-only mode"}, status_code=403)
 
         if not auth_enabled(self._settings) or is_open:

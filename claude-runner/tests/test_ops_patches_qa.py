@@ -19,6 +19,7 @@ LAUNCH_SCRIPT = OPS_DIR / "launch_mission.sh"
 PATCH_PATH = OPS_DIR / "qa_workflow_patch.py"
 LIVE_EXPORT = OPS_DIR / "_scratch" / "live_export.json"
 QA_SCRIPT = "qa_workflow_patch"
+OVERRIDES_SCRIPT = "overrides_config_patch"
 MISSION_ID = "t022-test-mission"
 PATCH_TIMEOUT_SECONDS = 120
 CODE_NODE_TIMEOUT_SECONDS = 30
@@ -56,9 +57,16 @@ def _launch_steps() -> list[tuple[str, str]]:
     return steps
 
 
+def _adaptive_scratch(workflow: Path) -> Path:
+    # the adaptive patch writes only below its scratch folder; the launch script copies it back
+    return OPS_DIR / "adaptive_split" / "scratch" / f"qa_test_{workflow.parent.name}.json"
+
+
 def _script_args(script: str, args: str, workflow: Path, qa_mode: str) -> list[str]:
     if script == QA_SCRIPT:
         return [qa_mode, str(workflow)]
+    if "--out" in args:
+        return ["--src", str(workflow), "--out", str(_adaptive_scratch(workflow))]
     extra = [MISSION_ID] if '"$MISSION"' in args else []
     return [str(workflow), *extra]
 
@@ -81,6 +89,9 @@ def _run_steps(steps: list[tuple[str, str]], workflow: Path, qa_mode: str) -> No
             check=False,
         )
         assert result.returncode == 0, f"{script} failed: {result.stderr[-2000:]}"
+        if "--out" in args:
+            scratch = _adaptive_scratch(workflow)
+            shutil.move(scratch, workflow)
 
 
 def _live_workflow(path: Path) -> dict[str, Any]:
@@ -106,7 +117,9 @@ def _assert_code_nodes_pass_node_check(workflow_path: Path, scratch_dir: Path) -
     assert code_nodes
     for index, node in enumerate(code_nodes):
         script = scratch_dir / f"code_{index}.js"
-        script.write_text(node["parameters"]["jsCode"], encoding="utf-8")
+        # an n8n code node body runs inside an async function: await is valid at its top level
+        body = node["parameters"]["jsCode"]
+        script.write_text(f"(async () => {{\n{body}\n}})();", encoding="utf-8")
         result = subprocess.run(
             ["node", "--check", str(script)],
             capture_output=True,
@@ -126,6 +139,7 @@ def test_all_launch_patches_twice_on_a_fresh_export(
     workflow = tmp_path / "live_export.json"
     shutil.copyfile(LIVE_EXPORT, workflow)
     steps = _launch_steps()
+    steps.insert(-1, (OVERRIDES_SCRIPT, '"$SP/wf_next.json"'))
 
     _run_steps(steps, workflow, "final")
     once_sha256 = _sha256(workflow)
@@ -148,3 +162,65 @@ def test_mode_off_qa_step_is_a_byte_for_byte_no_op(tmp_path: Path) -> None:
     _run_steps([step for step in steps if step[0] != QA_SCRIPT], without_qa, "off")
     _run_steps(steps, with_qa, "off")
     assert _sha256(with_qa) == _sha256(without_qa)
+
+
+REVIEW_HARNESS = """
+const body = `return (async () => {${process.argv[1]}})();`;
+const run = new Function('$', '$input', '$getWorkflowStaticData', body);
+const poll = JSON.parse(process.argv[2]);
+const reachable = JSON.parse(process.argv[3]);
+const last = (_branch, index) => {
+  if (index !== undefined && index >= reachable) throw new Error('no such run');
+  return { json: poll };
+};
+const node = (name) => ({
+  first: () => ({ json: name === 'Mission' ? { mission_id: 'm1' } : {} }),
+  last,
+});
+run(node, { first: () => ({ json: JSON.parse(process.argv[4]) }) }, () => ({}))
+  .then((out) => console.log(JSON.stringify(out[0].json.qa_notice)));
+"""
+
+
+def _review_notice(
+    qwp: ModuleType, poll: dict[str, Any], reachable: int, given: dict[str, Any]
+) -> str:
+    args = [qwp.QA_REVIEW_JS, json.dumps(poll), str(reachable), json.dumps(given)]
+    result = subprocess.run(
+        ["node", "-e", REVIEW_HARNESS, *args],
+        capture_output=True,
+        text=True,
+        timeout=CODE_NODE_TIMEOUT_SECONDS,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr[-1000:]
+    return str(json.loads(result.stdout))
+
+
+@needs_node
+def test_review_reads_the_finished_poll_after_many_polls(qwp: ModuleType) -> None:
+    done = {"status": "done", "verdicts": [{"verdict": "pass"}]}
+    # the join hands the finished poll on: the notice must not say the runner is unreachable
+    assert _review_notice(qwp, done, 0, done) == "QA passed"
+    # the limit branch hands on a counter only: the last poll run is found by its index
+    assert _review_notice(qwp, done, 10, {"poll_count": 3}) == "QA passed"
+
+
+@needs_node
+def test_failure_notice_names_scenarios_and_reasons(qwp: ModuleType) -> None:
+    failing = [
+        {
+            "verdict": "fail",
+            "layer": "ui",
+            "scenario": f"scenario {index}",
+            "failed_reason": "Locator timed out",
+        }
+        for index in range(19)
+    ]
+    poll = {"status": "done", "verdicts": failing}
+    notice = _review_notice(qwp, poll, 0, poll)
+    # not "ui, ui, ui, ...": the count, the first scenarios with their reason, the rest as a number
+    assert notice.startswith("QA failed (ui 19 of 19 scenarios):")
+    assert "- scenario 0: Locator timed out" in notice
+    assert "(+16 more)" in notice
+    assert "ui, ui" not in notice

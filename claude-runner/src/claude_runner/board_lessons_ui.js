@@ -26,6 +26,7 @@ const STATUS_KEYS = {
 const ACTION_KEYS = {
   retire: ["lessons.act.retire", "Retire"],
   restore: ["lessons.act.restore", "Restore"],
+  promote: ["lessons.act.promote", "Promote"],
   edit: ["lessons.act.edit", "Edit"],
   delete: ["lessons.act.delete", "Delete"],
 };
@@ -50,6 +51,7 @@ function diffText(changes) {
 
 function actionButtons(lesson, ui) {
   const actions = lesson.status === "active" ? ["retire"] : ["restore"];
+  if (lesson.scope !== "project") actions.push("promote");
   actions.push("edit", "delete");
   return actions.map((action) => {
     const [key, en] = ACTION_KEYS[action];
@@ -127,6 +129,11 @@ function setStatus(lesson, status, ui) {
   return applyChange(lesson, { status }, send, ui);
 }
 
+function promoteLesson(lesson, ui) {
+  const send = () => ui.write("POST", lessonUrl(lesson.id, "/promote"), { expected_version: lesson.updated_at });
+  return applyChange(lesson, { scope: "project" }, send, ui);
+}
+
 async function deleteLesson(lesson, ui) {
   const question = ui.L("lessons.delete.confirm", "Delete lesson {id} for good? It cannot be undone.", { id: lesson.id });
   if (!globalThis.confirm(question)) return undefined;
@@ -142,6 +149,7 @@ async function deleteLesson(lesson, ui) {
 function runAction(action, lesson, ui) {
   if (action === "edit") return editLesson(lesson, ui);
   if (action === "delete") return deleteLesson(lesson, ui);
+  if (action === "promote") return promoteLesson(lesson, ui);
   return setStatus(lesson, action === "retire" ? "retired" : "active", ui);
 }
 

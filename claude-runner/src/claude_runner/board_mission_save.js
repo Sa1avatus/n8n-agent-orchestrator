@@ -236,6 +236,32 @@ function featuresSavePlan(state, missionId, current) {
   return { diff, requests };
 }
 
+// The save plan for the thinking_json text (global hermes_config): one PUT when it changed,
+// carrying the version read at load.
+function thinkingSavePlan(state, current) {
+  const next = current.thinking_json == null ? "" : String(current.thinking_json);
+  const stored = state.thinking_json == null ? "" : String(state.thinking_json);
+  if (next === stored) return { diff: [], requests: [] };
+  return {
+    diff: [{ field: "thinking_json", old: state.thinking_json, new: next }],
+    requests: [{ url: "/api/board/thinking", method: "PUT",
+      headers: { "X-AHAWR-Dashboard": "1" },
+      body: { thinking_json: next, expected_version: state.thinking_version } }],
+  };
+}
+
+function retrievalSavePlan(state, current) {
+  const next = current.retrieval_json == null ? "" : String(current.retrieval_json);
+  const stored = state.retrieval_json == null ? "" : String(state.retrieval_json);
+  if (next === stored) return { diff: [], requests: [] };
+  return {
+    diff: [{ field: "retrieval_json", old: state.retrieval_json, new: next }],
+    requests: [{ url: "/api/board/retrieval", method: "PUT",
+      headers: { "X-AHAWR-Dashboard": "1" },
+      body: { retrieval_json: next, expected_version: state.retrieval_version } }],
+  };
+}
+
 // --- panel and banner ---
 
 // The panel (banner + diff + button bar) is created once, inside the confbox.
@@ -617,8 +643,8 @@ async function postJson(url, body, method = "POST", headers = {}) {
 // === export (browser global + CommonJS module.exports) ===
 const BoardMissionSave = {
   esc, SaveState, readForm, parseLines, initialValue,
-  captureInitial, formDirty, currentDiff, diffHtml, featuresState, featuresSavePlan,
-  ensurePanel, showBanner, attachControls, attachToBox,
+  captureInitial, formDirty, currentDiff, diffHtml, featuresState, featuresSavePlan, thinkingSavePlan,
+  retrievalSavePlan, ensurePanel, showBanner, attachControls, attachToBox,
   onSave, onReset, onCopy, copyIntoForm, doSave,
   fetchServerData, renderClean, refresh, fetchJson, postJson,
 };

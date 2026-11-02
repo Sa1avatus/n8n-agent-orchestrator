@@ -1,0 +1,214 @@
+{
+  "description": "Shared cases for the thinking core. thinking_json is the raw text of the column; legacy holds the four hermes_config columns (null = empty column). flatten(thinking_json, legacy) returns the legacy constants; errors are the validation messages for thinking_json. The integer bounds (from_task >= 1, off_after_seconds and off_after_steps >= 0) are the proposed contract from docs/config-thinking.md and are settled by the implementation task. Golden: an empty or missing thinking_json with empty legacy columns flattens to the constants read by today's workflow (docs/config-thinking.md section 2).",
+  "legacy_constants": {
+    "worker_think_policy": "",
+    "worker_think_policy_from_task": 0,
+    "worker_think_off_after_seconds": -1,
+    "worker_think_off_after_steps": -1
+  },
+  "parse": [
+    {
+      "name": "golden_missing",
+      "thinking_json": null,
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_empty_string",
+      "thinking_json": "",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "golden_empty_object",
+      "thinking_json": "{}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "json_wins_over_legacy",
+      "thinking_json": "{\"from_task\":1,\"off_after_seconds\":1800,\"off_after_steps\":40}",
+      "legacy": {
+        "worker_think_policy": "off_first",
+        "worker_think_policy_from_task": 0,
+        "worker_think_off_after_seconds": 600,
+        "worker_think_off_after_steps": 30
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "worker_think_policy_from_task": 1,
+          "worker_think_off_after_seconds": 1800,
+          "worker_think_off_after_steps": 40
+        }
+      }
+    },
+    {
+      "name": "legacy_fallback_per_key",
+      "thinking_json": "{\"from_task\":1}",
+      "legacy": {
+        "worker_think_policy": "off_first",
+        "worker_think_policy_from_task": 0,
+        "worker_think_off_after_seconds": 600,
+        "worker_think_off_after_steps": 30
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "worker_think_policy": "off_first",
+          "worker_think_policy_from_task": 1,
+          "worker_think_off_after_seconds": 600,
+          "worker_think_off_after_steps": 30
+        }
+      }
+    },
+    {
+      "name": "legacy_used_when_json_key_absent",
+      "thinking_json": "{}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": 1,
+        "worker_think_off_after_seconds": 600,
+        "worker_think_off_after_steps": 30
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "worker_think_policy": "",
+          "worker_think_policy_from_task": 1,
+          "worker_think_off_after_seconds": 600,
+          "worker_think_off_after_steps": 30
+        }
+      }
+    },
+    {
+      "name": "partial_object_defaults_for_absent_keys",
+      "thinking_json": "{\"off_after_seconds\":900}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "worker_think_policy": "",
+          "worker_think_policy_from_task": 0,
+          "worker_think_off_after_seconds": 900,
+          "worker_think_off_after_steps": -1
+        }
+      }
+    },
+    {
+      "name": "valid_full_object",
+      "thinking_json": "{\"from_task\":1,\"off_after_seconds\":1800,\"off_after_steps\":40}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": [],
+        "flatten_partial": {
+          "worker_think_policy_from_task": 1,
+          "worker_think_off_after_seconds": 1800,
+          "worker_think_off_after_steps": 40
+        }
+      }
+    },
+    {
+      "name": "invalid_json",
+      "thinking_json": "{\"from_task\":1,",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": { "errors": ["thinking_json: not valid JSON"] }
+    },
+    {
+      "name": "top_level_not_object",
+      "thinking_json": "[1,2]",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": { "errors": ["thinking_json: must be a JSON object, got array"] }
+    },
+    {
+      "name": "wrong_type_from_task",
+      "thinking_json": "{\"from_task\":\"1\"}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": ["thinking_json: from_task must be an integer >= 1, got \"1\""]
+      }
+    },
+    {
+      "name": "wrong_type_seconds",
+      "thinking_json": "{\"off_after_seconds\":\"1800\"}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": ["thinking_json: off_after_seconds must be an integer >= 0, got \"1800\""]
+      }
+    },
+    {
+      "name": "non_integer_steps",
+      "thinking_json": "{\"off_after_steps\":2.5}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": ["thinking_json: off_after_steps must be an integer >= 0, got 2.5"]
+      }
+    },
+    {
+      "name": "out_of_range_numbers",
+      "thinking_json": "{\"from_task\":0,\"off_after_seconds\":-5}",
+      "legacy": {
+        "worker_think_policy": null,
+        "worker_think_policy_from_task": null,
+        "worker_think_off_after_seconds": null,
+        "worker_think_off_after_steps": null
+      },
+      "expect": {
+        "errors": [
+          "thinking_json: from_task must be an integer >= 1, got 0",
+          "thinking_json: off_after_seconds must be an integer >= 0, got -5"
+        ]
+      }
+    }
+  ]
+}

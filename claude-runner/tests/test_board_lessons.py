@@ -10,12 +10,17 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from claude_runner.board import ConflictError, GuardError
+from claude_runner.api import create_app
+from claude_runner.board import ConflictError, GuardError, InMemoryBoardStore
 from claude_runner.board_lessons import (
     EVIDENCE_MAX_CHARS,
     LESSON_MAX_CHARS,
+    LESSONS_PROMOTE_MIN_MISSIONS,
+    LESSONS_PROMOTE_MIN_MISSIONS_KEY,
     LESSONS_RETIRE_MIN_SHOWN,
     MISSION_MAX_CHARS,
     SITUATION_MAX_CHARS,
@@ -23,8 +28,17 @@ from claude_runner.board_lessons import (
     InMemoryLessonStore,
     Lesson,
     LessonCandidate,
+    LessonScope,
     PgLessonStore,
+    promote_min_missions,
+    promoted_scope,
 )
+from claude_runner.board_lessons_extract import (
+    LESSONS_K,
+    render_lessons_block,
+    select_lessons,
+)
+from claude_runner.config import Settings
 
 
 def _candidate(**overrides: Any) -> LessonCandidate:
@@ -69,6 +83,15 @@ def test_list_filters_by_mission_and_status() -> None:
     assert [row.id for row in store.list("ahawr-demo")] == [first.id]
     assert store.list("ahawr-demo", status="active") == []
     assert [row.id for row in store.list("ahawr-demo", status="retired")] == [first.id]
+
+
+def test_list_filters_by_scope() -> None:
+    store = InMemoryLessonStore()
+    mission_row = store.add(_candidate())
+    project_row = store.add(_candidate(situation="A project situation."))
+    store._lessons[project_row.id] = project_row.model_copy(update={"scope": "project"})
+    assert [row.id for row in store.list("ahawr-demo", scope="mission")] == [mission_row.id]
+    assert [row.id for row in store.list("ahawr-demo", scope="project")] == [project_row.id]
 
 
 def test_edit_with_current_version_changes_text() -> None:
@@ -335,6 +358,17 @@ def test_pg_list_passes_mission_and_status_as_parameters() -> None:
     assert [row.id for row in rows] == [1]
 
 
+def test_pg_list_filters_by_scope_and_selects_the_scope_column() -> None:
+    conn = _FakeConnection()
+    conn.respond("FROM board.lessons", [_db_row(scope="project")])
+    rows = PgLessonStore(conn).list("ahawr-demo", scope="project")
+    sql, params = conn.executed[0]
+    assert "status, scope, times_shown" in sql
+    assert "WHERE mission = %s AND scope = %s" in sql
+    assert params == ("ahawr-demo", "project")
+    assert [row.scope for row in rows] == ["project"]
+
+
 def test_pg_add_cuts_text_and_writes_evidence_as_jsonb() -> None:
     conn = _FakeConnection()
     conn.respond("INSERT INTO board.lessons", [_db_row()])
@@ -495,3 +529,148 @@ def test_pg_delete_with_confirm_deletes_by_id() -> None:
 def test_pg_delete_unknown_id_is_key_error() -> None:
     with pytest.raises(KeyError, match="lesson 7 not found"):
         PgLessonStore(_FakeConnection()).delete(7, confirm=True)
+
+
+def _lesson_with_scope(scope: LessonScope) -> Lesson:
+    return InMemoryLessonStore().add(_candidate()).model_copy(update={"scope": scope})
+
+
+@pytest.mark.parametrize(
+    ("scope", "missions", "mark", "enabled", "expected"),
+    [
+        ("mission", 2, None, True, "mission"),
+        ("mission", 3, None, True, "project"),
+        ("mission", 4, None, True, "project"),
+        ("mission", 5, "mission", True, "mission"),
+        ("mission", 1, "project", True, "project"),
+        ("project", 1, None, True, "project"),
+        ("project", 1, "mission", True, "mission"),
+        ("mission", 3, None, False, "mission"),
+        ("mission", 3, "project", False, "mission"),
+        ("project", 3, "mission", False, "project"),
+    ],
+)
+def test_promoted_scope_table(
+    scope: LessonScope,
+    missions: int,
+    mark: LessonScope | None,
+    enabled: bool,
+    expected: LessonScope,
+) -> None:
+    lesson = _lesson_with_scope(scope)
+    result = promoted_scope(lesson, missions, mark, LESSONS_PROMOTE_MIN_MISSIONS, enabled)
+    assert result == expected
+    assert lesson.scope == scope
+
+
+def test_promoted_scope_uses_the_given_threshold() -> None:
+    lesson = _lesson_with_scope("mission")
+    assert promoted_scope(lesson, 2, None, 2, True) == "project"
+    assert promoted_scope(lesson, 2, None, 3, True) == "mission"
+
+
+def test_scope_defaults_to_mission() -> None:
+    assert InMemoryLessonStore().add(_candidate()).scope == "mission"
+
+
+@pytest.mark.parametrize(
+    ("config", "expected"),
+    [
+        ({}, LESSONS_PROMOTE_MIN_MISSIONS),
+        ({LESSONS_PROMOTE_MIN_MISSIONS_KEY: 5}, 5),
+        ({LESSONS_PROMOTE_MIN_MISSIONS_KEY: 0}, ValueError),
+        ({LESSONS_PROMOTE_MIN_MISSIONS_KEY: True}, ValueError),
+        ({LESSONS_PROMOTE_MIN_MISSIONS_KEY: "3"}, ValueError),
+    ],
+)
+def test_promote_min_missions_reads_the_setting(config: dict[str, Any], expected: Any) -> None:
+    if expected is ValueError:
+        with pytest.raises(ValueError, match=LESSONS_PROMOTE_MIN_MISSIONS_KEY):
+            promote_min_missions(config)
+    else:
+        assert promote_min_missions(config) == expected
+
+
+def test_project_and_mission_lessons_share_the_k_cap() -> None:
+    store = InMemoryLessonStore()
+    ids = [
+        store.add(_candidate(situation=f"Parser case {n} needs its test.")).id for n in range(4)
+    ]
+    for lesson_id in ids[:2]:
+        store.promote(lesson_id, None)
+    lessons = store.list("ahawr-demo", "active")
+
+    chosen = select_lessons(lessons, "parser case test", "", [], [], k=LESSONS_K)
+
+    assert {lesson.scope for lesson in lessons} == {"mission", "project"}
+    assert len(chosen) == len(lessons) == 4
+    assert len(select_lessons(lessons, "parser case test", "", [], [], k=3)) == 3
+
+
+def test_times_shown_moves_only_for_lessons_in_the_rendered_block() -> None:
+    store = InMemoryLessonStore()
+    fitting = store.add(_candidate(situation="Parser empty lines need a test."))
+    oversized = store.add(_candidate(situation="Parser empty lines " * 20, lesson="x" * 300))
+    limit = len(render_lessons_block([_stored(store, fitting.id)]))
+
+    chosen = select_lessons(
+        store.list("ahawr-demo", "active"), "parser empty lines", "", [], [], max_chars=limit
+    )
+    store.record_shown("ahawr-demo", 4, [lesson.id for lesson in chosen])
+
+    assert [lesson.id for lesson in chosen] == [fitting.id]
+    assert _stored(store, fitting.id).times_shown == 1
+    assert _stored(store, oversized.id).times_shown == 0
+
+
+FIXTURE_INPUT = "Task: parser empty lines\nFiles: src/parser.py\n"
+SELECT_BODY = {
+    "mission": "ahawr-demo",
+    "task_index": 1,
+    "task_title": "parser empty lines",
+    "objective": "",
+    "scope": [],
+    "files": ["src/parser.py"],
+}
+SELECT_ROUTE = "/api/board/lessons/select"
+DASHBOARD_HEADER = {"X-AHAWR-Dashboard": "1"}
+
+
+def _lessons_app(settings: Settings) -> FastAPI:
+    app = create_app(settings)
+    app.state.board_store = InMemoryBoardStore()
+    app.state.lessons_store = InMemoryLessonStore()
+    return app
+
+
+def _select_block(app: FastAPI) -> str:
+    with TestClient(app) as client:
+        response = client.post(SELECT_ROUTE, headers=DASHBOARD_HEADER, json=SELECT_BODY)
+    assert response.status_code == 200
+    block: str = response.json()["block"]
+    return block
+
+
+def test_flag_off_leaves_worker_and_reviewer_input_byte_for_byte(settings: Settings) -> None:
+    app = _lessons_app(settings)
+    seeded = app.state.lessons_store.add(_candidate(situation="Parser empty lines need a test."))
+
+    block = _select_block(app)
+    worker_input = FIXTURE_INPUT + block
+    reviewer_input = FIXTURE_INPUT + block
+
+    assert worker_input == reviewer_input == FIXTURE_INPUT
+    assert _stored(app.state.lessons_store, seeded.id).times_shown == 0
+
+
+def test_flag_on_with_empty_store_leaves_worker_and_reviewer_input_byte_for_byte(
+    settings: Settings,
+) -> None:
+    app = _lessons_app(settings)
+    app.state.board_store.update_hermes_config(None, lessons_enabled=True)
+
+    block = _select_block(app)
+    worker_input = FIXTURE_INPUT + block
+    reviewer_input = FIXTURE_INPUT + block
+
+    assert worker_input == reviewer_input == FIXTURE_INPUT

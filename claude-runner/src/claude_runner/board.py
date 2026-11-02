@@ -77,6 +77,7 @@ class Mission(BaseModel):
     rules: list[Any] = []
     acceptance_criteria: list[Any] = []
     retrieval_corpora: list[str] | None = None
+    overrides_json: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 

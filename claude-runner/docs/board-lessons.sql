@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS board.lesson_shown (
 
 CREATE INDEX IF NOT EXISTS lesson_shown_mission_task_idx ON board.lesson_shown (mission, task_index);
 
+-- PROPOSED SCHEMA, NOT APPLIED. Needs operator approval (schema change).
+-- T001B found no existing per-task field for injection: board.lesson_shown has rows only for
+-- lessons that were rendered, so a task whose block was empty leaves no trace. This table
+-- records every task that went through the select route, with lessons_injected true or false,
+-- so the effect on the first attempt can be measured for the control tasks too.
+CREATE TABLE IF NOT EXISTS board.lesson_injection (
+    mission            text NOT NULL CHECK (char_length(mission) <= 64),
+    task_index         integer NOT NULL CHECK (task_index BETWEEN 1 AND 999),
+    lessons_injected   boolean NOT NULL,
+    PRIMARY KEY (mission, task_index)
+);
+
 -- Board role grants, same shape as claude-runner/docs/board-role.sql.
 -- Guarded: skipped when the role does not exist yet, so the file applies before the role.
 DO $$
@@ -50,6 +62,7 @@ BEGIN
         GRANT SELECT, INSERT, UPDATE, DELETE ON board.lessons TO board_operator;
         GRANT USAGE ON SEQUENCE board.lessons_id_seq TO board_operator;
         GRANT SELECT, INSERT, UPDATE, DELETE ON board.lesson_shown TO board_operator;
+        GRANT SELECT, INSERT, UPDATE, DELETE ON board.lesson_injection TO board_operator;
     END IF;
 END
 $$;

@@ -322,13 +322,18 @@ services:
     restart: unless-stopped
     command: ["ahawr-dashboard", "--host", "0.0.0.0", "--port", "8701"]
 
+    # 8701 is the open, writable port for the operator's tools: loopback only, never published to the network.
+    # DASHBOARD_LAN_PORT=8702 makes the same process listen on a second port that needs the login below and
+    # is read-only when DASHBOARD_READONLY=1; AHAWR_DASHBOARD_LAN_BIND (default loopback) says where it is published.
     ports:
-      - "${AHAWR_DASHBOARD_BIND:-127.0.0.1}:${AHAWR_DASHBOARD_PORT:-8701}:8701"
+      - "127.0.0.1:${AHAWR_DASHBOARD_PORT:-8701}:8701"
+      - "${AHAWR_DASHBOARD_LAN_BIND:-127.0.0.1}:${AHAWR_DASHBOARD_LAN_PORT:-8702}:8702"
 
     # Only what the dashboard needs (not the whole .env).
     environment:
       # non-loopback bind needs auth (validate_startup); empty = loopback only, auth off
       - AHAWR_DASHBOARD_BIND=${AHAWR_DASHBOARD_BIND:-127.0.0.1}
+      - DASHBOARD_LAN_PORT=${DASHBOARD_LAN_PORT:-}
       - DASHBOARD_USER=${DASHBOARD_USER:-}
       - DASHBOARD_PASSWORD_HASH=${DASHBOARD_PASSWORD_HASH:-}
       - DASHBOARD_SESSION_SECRET=${DASHBOARD_SESSION_SECRET:-}

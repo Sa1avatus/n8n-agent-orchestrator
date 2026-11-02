@@ -25,6 +25,18 @@ _ATTEMPT_KEY_PATTERN = re.compile(r"[1-9][0-9]*")
 ESCALATE_SUFFIX = "_escalate"
 ESCALATE_KEYS = frozenset({"model", "above_steps", "below_score", "from_attempt"})
 MAX_SCORE = 100
+MAX_POLLS_KEY = "max_polls"
+POLL_SECONDS_KEY = "poll_seconds"
+MAX_RETRIES_KEY = "max_retries"
+FIRST_ATTEMPT = 1
+MIN_MAX_POLLS = 1
+MIN_MAX_RETRIES = 0
+FLAT_ROLES = ("architect", "worker", "reviewer", "service")
+POLLING_DEFAULTS: dict[str, dict[str, Any]] = {
+    "architect": {MAX_POLLS_KEY: 30, POLL_SECONDS_KEY: 3, MAX_RETRIES_KEY: 5},
+    "worker": {MAX_POLLS_KEY: 30, POLL_SECONDS_KEY: 3, MAX_RETRIES_KEY: 3},
+    "reviewer": {MAX_POLLS_KEY: 20, POLL_SECONDS_KEY: 3, MAX_RETRIES_KEY: 5},
+}
 
 
 @dataclass(frozen=True)
@@ -158,6 +170,7 @@ def _check_options(role: str, options: Any) -> list[str]:
     errors = [f"role {role!r}: unknown option {key!r}" for key in options if key not in allowed]
     if role == "qa":
         errors.extend(_check_qa_options(role, options))
+    errors.extend(_check_polling(role, options))
     return errors
 
 
@@ -175,6 +188,22 @@ def _check_qa_options(role: str, options: dict[str, Any]) -> list[str]:
     if "layers" in options:
         errors.extend(_check_layers(role, options["layers"]))
     return errors
+
+
+def _check_polling(role: str, options: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    for key, minimum in ((MAX_POLLS_KEY, MIN_MAX_POLLS), (MAX_RETRIES_KEY, MIN_MAX_RETRIES)):
+        if key in options and not _is_whole_number(options[key], minimum):
+            errors.append(
+                f"role {role!r}: option {key!r} must be a whole number of at least {minimum}"
+            )
+    if POLL_SECONDS_KEY in options and not _is_positive_number(options[POLL_SECONDS_KEY]):
+        errors.append(f"role {role!r}: option {POLL_SECONDS_KEY!r} must be a positive number")
+    return errors
+
+
+def _is_whole_number(value: Any, minimum: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
 def _check_layers(role: str, layers: Any) -> list[str]:
@@ -249,7 +278,9 @@ def legacy_role(columns: Mapping[str, Any], role: str) -> dict[str, Any]:
     if provider and model:
         value[FIRST_ATTEMPT_KEY] = f"{provider}{MODEL_SEPARATOR}{model}"
     options = {key: columns.get(f"{role}_{key}") for key in LEGACY_OPTION_KEYS}
-    value[OPTIONS_KEY] = {key: option for key, option in options.items() if option is not None}
+    value[OPTIONS_KEY] = {
+        key: option for key, option in options.items() if option not in (None, "")
+    }
     return value
 
 
@@ -354,3 +385,21 @@ def _options_of(value: Any) -> dict[str, Any]:
     if isinstance(value, dict) and isinstance(value.get(OPTIONS_KEY), dict):
         return dict(value[OPTIONS_KEY])
     return {}
+
+
+def flatten(roles: Mapping[str, Any] | None, legacy: Mapping[str, Any]) -> dict[str, Any]:
+    given_roles = roles or {}
+    flat: dict[str, Any] = {}
+    for role in FLAT_ROLES:
+        model = _model_for_attempt(given_roles.get(role), FIRST_ATTEMPT)
+        if model is None:
+            flat[f"{role}_provider"] = legacy.get(f"{role}_provider") or None
+            flat[f"{role}_model"] = legacy.get(f"{role}_model") or None
+        else:
+            flat[f"{role}_provider"], flat[f"{role}_model"] = split_model(model)
+    for role, defaults in POLLING_DEFAULTS.items():
+        legacy_options = legacy_role(legacy, role)[OPTIONS_KEY]
+        options = {**legacy_options, **_options_of(given_roles.get(role))}
+        for key, default in defaults.items():
+            flat[f"{role}_{key}"] = options.get(key, default)
+    return flat

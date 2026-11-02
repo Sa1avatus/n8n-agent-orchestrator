@@ -85,8 +85,8 @@ Retry counter: `retries` is the number of times this mission was already sent ba
 | # | Case | Source | Outcome | Retry counter | Notice text |
 | --- | --- | --- | --- | --- | --- |
 | 1 | verdict `pass` | verdict | accept | unchanged | `QA passed` |
-| 2 | verdict `fail`, `retries < QA_MAX_RETRIES` | verdict | needs_changes review; `next_task` names the failed step and the reason | +1 | `QA failed` with the step |
-| 3 | verdict `fail`, `retries = QA_MAX_RETRIES` | verdict | accept | unchanged | `QA still failing after the retries` |
+| 2 | verdict `fail`, `retries < QA_MAX_RETRIES` | verdict | needs_changes review; `next_task` names the failed step and the reason | +1 | `QA failed (ui 3 of 20 scenarios):` then the first three scenarios with their reason and `(+N more)` |
+| 3 | verdict `fail`, `retries = QA_MAX_RETRIES` | verdict | accept | unchanged | `QA still failing after 2 retries.` followed by the same summary |
 | 4 | verdict `skipped` (no UI files changed) | verdict | accept | unchanged | none (silent) |
 | 5 | verdict `blocked` (missing folder or not a git repository) | verdict | accept | unchanged | `QA could not run` with the reason |
 | 6 | state `error` (QA run crashed or the worker reported an error) | infrastructure | accept | unchanged | `QA could not run` with the reason |

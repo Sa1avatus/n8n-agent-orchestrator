@@ -141,6 +141,11 @@ async function main() {
       keys.length > 0 && keys.every((k) => I.t(k) === EN_JSON[k]));
   }
   {
+    const RU_JSON = JSON.parse(fs.readFileSync(path.join(SRC, "board_i18n_ru.json"), "utf8"));
+    check("board_i18n_ru.json has the same keys as board_i18n_en.json",
+      Object.keys(RU_JSON).sort().join() === Object.keys(EN_JSON).sort().join());
+  }
+  {
     const before = new Set(["console", "localStorage", "getJSON"]);
     const sandbox = {
       console, localStorage: memoryStorage(), getJSON: () => Promise.reject(new Error("x")),

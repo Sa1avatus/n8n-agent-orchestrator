@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pathlib
 import subprocess
 from collections.abc import Callable
@@ -426,3 +427,12 @@ def test_seed_sql_inserts_the_fixture_providers_without_their_key() -> None:
     assert lines[0].startswith("INSERT INTO board.providers ") and "'qa-cloud'" in lines[0]
     assert all("api_key" not in line and "qa-fixture-not-a-key" not in line for line in lines)
     assert not [line for line in _seed_sql("empty").split("\n") if "board.provider" in line]
+
+
+def test_qa_table_layout_has_the_columns_the_board_reads() -> None:
+    layout = json.loads(qa_stack.N8N_TABLES_PATH.read_text(encoding="utf-8"))
+    columns = {table: {column for column, _ in rows} for table, rows in layout.items()}
+    # a column the board selects but the throwaway database lacks makes every board call a 500
+    assert "overrides_json" in columns["data_table_user_hYAqO52ZGHXxhhHX"]
+    config = columns["data_table_user_1S21PsMqT0FpR7eD"]
+    assert {"engine_json", "thinking_json", "retrieval_json", "lessons_enabled"} <= config
