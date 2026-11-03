@@ -9,9 +9,10 @@ activity logs of the session's runs, newest entries kept when it has to be cut.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from .runs import RunManager
+if TYPE_CHECKING:
+    from .runs import RunManager
 
 # per-entry limits: enough to recognise a finding, small enough to keep many steps
 TEXT_CHARS = 1500

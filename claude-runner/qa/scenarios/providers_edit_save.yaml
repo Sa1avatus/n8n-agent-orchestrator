@@ -21,12 +21,7 @@ steps:
         base_url: https://made-up.example/v1
     expect:
       no_mutation_without_header: true
-  - open: /static/board.html#board/view/kan
-    expect:
-      text_visible: ["Providers"]
-      request_2xx: [/api/board]
-      no_console_error: true
-  - click: "Providers"
+  - open: /static/board.html#board/providers
     expect:
       text_visible: ["qa-edit"]
       request_2xx: [/api/board/providers]
@@ -85,10 +80,10 @@ steps:
       no_console_error: true
   # The page still shows the old provider until re-read: a direct API delete does not
   # change it, so re-open the page and read the fresh list.
-  - open: /static/board.html#board/view/kan
-  - click: "Providers"
+  # a query makes the second open a real reload: the same URL with the same hash would not load the page again
+  - open: /static/board.html?reload=1#board/providers
     expect:
-      text_visible: ["No providers yet."]
+      text_visible: ["qa-cloud"]
       text_absent: [qa-edit]
       no_console_error: true
 reload_persistence: false

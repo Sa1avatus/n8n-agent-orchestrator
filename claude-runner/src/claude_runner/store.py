@@ -79,6 +79,9 @@ class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        # providers whose Worker runs follow the thinking policy: the local model and the ones
+        # behind the think proxy
+        self.think_providers: tuple[str, ...] = ("local",)
         self._db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
@@ -232,12 +235,17 @@ class Store:
                 )
         return superseded
 
+    def _think_marks(self) -> str:
+        return ", ".join("?" for _ in self.think_providers)
+
     def local_compaction_running(self) -> list[str]:
         """Run ids of the running compactions of local Worker sessions."""
         with self._lock:
             rows = self._db.execute(
                 "SELECT run_id FROM runs WHERE role = 'worker' "
-                "AND provider = 'local' AND status = 'running' AND kind = 'compact'"
+                f"AND provider IN ({self._think_marks()}) AND status = 'running' "
+                "AND kind = 'compact'",
+                self.think_providers,
             ).fetchall()
         return [r["run_id"] for r in rows]
 
@@ -249,8 +257,9 @@ class Store:
                 "SELECT run_id, session_id, substr(input, 1, 600) AS head, "
                 "think_policy, think_from, think_after, think_after_steps, think_task "
                 "FROM runs WHERE role = 'worker' "
-                "AND provider = 'local' AND status = 'running' "
-                "AND kind != 'compact' ORDER BY created_at"
+                f"AND provider IN ({self._think_marks()}) AND status = 'running' "
+                "AND kind != 'compact' ORDER BY created_at",
+                self.think_providers,
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -316,7 +325,8 @@ class Store:
             return (
                 self._db.execute(
                     "SELECT 1 FROM runs WHERE role = 'worker' "
-                    "AND provider = 'local' AND status = 'running' LIMIT 1"
+                    f"AND provider IN ({self._think_marks()}) AND status = 'running' LIMIT 1",
+                    self.think_providers,
                 ).fetchone()
                 is not None
             )
@@ -330,8 +340,9 @@ class Store:
             return []
         with self._lock:
             active = self._db.execute(
-                "SELECT run_id, session_id FROM runs WHERE role = 'worker' AND provider = 'local' "
-                "AND status = 'running'"
+                "SELECT run_id, session_id FROM runs WHERE role = 'worker' "
+                f"AND provider IN ({self._think_marks()}) AND status = 'running'",
+                self.think_providers,
             ).fetchall()
             out = []
             moment = datetime.now(UTC)

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import cloud_think, store
+from . import cloud_think, hermes_events, hermes_run, store, think_proxy
 from .claude_cli import (
     UUID_RE,
     Outcome,
@@ -205,6 +205,8 @@ class RunManager:
         # so the age is right even when a run id is reused.
         self._proc_started_at: dict[asyncio.subprocess.Process, float] = {}
         self._cancelled: set[str] = set()
+        # runner run id -> the gateway run id for the ENGINE=hermes cancel route
+        self._hermes_runs: dict[str, str] = {}
         self._shutting_down = False
         self._session_lock = asyncio.Lock()
         self.events = EventLog(settings.data_dir / "events", settings.event_retention_days)
@@ -264,6 +266,16 @@ class RunManager:
         role = (role or "").strip().lower()
         return role if role in ROLES else "generic"
 
+    async def _needs_think_proxy(self, provider_name: str) -> bool:
+        provider = self._provider(provider_name)
+        base_url = provider.env.get("ANTHROPIC_BASE_URL", "") if provider is not None else ""
+        if not base_url or provider_name == "local":
+            return False
+        return await asyncio.to_thread(think_proxy.ignores_client_thinking, base_url)
+
+    def provider_profile(self, name: str) -> ProviderProfile | None:
+        return self._provider(name)
+
     def _provider(self, name: str) -> ProviderProfile | None:
         found = self.settings.provider(name)
         if found is None and name.strip() and self.extra_provider is not None:
@@ -317,8 +329,19 @@ class RunManager:
                     # attaches to the run that is already working on this session.
                     return self.public(active, attached=True)
             provider = self._provider(request.provider.strip())
+            hermes_flag = self.settings.hermes_engine_enabled
             fresh_retry = bool(session_id and self.settings.retry_fresh_session_for(provider))
-            claude_id, resume, created = self._bind(session_id, cwd, role, fresh=fresh_retry)
+            if provider is not None and provider.engine == "hermes" and hermes_flag:
+                # A known hermes session resumes the stored gateway session id directly; the
+                # Claude Code transcript check in _bind does not apply on this engine.
+                known = self.store.get_session(session_id)
+                if known and not fresh_retry and known["claude_session_id"] != session_id:
+                    claude_id, resume, created = known["claude_session_id"], True, False
+                else:
+                    bound = self._bind(session_id, cwd, role, fresh=fresh_retry)
+                    claude_id, resume, created = bound
+            else:
+                claude_id, resume, created = self._bind(session_id, cwd, role, fresh=fresh_retry)
             session_id = session_id or claude_id
             if fresh_retry:
                 prompt = cut_retry_input(prompt, self.settings.retry_input_chars)
@@ -426,6 +449,9 @@ class RunManager:
             self.store.update_run(
                 run_id, status="running", started_at=now(), owner_pid=self.owner_pid
             )
+            if self.settings.think_proxy and await self._needs_think_proxy(provider_name):
+                # learned from the endpoint, not from a name: the thinking policy follows it now
+                self.store.think_providers = tuple({*self.store.think_providers, provider_name})
             if self.on_run_start is not None:
                 with contextlib.suppress(Exception):
                     self.on_run_start()
@@ -435,7 +461,7 @@ class RunManager:
                 )
                 if ref:
                     self.events.add(run_id, {"kind": "git_snapshot", "ref": ref})
-            if self.think_flag is not None and provider_name == "local":
+            if self.think_flag is not None and provider_name in self.store.think_providers:
                 with contextlib.suppress(Exception):
                     # the thinking mode the first request of the run starts in
                     # (the local price depends on it)
@@ -444,6 +470,12 @@ class RunManager:
                     )
             profile = self.settings.profile(role)
             provider = self._provider(provider_name)
+            hermes_flag = self.settings.hermes_engine_enabled
+            if provider is not None and provider.engine == "hermes" and hermes_flag:
+                await self._execute_hermes(
+                    run_id, prompt, model, role, cwd, provider, claude_id if resume else ""
+                )
+                return
             # Cloud thinking: resolve the per-attempt mode for non-local providers when the
             # setting is on; None when the provider is local, the setting is off, or the
             # policy is empty/invalid. An unconfigured cloud provider is still resolved: the
@@ -507,6 +539,12 @@ class RunManager:
                 shared_prefix=self.settings.local_shared_prefix,
                 cloud_think=ct_setting,
             )
+            if provider_name in self.store.think_providers and provider_name != "local":
+                # the engine ignores the client's thinking settings: the requests go through the
+                # runner's think proxy, which adds the thinking switch of the flag file
+                env["ANTHROPIC_BASE_URL"] = think_proxy.child_base_url(
+                    self.settings.think_proxy_url, provider_name
+                )
             if provider is not None and provider.context_probe_url:
                 # the window of the model as llama-server runs it now, not a fixed 65536
                 window = await asyncio.to_thread(
@@ -535,9 +573,7 @@ class RunManager:
                 # When prlimit is available it is argv[0], so the missing claude binary
                 # fails inside the prlimit child (exit 127) instead of raising OSError
                 # here; pre-check the target to keep the cli_unavailable branch working.
-                if cmd_to_exec[0] != cmd[0] and shutil.which(
-                    cmd[0], path=env.get("PATH")
-                ) is None:
+                if cmd_to_exec[0] != cmd[0] and shutil.which(cmd[0], path=env.get("PATH")) is None:
                     raise OSError(f"[Errno 2] No such file or directory: {cmd[0]!r}")
                 proc = await asyncio.create_subprocess_exec(
                     *cmd_to_exec,
@@ -623,6 +659,69 @@ class RunManager:
             if state.compact_result:
                 outcome.details["compact_result"] = state.compact_result
             self._finish(run_id, outcome, state)
+
+    async def _execute_hermes(
+        self,
+        run_id: str,
+        prompt: str,
+        model: str,
+        role: str,
+        cwd: str,
+        provider: ProviderProfile,
+        gateway_session: str,
+    ) -> None:
+        """The dispatch route for ENGINE=hermes: the gateway calls are the pure client in
+        hermes_run.py, and the run row, events, session and result stay in this code path.
+        shortcut: the client returns only the terminal poll payload, so the entries come from
+        it; upgrade when the gateway needs entries for every poll."""
+        session_id = str((self.store.get_run(run_id) or {}).get("session_id", ""))
+        if role == "qa":
+            self._qa_runs.add(run_id)
+        try:
+            gateway_run_id, response_session = await asyncio.to_thread(
+                hermes_run.start_run, provider, prompt, model, gateway_session, cwd
+            )
+            self._hermes_runs[run_id] = gateway_run_id
+            if response_session:
+                self.store.bind_session(session_id, response_session, cwd, role)
+            result = await asyncio.to_thread(hermes_run.poll_run, provider, gateway_run_id)
+            output = str(result.get("output") or "")
+            poll_count = int(result.get("poll_count") or 0)
+            entries = hermes_events.result_entries(result, run_id, poll_count)
+            if entries:
+                self._last_event_at[run_id] = time.monotonic()
+            for entry in entries:
+                self.events.add(run_id, entry)
+            details: dict[str, Any] = {"poll_count": poll_count}
+            if run_id in self._cancelled:
+                outcome = Outcome(
+                    "cancelled", output, "cancelled", "Run was cancelled.", None, details
+                )
+            else:
+                failure = hermes_events.classify_failure(result, None)
+                if failure is None:
+                    outcome = Outcome("completed", output, details=details)
+                else:
+                    failure_class, code = failure
+                    details["failure_class"] = failure_class
+                    message = str(result.get("error") or f"Hermes run finished on route {code}.")
+                    outcome = Outcome("failed", output, code, message, None, details)
+            self._finish(run_id, outcome, None)
+        except hermes_run.HermesError as exc:
+            self._finish(
+                run_id,
+                Outcome(
+                    "failed",
+                    error_code="provider_error",
+                    error_message=f"Hermes gateway call failed: {exc}",
+                    http_code=exc.http_code,
+                ),
+                None,
+            )
+        finally:
+            # unconditional: the cancel route must never look at a finished run's gateway id,
+            # including the HermesError path that returned before this line used to
+            self._hermes_runs.pop(run_id, None)
 
     def _limited(self, cmd: list[str]) -> list[str]:
         """The command under ``prlimit --data``: the claude process and everything a Worker
@@ -787,9 +886,9 @@ class RunManager:
             procs.append(
                 {
                     "pid": proc.pid,
-                    "age_seconds": round(time.monotonic() - self._proc_started_at.get(
-                        proc, 0.0
-                    ), 1),
+                    "age_seconds": round(
+                        time.monotonic() - self._proc_started_at.get(proc, 0.0), 1
+                    ),
                     "session_id": str(run.get("session_id") or ""),
                     "run_id": run_id,
                     "status": str(run.get("status") or ""),
@@ -835,6 +934,15 @@ class RunManager:
         if run["status"] in ("queued", "running"):
             self._cancelled.add(run_id)
             await self._terminate_proc(run_id)
+            gateway_run_id = self._hermes_runs.get(run_id)
+            provider = self._provider(str(run.get("provider") or ""))
+            # The entry in _hermes_runs only exists when the flag was on and the run started
+            # on the hermes dispatch, so this route is the ENGINE=hermes stop path.
+            if gateway_run_id and provider is not None and self.settings.hermes_engine_enabled:
+                try:
+                    await asyncio.to_thread(hermes_run.cancel_run, provider, gateway_run_id)
+                except hermes_run.HermesError as exc:
+                    log.warning("Hermes cancel dispatch failed for run %s: %s", run_id, exc)
             task = self._tasks.get(run_id)
             if task is not None:
                 with contextlib.suppress(Exception):
@@ -870,13 +978,15 @@ class RunManager:
             if self.store.active_run(session_id):
                 return skipped("session_busy")
             session = self.store.get_session(session_id)
-            if not session or not transcript_exists(session["claude_session_id"]):
+            if not session:
                 return skipped("session_not_found")
             # Compact with the backend (and model) the session last ran on.
             last = self.store.get_run(session["last_run_id"]) if session["last_run_id"] else None
             provider_name = str((last or {}).get("provider") or "")
             model = model or str((last or {}).get("model") or "")
             provider = self._provider(provider_name)
+            if not transcript_exists(session["claude_session_id"]):
+                return skipped("session_not_found")
             if self.settings.retry_fresh_session_for(provider):
                 # Fresh-session retry is on: a retry will start a new session, so
                 # compacting the old one would be wasted work.

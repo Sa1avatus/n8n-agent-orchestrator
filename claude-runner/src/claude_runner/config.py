@@ -165,6 +165,10 @@ PROVIDER_PREFIX = "CLAUDE_RUNNER_PROVIDER_"
 # = the CLAUDE_RUNNER_SEARCH_FIRST default. RETRY_FRESH_SESSION: a retry with a previous session
 # starts a fresh session (no pre-retry /compact) seeded with the four-part retry input; the
 # input is cut to RETRY_INPUT_CHARS characters.
+# ENGINE selects the agent CLI for the provider: claude (Claude Code); hermes is accepted only
+# when the flag (hermes_engine_enabled) is ON. The HERMES_* keys configure the engine block only;
+# none of them reach the Claude Code process. They name the environment variables the engine
+# reads (names, never values), and its timeouts in milliseconds.
 PROVIDER_RUNNER_KEYS = {
     "TOOLS",
     "COMPACT_MIN_TOKENS",
@@ -174,7 +178,24 @@ PROVIDER_RUNNER_KEYS = {
     "COMPACT_PCT",
     "SEARCH_FIRST",
     "RETRY_FRESH_SESSION",
+    "ENGINE",
+    "HERMES_BASE_URL_VAR",
+    "HERMES_API_KEY_VAR",
+    "HERMES_START_TIMEOUT_MS",
+    "HERMES_POLL_INTERVAL_MS",
+    "HERMES_RUN_TIMEOUT_MS",
+    "HERMES_MAX_POLLS",
 }
+ENGINES = ("claude",)
+DEFAULT_ENGINE = "claude"
+# Hermes defaults. Names come from .env.example (HERMES_API_URL, API_SERVER_KEY); the poll
+# interval is the docs/hermes-engine.md default (poll 3 s). Start and run timeouts are chosen
+# defaults, not values recorded in the docs.
+DEFAULT_HERMES_BASE_URL_VAR = "HERMES_API_URL"
+DEFAULT_HERMES_API_KEY_VAR = "API_SERVER_KEY"
+DEFAULT_HERMES_START_TIMEOUT_MS = 10_000
+DEFAULT_HERMES_POLL_INTERVAL_MS = 3_000
+DEFAULT_HERMES_RUN_TIMEOUT_MS = 3_600_000
 
 # Character budget for the fresh-session retry input (task, review findings, previous report,
 # previous session's digest, newest last). The digest fills most of it; it is built at roughly
@@ -190,6 +211,27 @@ AUTO_COMPACT_TOOL_RESERVE = 20_000
 DEFAULT_MAX_OUTPUT_TOKENS = 8_192
 QA_MAX_MINUTES = 20
 PROVIDERS_RELOAD_POLL_SECONDS = 30
+# QA complexity gate (qa_complexity.py): thresholds a function not named in the
+# baseline is checked against; C901 complexity is a mccabe score (branches and
+# conditions), length in lines, nesting in block levels.
+DEFAULT_QA_COMPLEXITY_MAX_COMPLEXITY = 10
+DEFAULT_QA_COMPLEXITY_MAX_LENGTH_LINES = 40
+DEFAULT_QA_COMPLEXITY_MAX_NESTING_DEPTH = 3
+# Risk tiers (risk_tiers.tier_of): ordered fnmatch patterns over repo-root-relative
+# paths, first match wins. Core = a wrong change breaks mission execution (ops
+# patches, dashboard auth, roles, engine error rules, run failure handling,
+# Live State readers); supporting = docs, UI texts, tests.
+DEFAULT_RISK_TIER_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("data-tables/ops/*_patch.py", "core"),
+    ("*/dashboard_auth*", "core"),
+    ("*/roles_config.py", "core"),
+    ("*/board_engine*", "core"),
+    ("*/runs.py", "core"),
+    ("*/board_ops_livestate.py", "core"),
+    ("*docs/*", "supporting"),
+    ("*/board_i18n_*.json", "supporting"),
+    ("*/tests/*", "supporting"),
+)
 
 
 @dataclass(frozen=True)
@@ -219,6 +261,19 @@ class ProviderProfile:
     # the four-part retry input (task, review findings, previous report, digest); None = the
     # global CLAUDE_RUNNER_RETRY_FRESH_SESSION
     retry_fresh_session: bool | None = None
+    # Agent CLI that runs this provider's runs: "claude", or "hermes" (with the
+    # hermes_engine_enabled flag ON) — the engine block fields name the env variables and
+    # timeouts the engine reads.
+    engine: str = DEFAULT_ENGINE
+    # Hermes engine: env variable NAMES (never values), and timeouts in milliseconds.
+    hermes_base_url_var: str = DEFAULT_HERMES_BASE_URL_VAR
+    hermes_api_key_var: str = DEFAULT_HERMES_API_KEY_VAR
+    hermes_start_timeout_ms: int = DEFAULT_HERMES_START_TIMEOUT_MS
+    hermes_poll_interval_ms: int = DEFAULT_HERMES_POLL_INTERVAL_MS
+    hermes_run_timeout_ms: int = DEFAULT_HERMES_RUN_TIMEOUT_MS
+    # Polls allowed before the run times out; derived from the run timeout and the poll
+    # interval when the block does not name HERMES_MAX_POLLS.
+    hermes_max_polls: int = DEFAULT_HERMES_RUN_TIMEOUT_MS // DEFAULT_HERMES_POLL_INTERVAL_MS
 
     @property
     def isolates_credentials(self) -> bool:
@@ -276,6 +331,49 @@ def _opt_bool(name: str, raw: str, key: str) -> bool | None:
     raise ValueError(f"provider {name}: {key} must be true or false, got {raw!r}")
 
 
+def _engine(name: str, raw: str, hermes_engine_enabled: bool) -> str:
+    engine = raw.strip() or DEFAULT_ENGINE
+    accepted = (*ENGINES, "hermes") if hermes_engine_enabled else ENGINES
+    if engine not in accepted:
+        raise ValueError(
+            f"provider {name}: ENGINE must be one of {', '.join(accepted)}, got {raw!r}"
+        )
+    return engine
+
+
+def _env_var_name(name: str, key: str, raw: str) -> str:
+    """A block key whose value is the NAME of an environment variable, never its value."""
+    var = raw.strip()
+    if var and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", var):
+        raise ValueError(
+            f"provider {name}: {key} must be an environment variable name, got {raw!r}"
+        )
+    return var
+
+
+def _positive_ms(name: str, key: str, raw: str, default: int) -> int:
+    text = raw.strip()
+    if not text:
+        return default
+    if not re.fullmatch(r"[0-9]+", text) or int(text) == 0:
+        raise ValueError(
+            f"provider {name}: {key} must be a positive integer of milliseconds, got {raw!r}"
+        )
+    return int(text)
+
+
+def _hermes_max_polls(name: str, raw: str, run_timeout_ms: int, poll_interval_ms: int) -> int:
+    text = raw.strip()
+    if text:
+        if not re.fullmatch(r"[0-9]+", text) or int(text) == 0:
+            raise ValueError(
+                f"provider {name}: HERMES_MAX_POLLS must be a positive integer, got {raw!r}"
+            )
+        return int(text)
+    # Derived when the block does not name it: the polls that fit in the run timeout.
+    return max(1, run_timeout_ms // poll_interval_ms)
+
+
 def _max_output_tokens(block: dict[str, str]) -> int | None:
     raw = block.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS", "").strip()
     return int(raw) if raw else None
@@ -305,7 +403,9 @@ def _validate_compaction_limits(name: str, block: dict[str, str]) -> None:
         )
 
 
-def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
+def _providers(
+    env: dict[str, str], hermes_engine_enabled: bool = False
+) -> dict[str, ProviderProfile]:
     """``CLAUDE_RUNNER_PROVIDER_<NAME>__<VAR>=value`` (double underscore) → providers."""
     blocks: dict[str, dict[str, str]] = {}
     for key, value in env.items():
@@ -318,6 +418,18 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
     for name, block in blocks.items():
         compact = block.get("COMPACT_MIN_TOKENS", "").strip()
         _validate_compaction_limits(name, block)
+        start_timeout_ms = _positive_ms(
+            name, "HERMES_START_TIMEOUT_MS", block.get("HERMES_START_TIMEOUT_MS", ""),
+            DEFAULT_HERMES_START_TIMEOUT_MS,
+        )
+        poll_interval_ms = _positive_ms(
+            name, "HERMES_POLL_INTERVAL_MS", block.get("HERMES_POLL_INTERVAL_MS", ""),
+            DEFAULT_HERMES_POLL_INTERVAL_MS,
+        )
+        run_timeout_ms = _positive_ms(
+            name, "HERMES_RUN_TIMEOUT_MS", block.get("HERMES_RUN_TIMEOUT_MS", ""),
+            DEFAULT_HERMES_RUN_TIMEOUT_MS,
+        )
         providers[name] = ProviderProfile(
             name=name,
             env={k: v for k, v in block.items() if k not in PROVIDER_RUNNER_KEYS},
@@ -332,6 +444,23 @@ def _providers(env: dict[str, str]) -> dict[str, ProviderProfile]:
             search_first=_opt_bool(name, block.get("SEARCH_FIRST", ""), "SEARCH_FIRST"),
             retry_fresh_session=_opt_bool(
                 name, block.get("RETRY_FRESH_SESSION", ""), "RETRY_FRESH_SESSION"
+            ),
+            engine=_engine(name, block.get("ENGINE", ""), hermes_engine_enabled),
+            hermes_base_url_var=_env_var_name(
+                name,
+                "HERMES_BASE_URL_VAR",
+                block.get("HERMES_BASE_URL_VAR", DEFAULT_HERMES_BASE_URL_VAR),
+            ),
+            hermes_api_key_var=_env_var_name(
+                name,
+                "HERMES_API_KEY_VAR",
+                block.get("HERMES_API_KEY_VAR", DEFAULT_HERMES_API_KEY_VAR),
+            ),
+            hermes_start_timeout_ms=start_timeout_ms,
+            hermes_poll_interval_ms=poll_interval_ms,
+            hermes_run_timeout_ms=run_timeout_ms,
+            hermes_max_polls=_hermes_max_polls(
+                name, block.get("HERMES_MAX_POLLS", ""), run_timeout_ms, poll_interval_ms
             ),
         )
     return providers
@@ -439,6 +568,10 @@ class Settings:
     think_stuck_noedit_steps: int = 12
     think_stuck_errors: int = 3
     think_flag_file: str = ""
+    # a run whose provider endpoint reports an engine that ignores the client's thinking settings
+    # (think_proxy.ENGINE_SERVICES) goes through the runner's think proxy; off by default
+    think_proxy: bool = False
+    think_proxy_url: str = "http://127.0.0.1:8700"
     # memory guard (mem_guard.py): kill a process that holds more than this many MB of
     # anonymous memory (0 = off) or the biggest one when the container passes this share
     # of its limit
@@ -491,6 +624,9 @@ class Settings:
     # Cloud (Anthropic) runs: apply the local thinking policy per attempt (cloud_think.py);
     # off by default, then the CLI's default thinking behaviour is used for the chosen model.
     cloud_think: bool = False
+    # Hermes engine (docs/hermes-engine.md): off by default; with the flag off the accepted
+    # ENGINE values and their error messages stay as today until the engine module lands.
+    hermes_engine_enabled: bool = False
     # Providers in the board database (board.providers / board.provider_models): off by
     # default, the env blocks are the only source; on, the database overrides env blocks.
     providers_db: bool = False
@@ -499,6 +635,19 @@ class Settings:
     secrets_file: Path | None = None
     # Writes the LiteLLM route entries from the provider database (docs/providers.md, section 13).
     litellm_sync: bool = False
+    # QA complexity gate (qa_complexity.py): off by default; on, the gate compares function
+    # length, nesting and ruff's C901 complexity with the saved baseline (equal is not worse).
+    qa_complexity_enabled: bool = False
+    # Thresholds for a function the baseline does not name; units are in the names.
+    qa_complexity_max_complexity: int = DEFAULT_QA_COMPLEXITY_MAX_COMPLEXITY
+    qa_complexity_max_length_lines: int = DEFAULT_QA_COMPLEXITY_MAX_LENGTH_LINES
+    qa_complexity_max_nesting_depth: int = DEFAULT_QA_COMPLEXITY_MAX_NESTING_DEPTH
+    # The saved baseline JSON (file -> function -> metrics); unset = no baseline file.
+    qa_complexity_baseline_path: Path | None = None
+    # Risk tiers (risk_tiers.tier_of): off by default; on, tier_of classifies a
+    # changed path with risk_tier_patterns (first match wins, unmatched = "core").
+    risk_tiers_enabled: bool = False
+    risk_tier_patterns: tuple[tuple[str, str], ...] = DEFAULT_RISK_TIER_PATTERNS
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -535,6 +684,7 @@ class Settings:
             compact_instructions = env["CLAUDE_RUNNER_COMPACT_INSTRUCTIONS"].strip()
         else:
             compact_instructions = DEFAULT_COMPACT_INSTRUCTIONS
+        hermes_engine_enabled = _bool(env, "CLAUDE_RUNNER_HERMES_ENGINE_ENABLED", False)
         return cls(
             data_dir=Path(env.get("CLAUDE_RUNNER_DATA_DIR", "/data")),
             claude_bin=env.get("CLAUDE_RUNNER_CLAUDE_BIN", "claude").strip() or "claude",
@@ -564,6 +714,8 @@ class Settings:
             think_stuck_noedit_steps=_int(env, "CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", 12),
             think_stuck_errors=_int(env, "CLAUDE_RUNNER_THINK_STUCK_ERRORS", 3),
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
+            think_proxy=_bool(env, "CLAUDE_RUNNER_THINK_PROXY", False),
+            think_proxy_url=env.get("CLAUDE_RUNNER_THINK_PROXY_URL", "http://127.0.0.1:8700").strip(),
             mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
             proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
             worker_git_snapshot=_bool(env, "CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT", False),
@@ -579,7 +731,7 @@ class Settings:
             },
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
-            providers=_providers(env),
+            providers=_providers(env, hermes_engine_enabled),
             live_tokens=_bool(env, "CLAUDE_RUNNER_LIVE_TOKENS", True),
             event_retention_days=_int(env, "CLAUDE_RUNNER_EVENT_RETENTION_DAYS", 14),
             search_first=_bool(env, "CLAUDE_RUNNER_SEARCH_FIRST", False),
@@ -595,11 +747,36 @@ class Settings:
             local_tool_output_limits=_bool(env, "CLAUDE_RUNNER_LOCAL_TOOL_OUTPUT_LIMITS", False),
             local_shared_prefix=_bool(env, "CLAUDE_RUNNER_LOCAL_SHARED_PREFIX", True),
             cloud_think=_bool(env, "CLAUDE_RUNNER_CLOUD_THINK", False),
+            hermes_engine_enabled=hermes_engine_enabled,
             providers_db=_bool(env, "CLAUDE_RUNNER_PROVIDERS_DB", False),
             secrets_file=Path(env["CLAUDE_RUNNER_SECRETS_FILE"])
             if env.get("CLAUDE_RUNNER_SECRETS_FILE", "").strip()
             else None,
             litellm_sync=_bool(env, "CLAUDE_RUNNER_LITELLM_SYNC", False),
+            qa_complexity_enabled=_bool(env, "CLAUDE_RUNNER_QA_COMPLEXITY_ENABLED", False),
+            qa_complexity_max_complexity=_int(
+                env,
+                "CLAUDE_RUNNER_QA_COMPLEXITY_MAX_COMPLEXITY",
+                DEFAULT_QA_COMPLEXITY_MAX_COMPLEXITY,
+                minimum=1,
+            ),
+            qa_complexity_max_length_lines=_int(
+                env,
+                "CLAUDE_RUNNER_QA_COMPLEXITY_MAX_LENGTH_LINES",
+                DEFAULT_QA_COMPLEXITY_MAX_LENGTH_LINES,
+                minimum=1,
+            ),
+            qa_complexity_max_nesting_depth=_int(
+                env,
+                "CLAUDE_RUNNER_QA_COMPLEXITY_MAX_NESTING_DEPTH",
+                DEFAULT_QA_COMPLEXITY_MAX_NESTING_DEPTH,
+            ),
+            qa_complexity_baseline_path=(
+                Path(env["CLAUDE_RUNNER_QA_COMPLEXITY_BASELINE_PATH"])
+                if env.get("CLAUDE_RUNNER_QA_COMPLEXITY_BASELINE_PATH", "").strip()
+                else None
+            ),
+            risk_tiers_enabled=_bool(env, "CLAUDE_RUNNER_RISK_TIERS_ENABLED", False),
         )
 
     def profile(self, role: str) -> RoleProfile:

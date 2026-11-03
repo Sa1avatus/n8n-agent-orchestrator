@@ -16,6 +16,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from claude_runner import qa_complexity
+from claude_runner.config import Settings
+
 LAYER = "regression"
 
 PYTEST_FAILURE = re.compile(r"^(?:FAILED|ERROR) (.+?)(?: - |$)")
@@ -101,6 +104,48 @@ def new_failures(
     return {tool: keys for tool, keys in fresh.items() if keys}
 
 
+def _complexity_baseline(path: Path | None) -> dict[str, Any]:
+    """The gate baseline JSON (file -> function -> metrics); empty when no file is set."""
+    if path is None:
+        return {}
+    data: object = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"complexity baseline {path} must be a JSON object")
+    return data
+
+
+def _complexity_gate(changed_files: Sequence[str], settings: Settings) -> dict[str, Any]:
+    """The gate verdict on the changed Python files: {"verdict", "violations"}.
+
+    A violation is {file, function, metric, value, baseline}: length and nesting from
+    ast measurement, complexity from installed ruff's C901; each limit is the saved
+    baseline entry or the threshold from settings. The reason key is present only
+    when ruff could not run.
+    """
+    # shortcut: only .py files are measured; extend when the gate needs other formats.
+    files = [file for file in changed_files if file.endswith(".py")]
+    baseline = _complexity_baseline(settings.qa_complexity_baseline_path)
+    thresholds = {
+        "length_lines": settings.qa_complexity_max_length_lines,
+        "nesting_depth": settings.qa_complexity_max_nesting_depth,
+    }
+    measured: dict[str, dict[str, dict[str, int]]] = {}
+    for file in files:
+        lengths = qa_complexity.function_length_lines(file)
+        depths = qa_complexity.function_nesting_depth(file)
+        measured[file] = {
+            name: {"length_lines": lengths[name], "nesting_depth": depths[name]}
+            for name in lengths
+        }
+    violations = qa_complexity.find_violations(measured, baseline, thresholds, files)
+    c901 = qa_complexity.check_c901(files, settings.qa_complexity_max_complexity, baseline)
+    violations.extend(c901["violations"])
+    gate: dict[str, Any] = {"verdict": "fail" if violations else "pass", "violations": violations}
+    if c901["verdict"] == "NOT RUN":
+        gate["reason"] = c901["reason"]
+    return gate
+
+
 def regression_verdict(
     *,
     has_profile: bool,
@@ -108,6 +153,8 @@ def regression_verdict(
     baseline: Mapping[str, Sequence[str]],
     blocked_reason: str | None = None,
     timed_out: bool = False,
+    changed_files: Sequence[str] | None = None,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     reason: str | None = None
     fresh = new_failures(found, baseline)
@@ -125,6 +172,16 @@ def regression_verdict(
     verdict: dict[str, Any] = {"layer": LAYER, "scenario": LAYER, "verdict": outcome}
     if reason is not None:
         verdict["reason"] = reason
+    if settings is not None and settings.qa_complexity_enabled and outcome in ("pass", "fail"):
+        gate = _complexity_gate(changed_files or (), settings)
+        verdict["complexity"] = gate
+        if outcome == "pass" and gate["verdict"] == "fail":
+            first = gate["violations"][0]
+            verdict["verdict"] = "fail"
+            verdict["reason"] = (
+                f"complexity {first['file']}::{first['function']} "
+                f"{first['metric']} {first['value']} exceeds baseline {first['baseline']}"
+            )
     return verdict
 
 

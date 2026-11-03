@@ -1,4 +1,4 @@
-# The Providers page (board_providers_view.js / board_providers_form.js, opened from #bvprov).
+# The Providers page (board_providers_view.js / board_providers_form.js, opened by the deep link #board/providers, the same page as the Providers tab of the shell).
 # A made-up provider is created through the form (POST /api/board/providers), then the made-up
 # key marker is typed into the edit form's "New key" field and saved (PUT .../key). The list
 # then shows the key state "key set, since ..." and the raw key is never rendered.
@@ -8,19 +8,14 @@ tags: [ui, settings]
 preconditions:
   fixture: default
 steps:
-  - open: /static/board.html#board/view/kan
+  - open: /static/board.html#board/providers
     expect:
-      text_visible: ["Providers"]
-      request_2xx: [/api/board]
-      no_console_error: true
-  - click: "Providers"
-    expect:
-      text_visible: ["Add provider", "No providers yet."]
+      text_visible: ["New provider", "Import from the environment"]
       request_2xx: [/api/board/providers]
       no_console_error: true
-  - click: "Add provider"
+  - click: "New provider"
     expect:
-      text_visible: ["New provider", "Base URL"]
+      text_visible: ["Base URL", "API type"]
       no_console_error: true
   - type:
       into: Name
@@ -55,8 +50,8 @@ steps:
       no_mutation_without_header: true
       text_absent: [sk-qa-marker-5c1e9a7d2b40]
   # A fresh page load reads the list from the database: the row is there and shows no key.
-  - open: /static/board.html#board/view/kan
-  - click: "Providers"
+  # a query makes the second open a real reload: the same URL with the same hash would not load the page again
+  - open: /static/board.html?reload=1#board/providers
     expect:
       text_visible: ["qa-made-up"]
       request_2xx: [/api/board/providers]

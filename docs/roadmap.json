@@ -5,12 +5,12 @@
   "note": "The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.",
   "hero": {
     "title": "Mission Board Is Live",
-    "date": "0.12.10 · November 2, 2026",
-    "tag": "The configuration lives in JSON now (roles, thinking, retrieval, engine, mission overrides, features) and the adaptive split of long tasks is wired into the launch; the rename to ahawr-runner and the code review come next",
+    "date": "0.13.0 · November 3, 2026",
+    "tag": "The Hermes engine, the think proxy and the QA gates are in the runner, each behind a flag; the cleanup of the code (with the Codex executor) and the rename to ahawr-runner come next",
     "stats": [
       [
         "Current version",
-        "0.12.10"
+        "0.13.0"
       ],
       [
         "Missions completed",
@@ -22,7 +22,7 @@
       ],
       [
         "Next milestone",
-        "0.12.x rename · 1.0.0"
+        "Code cleanup · 1.0.0"
       ]
     ],
     "text": "The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next."
@@ -477,6 +477,35 @@
       ]
     },
     {
+      "s": "done",
+      "when": "November 3",
+      "t": "0.13.0: Hermes engine, think proxy and QA gates",
+      "v": "0.13.0",
+      "d": "Hermes as a third engine of the runner, a think proxy for local engines that ignore Claude Code's thinking settings, complexity and risk-tier gates in QA, the read-only code audit",
+      "m": [
+        4,
+        4
+      ],
+      "items": [
+        [
+          "ok",
+          "Hermes engine in the runner (ENGINE=hermes, flag off by default): client, event mapper, run path, tests, docs/hermes-engine.md"
+        ],
+        [
+          "ok",
+          "Think proxy: the thinking policy reaches a local engine that ignores the client's settings (found by its /health, flag off by default)"
+        ],
+        [
+          "ok",
+          "QA gates behind flags: function complexity against a baseline, risk tiers in the report pack"
+        ],
+        [
+          "ok",
+          "Read-only code audit and baseline (reports/audit-python.json, audit-frontend.json, review-baseline.json); the refactoring itself is not done"
+        ]
+      ]
+    },
+    {
       "s": "next",
       "when": "Q4 2026 – Q1 2027",
       "t": "After 0.12.0: Quality and reach",
@@ -510,7 +539,7 @@
       "items": [
         [
           "todo",
-          "Code review and refactoring mission (before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)"
+          "Code review and refactoring mission, the cleanup part, together with the Codex code (the audit and the baseline are done in 0.13.0; the refactoring steps wait for the approval of the ranked findings; before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)"
         ],
         [
           "todo",
@@ -579,11 +608,11 @@
     "status": [
       [
         "✅ **Done**",
-        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) · host actions, the queue from the board, providers, report tasks, lessons library, QA agent and RAG quality tools (0.11.0 – 0.11.800)"
+        "Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) · host actions, the queue from the board, providers, report tasks, lessons library, QA agent and RAG quality tools (0.11.0 – 0.11.800) · Hermes engine, think proxy and QA gates behind flags (0.13.0)"
       ],
       [
         "🔄 **Now**",
-        "The mission queue and stability checks of the local model → next release **0.12.0**"
+        "The mission queue and stability checks of the local model → next release **0.14.0**"
       ],
       [
         "➡️ **Next**",

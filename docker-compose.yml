@@ -172,6 +172,8 @@ services:
       # policy off_first: the first attempt at a task (TASK T<n>, n >= FROM_TASK) runs without thinking, a retry after a review with it
       - CLAUDE_RUNNER_THINK_POLICY=${AHAWR_THINK_POLICY:-}
       - CLAUDE_RUNNER_THINK_POLICY_FROM_TASK=${AHAWR_THINK_POLICY_FROM_TASK:-1}
+      # the runner's think proxy (think_proxy.py): a provider whose endpoint reports an engine that ignores Claude Code's thinking setting (Strata) gets the thinking flag in its requests
+      - CLAUDE_RUNNER_THINK_PROXY=${AHAWR_THINK_PROXY:-}
       # what a local run would have cost on a cloud model (USD per MTok: input, output, cache read, cache write): steps made without thinking
       # at the Haiku rates, with thinking at the Sonnet rates (claude_runner/local_pricing.py). Empty modes = the flat Claude Code price.
       - CLAUDE_RUNNER_LOCAL_PRICE_SONNET=${AHAWR_LOCAL_PRICE_SONNET:-2,10,0.2,4}

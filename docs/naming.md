@@ -88,6 +88,9 @@ The review mission starts from this list; it is a first sample, not complete.
 - Same idea, several words: `state_key` / `state_namespace` / `namespace`; `profile` / `profile_id` / `config row`;
   `score` / `review_score` / `last_review_score`.
 - Hard-coded values inside functions that should be named parameters (`_HERMES_PROFILE`, port 8701, local model name).
+  The kinds the audit names for them: model name, profile name, port, host, timeout, limit.
+- `while True` with no break, counter or deadline the reader can see.
+- Import cycles between runner modules (`board_api` importing `board_pg` which imports `board_api`).
 - Underscore-prefixed one-off scripts in `data-tables/ops`.
 
 Renames that cross a boundary (a DB column, an API field, an environment variable, a public route, a table of

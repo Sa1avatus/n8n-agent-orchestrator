@@ -1,0 +1,194 @@
+{
+  "date": "2026-11-03",
+  "commands": [
+    {
+      "command": "wc -l claude-runner/src/claude_runner/*.py (line counts per area)",
+      "date": "2026-11-03"
+    },
+    {
+      "command": "cd claude-runner && python -m pytest --collect-only --no-cov",
+      "date": "2026-11-03"
+    },
+    {
+      "command": "ls claude-runner/tests/*.test.js | wc -l",
+      "date": "2026-11-03"
+    },
+    {
+      "command": "cd claude-runner && python -m ruff check src --statistics",
+      "date": "2026-11-03"
+    },
+    {
+      "command": "cd claude-runner && python -m mypy src",
+      "date": "2026-11-03"
+    }
+  ],
+  "areas": {
+    "runner_python": {
+      "files": 98,
+      "lines": 33385
+    },
+    "board_js_css": {
+      "files": 44,
+      "lines": 13793
+    },
+    "tests": {
+      "pytest_py_files": 161,
+      "pytest_py_lines": 41591,
+      "node_test_files": 41,
+      "node_test_lines": 8831
+    },
+    "ops": {
+      "python_files": 308,
+      "python_lines": 25203,
+      "shell_files": 215
+    },
+    "docs": {
+      "files": 62,
+      "lines": 20834
+    }
+  },
+  "tests": {
+    "pytest_collected": 2991,
+    "pytest_collect_error": "tests/test_qa_container_static.py: ModuleNotFoundError: No module named 'yaml'",
+    "node_test_files": 41
+  },
+  "ruff_by_file": {
+    "src/claude_runner/board.py": 4,
+    "src/claude_runner/board_api.py": 28,
+    "src/claude_runner/board_ops_actions.py": 3,
+    "src/claude_runner/board_ops_api.py": 2,
+    "src/claude_runner/board_ops_guard.py": 1,
+    "src/claude_runner/board_ops_livestate.py": 3,
+    "src/claude_runner/board_ops_parsers.py": 2,
+    "src/claude_runner/board_ops_store.py": 3,
+    "src/claude_runner/board_pg.py": 26,
+    "src/claude_runner/board_plan.py": 3,
+    "src/claude_runner/board_ready.py": 2,
+    "src/claude_runner/board_think.py": 9,
+    "src/claude_runner/remote_manager.py": 12
+  },
+  "ruff_total": 98,
+  "mypy_by_file": {
+    "src/claude_runner/api.py": 2,
+    "src/claude_runner/board.py": 5,
+    "src/claude_runner/board_api.py": 12,
+    "src/claude_runner/board_ops_api.py": 35,
+    "src/claude_runner/board_ops_guard.py": 1,
+    "src/claude_runner/board_ops_livestate.py": 2,
+    "src/claude_runner/board_ops_parsers.py": 3,
+    "src/claude_runner/board_ops_redact.py": 1,
+    "src/claude_runner/board_ops_settings.py": 1,
+    "src/claude_runner/board_ops_store_pg.py": 7,
+    "src/claude_runner/board_order.py": 20,
+    "src/claude_runner/board_pg.py": 30,
+    "src/claude_runner/board_providers_api.py": 1,
+    "src/claude_runner/board_ready.py": 4,
+    "src/claude_runner/board_stats.py": 2,
+    "src/claude_runner/board_think.py": 1,
+    "src/claude_runner/runs.py": 1
+  },
+  "mypy_total": 128,
+  "import_time": {
+    "method": "python -X importtime, three runs, cumulative microseconds of the last line; wall clock also timed with time.perf_counter",
+    "commands": [
+      "cd claude-runner && python -X importtime -c \"import claude_runner\" 2>&1 | tail -5",
+      "cd claude-runner && python -X importtime -c \"import claude_runner.api\" 2>&1 | tail -1",
+      "cd claude-runner && python -X importtime -c \"import claude_runner.board_api\" 2>&1 | tail -1",
+      "cd claude-runner && python -c \"import time; t0=time.perf_counter(); import claude_runner.api; print(round((time.perf_counter()-t0)*1000,1))\""
+    ],
+    "package_import_us": {
+      "claude_runner": [1925, 1877, 1874, 2373],
+      "note_variance": "the package stub is 1.9-2.4 ms, the four runs differ by machine load",
+      "note": "the package __init__ is a stub: importing the top-level package costs about 2 ms, everything heavy is in the submodules"
+    },
+    "runner_import_us_cumulative": {
+      "claude_runner.api": [485223, 504151, 558729],
+      "claude_runner.board_api": [615315],
+      "wall_clock_import_claude_runner_api_ms": 470.7
+    },
+    "heavy_contributors_us_cumulative": {
+      "fastapi": 185966,
+      "claude_runner.board_api": 129919,
+      "asyncio": 93274
+    },
+    "shortcut": "import time of the installed copy in the runner venv, not the container's cold start; upgrade by measuring inside the container when a restart is allowed"
+  },
+  "route_latency_ms": {
+    "method": "in-process fastapi.testclient.TestClient against create_app(Settings.from_env(...)) with an InMemoryBoardStore seeded with 6 missions (1 running, 2 queued, 1 completed, 1 stopped, 1 disabled), 20 requests per route, first request warm-up excluded; dashboard routes measured with create_dashboard_app and httpx.MockTransport. No service was restarted, no provider was contacted (providers_db unset, so provider_registry.start_polling returns None).",
+    "script": "/tmp/baseline/measure.py (scratch, not committed; run with: cd claude-runner && DASHBOARD_BOARD_PG_DSN= python /tmp/baseline/measure.py)",
+    "runner_routes_median_ms": {
+      "/health": 2.26,
+      "/v1/runs": 2.48,
+      "/v1/processes": 2.46,
+      "/api/board/status": 2.59,
+      "/api/board/missions": 3.08,
+      "/api/board/queue": 3.48,
+      "/api/board/missions/m1": 3.26,
+      "/api/board/missions/m1/stats": 3.44,
+      "/api/board/summary": 3.34,
+      "/api/board/templates": 3.36,
+      "/api/board/roles": 2.76,
+      "/api/board/features": 2.73,
+      "/api/board/thinking": 2.73,
+      "/api/board/i18n": 12.32,
+      "/api/board/changelog": 2.82
+    },
+    "dashboard_routes_median_ms": {
+      "/": 3.34,
+      "/healthz": 3.32,
+      "/manifest.json": 5.63,
+      "/icon.svg": 5.73,
+      "/static/board.html": 5.60,
+      "/static/board.js": 5.68,
+      "/static/board.css": 5.91,
+      "/api/ui-mode": 3.49,
+      "/api/board/missions (proxied by the dashboard)": 3.62,
+      "/api/board/queue (proxied)": 3.60,
+      "/api/runs": 6.51,
+      "/api/guards": 3.32
+    },
+    "board_refresh_sequence_total_ms": 35.3,
+    "shortcut": "latency measured against an in-memory board store, not the live Postgres board; upgrade by pointing the same script at a staged DSN when an operator supplies one"
+  },
+  "requests_per_board_refresh": {
+    "method": "the refresh sequence of src/claude_runner/board_queue.js (BoardQueue: missions + queue, then loadCard per mission = detail + stats, CARD_PARALLEL limits the card fetches), replayed with the store's mission_groups() and counted with a node harness that mirrors the JS calls",
+    "commands": [
+      "node /tmp/baseline/refresh_count.js",
+      "cd claude-runner && DASHBOARD_BOARD_PG_DSN= python /tmp/baseline/measure.py (the same sequence replayed through TestClient and counted)"
+    ],
+    "api_requests_per_queue_refresh": 12,
+    "breakdown": {
+      "list_calls": 2,
+      "card_calls": "2 per mission in the queue (detail + stats): 5 missions in groups x 2 = 10",
+      "renders": 2
+    },
+    "api_requests_per_page_open": 51,
+    "page_open_breakdown": {
+      "static_assets_from_board_html": 38,
+      "i18n_get": 1,
+      "note": "board.html has 37 script tags plus board.css; board.js then adds the 2 list calls and the card calls on top of that"
+    },
+    "not_counted": "the offline retry loop (board.js OFFLINE_RETRIES=20 x OFFLINE_DELAY_MS=15000) and the 503 loading retries are re-fetches, not a refresh; they are not counted"
+  },
+  "not_run": [
+    {
+      "item": "end-to-end latency of the live dashboard and board routes over HTTP",
+      "reason": "would need the container reachable or recreated; the task forbids restarts and there is no docker in this worker",
+      "instead": "measured in-process with TestClient"
+    },
+    {
+      "item": "requests per board refresh in a real browser",
+      "reason": "playwright is not installed (python -c \"import playwright\" -> ModuleNotFoundError), so the network log of a loaded page cannot be captured",
+      "instead": "the request sequence is derived from board_queue.js and replayed in python and node"
+    },
+    {
+      "item": "latency against the live Postgres board store",
+      "reason": "DASHBOARD_BOARD_PG_DSN points at the production database, which this task must not touch; no DSN was staged by the operator",
+      "instead": "InMemoryBoardStore with the same call sequence"
+    },
+    {
+      "item": "provider-related timings (provider registry reload, run launch)",
+      "reason": "the task rule says never to measure against providers"
+    }
+  ]
+}

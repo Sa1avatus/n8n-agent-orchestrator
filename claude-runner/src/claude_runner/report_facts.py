@@ -12,7 +12,9 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, TypedDict
 
+from claude_runner.config import Settings
 from claude_runner.provider_secrets import REDACTED_TEXT
+from claude_runner.risk_tiers import CORE, SUPPORTING, group_by_tier
 
 NO_EVIDENCE = "no evidence"
 ACCEPTED = "accepted"
@@ -320,11 +322,33 @@ def _files_section(repo_facts: RepoFacts, names_only: bool) -> list[str]:
     ]
 
 
+def _changed_file_names(repo_facts: RepoFacts) -> list[str]:
+    """The changed file names in the repo facts: diff stats, then untracked files."""
+    names: list[str] = []
+    for stat in (repo_facts["diff_stat_uncommitted"], repo_facts["diff_stat_committed"]):
+        names.extend(_stat_lines(stat, names_only=True))
+    untracked = repo_facts["untracked_files"]
+    if isinstance(untracked, list):
+        names.extend(untracked)
+    return [name for name in names if not name.startswith(NO_EVIDENCE)]
+
+
+def _tier_lines(repo_facts: RepoFacts, settings: Settings) -> list[str]:
+    """Section 4 lines listing the changed files grouped by risk tier (flag on)."""
+    grouped = group_by_tier(_changed_file_names(repo_facts), settings.risk_tier_patterns)
+    return [
+        "changed files by risk tier:",
+        f"{CORE}: {', '.join(grouped[CORE]) or 'none'}",
+        f"{SUPPORTING}: {', '.join(grouped[SUPPORTING]) or 'none'}",
+    ]
+
+
 def _render_pack(
     digest: ReportDigest,
     repo_facts: RepoFacts,
     remarks: list[tuple[str, str]],
     names_only: bool,
+    tier_lines: list[str],
 ) -> str:
     remark_lines = [f"{task_id}: {text}" for task_id, text in remarks] or ["none"]
     unmet_lines = known_unmet(digest) or ["none"]
@@ -339,6 +363,7 @@ def _render_pack(
         render_task_table(digest),
         "4. Files changed",
         *_files_section(repo_facts, names_only),
+        *tier_lines,
         "5. Quoted check lines",
         *extract_check_lines(digest.validation_output),
         "6. Unresolved Reviewer remarks",
@@ -354,16 +379,27 @@ def _finish(body: str, removed_chars: int | None) -> str:
     return redact("\n".join([body, *tail, PACK_END]))
 
 
-def build_pack(digest: ReportDigest, repo_facts: RepoFacts) -> str:
+def build_pack(
+    digest: ReportDigest,
+    repo_facts: RepoFacts,
+    settings: Settings | None = None,
+) -> str:
     remarks = unresolved_remarks(digest)
-    full_body = _render_pack(digest, repo_facts, remarks, names_only=False)
+    # The tier grouping is only rendered when the risk tiers flag is on; with the
+    # flag off (or no settings) the pack stays byte-for-byte as before.
+    tier_lines = (
+        _tier_lines(repo_facts, settings)
+        if settings is not None and settings.risk_tiers_enabled
+        else []
+    )
+    full_body = _render_pack(digest, repo_facts, remarks, names_only=False, tier_lines=tier_lines)
     pack = _finish(full_body, None)
     if len(pack) <= MAX_PACK_CHARS:
         return pack
     stages = [(remarks[dropped:], False) for dropped in range(1, len(remarks) + 1)]
     stages.append(([], True))
     for kept_remarks, names_only in stages:
-        body = _render_pack(digest, repo_facts, kept_remarks, names_only)
+        body = _render_pack(digest, repo_facts, kept_remarks, names_only, tier_lines)
         pack = _finish(body, len(full_body) - len(body))
         if len(pack) <= MAX_PACK_CHARS:
             return pack

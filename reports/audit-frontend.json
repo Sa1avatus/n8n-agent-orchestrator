@@ -1,0 +1,1206 @@
+{
+  "generated_at": "2026-11-03T13:49:38.603912+00:00",
+  "roots": [
+    "claude-runner/src/claude_runner"
+  ],
+  "corpus_files": 2243,
+  "only": [
+    "css",
+    "exports",
+    "helpers",
+    "timers"
+  ],
+  "checked": {
+    "frontend_files": 42,
+    "css_files": 3,
+    "css_classes": 294,
+    "export_keys": 247,
+    "timer_starts": 11
+  },
+  "summary": {
+    "total": 53,
+    "by_kind": {
+      "duplicate_helper": 12,
+      "timer_without_clear": 3,
+      "unused_export": 38
+    },
+    "do_not_touch": 0
+  },
+  "findings": [
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 28,
+      "kind": "duplicate_helper",
+      "symbol": "esc",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_actions.js",
+          "line": 28,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_dnd.js",
+          "line": 37,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_lessons_ui.js",
+          "line": 34,
+          "def_kind": "alias",
+          "body": "const esc = BoardLogic.esc;"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_logic.js",
+          "line": 23,
+          "def_kind": "definition",
+          "body": "function esc(value) { if (value === null || value === undefined) return \"\"; return String(value) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission.js",
+          "line": 35,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission_save.js",
+          "line": 30,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_plan_edit.js",
+          "line": 39,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_qa.js",
+          "line": 27,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_queue.js",
+          "line": 32,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_task.js",
+          "line": 35,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_tasks.js",
+          "line": 36,
+          "def_kind": "definition",
+          "body": "function esc(v) { if (typeof BoardLogic !== \"undefined\" && typeof BoardLogic.esc === \"function\") { return BoardLogic.esc(v); } return String(v == null ? \"\" : v) .replace(/&/g, \"&amp;\") .replace(/</g, \"&lt;\") .replace(/>/g, \"&gt;\") .replace(/\"/g, \"&quot;\") .replace(/'/g, \"&#39;\"); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.html",
+          "line": 496,
+          "def_kind": "definition",
+          "body": "const esc = (s) => String(s ?? \"\").replace(/[&<>\"']/g, (c) => ({ \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", '\"': \"&quot;\", \"'\": \"&#39;\" }[c]));"
+        }
+      ],
+      "location_count": 12,
+      "files": [
+        "claude-runner/src/claude_runner/board_actions.js",
+        "claude-runner/src/claude_runner/board_dnd.js",
+        "claude-runner/src/claude_runner/board_logic.js",
+        "claude-runner/src/claude_runner/board_mission.js",
+        "claude-runner/src/claude_runner/board_mission_save.js",
+        "claude-runner/src/claude_runner/board_plan_edit.js",
+        "claude-runner/src/claude_runner/board_qa.js",
+        "claude-runner/src/claude_runner/board_queue.js",
+        "claude-runner/src/claude_runner/board_task.js",
+        "claude-runner/src/claude_runner/board_tasks.js",
+        "claude-runner/src/claude_runner/dashboard.html"
+      ],
+      "identical_bodies": false,
+      "body_variants": 3,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move esc to one shared module (board_logic.js) and reuse it in 11 files: claude-runner/src/claude_runner/board_actions.js, claude-runner/src/claude_runner/board_dnd.js, claude-runner/src/claude_runner/board_logic.js, claude-runner/src/claude_runner/board_mission.js, claude-runner/src/claude_runner/board_mission_save.js, claude-runner/src/claude_runner/board_plan_edit.js, claude-runner/src/claude_runner/board_qa.js, claude-runner/src/claude_runner/board_queue.js, claude-runner/src/claude_runner/board_task.js, claude-runner/src/claude_runner/board_tasks.js, claude-runner/src/claude_runner/dashboard.html",
+      "rank": -12
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_edit_win.js",
+      "line": 109,
+      "kind": "duplicate_helper",
+      "symbol": "L",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_edit_win.js",
+          "line": 109,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { const text = tr(key, params); return text === key ? en : text; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_history_ui.js",
+          "line": 29,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_plan_edit.js",
+          "line": 28,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_providers_view.js",
+          "line": 23,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { const text = t(key, params); if (text !== key) return text; return en.replace(/\\{(\\w+)\\}/g, (m, name) => (params && params[name] !== undefined ? String(params[name]) : m)); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_qa.js",
+          "line": 17,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ready_ui.js",
+          "line": 31,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_task.js",
+          "line": 23,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_tasks.js",
+          "line": 24,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_think_ui.js",
+          "line": 30,
+          "def_kind": "definition",
+          "body": "function L(key, en, params) { let v = en; try { if (typeof t === \"function\") { const r = t(key); if (r && r !== key) v = r; } } catch (e) { } if (params) for (const k of Object.keys(params)) v = v.split(\"{\" + k + \"}\").join(String(params[k])); return v; }"
+        }
+      ],
+      "location_count": 9,
+      "files": [
+        "claude-runner/src/claude_runner/board_edit_win.js",
+        "claude-runner/src/claude_runner/board_history_ui.js",
+        "claude-runner/src/claude_runner/board_plan_edit.js",
+        "claude-runner/src/claude_runner/board_providers_view.js",
+        "claude-runner/src/claude_runner/board_qa.js",
+        "claude-runner/src/claude_runner/board_ready_ui.js",
+        "claude-runner/src/claude_runner/board_task.js",
+        "claude-runner/src/claude_runner/board_tasks.js",
+        "claude-runner/src/claude_runner/board_think_ui.js"
+      ],
+      "identical_bodies": false,
+      "body_variants": 3,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move L to one shared module (board_logic.js) and reuse it in 9 files: claude-runner/src/claude_runner/board_edit_win.js, claude-runner/src/claude_runner/board_history_ui.js, claude-runner/src/claude_runner/board_plan_edit.js, claude-runner/src/claude_runner/board_providers_view.js, claude-runner/src/claude_runner/board_qa.js, claude-runner/src/claude_runner/board_ready_ui.js, claude-runner/src/claude_runner/board_task.js, claude-runner/src/claude_runner/board_tasks.js, claude-runner/src/claude_runner/board_think_ui.js",
+      "rank": -9
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 49,
+      "kind": "duplicate_helper",
+      "symbol": "fetchJson",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_actions.js",
+          "line": 49,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url, options) { const res = await fetch(url, Object.assign({ cache: \"no-store\" }, options || {})); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_dnd.js",
+          "line": 59,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error ? body.error : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_history_ui.js",
+          "line": 77,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission.js",
+          "line": 862,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission_save.js",
+          "line": 600,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_plan_edit.js",
+          "line": 203,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ready_ui.js",
+          "line": 211,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url) { const res = await fetch(url, { cache: \"no-store\" }); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.html",
+          "line": 1492,
+          "def_kind": "definition",
+          "body": "async function fetchJson(url, options) { const res = await fetch(url, Object.assign({ cache: \"no-store\" }, options || {})); const body = await res.json().catch(() => ({})); if (!res.ok) { const err = new Error(body && body.error && body.error.message ? body.error.message : \"HTTP \" + res.status); err.status = res.status; err.body = body; throw err; } return body; }"
+        }
+      ],
+      "location_count": 8,
+      "files": [
+        "claude-runner/src/claude_runner/board_actions.js",
+        "claude-runner/src/claude_runner/board_dnd.js",
+        "claude-runner/src/claude_runner/board_history_ui.js",
+        "claude-runner/src/claude_runner/board_mission.js",
+        "claude-runner/src/claude_runner/board_mission_save.js",
+        "claude-runner/src/claude_runner/board_plan_edit.js",
+        "claude-runner/src/claude_runner/board_ready_ui.js",
+        "claude-runner/src/claude_runner/dashboard.html"
+      ],
+      "identical_bodies": false,
+      "body_variants": 3,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move fetchJson to one shared module (board_logic.js) and reuse it in 8 files: claude-runner/src/claude_runner/board_actions.js, claude-runner/src/claude_runner/board_dnd.js, claude-runner/src/claude_runner/board_history_ui.js, claude-runner/src/claude_runner/board_mission.js, claude-runner/src/claude_runner/board_mission_save.js, claude-runner/src/claude_runner/board_plan_edit.js, claude-runner/src/claude_runner/board_ready_ui.js, claude-runner/src/claude_runner/dashboard.html",
+      "rank": -8
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 75,
+      "kind": "duplicate_helper",
+      "symbol": "postJson",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_actions.js",
+          "line": 75,
+          "def_kind": "definition",
+          "body": "async function postJson(url, body) { const res = await fetch(url, { method: \"POST\", cache: \"no-store\", headers: { \"Content-Type\": \"application/json\", \"X-AHAWR-Dashboard\": \"1\", }, body: JSON.stringify(body), }); const payload = await res.json().catch(() => ({})); if (res.status === 409) { const err = new Error((payload.error && payload.error.message) || t(\"conflict.plan_changed\")); err.status = 409; throw err; } if (!res.ok) { const err = new Error((payload.error && payload.error.message) || payload.code || \"HTTP \" + res.status); err.status = res.status; err.body = payload; throw err; } return payload; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission.js",
+          "line": 546,
+          "def_kind": "definition",
+          "body": "async function postJson(url, body) { const res = await fetch(url, { method: \"POST\", headers: { \"Content-Type\": \"application/json\", Accept: \"application/json\", \"X-AHAWR-Dashboard\": \"1\" }, credentials: \"same-origin\", body: JSON.stringify(body), }); const data = await res.json().catch(() => ({})); return { ok: res.ok, status: res.status, data }; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_mission_save.js",
+          "line": 616,
+          "def_kind": "definition",
+          "body": "async function postJson(url, body, method = \"POST\", headers = {}) {"
+        }
+      ],
+      "location_count": 3,
+      "files": [
+        "claude-runner/src/claude_runner/board_actions.js",
+        "claude-runner/src/claude_runner/board_mission.js",
+        "claude-runner/src/claude_runner/board_mission_save.js"
+      ],
+      "identical_bodies": false,
+      "body_variants": 3,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move postJson to one shared module (board_logic.js) and reuse it in 3 files: claude-runner/src/claude_runner/board_actions.js, claude-runner/src/claude_runner/board_mission.js, claude-runner/src/claude_runner/board_mission_save.js",
+      "rank": -3
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_features.js",
+      "line": 16,
+      "kind": "duplicate_helper",
+      "symbol": "isPlainObject",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_features.js",
+          "line": 16,
+          "def_kind": "definition",
+          "body": "function isPlainObject(value) { return value !== null && typeof value === \"object\" && !Array.isArray(value); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_overrides.js",
+          "line": 32,
+          "def_kind": "definition",
+          "body": "function isPlainObject(value) { return value !== null && typeof value === \"object\" && !Array.isArray(value); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_retrieval.js",
+          "line": 29,
+          "def_kind": "definition",
+          "body": "function isPlainObject(value) { return value !== null && typeof value === \"object\" && !Array.isArray(value); }"
+        }
+      ],
+      "location_count": 3,
+      "files": [
+        "claude-runner/src/claude_runner/board_features.js",
+        "claude-runner/src/claude_runner/board_overrides.js",
+        "claude-runner/src/claude_runner/board_retrieval.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move isPlainObject to one shared module (board_logic.js) and reuse it in 3 files: claude-runner/src/claude_runner/board_features.js, claude-runner/src/claude_runner/board_overrides.js, claude-runner/src/claude_runner/board_retrieval.js",
+      "rank": -3
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_view_grid.js",
+      "line": 25,
+      "kind": "duplicate_helper",
+      "symbol": "stateOf",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_view_grid.js",
+          "line": 25,
+          "def_kind": "definition",
+          "body": "function stateOf(mission) { return STATE_OF_GROUP[mission.state_group] || \"off\"; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_kanban.js",
+          "line": 36,
+          "def_kind": "definition",
+          "body": "function stateOf(mission) { return STATE_OF_GROUP[mission.state_group] || \"off\"; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_projects.js",
+          "line": 18,
+          "def_kind": "definition",
+          "body": "function stateOf(mission) { return STATE_OF_GROUP[mission.state_group] || \"off\"; }"
+        }
+      ],
+      "location_count": 3,
+      "files": [
+        "claude-runner/src/claude_runner/board_view_grid.js",
+        "claude-runner/src/claude_runner/board_view_kanban.js",
+        "claude-runner/src/claude_runner/board_view_projects.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move stateOf to one shared module (board_logic.js) and reuse it in 3 files: claude-runner/src/claude_runner/board_view_grid.js, claude-runner/src/claude_runner/board_view_kanban.js, claude-runner/src/claude_runner/board_view_projects.js",
+      "rank": -3
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_view_grid.js",
+      "line": 29,
+      "kind": "duplicate_helper",
+      "symbol": "taskCounts",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_view_grid.js",
+          "line": 29,
+          "def_kind": "definition",
+          "body": "function taskCounts(mission) { const tasks = Array.isArray(mission.tasks) ? mission.tasks : []; const done = tasks.filter((task) => DONE_STATUSES.includes(task.status)).length; return { done, total: tasks.length }; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_kanban.js",
+          "line": 40,
+          "def_kind": "definition",
+          "body": "function taskCounts(mission) { const tasks = Array.isArray(mission.tasks) ? mission.tasks : []; const done = tasks.filter((task) => DONE_STATUSES.includes(task.status)).length; return { done, total: tasks.length }; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_projects.js",
+          "line": 41,
+          "def_kind": "definition",
+          "body": "function taskCounts(mission) { const tasks = Array.isArray(mission.tasks) ? mission.tasks : []; const done = tasks.filter((task) => DONE_STATUSES.includes(task.status)).length; return { done, total: tasks.length }; }"
+        }
+      ],
+      "location_count": 3,
+      "files": [
+        "claude-runner/src/claude_runner/board_view_grid.js",
+        "claude-runner/src/claude_runner/board_view_kanban.js",
+        "claude-runner/src/claude_runner/board_view_projects.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move taskCounts to one shared module (board_logic.js) and reuse it in 3 files: claude-runner/src/claude_runner/board_view_grid.js, claude-runner/src/claude_runner/board_view_kanban.js, claude-runner/src/claude_runner/board_view_projects.js",
+      "rank": -3
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 63,
+      "kind": "duplicate_helper",
+      "symbol": "loadBoardData",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_actions.js",
+          "line": 63,
+          "def_kind": "definition",
+          "body": "async function loadBoardData() { return Object.assign( {}, await fetchJson(\"/api/board/missions\"), await fetchJson(\"/api/board/queue\"), ); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_dnd.js",
+          "line": 72,
+          "def_kind": "definition",
+          "body": "async function loadBoardData() { return Object.assign( {}, await fetchJson(\"/api/board/missions\"), await fetchJson(\"/api/board/queue\"), ); }"
+        }
+      ],
+      "location_count": 2,
+      "files": [
+        "claude-runner/src/claude_runner/board_actions.js",
+        "claude-runner/src/claude_runner/board_dnd.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move loadBoardData to one shared module (board_logic.js) and reuse it in 2 files: claude-runner/src/claude_runner/board_actions.js, claude-runner/src/claude_runner/board_dnd.js",
+      "rank": -2
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_queue.js",
+      "line": 54,
+      "kind": "duplicate_helper",
+      "symbol": "fmtTokens",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_queue.js",
+          "line": 54,
+          "def_kind": "definition",
+          "body": "function fmtTokens(v) { const n = Number(v) || 0; if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + \"M\"; if (n >= 1_000) return (n / 1_000).toFixed(1) + \"K\"; return String(Math.round(n)); }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_tasks.js",
+          "line": 49,
+          "def_kind": "definition",
+          "body": "function fmtTokens(v) { const n = Number(v) || 0; if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + \"M\"; if (n >= 1_000) return (n / 1_000).toFixed(1) + \"K\"; return String(Math.round(n)); }"
+        }
+      ],
+      "location_count": 2,
+      "files": [
+        "claude-runner/src/claude_runner/board_queue.js",
+        "claude-runner/src/claude_runner/board_tasks.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move fmtTokens to one shared module (board_logic.js) and reuse it in 2 files: claude-runner/src/claude_runner/board_queue.js, claude-runner/src/claude_runner/board_tasks.js",
+      "rank": -2
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_queue.js",
+      "line": 80,
+      "kind": "duplicate_helper",
+      "symbol": "fmtPercent",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_queue.js",
+          "line": 80,
+          "def_kind": "definition",
+          "body": "function fmtPercent(ratio, parts) { const total = Number(parts) || 0; if (total <= 0) return \"\u2014\"; const r = Number(ratio); if (!isFinite(r) || r < 0) return \"\u2014\"; return Math.round(r * 100) + \"%\"; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_tasks.js",
+          "line": 64,
+          "def_kind": "definition",
+          "body": "function fmtPercent(ratio, parts) { const total = Number(parts) || 0; if (total <= 0) return \"\u2014\"; const r = Number(ratio); if (!isFinite(r) || r < 0) return \"\u2014\"; return Math.round(r * 100) + \"%\"; }"
+        }
+      ],
+      "location_count": 2,
+      "files": [
+        "claude-runner/src/claude_runner/board_queue.js",
+        "claude-runner/src/claude_runner/board_tasks.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move fmtPercent to one shared module (board_logic.js) and reuse it in 2 files: claude-runner/src/claude_runner/board_queue.js, claude-runner/src/claude_runner/board_tasks.js",
+      "rank": -2
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_view_grid.js",
+      "line": 35,
+      "kind": "duplicate_helper",
+      "symbol": "numberOf",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_view_grid.js",
+          "line": 35,
+          "def_kind": "definition",
+          "body": "function numberOf(value) { if (value === null || value === undefined || value === \"\") return null; const n = Number(value); return Number.isFinite(n) ? n : null; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_sprint.js",
+          "line": 22,
+          "def_kind": "definition",
+          "body": "function numberOf(value) { if (value === null || value === undefined || value === \"\") return null; const n = Number(value); return Number.isFinite(n) ? n : null; }"
+        }
+      ],
+      "location_count": 2,
+      "files": [
+        "claude-runner/src/claude_runner/board_view_grid.js",
+        "claude-runner/src/claude_runner/board_view_sprint.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move numberOf to one shared module (board_logic.js) and reuse it in 2 files: claude-runner/src/claude_runner/board_view_grid.js, claude-runner/src/claude_runner/board_view_sprint.js",
+      "rank": -2
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_view_grid.js",
+      "line": 57,
+      "kind": "duplicate_helper",
+      "symbol": "projectName",
+      "locations": [
+        {
+          "file": "claude-runner/src/claude_runner/board_view_grid.js",
+          "line": 57,
+          "def_kind": "definition",
+          "body": "function projectName(mission) { const project = mission.project || {}; return project.name || project.key || \"\"; }"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_view_sprint.js",
+          "line": 32,
+          "def_kind": "definition",
+          "body": "function projectName(mission) { const project = mission.project || {}; return project.name || project.key || \"\"; }"
+        }
+      ],
+      "location_count": 2,
+      "files": [
+        "claude-runner/src/claude_runner/board_view_grid.js",
+        "claude-runner/src/claude_runner/board_view_sprint.js"
+      ],
+      "identical_bodies": true,
+      "body_variants": 1,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "move projectName to one shared module (board_logic.js) and reuse it in 2 files: claude-runner/src/claude_runner/board_view_grid.js, claude-runner/src/claude_runner/board_view_sprint.js",
+      "rank": -2
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 392,
+      "kind": "timer_without_clear",
+      "symbol": "tick",
+      "start_line": 392,
+      "timer": "setInterval",
+      "handle": "refreshTimer",
+      "interval_ms": "10000",
+      "clear_line": "claude-runner/src/claude_runner/board_actions.js:398",
+      "clear_function": "stopAutoRefresh",
+      "missing_clear": "clearInterval(refreshTimer)",
+      "page_teardown_wired": false,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "call clearInterval(refreshTimer) on pagehide in claude-runner/src/claude_runner/board_actions.js:392: clearInterval(refreshTimer) sits in stopAutoRefresh(), never called on pagehide",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_views.js",
+      "line": 387,
+      "kind": "timer_without_clear",
+      "symbol": "tick",
+      "start_line": 387,
+      "timer": "setInterval",
+      "handle": null,
+      "interval_ms": "REFRESH_MS",
+      "clear_line": null,
+      "clear_function": null,
+      "missing_clear": "clearInterval(tick)",
+      "page_teardown_wired": false,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "call clearInterval(tick) on pagehide in claude-runner/src/claude_runner/board_views.js:387: no clearInterval(tick) exists in the frontend",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/dashboard.html",
+      "line": 1483,
+      "kind": "timer_without_clear",
+      "symbol": "loadRuns",
+      "start_line": 1483,
+      "timer": "setInterval",
+      "handle": null,
+      "interval_ms": "3000",
+      "clear_line": null,
+      "clear_function": null,
+      "missing_clear": "clearInterval(loadRuns)",
+      "page_teardown_wired": false,
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "call clearInterval(loadRuns) on pagehide in claude-runner/src/claude_runner/dashboard.html:1483: no clearInterval(loadRuns) exists in the frontend",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 434,
+      "kind": "unused_export",
+      "symbol": "BoardActions.confirmActions",
+      "module": "BoardActions",
+      "export_key": "confirmActions",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardActions.confirmActions from the export of claude-runner/src/claude_runner/board_actions.js:434",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 434,
+      "kind": "unused_export",
+      "symbol": "BoardActions.createMissionForm",
+      "module": "BoardActions",
+      "export_key": "createMissionForm",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardActions.createMissionForm from the export of claude-runner/src/claude_runner/board_actions.js:434",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_actions.js",
+      "line": 434,
+      "kind": "unused_export",
+      "symbol": "BoardActions.startAutoRefresh",
+      "module": "BoardActions",
+      "export_key": "startAutoRefresh",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-ops-notes.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardActions.startAutoRefresh from the export of claude-runner/src/claude_runner/board_actions.js:434",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_claude_md.js",
+      "line": 210,
+      "kind": "unused_export",
+      "symbol": "BoardClaudeMdView.storageLine",
+      "module": "BoardClaudeMdView",
+      "export_key": "storageLine",
+      "uses_in_own_module": 1,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardClaudeMdView.storageLine from the export of claude-runner/src/claude_runner/board_claude_md.js:210",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_claude_md.js",
+      "line": 210,
+      "kind": "unused_export",
+      "symbol": "BoardClaudeMdView.editorHtml",
+      "module": "BoardClaudeMdView",
+      "export_key": "editorHtml",
+      "uses_in_own_module": 1,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardClaudeMdView.editorHtml from the export of claude-runner/src/claude_runner/board_claude_md.js:210",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_dnd.js",
+      "line": 413,
+      "kind": "unused_export",
+      "symbol": "BoardDnd.applyMove",
+      "module": "BoardDnd",
+      "export_key": "applyMove",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardDnd.applyMove from the export of claude-runner/src/claude_runner/board_dnd.js:413",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_dnd.js",
+      "line": 413,
+      "kind": "unused_export",
+      "symbol": "BoardDnd.moveByStep",
+      "module": "BoardDnd",
+      "export_key": "moveByStep",
+      "uses_in_own_module": 5,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardDnd.moveByStep from the export of claude-runner/src/claude_runner/board_dnd.js:413",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_dnd.js",
+      "line": 413,
+      "kind": "unused_export",
+      "symbol": "BoardDnd.moveInData",
+      "module": "BoardDnd",
+      "export_key": "moveInData",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardDnd.moveInData from the export of claude-runner/src/claude_runner/board_dnd.js:413",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_dnd.js",
+      "line": 413,
+      "kind": "unused_export",
+      "symbol": "BoardDnd.postMoveQueue",
+      "module": "BoardDnd",
+      "export_key": "postMoveQueue",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardDnd.postMoveQueue from the export of claude-runner/src/claude_runner/board_dnd.js:413",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_edit_win.js",
+      "line": 1309,
+      "kind": "unused_export",
+      "symbol": "BoardEditWin.closeWin",
+      "module": "BoardEditWin",
+      "export_key": "closeWin",
+      "uses_in_own_module": 6,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardEditWin.closeWin from the export of claude-runner/src/claude_runner/board_edit_win.js:1309",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_guards_view.js",
+      "line": 156,
+      "kind": "unused_export",
+      "symbol": "BoardGuardsView.STRIP_LENGTH",
+      "module": "BoardGuardsView",
+      "export_key": "STRIP_LENGTH",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardGuardsView.STRIP_LENGTH from the export of claude-runner/src/claude_runner/board_guards_view.js:156",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_guards_view.js",
+      "line": 156,
+      "kind": "unused_export",
+      "symbol": "BoardGuardsView.FLOW",
+      "module": "BoardGuardsView",
+      "export_key": "FLOW",
+      "uses_in_own_module": 5,
+      "doc_mentions": [
+        "AHAWR_v13_ClaudeCode.json",
+        "claude-runner/docs/features-config.md",
+        "data-tables/ops/_tg_exprs.json"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardGuardsView.FLOW from the export of claude-runner/src/claude_runner/board_guards_view.js:156",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_history_ui.js",
+      "line": 228,
+      "kind": "unused_export",
+      "symbol": "BoardHistoryUI.rollbackRequest",
+      "module": "BoardHistoryUI",
+      "export_key": "rollbackRequest",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardHistoryUI.rollbackRequest from the export of claude-runner/src/claude_runner/board_history_ui.js:228",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.presetButtons",
+      "module": "BoardMissionView",
+      "export_key": "presetButtons",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.presetButtons from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.fmtLines",
+      "module": "BoardMissionView",
+      "export_key": "fmtLines",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.fmtLines from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.fmtJson",
+      "module": "BoardMissionView",
+      "export_key": "fmtJson",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md",
+        "docs/config-cutover.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.fmtJson from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.greyNote",
+      "module": "BoardMissionView",
+      "export_key": "greyNote",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.greyNote from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.attachPresetButtons",
+      "module": "BoardMissionView",
+      "export_key": "attachPresetButtons",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.attachPresetButtons from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.FORM_ROWS",
+      "module": "BoardMissionView",
+      "export_key": "FORM_ROWS",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-part2-notes.md",
+        "claude-runner/docs/qa-acceptance.md",
+        "docs/config-overrides.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.FORM_ROWS from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission.js",
+      "line": 876,
+      "kind": "unused_export",
+      "symbol": "BoardMissionView.bindTasksView",
+      "module": "BoardMissionView",
+      "export_key": "bindTasksView",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionView.bindTasksView from the export of claude-runner/src/claude_runner/board_mission.js:876",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission_save.js",
+      "line": 644,
+      "kind": "unused_export",
+      "symbol": "BoardMissionSave.ensurePanel",
+      "module": "BoardMissionSave",
+      "export_key": "ensurePanel",
+      "uses_in_own_module": 6,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionSave.ensurePanel from the export of claude-runner/src/claude_runner/board_mission_save.js:644",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission_save.js",
+      "line": 644,
+      "kind": "unused_export",
+      "symbol": "BoardMissionSave.showBanner",
+      "module": "BoardMissionSave",
+      "export_key": "showBanner",
+      "uses_in_own_module": 15,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionSave.showBanner from the export of claude-runner/src/claude_runner/board_mission_save.js:644",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission_save.js",
+      "line": 644,
+      "kind": "unused_export",
+      "symbol": "BoardMissionSave.attachControls",
+      "module": "BoardMissionSave",
+      "export_key": "attachControls",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionSave.attachControls from the export of claude-runner/src/claude_runner/board_mission_save.js:644",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission_save.js",
+      "line": 644,
+      "kind": "unused_export",
+      "symbol": "BoardMissionSave.copyIntoForm",
+      "module": "BoardMissionSave",
+      "export_key": "copyIntoForm",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionSave.copyIntoForm from the export of claude-runner/src/claude_runner/board_mission_save.js:644",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_mission_save.js",
+      "line": 644,
+      "kind": "unused_export",
+      "symbol": "BoardMissionSave.fetchServerData",
+      "module": "BoardMissionSave",
+      "export_key": "fetchServerData",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardMissionSave.fetchServerData from the export of claude-runner/src/claude_runner/board_mission_save.js:644",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_plan_edit.js",
+      "line": 519,
+      "kind": "unused_export",
+      "symbol": "BoardPlanEdit.planEditPost",
+      "module": "BoardPlanEdit",
+      "export_key": "planEditPost",
+      "uses_in_own_module": 9,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardPlanEdit.planEditPost from the export of claude-runner/src/claude_runner/board_plan_edit.js:519",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_ready_ui.js",
+      "line": 225,
+      "kind": "unused_export",
+      "symbol": "BoardReadyUI.startRequest",
+      "module": "BoardReadyUI",
+      "export_key": "startRequest",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardReadyUI.startRequest from the export of claude-runner/src/claude_runner/board_ready_ui.js:225",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_roles.js",
+      "line": 652,
+      "kind": "unused_export",
+      "symbol": "BoardRoles.validateRoles",
+      "module": "BoardRoles",
+      "export_key": "validateRoles",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "data-tables/ops/adaptive_split/scratch/check_in.json",
+        "data-tables/ops/adaptive_split/scratch/check_out.json",
+        "data-tables/ops/adaptive_split/scratch/wf_next.json"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardRoles.validateRoles from the export of claude-runner/src/claude_runner/board_roles.js:652",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.policyText",
+      "module": "BoardThinkUI",
+      "export_key": "policyText",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "docs/config-cutover.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.policyText from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.policyFromText",
+      "module": "BoardThinkUI",
+      "export_key": "policyFromText",
+      "uses_in_own_module": 5,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.policyFromText from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.notEnoughText",
+      "module": "BoardThinkUI",
+      "export_key": "notEnoughText",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.notEnoughText from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.previewLayout",
+      "module": "BoardThinkUI",
+      "export_key": "previewLayout",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.previewLayout from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.loadStats",
+      "module": "BoardThinkUI",
+      "export_key": "loadStats",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.loadStats from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.thinkPost",
+      "module": "BoardThinkUI",
+      "export_key": "thinkPost",
+      "uses_in_own_module": 6,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.thinkPost from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_think_ui.js",
+      "line": 359,
+      "kind": "unused_export",
+      "symbol": "BoardThinkUI.LAYOUT_PARALLEL",
+      "module": "BoardThinkUI",
+      "export_key": "LAYOUT_PARALLEL",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardThinkUI.LAYOUT_PARALLEL from the export of claude-runner/src/claude_runner/board_think_ui.js:359",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_view_lanes.js",
+      "line": 360,
+      "kind": "unused_export",
+      "symbol": "BoardViewLanes.boardTasks",
+      "module": "BoardViewLanes",
+      "export_key": "boardTasks",
+      "uses_in_own_module": 3,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardViewLanes.boardTasks from the export of claude-runner/src/claude_runner/board_view_lanes.js:360",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_views.js",
+      "line": 391,
+      "kind": "unused_export",
+      "symbol": "BoardViews.DEFAULT_VIEW",
+      "module": "BoardViews",
+      "export_key": "DEFAULT_VIEW",
+      "uses_in_own_module": 4,
+      "doc_mentions": [],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardViews.DEFAULT_VIEW from the export of claude-runner/src/claude_runner/board_views.js:391",
+      "rank": 0
+    },
+    {
+      "file": "claude-runner/src/claude_runner/board_views.js",
+      "line": 391,
+      "kind": "unused_export",
+      "symbol": "BoardViews.SUMMARY_URL",
+      "module": "BoardViews",
+      "export_key": "SUMMARY_URL",
+      "uses_in_own_module": 3,
+      "doc_mentions": [
+        "claude-runner/docs/board-views.md"
+      ],
+      "tier": "core",
+      "do_not_touch": false,
+      "proposed_fix": "remove BoardViews.SUMMARY_URL from the export of claude-runner/src/claude_runner/board_views.js:391",
+      "rank": 0
+    }
+  ]
+}

@@ -101,6 +101,7 @@ async function route() {
   clearTimeout(offlineTimer);
   if (needLogic()) return;
   if (/^#board[/]view[/]/.test(location.hash)) return;   // the views draw themselves
+  if (location.hash === "#board/providers") { await BoardProvidersView.open(); return; }   // deep link: the shell tab opens the same page
   showScreen(location.hash);
   let parsed;
   try { parsed = BoardLogic.parseHash(location.hash || "#board"); }

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from claude_runner.config import Settings
 from claude_runner.qa_regression import (
     Profile,
     ProfileError,
@@ -149,6 +150,99 @@ def test_timeout_wins_over_new_failures() -> None:
         timed_out=True,
     )
     assert verdict["verdict"] == "timeout"
+
+
+# def line 1, body 5 lines: length 6, nesting for>if = 2.
+GROWN_FUNCTION = (
+    "def count_marks(lines):\n"
+    "    total = 0\n"
+    "    for line in lines:\n"
+    "        if line:\n"
+    "            total += 1\n"
+    "    return total\n"
+)
+
+
+def _complexity_settings(baseline_path: Path | None = None) -> Settings:
+    env = {"CLAUDE_RUNNER_QA_COMPLEXITY_ENABLED": "1"}
+    if baseline_path is not None:
+        env["CLAUDE_RUNNER_QA_COMPLEXITY_BASELINE_PATH"] = str(baseline_path)
+    return Settings.from_env(env)
+
+
+def _write_json(path: Path, data: object) -> None:
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_complexity_flag_off_leaves_the_verdict_byte_identical() -> None:
+    found = {"pytest": ["tests/test_a.py::test_slow"]}
+    before = regression_verdict(has_profile=True, found=found, baseline={})
+    after = regression_verdict(
+        has_profile=True,
+        found=found,
+        baseline={},
+        changed_files=["src/a.py"],
+        settings=Settings.from_env({}),
+    )
+    assert json.dumps(after).encode("utf-8") == json.dumps(before).encode("utf-8")
+
+
+def test_complexity_flag_on_fails_when_a_changed_function_grows(tmp_path: Path) -> None:
+    file = tmp_path / "grown_function.py"
+    file.write_text(GROWN_FUNCTION, encoding="utf-8")
+    baseline = tmp_path / "complexity-baseline.json"
+    _write_json(baseline, {str(file): {"count_marks": {"length_lines": 5, "nesting_depth": 2}}})
+    verdict = regression_verdict(
+        has_profile=True,
+        found={},
+        baseline={},
+        changed_files=[str(file)],
+        settings=_complexity_settings(baseline),
+    )
+    assert verdict["verdict"] == "fail"
+    assert verdict["complexity"]["violations"][0] == {
+        "file": str(file),
+        "function": "count_marks",
+        "metric": "length_lines",
+        "value": 6,
+        "baseline": 5,
+    }
+    assert str(file) in verdict["reason"]
+    assert "count_marks" in verdict["reason"]
+    assert "6" in verdict["reason"] and "5" in verdict["reason"]
+
+
+def test_complexity_flag_on_passes_when_the_function_is_at_the_baseline(tmp_path: Path) -> None:
+    file = tmp_path / "small_function.py"
+    file.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
+    baseline = tmp_path / "complexity-baseline.json"
+    _write_json(baseline, {str(file): {"add": {"length_lines": 2, "nesting_depth": 0}}})
+    verdict = regression_verdict(
+        has_profile=True,
+        found={},
+        baseline={},
+        changed_files=[str(file)],
+        settings=_complexity_settings(baseline),
+    )
+    assert verdict["verdict"] == "pass"
+    assert verdict["complexity"]["verdict"] == "pass"
+    assert verdict["complexity"]["violations"] == []
+
+
+def test_complexity_flag_on_skips_files_not_changed_in_the_mission(tmp_path: Path) -> None:
+    file = tmp_path / "grown_function.py"
+    file.write_text(GROWN_FUNCTION, encoding="utf-8")
+    baseline = tmp_path / "complexity-baseline.json"
+    _write_json(baseline, {str(file): {"count_marks": {"length_lines": 1, "nesting_depth": 0}}})
+    verdict = regression_verdict(
+        has_profile=True,
+        found={},
+        baseline={},
+        changed_files=[],
+        settings=_complexity_settings(baseline),
+    )
+    assert verdict["verdict"] == "pass"
+    assert verdict["complexity"]["violations"] == []
 
 
 def _profiles(tmp_path: Path, text: str = PROFILE_YAML) -> list[Profile]:

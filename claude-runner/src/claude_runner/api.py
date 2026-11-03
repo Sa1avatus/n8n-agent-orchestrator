@@ -43,6 +43,7 @@ from .run_views import build_router
 from .runs import RunManager, RunnerError, StartRequest
 from .search import DEFAULT_LIMIT, MAX_LIMIT
 from .search import search as run_search
+from .think_proxy import build_router as build_think_proxy_router
 from .think_switch import ThinkSwitch
 from .thinking_config import flatten
 
@@ -305,7 +306,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="claude-runner", version="0.12.020", lifespan=lifespan)
+    app = FastAPI(title="claude-runner", version="0.13.0", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -411,6 +412,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 think_policy_from_task=thinking["worker_think_policy_from_task"],
                 think_off_after_seconds=thinking["worker_think_off_after_seconds"],
                 think_off_after_steps=thinking["worker_think_off_after_steps"],
+            )
+        )
+
+    if settings.think_proxy:  # no route at all while the setting is off
+
+        def think_mode() -> str | None:
+            flag = manager_of(app).think_flag
+            return flag() if flag is not None else None
+
+        app.include_router(
+            build_think_proxy_router(
+                lambda name: manager_of(app).provider_profile(name),
+                lambda: manager_of(app).store.think_providers,
+                think_mode,
             )
         )
 
@@ -582,7 +597,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             digest = parse_digest(body.digest)
             repo_facts = collect_repo_facts(workdir, body.since_ref)
-            markdown = build_pack(digest, repo_facts)
+            markdown = build_pack(digest, repo_facts, settings)
         except ValueError as exc:
             raise RunnerError("invalid_report_facts", str(exc)) from exc
         return {"markdown": markdown}

@@ -896,15 +896,18 @@ function totals(m) {
     if (g && s.output_tokens) { t.gen += g; t.genOut += s.output_tokens; }
     else if (s.tokens_per_s && s.output_tokens) { t.gen += (s.output_tokens / s.tokens_per_s) * 1000; t.genOut += s.output_tokens; }
   }
-  const result = [...S.entries].reverse().find((e) => e.kind === "result");
-  const u = (result && result.usage) || null;
-  if (u) { t.input = u.input_tokens || 0; t.cacheRead = u.cache_read_input_tokens || 0; t.cacheWrite = u.cache_creation_input_tokens || 0; t.output = u.output_tokens || t.output; }
+  // one run can end several turns (background-task notifications resume the process): each result
+  // reports its own tokens and time, so the totals add them up
+  const results = S.entries.filter((e) => e.kind === "result");
+  const result = results[results.length - 1];
+  const sumUsage = (key) => results.reduce((n, e) => n + ((e.usage && e.usage[key]) || 0), 0);
+  if (results.length) { t.input = sumUsage("input_tokens"); t.cacheRead = sumUsage("cache_read_input_tokens"); t.cacheWrite = sumUsage("cache_creation_input_tokens"); t.output = sumUsage("output_tokens") || t.output; }
   const rt = S.run && S.run.tokens;
   if (rt && S.run.source === "hermes") { t.input = rt.input || t.input; t.output = rt.output || t.output; t.cacheRead = rt.cache_read || 0; t.cacheWrite = rt.cache_write || 0; t.reasoning = rt.reasoning; }
   // Claude Code reports the session's cumulative cost and API time (restored on --resume);
   // the runner stores this run's share, so prefer it
   t.cost = S.run && S.run.cost_usd != null ? S.run.cost_usd : result && result.cost_usd;
-  t.durationMs = result && result.duration_ms;
+  t.durationMs = results.reduce((n, e) => n + (e.duration_ms || 0), 0) || null;
   t.apiMs = S.run && S.run.api_ms != null ? S.run.api_ms : result && result.duration_api_ms;
   return t;
 }

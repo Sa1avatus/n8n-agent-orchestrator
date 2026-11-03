@@ -130,3 +130,34 @@ def test_qa_agent_cli_args_do_not_allow_write_edit_or_bash(config_home: Path) ->
         assert forbidden not in tools
     # No --allowedTools flag (allowed_tools is empty).
     assert "--allowedTools" not in cmd
+
+
+def test_classify_adds_up_every_result_of_the_run() -> None:
+    # background-task notifications resume the process: each result reports its own turns and tokens
+    first = {
+        "type": "result",
+        "subtype": "success",
+        "num_turns": 67,
+        "duration_api_ms": 100,
+        "usage": {
+            "input_tokens": 49,
+            "output_tokens": 27367,
+            "cache_read_input_tokens": 3289663,
+            "output_tokens_details": {"thinking_tokens": 0},
+        },
+    }
+    second = {
+        "type": "result",
+        "subtype": "success",
+        "num_turns": 1,
+        "duration_api_ms": 130,
+        "usage": {"input_tokens": 1, "output_tokens": 226, "cache_read_input_tokens": 90956},
+    }
+    state = StreamState()
+    for event in (first, second):
+        state.feed(json.dumps(event))
+    outcome = classify(state, 0, "")
+    assert outcome.details["num_turns"] == 68
+    assert outcome.details["usage"]["output_tokens"] == 27593
+    assert outcome.details["usage"]["cache_read_input_tokens"] == 3380619
+    assert outcome.details["duration_api_ms"] == 130  # already the session's running total

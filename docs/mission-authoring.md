@@ -16,13 +16,21 @@ split path is rarely needed.
 4. **Tests, docs and report are separate tasks.** Write the implementation, the tests, the docs and the
    report as separate tasks, each with its own acceptance check. Do not hide a test inside an
    implementation task: the Reviewer cannot tell whether it ran.
-5. **Lint before import.** `data-tables/ops/mission_lint.py` checks the mission objective. It warns when:
-   - there are more than 5 `PART`/`ЧАСТЬ` sections;
-   - the objective is longer than 9000 characters;
-   - it names more than 4 code areas;
-   - it asks for more than 1 final report.
-   Its advice is "split into several missions of at most 12-15 tasks, one area each". The lint only
-   warns, so this guide requires a clean run before a mission is queued.
+5. **Lint before import.** `data-tables/ops/mission_lint.py <mission_id>` checks the mission row. It warns
+   when the objective
+   - has more than 5 `PART`/`ЧАСТЬ` sections;
+   - is longer than 9000 characters;
+   - names more than 4 code areas;
+   - asks for more than 1 final report.
+   Its advice is "split into several missions of at most 12-15 tasks, one area each". The same run also
+   checks before launch: every path named as `operator copy at <path>` exists on the host, the
+   `working_directory` exists, no task id in the objective carries a letter suffix (`T001A`, the id the
+   Architect gives a task after a split), and every acceptance criterion is non-empty and names a command
+   or a test path it can run. With `--providers <json>` (default `data-tables/ops/providers_snapshot.json`)
+   the roles chain in the mission row is checked against that snapshot: a model not in the stored providers
+   list is a `FAIL`, and when the snapshot is absent or unreadable the check prints `NOT RUN` with the
+   reason instead of failing. One `PASS`/`FAIL`/`NOT RUN` line per check, one `WARN` line per size rule; any
+   `FAIL` exits 1, `--strict` also exits 1 on warnings. The script writes nothing and never calls a provider.
 6. **Be concrete in each task.** Name the files in scope (at most 3 per task), state the acceptance
    check, and state what is out of scope. A task with "whole", "entire" or "completely" near a module
    name is flagged by the plan gate.
@@ -55,5 +63,5 @@ Live State row, or the dashboard's task cards) before you cite a number.
 - [ ] one code area
 - [ ] each part is its own mission
 - [ ] tests, docs and report are their own tasks
-- [ ] `mission_lint.py` shows no warnings
+- [ ] `mission_lint.py` prints no FAIL line and no WARN line
 - [ ] every task names at most 3 scope files and states its acceptance check

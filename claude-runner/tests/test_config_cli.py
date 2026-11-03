@@ -577,6 +577,13 @@ def test_provider_list_golden_with_registry_flags_off(tmp_path: Path) -> None:
             "compact_min_pct": None,
             "search_first": True,
             "retry_fresh_session": None,
+            "engine": "claude",
+            "hermes_base_url_var": "HERMES_API_URL",
+            "hermes_api_key_var": "API_SERVER_KEY",
+            "hermes_start_timeout_ms": 10000,
+            "hermes_poll_interval_ms": 3000,
+            "hermes_run_timeout_ms": 3600000,
+            "hermes_max_polls": 1200,
         }
     }
 

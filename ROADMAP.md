@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.12.10 · November 2, 2026** — The configuration lives in JSON now (roles, thinking, retrieval, engine, mission overrides, features) and the adaptive split of long tasks is wired into the launch; the rename to ahawr-runner and the code review come next
+**0.13.0 · November 3, 2026** — The Hermes engine, the think proxy and the QA gates are in the runner, each behind a flag; the cleanup of the code (with the Codex executor) and the rename to ahawr-runner come next
 
-Current version: **0.12.020** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.x rename · 1.0.0**
+Current version: **0.13.0** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **Code cleanup · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -151,6 +151,15 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [ ] Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
 - [x] 0.12.0 release: changelog, version, roadmap
 
+### 0.13.0: Hermes engine, think proxy and QA gates — Done (November 3)
+
+0.13.0 · Hermes as a third engine of the runner, a think proxy for local engines that ignore Claude Code's thinking settings, complexity and risk-tier gates in QA, the read-only code audit · 4/4 milestones, 100%
+
+- [x] Hermes engine in the runner (ENGINE=hermes, flag off by default): client, event mapper, run path, tests, docs/hermes-engine.md
+- [x] Think proxy: the thinking policy reaches a local engine that ignores the client's settings (found by its /health, flag off by default)
+- [x] QA gates behind flags: function complexity against a baseline, risk tiers in the report pack
+- [x] Read-only code audit and baseline (reports/audit-python.json, audit-frontend.json, review-baseline.json); the refactoring itself is not done
+
 ### After 0.12.0: Quality and reach — Next (Q4 2026 – Q1 2027)
 
 after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the local network · 0/2 milestones, 0%
@@ -162,7 +171,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 
 1.0.0 · Codex as a third executor next to Hermes and Claude Code · 0/5 milestones, 0%
 
-- [ ] Code review and refactoring mission (before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
+- [ ] Code review and refactoring mission, the cleanup part, together with the Codex code (the audit and the baseline are done in 0.13.0; the refactoring steps wait for the approval of the ranked findings; before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
 - [ ] ahawr-codex-executor: the OpenAI Codex CLI as an engine of a provider block
 - [ ] DeepSeek Harness evaluated as a third executor
 - [ ] Stable provider-block configuration and event format

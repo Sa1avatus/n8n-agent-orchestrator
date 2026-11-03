@@ -3,7 +3,47 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.12.020** (claude-runner `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **0.13.0** (claude-runner `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-03 (0.13.0)
+
+Step: the Hermes engine in the runner, a think proxy for local engines that ignore Claude Code's thinking settings, and
+quality gates for the QA review. New functions: middle number + 1 from 0.12.020. Every new function is behind a flag that
+is OFF by default; with the flags off the runner behaves as in 0.12.020.
+
+- Hermes as a third engine of the runner: a provider block with `ENGINE=hermes` runs its role through the Hermes gateway
+  (`hermes_run.py` is the pure client, `hermes_events.py` maps the poll result to the dashboard entries and failure classes,
+  `engine_events.py` holds the classes and text helpers they share, `RunManager._execute_hermes` keeps the run row, events,
+  session and result). Flag `CLAUDE_RUNNER_HERMES_ENGINE_ENABLED`; the block keys `HERMES_BASE_URL_VAR`,
+  `HERMES_API_KEY_VAR`, `HERMES_START_TIMEOUT_MS`, `HERMES_POLL_INTERVAL_MS`, `HERMES_RUN_TIMEOUT_MS`, `HERMES_MAX_POLLS`
+  (the poll loop is bounded by `HERMES_MAX_POLLS`). With the flag off `ENGINE=hermes` is a configuration error as any
+  unknown value. Design and mapping: `docs/hermes-engine.md`. Tests: `test_hermes_run.py`, `test_hermes_events.py`,
+  `fake_hermes.py`, the engine cases of `test_config.py`.
+- Think proxy (`think_proxy.py`, flag `AHAWR_THINK_PROXY`): a provider whose endpoint reports `service: strata` on
+  `GET /health` ignores `MAX_THINKING_TOKENS` and the effort settings, so the runner sends its requests through
+  `/think-proxy/<provider>`, which adds `thinking: disabled` while the thinking flag file says `off` and forwards the
+  client's own credentials; loopback callers only. The engine is found by the endpoint, not by a provider name. The thinking
+  policy (`ThinkSwitch`, compaction, stuck detector, price) follows such a provider like the local one
+  (`Store.think_providers`). Tests: `test_think_proxy.py`.
+- QA gates, both off: the complexity gate (`qa_complexity.py`: function length and nesting by `ast`, C901 by ruff, against a
+  saved baseline; thresholds in settings; plugged into `qa_regression.py`) and risk tiers (`risk_tiers.py`: core or
+  supporting by path patterns; the report pack lists the changed files by tier). Settings: `CLAUDE_RUNNER_QA_COMPLEXITY_*`,
+  `CLAUDE_RUNNER_RISK_TIERS_ENABLED`. Tests: `test_qa_complexity.py`, `test_risk_tiers.py`, the cases of
+  `test_qa_regression.py` and `test_report_facts.py`.
+- Read-only code audit and baseline of the review mission: `reports/audit-python.json`, `reports/audit-frontend.json`,
+  `reports/review-baseline.json`. No code was refactored in this step; the findings are candidates for the cleanup before 1.0.
+- A run that ends several turns (background-task notifications resume the process) adds up the turns and the token usage of
+  every result instead of keeping the last one (`StreamState.turns_total`, `usage_total`; the run totals of the dashboard).
+
+Bug fixes in this step:
+
+- The QA scenarios `providers_add_key_marker` and `providers_edit_save` opened a dead address and looked for texts the
+  Providers screen no longer has; the board opens `#board/providers` directly, and the second `open` is a real reload.
+- `handoff.py` imported `RunManager` at run time only for a type, which closed an import cycle with `runs.py`; the import is
+  now for type checking only.
+- `test_risk_tiers.py` required a file of the operator scripts folder, which is not in git; the check skips that pattern.
+
+Not part of this release: the Codex executor stays uncommitted until it is verified against a live run.
 
 ## 2026-11-03 (0.12.020)
 

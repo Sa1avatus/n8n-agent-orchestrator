@@ -298,6 +298,10 @@ class StreamState:
     events: int = 0
     bad_lines: int = 0
     permission_denials: list[Any] = field(default_factory=list)
+    # one run can end several turns (background-task notifications resume the process): every
+    # ``result`` event reports its own turns and tokens, so the run's totals add them up
+    turns_total: int = 0
+    usage_total: dict[str, int] = field(default_factory=dict)
     # main-thread replies in order (message id -> text) and the ids cut at the output limit
     replies: dict[str, str] = field(default_factory=dict)
     cut: list[str] = field(default_factory=list)
@@ -319,6 +323,10 @@ class StreamState:
         kind, subtype = event.get("type"), event.get("subtype")
         if kind == "result":
             self.result = event
+            self.turns_total += int(event.get("num_turns") or 0)
+            for key, value in (event.get("usage") or {}).items():
+                if isinstance(value, int) and not isinstance(value, bool):
+                    self.usage_total[key] = self.usage_total.get(key, 0) + value
             self.permission_denials = list(event.get("permission_denials") or [])
         elif kind == "assistant":
             message = event.get("message") or {}
@@ -386,11 +394,10 @@ class StreamState:
         prompt size per turn from the run totals."""
         if self.context_tokens or self.compact is not None:
             return self.context_tokens
-        result = self.result or {}
-        total = _prompt_tokens(result.get("usage") or {})
+        total = _prompt_tokens(self.usage_total)
         if not total:
             return self.context_tokens
-        return total // max(int(result.get("num_turns") or 1), 1)
+        return total // max(self.turns_total or 1, 1)
 
 
 def _prompt_tokens(usage: dict[str, Any]) -> int:
@@ -426,10 +433,10 @@ def classify(
         "exit_code": returncode,
         "subtype": result.get("subtype"),
         "terminal_reason": result.get("terminal_reason"),
-        "num_turns": result.get("num_turns"),
+        "num_turns": state.turns_total or result.get("num_turns"),
         "total_cost_usd": result.get("total_cost_usd"),
         "duration_api_ms": result.get("duration_api_ms"),
-        "usage": result.get("usage"),
+        "usage": state.usage_total or result.get("usage"),
         "permission_denials": state.permission_denials,
         "model": state.model,
     }

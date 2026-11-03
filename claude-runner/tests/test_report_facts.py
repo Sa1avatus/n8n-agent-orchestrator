@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from claude_runner.config import Settings
 from claude_runner.provider_secrets import REDACTED_TEXT
 from claude_runner.report_facts import (
     MAX_PACK_CHARS,
@@ -249,6 +250,33 @@ def test_build_pack_redacts_made_up_secrets() -> None:
     for secret in secrets:
         assert secret not in pack
     assert REDACTED_TEXT in pack
+
+
+def test_risk_tiers_off_pack_is_byte_for_byte_unchanged() -> None:
+    settings = Settings.from_env({})
+    assert settings.risk_tiers_enabled is False
+    digest = parse_digest(_raw_digest([_raw_task("T001", "accepted")]))
+    repo_facts: RepoFacts = {
+        **_NO_REPO_FACTS,
+        "diff_stat_uncommitted": "data-tables/ops/live_patch.py | 3 +++\ndocs/naming.md | 1 +\n",
+        "untracked_files": ["claude-runner/tests/test_new.py"],
+    }
+    assert build_pack(digest, repo_facts, settings) == build_pack(digest, repo_facts)
+
+
+def test_risk_tiers_on_pack_lists_core_and_supporting_files() -> None:
+    settings = Settings.from_env({"CLAUDE_RUNNER_RISK_TIERS_ENABLED": "1"})
+    digest = parse_digest(_raw_digest([_raw_task("T001", "accepted")]))
+    repo_facts: RepoFacts = {
+        "diff_stat_uncommitted": "data-tables/ops/live_patch.py | 3 +++\n",
+        "diff_stat_committed": "docs/naming.md | 1 +\n",
+        "untracked_files": ["claude-runner/tests/test_new.py"],
+    }
+    pack = build_pack(digest, repo_facts, settings)
+    assert "changed files by risk tier:" in pack
+    assert "core: data-tables/ops/live_patch.py" in pack
+    assert "supporting: docs/naming.md, claude-runner/tests/test_new.py" in pack
+    assert build_pack(digest, repo_facts, settings) != build_pack(digest, repo_facts)
 
 
 def test_oversized_pack_loses_remarks_first_and_keeps_table_and_criteria() -> None:

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import http.server
+import json
 import stat
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -288,6 +292,87 @@ def test_failures_map_to_hermes_contract(
 def test_garbage_lines_are_ignored(client: TestClient) -> None:
     done = wait_for(client, start(client, input="[[garbage]] fine")["run_id"])
     assert done["status"] == "completed"
+
+
+def fake_gateway() -> tuple[http.server.HTTPServer, list[dict[str, Any]]]:
+    """A stdlib gateway serving the Hermes /v1/runs shape the dispatch calls: every POST is
+    recorded, every GET answers with a terminal "completed" payload.
+    shortcut: one completed shape is enough for the dispatch tests; extend when the gateway
+    needs running/failed/timeout routes."""
+    posts: list[dict[str, Any]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def _respond(self, payload: dict[str, Any]) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self) -> None:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+            posts.append(json.loads(raw.decode("utf-8")))
+            self._respond({"run_id": "gw-run-1", "session_id": "gw-session-9"})
+
+        def do_GET(self) -> None:
+            self._respond({"run_id": "gw-run-1", "status": "completed", "output": "hermes answer"})
+
+        def log_message(self, message: str, *args: Any) -> None:
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, posts
+
+
+def test_hermes_flag_on_followup_sends_the_stored_gateway_session(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server, posts = fake_gateway()
+    monkeypatch.setenv("HERMES_API_URL", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setenv("API_SERVER_KEY", "test-key")
+    object.__setattr__(settings, "hermes_engine_enabled", True)
+    object.__setattr__(
+        settings, "providers", {"HERMES": ProviderProfile(name="hermes", engine="hermes")}
+    )
+    try:
+        with TestClient(create_app(settings)) as client:
+            first = start(client, role="worker", provider="hermes")
+            sid = str(first["session_id"])
+            done = wait_for(client, first["run_id"])
+            assert done["status"] == "completed", done
+            assert done["output"] == "hermes answer"
+            # the first start sends no session id at all
+            assert "session_id" not in posts[0]
+            follow = start(client, role="worker", session_id=sid, provider="hermes", input="more")
+            assert wait_for(client, follow["run_id"])["status"] == "completed"
+            # the follow-up start carries the gateway session id bound by the first run
+            assert posts[-1]["session_id"] == "gw-session-9"
+            assert posts[-1]["input"] == "more"
+    finally:
+        server.shutdown()
+
+
+def test_hermes_flag_off_profile_never_calls_the_gateway(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    server, posts = fake_gateway()
+    monkeypatch.setenv("HERMES_API_URL", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setenv("API_SERVER_KEY", "test-key")
+    # hermes_engine_enabled stays False (the flag default)
+    object.__setattr__(
+        settings, "providers", {"HERMES": ProviderProfile(name="hermes", engine="hermes")}
+    )
+    try:
+        with TestClient(create_app(settings)) as client:
+            run = start(client, role="worker", provider="hermes")
+            done = wait_for(client, run["run_id"])
+            assert done["status"] == "completed", done
+        # the gateway was never reached: the run went through the fake claude CLI instead
+        assert not posts
+        assert calls(tmp_path)
+    finally:
+        server.shutdown()
 
 
 def test_timeout_and_cancel(settings: Settings) -> None:
