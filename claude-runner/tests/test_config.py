@@ -119,6 +119,13 @@ def test_hermes_engine_flag_defaults_off_and_leaves_the_config_unchanged() -> No
         Settings.from_env({f"{PROVIDER}ENGINE": "hermes"})
 
 
+
+def test_flat_price_profiles_parse_pairs_and_default_to_none() -> None:
+    assert Settings.from_env({}).flat_price_profiles == {}
+    env = {"CLAUDE_RUNNER_FLAT_PRICE_PROFILES": "Strata=Sonnet, other=haiku;bad;=x"}
+    assert Settings.from_env(env).flat_price_profiles == {"strata": "sonnet", "other": "haiku"}
+
+
 def test_qa_complexity_keys_default_off_with_named_thresholds() -> None:
     # Off by default, like the other gate flags; the thresholds carry their units.
     s = Settings.from_env({})

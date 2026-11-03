@@ -493,6 +493,12 @@ def _list(value: str | None) -> list[str] | None:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
+def _name_pairs(raw: str) -> dict[str, str]:
+    """'strata=sonnet, other=haiku' -> {'strata': 'sonnet', 'other': 'haiku'} (lower case)."""
+    pairs = (item.split("=", 1) for item in re.split(r"[,;\s]+", raw) if "=" in item)
+    return {k.strip().lower(): v.strip().lower() for k, v in pairs if k.strip() and v.strip()}
+
+
 def _int(env: dict[str, str], name: str, default: int, minimum: int = 0) -> int:
     raw = env.get(name, "").strip()
     if not raw:
@@ -598,6 +604,9 @@ class Settings:
     # Local runs priced as a cloud model by thinking mode (local_pricing.py);
     # the raw environment is kept for it
     local_pricing_env: dict[str, str] = field(default_factory=dict)
+    # provider name -> price profile of local_pricing.py: the runs of an engine that costs
+    # nothing per token are priced as that cloud model whatever the thinking mode
+    flat_price_profiles: dict[str, str] = field(default_factory=dict)
     interrupt_grace_seconds: float = 10.0
     profiles: dict[str, RoleProfile] = field(default_factory=lambda: dict(DEFAULT_PROFILES))
     tools: str = ""
@@ -729,6 +738,7 @@ class Settings:
             local_pricing_env={
                 k: v for k, v in env.items() if k.startswith("CLAUDE_RUNNER_LOCAL_PRICE_")
             },
+            flat_price_profiles=_name_pairs(env.get("CLAUDE_RUNNER_FLAT_PRICE_PROFILES", "")),
             profiles=profiles,
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env, hermes_engine_enabled),

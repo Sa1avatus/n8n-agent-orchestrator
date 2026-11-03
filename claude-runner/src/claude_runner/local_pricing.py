@@ -75,11 +75,20 @@ class LocalPricing:
     def enabled(self) -> bool:
         return len(self.mode_profile) == 2
 
-    def cost_from_events(self, path: Path, default_mode: str = "on") -> dict[str, Any] | None:
+    def cost_from_events(
+        self, path: Path, default_mode: str = "on", flat_profile: str | None = None
+    ) -> dict[str, Any] | None:
         """Cost of the run from its event log, or None when the log has no steps.
         ``default_mode`` is used before the first thinking_state / thinking_switch entry
-        (a run of an older runner version has none)."""
-        if not self.enabled:
+        (a run of an older runner version has none). ``flat_profile`` prices every step at
+        that one profile, whatever the thinking mode (an engine whose price is one cloud
+        model's); an unknown profile gives None."""
+        mode_profile = self.mode_profile
+        if flat_profile is not None:
+            if flat_profile not in self.profiles:
+                return None
+            mode_profile = {"on": flat_profile, "off": flat_profile}
+        elif not self.enabled:
             return None
         try:
             lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -122,7 +131,7 @@ class LocalPricing:
                 by_profile[name] += (
                     sum(n * r for n, r in zip(tokens, rates, strict=True)) / 1_000_000
                 )
-            rates = self.profiles[self.mode_profile[mode]]
+            rates = self.profiles[mode_profile[mode]]
             usd = sum(n * r for n, r in zip(tokens, rates, strict=True)) / 1_000_000
             total += usd
             per_mode[mode]["steps"] += 1
@@ -131,7 +140,7 @@ class LocalPricing:
             "cost_usd": round(total, 6),
             "by_profile": {k: round(v, 6) for k, v in by_profile.items()},
             "by_mode": {
-                k: {"steps": v["steps"], "usd": round(v["usd"], 6), "profile": self.mode_profile[k]}
+                k: {"steps": v["steps"], "usd": round(v["usd"], 6), "profile": mode_profile[k]}
                 for k, v in per_mode.items()
             },
         }

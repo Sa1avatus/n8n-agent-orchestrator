@@ -116,3 +116,28 @@ def test_no_steps_missing_file_or_disabled_gives_none(tmp_path):
     assert p.cost_from_events(write(tmp_path, [{"kind": "text", "t": 1}])) is None
     assert p.cost_from_events(tmp_path / "missing.jsonl") is None
     assert LocalPricing.from_env({}).cost_from_events(write(tmp_path, [step(1, out=5)])) is None
+
+
+def test_a_flat_profile_prices_every_step_at_that_model_whatever_the_mode(tmp_path):
+    p = LocalPricing.from_env(ENV)
+    path = write(
+        tmp_path,
+        [
+            {"kind": "thinking_state", "t": 100, "thinking": "off"},
+            step(110, inp=1_000_000, out=100_000),
+            {"kind": "thinking_switch", "t": 200, "thinking": "on"},
+            step(210, inp=1_000_000, out=100_000, cr=500_000, cw=250_000),
+        ],
+    )
+    result = p.cost_from_events(path, flat_profile="sonnet")
+    assert result["cost_usd"] == pytest.approx(3 + (2 + 1 + 0.1 + 1))
+    assert result["by_mode"]["off"]["profile"] == "sonnet"
+    assert result["by_mode"]["on"]["profile"] == "sonnet"
+
+
+def test_a_flat_profile_works_when_the_mode_mapping_is_off_and_unknown_gives_none(tmp_path):
+    p = LocalPricing.from_env({"CLAUDE_RUNNER_LOCAL_PRICE_SONNET": "2,10,0.2,4"})
+    path = write(tmp_path, [step(110, inp=1_000_000, out=100_000)])
+    assert p.cost_from_events(path) is None
+    assert p.cost_from_events(path, flat_profile="sonnet")["cost_usd"] == pytest.approx(3.0)
+    assert p.cost_from_events(path, flat_profile="opus") is None

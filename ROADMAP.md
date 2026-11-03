@@ -10,9 +10,9 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 ## Mission Board Is Live
 
-**0.13.0 · November 3, 2026** — The Hermes engine, the think proxy and the QA gates are in the runner, each behind a flag; the cleanup of the code (with the Codex executor) and the rename to ahawr-runner come next
+**0.13.100 · November 3, 2026** — The Hermes engine, the think proxy and the QA gates are in the runner, each behind a flag; the cleanup of the code (with the Codex executor) and the rename to ahawr-runner come next
 
-Current version: **0.13.0** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **Code cleanup · 1.0.0**
+Current version: **0.13.100** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **Code cleanup · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 

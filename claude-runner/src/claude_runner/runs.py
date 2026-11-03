@@ -753,12 +753,15 @@ class RunManager:
         if api_ms is not None:
             details["run_duration_api_ms"] = int(api_ms)
         cost = run_cost(details.get("total_cost_usd"), previous)
-        if record.get("provider") == "local" and self.local_pricing.enabled:
+        provider_name = str(record.get("provider") or "")
+        flat_profile = self.settings.flat_price_profiles.get(provider_name.lower())
+        if flat_profile or (provider_name == "local" and self.local_pricing.enabled):
             # what the run would have cost on a cloud model: steps made without
-            # thinking at the cheaper model's rates, with thinking at the other's
+            # thinking at the cheaper model's rates, with thinking at the other's; an engine
+            # with a flat profile is priced at that one model
             with contextlib.suppress(Exception):
                 local = self.local_pricing.cost_from_events(
-                    self.events.directory / f"{run_id}.jsonl"
+                    self.events.directory / f"{run_id}.jsonl", flat_profile=flat_profile
                 )
                 if local is not None:
                     details["local_cost"] = local
