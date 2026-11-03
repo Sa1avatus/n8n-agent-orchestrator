@@ -15,6 +15,7 @@ from claude_runner.config import ProviderProfile, _providers
 from claude_runner.provider_registry import (
     RELOAD_MAX_BACKOFF_SECONDS,
     ProviderRegistry,
+    _profile_from_row,
     poll_delay_seconds,
 )
 from claude_runner.provider_secrets import ProviderSecrets
@@ -209,3 +210,17 @@ def test_a_run_falls_back_to_a_database_provider_only_without_an_env_block() -> 
     assert RunManager._provider(manager, "local") is env_profile  # type: ignore[arg-type]
     assert RunManager._provider(manager, "acme") is db_profile  # type: ignore[arg-type]
     assert RunManager._provider(manager, "  ") is None  # type: ignore[arg-type]
+
+
+def test_stored_context_window_sets_the_autocompact_env() -> None:
+    profile = _profile_from_row(
+        db_row("strata", base_url="http://strata:8080") | {"context_tokens": 131_072}, None
+    )
+    assert profile.env["CLAUDE_CODE_MAX_CONTEXT_TOKENS"] == "131072"
+    assert profile.env["CLAUDE_CODE_AUTO_COMPACT_WINDOW"] == "131072"
+    assert 0 < float(profile.env["CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"]) < 100
+
+
+def test_without_a_stored_window_the_env_has_no_window_keys() -> None:
+    profile = _profile_from_row(db_row("strata", base_url="http://strata:8080"), None)
+    assert "CLAUDE_CODE_MAX_CONTEXT_TOKENS" not in profile.env

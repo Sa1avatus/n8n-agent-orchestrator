@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **0.12.10 · November 2, 2026** — The configuration lives in JSON now (roles, thinking, retrieval, engine, mission overrides, features) and the adaptive split of long tasks is wired into the launch; the rename to ahawr-runner and the code review come next
 
-Current version: **0.12.10** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.x rename · 1.0.0**
+Current version: **0.12.020** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **0.12.x rename · 1.0.0**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 

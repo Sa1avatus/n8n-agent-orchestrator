@@ -17,6 +17,7 @@ from claude_runner.config import (
     ProviderProfile,
     provider_key,
 )
+from claude_runner.context_probe import window_env
 from claude_runner.provider_api_types import route_for
 from claude_runner.provider_secrets import ProviderSecrets
 
@@ -59,7 +60,7 @@ def _profile_from_row(row: dict[str, Any], api_key: str | None) -> ProviderProfi
         env["ANTHROPIC_BASE_URL"] = str(row["base_url"])
     if api_key:
         env["ANTHROPIC_AUTH_TOKEN"] = api_key
-    return ProviderProfile(
+    profile = ProviderProfile(
         name=provider_key(row["name"]),
         env=env,
         tools=row.get("tools") or "",
@@ -69,6 +70,11 @@ def _profile_from_row(row: dict[str, Any], api_key: str | None) -> ProviderProfi
         search_first=row.get("search_first"),
         retry_fresh_session=row.get("retry_fresh_session"),
     )
+    window = row.get("context_tokens")
+    overrides = window_env(int(window), profile) if window else None
+    if overrides:  # the stored window sets Claude Code's window and autocompact trigger
+        env.update(overrides)
+    return profile
 
 
 def _entry_from_row(row: dict[str, Any], api_key: str | None) -> ProviderEntry:
