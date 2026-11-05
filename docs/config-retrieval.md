@@ -83,9 +83,9 @@ The only `retrieval_` hits are `retrieval_worker_context` and `retrieval_reviewe
 
 ## Runner, board, launch window and docs readers (T001B)
 
-Read only. Paths are under `claude-runner/src/claude_runner/` unless shown. `codex_*.py` is excluded.
+Read only. Paths are under `ahawr-runner/src/ahawr_runner/` unless shown. `codex_*.py` is excluded.
 
-Result of the verification command `grep -rn 'retrieval_' claude-runner/src/claude_runner --include=*.py --include=*.js --include=*.html | wc -l`: **33**. The table below has 29 rows that together cover the 33 lines of that output (rows 17 and 19 span several lines). The four `.json` i18n hits (`board_i18n_en.json:35,37`, `board_i18n_ru.json:35,37`) are outside that command and are listed separately.
+Result of the verification command `grep -rn 'retrieval_' ahawr-runner/src/ahawr_runner --include=*.py --include=*.js --include=*.html | wc -l`: **33**. The table below has 29 rows that together cover the 33 lines of that output (rows 17 and 19 span several lines). The four `.json` i18n hits (`board_i18n_en.json:35,37`, `board_i18n_ru.json:35,37`) are outside that command and are listed separately.
 
 Only one runner reader touches the seven hermes columns: the write allow-list `known_hermes_cols` at `board_pg.py:816-829` (the retrieval names are at 824-827). Every other hit concerns the mission field `retrieval_corpora` (the `missions` column `retrieval_corpora_json`), not the seven columns. No board endpoint writes them: the callers of `update_hermes_config` pass only `roles_json` (`board_api.py:1579`), `features_json` (`:1624`) and `thinking_json` (`:1642`). The launch settings window (`board_edit_win.js`) has no control for any of the seven columns.
 
@@ -125,16 +125,16 @@ Hits in `board_i18n_en.json:35,37` and `board_i18n_ru.json:35,37`: `form.locked.
 
 Generic hermes readers that do not name a column (so they read the seven columns only implicitly): `board.py:221` and `:729` (`hermes_config()`), `board_pg.py:529` (`hermes_config()`), `board_ops_api.py:266` (snapshot section). None of them has a `retrieval_` name.
 
-Tests (`claude-runner/tests`): `test_board_views_api.py:539` and `test_qa_fixtures.py:56` cover only the mission field `retrieval_corpora_json`. No test names one of the seven hermes columns, and no test reads `retrieval_json`.
+Tests (`ahawr-runner/tests`): `test_board_views_api.py:539` and `test_qa_fixtures.py:56` cover only the mission field `retrieval_corpora_json`. No test names one of the seven hermes columns, and no test reads `retrieval_json`.
 
 Docs that describe the columns (not readers, but a change must reach them):
 
 | file | lines | note |
 |---|---|---|
-| `claude-runner/docs/board-data-model.md` | 25, 38, 458-464, 488-491 | column table and an example. Example at 490 gives `retrieval_worker_max_tokens=5000`, `retrieval_reviewer_max_tokens=60000`; the workflow defaults are 6000 and 5000 (rows 25-26 above). The example is inconsistent with the default. |
-| `claude-runner/docs/board-ops-notes.md` | 431-433 | list of the retrieval fields in a note |
+| `ahawr-runner/docs/board-data-model.md` | 25, 38, 458-464, 488-491 | column table and an example. Example at 490 gives `retrieval_worker_max_tokens=5000`, `retrieval_reviewer_max_tokens=60000`; the workflow defaults are 6000 and 5000 (rows 25-26 above). The example is inconsistent with the default. |
+| `ahawr-runner/docs/board-ops-notes.md` | 431-433 | list of the retrieval fields in a note |
 | `README.md` | 713, 716, 717 (EN); 1552, 1555, 1556 (RU) | operator steps: set `hermes_config.retrieval_enabled = true`, give the mission a `working_directory` |
-| `claude-runner/README.md` | 184 | corpus from `working_directory`; mentions `missions.retrieval_...` |
+| `ahawr-runner/README.md` | 184 | corpus from `working_directory`; mentions `missions.retrieval_...` |
 | `CHANGELOG.md` | 665 | `hermes_config.retrieval_enabled` |
 | `docs/config-columns-plan.md` | 27, 32, 37, 39, 66, 103 | the plan (section 2 and the target shape) |
 | `docs/retrieval/INTEGRATION.md` | 72-80, 95, 192-195 | table of the seven columns with defaults (`retrieval_timeout_ms` 120000, `retrieval_worker_max_tokens` 6000, `retrieval_reviewer_max_tokens` 5000, `retrieval_label` `hybrid-v1`). Line 73 says `retrieval_corpora_json` takes "comma-separated corpus ids, or a JSON array"; see the UNKNOWN below. |
@@ -160,12 +160,12 @@ Target shape from `docs/config-columns-plan.md:66-68`: `{enabled, url, corpora, 
 | `retrieval_json` (new) | the object itself | object | `{}`: all defaults above (empty means "the defaults", config-columns-plan.md:55) | the seven keys, each validated as above; unknown keys: UNKNOWN (plan does not say) | type of `retrieval_json` column: UNKNOWN (plan says JSON; the column does not exist yet) |
 
 Notes for the target:
-- Live column types: UNKNOWN. `claude-runner/docs/board-data-model.md:458-464` gives `boolean`, `text` and `double precision`; that was not checked against the live Data Table.
+- Live column types: UNKNOWN. `ahawr-runner/docs/board-data-model.md:458-464` gives `boolean`, `text` and `double precision`; that was not checked against the live Data Table.
 - `corpora` changes type from a JSON string to an array; a reader of the old string must be changed in the same step (rows 12-29 are the mission field, a separate column, not this change).
 
 ## Checks (T001B)
 
-- `grep -rn 'retrieval_' claude-runner/src/claude_runner --include=*.py --include=*.js --include=*.html | wc -l`: `33`; the reader table has 29 rows covering 33 lines (row 17 spans 824-827, row 19 spans 1034-1035). The four `.json` i18n hits are listed separately.
+- `grep -rn 'retrieval_' ahawr-runner/src/ahawr_runner --include=*.py --include=*.js --include=*.html | wc -l`: `33`; the reader table has 29 rows covering 33 lines (row 17 spans 824-827, row 19 spans 1034-1035). The four `.json` i18n hits are listed separately.
 - No source file changed (read only).
 - `git diff --check`: see the result in the final report.
 
@@ -175,18 +175,18 @@ Scope conflict (operator to confirm): RULES 1 and ACCEPTANCE CRITERIA 1-6 of the
 'lessons' mission (lessons library, `board_lessons*.py`), not to the retrieval-config work. They were NOT applied.
 This check used the T007 objective and its own criteria only. The retrieval files checked below are the scope.
 
-Environment: run from `claude-runner/` with Python 3.12.15, ruff, mypy 1.20.2, node.
+Environment: run from `ahawr-runner/` with Python 3.12.15, ruff, mypy 1.20.2, node.
 
 - `python -m pytest tests/test_retrieval_config.py tests/test_propose_retrieval_json.py -q --no-cov`: ran, exit 0.
-  Key line: `...............................  [100%]` (31 tests). The tests import `claude_runner.retrieval_config` and
+  Key line: `...............................  [100%]` (31 tests). The tests import `ahawr_runner.retrieval_config` and
   load `data-tables/ops/propose_retrieval_json.py` in-process; no runner restart, no provider request, no DB write.
 - `node --test tests/board_retrieval.test.js`: ran, exit 0. Key lines: `# tests 23`, `# pass 23`, `# fail 0`.
-- `python -m ruff check` on `src/claude_runner/retrieval_config.py`, `tests/test_retrieval_config.py`,
+- `python -m ruff check` on `src/ahawr_runner/retrieval_config.py`, `tests/test_retrieval_config.py`,
   `tests/test_propose_retrieval_json.py`: ran, exit 0. Key line: `All checks passed!`
 - `python -m ruff check` on `data-tables/ops/propose_retrieval_json.py` and `data-tables/ops/retrieval_config_patch.py`:
   ran, exit 1. The one finding is `data-tables/ops/retrieval_config_patch.py:42:101: E501 Line too long (109 > 100)`.
   Not fixed: this task changes no code. The ops folder is git-ignored (`.gitignore:41`), so it is outside git checks.
-- `python -m mypy src/claude_runner/retrieval_config.py tests/test_retrieval_config.py tests/test_propose_retrieval_json.py`
+- `python -m mypy src/ahawr_runner/retrieval_config.py tests/test_retrieval_config.py tests/test_propose_retrieval_json.py`
   without a version flag: exit 2, a parse error in a site-packages `numpy` stub (`Type statement is only supported in
   Python 3.12 and greater`). It is a mypy environment issue, not a finding in the changed files.
   With `--python-version 3.12`: ran, exit 0. Key line: `Success: no issues found in 3 source files`.
@@ -214,25 +214,25 @@ step 2 is the column, step 3 is the save, so no change was needed.
 
 ### Что изменено
 
-- `claude-runner/src/claude_runner/retrieval_config.py` (новый файл): `parse`, `validate`, `flatten`; таблица
+- `ahawr-runner/src/ahawr_runner/retrieval_config.py` (новый файл): `parse`, `validate`, `flatten`; таблица
   `JSON_KEYS` связывает семь ключей с колонками (`enabled`, `url`, `corpora`, `timeout_ms`, `worker_max_tokens`,
   `reviewer_max_tokens`, `label`).
-- `claude-runner/src/claude_runner/board_retrieval.js` (новый файл): та же проверка в браузере. Его ядро между маркерами
+- `ahawr-runner/src/ahawr_runner/board_retrieval.js` (новый файл): та же проверка в браузере. Его ядро между маркерами
   `// === pure retrieval core` встраивается в узел `Constants` патчем.
-- `claude-runner/src/claude_runner/board_api.py`: `GET /api/board/retrieval` и `PUT /api/board/retrieval`. PUT требует
+- `ahawr-runner/src/ahawr_runner/board_api.py`: `GET /api/board/retrieval` и `PUT /api/board/retrieval`. PUT требует
   заголовок `X-AHAWR-Dashboard`, проверяет текст до сохранения и принимает `expected_version`.
-- `claude-runner/src/claude_runner/board_pg.py:830`: `retrieval_json` добавлен в список колонок `hermes_config`.
-- `claude-runner/src/claude_runner/board_mission_save.js:252-259`: `retrievalSavePlan` (diff и запрос; без изменений запроса нет).
-- `claude-runner/src/claude_runner/board_edit_win.js`: поле `retrieval_json` в окне запуска (загрузка около строк 562-564,
+- `ahawr-runner/src/ahawr_runner/board_pg.py:830`: `retrieval_json` добавлен в список колонок `hermes_config`.
+- `ahawr-runner/src/ahawr_runner/board_mission_save.js:252-259`: `retrievalSavePlan` (diff и запрос; без изменений запроса нет).
+- `ahawr-runner/src/ahawr_runner/board_edit_win.js`: поле `retrieval_json` в окне запуска (загрузка около строк 562-564,
   сохранение около строки 577, секция около строки 686).
-- `claude-runner/src/claude_runner/board_i18n_en.json`, `board_i18n_ru.json`, `board_i18n.js`: тексты ключей `retrieval`.
+- `ahawr-runner/src/ahawr_runner/board_i18n_en.json`, `board_i18n_ru.json`, `board_i18n.js`: тексты ключей `retrieval`.
 - `data-tables/ops/propose_retrieval_json.py` (новый файл, каталог не в git): только чтение, печатает предложенный JSON.
 - `data-tables/ops/retrieval_config_patch.py` (новый файл, каталог не в git): патч узла `Constants`.
-- Тесты: `claude-runner/tests/test_retrieval_config.py`, `test_propose_retrieval_json.py`, `board_retrieval.test.js`,
+- Тесты: `ahawr-runner/tests/test_retrieval_config.py`, `test_propose_retrieval_json.py`, `board_retrieval.test.js`,
   `retrieval_cases.json`; в `board_edit_win_features.test.js` разделы 8-10; в `test_board_api_part2.py` проверки маршрута.
 - `docs/config-retrieval.md` (этот раздел), `CHANGELOG.md` (запись предложенной версии 0.12.0).
 
-`claude-runner/pyproject.toml` и `claude-runner/src/claude_runner/api.py` не менялись. Ничего не импортировано в n8n и
+`ahawr-runner/pyproject.toml` и `ahawr-runner/src/ahawr_runner/api.py` не менялись. Ничего не импортировано в n8n и
 ничего не записано в базу.
 
 ### Что делает оператор

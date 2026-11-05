@@ -1,0 +1,16 @@
+# Fake fixture for `codex exec --json`, one successful turn. Not captured from a real run.
+# CONFIRMED (docs/codex-executor.md): event names thread.started, turn.started, item.completed, turn.completed;
+#   item.type names reasoning, command_execution, file_change, mcp_tool_call, agent_message;
+#   usage key names input_tokens, cached_input_tokens, cache_write_input_tokens, output_tokens, reasoning_output_tokens.
+# HYPOTHESIS: usage sits at the top level of turn.completed; every item field below (id, summary, text, command,
+#   aggregated_output, exit_code, status, changes, kind, server, tool, arguments, result); the item.completed-only
+#   sequence (exec may emit item.started and item.updated); the success exit code 0.
+# exit_code: 0
+{"type":"thread.started","thread_id":"0195a1c2-7d3e-7c10-9a4b-2f6e1d8c0a11"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"reasoning","summary":["Read calc.py before editing it."]}}
+{"type":"item.completed","item":{"id":"item_1","type":"command_execution","command":"cat calc.py","aggregated_output":"def sub(a, b):\n    return a + b\n","exit_code":0,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"file_change","changes":[{"path":"calc.py","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"mcp_tool_call","server":"docs","tool":"lookup","arguments":{"query":"subtraction"},"result":"no match","status":"completed"}}
+{"type":"item.completed","item":{"id":"item_4","type":"agent_message","text":"Added sub() to calc.py."}}
+{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":800,"cache_write_input_tokens":0,"output_tokens":90,"reasoning_output_tokens":30}}

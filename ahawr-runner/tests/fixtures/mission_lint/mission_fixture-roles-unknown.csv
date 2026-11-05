@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json,roles_json
+fixture-roles-unknown,fixture-roles-unknown,working_dir,1,true,Roles model not in providers,Fix the node.,[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]","{""worker"": ""anthropic/claude-opus-5.5"", ""architect"": ""mistral/mistral-large-latest"", ""worker_escalate"": {""model"": ""openrouter/deepseek/deepseek-chat""}}"

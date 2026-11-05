@@ -142,7 +142,7 @@ served) are carried as notes, not as errors.
 
 ### 6. Usage metrics CLI
 
-`ahawr-retrieval usage` joins the retrieval log with the claude-runner API and reports per
+`ahawr-retrieval usage` joins the retrieval log with the ahawr-runner API and reports per
 profile: selected files, opened files, precision, recall, token share, `ahawr-search` call
 counts, and the most-missed files (opened but never selected).
 
@@ -155,13 +155,13 @@ ahawr-retrieval usage --runner-url http://localhost:8899 --json
 From inside the compose stack (container-to-container URL):
 
 ```bash
-docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://claude-runner:8700 --since -24h
+docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://ahawr-runner:8700 --since -24h
 ```
 
 `--since` takes a unix timestamp, an ISO-8601 value, or a relative offset (`-24h`, `-7d`,
 `-1w`); omit it for all logged requests.
 
-`ahawr-search` (in the claude-runner image) is the Worker-facing CLI for on-demand retrieval:
+`ahawr-search` (in the ahawr-runner image) is the Worker-facing CLI for on-demand retrieval:
 
 ```bash
 ahawr-search "where is the retry delay applied?" --k 8 --budget 1500

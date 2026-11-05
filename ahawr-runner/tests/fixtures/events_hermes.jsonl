@@ -1,0 +1,7 @@
+{"seq": 1, "t": 1793839780.892, "kind": "prompt", "text": "Review the provider block and report the diff.", "resume": false}
+{"seq": 2, "t": 1793839780.892, "kind": "retry", "attempt": 1, "max_retries": null, "status": 529, "error": "upstream error: temporarily overloaded", "delay_ms": null}
+{"seq": 3, "t": 1793839780.892, "kind": "retry", "attempt": 2, "max_retries": null, "status": 503, "error": "upstream error: service unavailable", "delay_ms": null}
+{"seq": 4, "t": 1793839780.892, "kind": "compact", "trigger": "handoff", "pre_tokens": null, "post_tokens": null, "duration_ms": null}
+{"seq": 5, "t": 1793839780.892, "kind": "text", "text": "Reviewed: no field renamed, two optional fields added."}
+{"seq": 6, "t": 1793839780.892, "kind": "notice", "text": "Hermes run run_hermes_fixture_001: poll 6"}
+{"seq": 7, "t": 1793839780.892, "kind": "end", "status": "completed", "error_code": "", "error": "", "stderr_tail": ""}

@@ -26,7 +26,7 @@ The live n8n workflow is unchanged until the patch is applied and the flags are 
    scratch copy in-process with `adaptive_split_patch.py` and loads the nodes from it).
 4. **Run hygiene.** With `run_hygiene` on, the workflow cancels the previous run of a session before a
    new one starts (`Has Cancel Run Id` -> `Cancel Previous Run`), so relaunches do not leave stale runs.
-   The runner side of this is the supersede and watchdog behaviour in `claude-runner/README.md`.
+   The runner side of this is the supersede and watchdog behaviour in `ahawr-runner/README.md`.
 
 ## Split-trigger decision table
 
@@ -45,12 +45,12 @@ The rows are checked top to bottom; the first match decides.
 | 8 | None of the above                                                         | No split, normal RESUME prompt  |
 
 The runner-side error codes `child_hung` and `orphan` are not split triggers. They end the run
-and are reported as failures, see `claude-runner/README.md`.
+and are reported as failures, see `ahawr-runner/README.md`.
 
 ## Flags and defaults
 
 The settings live in `features_json` (the `features` entries of `hermes_config`, see
-`claude-runner/docs/features-config.md`). A mission can override them with `mission_features_json`.
+`ahawr-runner/docs/features-config.md`). A mission can override them with `mission_features_json`.
 `features_config_patch.py` flattens them into the Constants node of the workflow; the split nodes read
 the flattened values, not the JSON. Every feature defaults to off.
 
@@ -69,7 +69,7 @@ A mission override of `adaptive_split.enabled` and `split_steps` alone, as the l
 other keys at their global values.
 
 The runner's own settings (`CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS`, `CLAUDE_RUNNER_WATCHDOG_CPU_SECONDS`)
-are separate and are documented in `claude-runner/README.md`.
+are separate and are documented in `ahawr-runner/README.md`.
 
 ## Operator commands
 
@@ -90,18 +90,18 @@ Run these only when the task names them. Nothing here is run automatically.
 4. Turn on the features in `features_json`: first `plan_no_truncate` and `run_hygiene`, then
    `adaptive_split`. Turn each on alone and watch one mission before the next. For a single mission, set
    the same keys in its `mission_features_json` instead (the live proof in `features-config.md` does this).
-5. Rebuild the runner after a change to its code (parts 3 and 6 of the change touch `claude-runner`):
+5. Rebuild the runner after a change to its code (parts 3 and 6 of the change touch `ahawr-runner`):
 
    ```
-   cd claude-runner && docker compose up -d --build
-   docker compose exec claude-runner curl -s http://127.0.0.1:8700/health
+   cd ahawr-runner && docker compose up -d --build
+   docker compose exec ahawr-runner curl -s http://127.0.0.1:8700/health
    ```
 
    Rebuilding restarts the runner container. Do it only with the queue paused.
 6. Read-only check for orphan processes left by earlier runs in the runner container:
 
    ```
-   docker exec claude-runner ps -eo pid,ppid,etimes,args | grep -E 'claude|node'
+   docker exec ahawr-runner ps -eo pid,ppid,etimes,args | grep -E 'claude|node'
    ```
 
    A `claude` or `node` process whose parent is not the runner, or that runs long with no active run,

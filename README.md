@@ -2,7 +2,7 @@
 
 <p align="center">
 Long coding missions on local and cloud models: planned, built, reviewed and watched.<br>
-An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a dashboard shows everything.
+An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a dashboard shows everything.
 </p>
 
 <p align="center">
@@ -12,12 +12,12 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **0.13.100** | **29** | Hermes · Claude Code <br> (Codex: planned for 1.0) | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.0.0** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
 
-<p align="center"><img src="docs/img/flow.svg" alt="Mission, Architect, Worker, Reviewer, QA; n8n, claude-runner, models, dashboard" width="100%"></p>
+<p align="center"><img src="docs/img/flow.svg" alt="Mission, Architect, Worker, Reviewer, QA; n8n, ahawr-runner, models, dashboard" width="100%"></p>
 
 1. A **mission** (objective, rules, acceptance criteria, working folder) is taken from the queue.
 2. The **Architect** splits it into small tasks.
@@ -30,7 +30,7 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 | Part | What it does |
 |---|---|
 | **n8n workflows** | the orchestration loop, retries, persistence, Telegram notices and a status bot |
-| **`claude-runner`** | runs the Claude Code CLI headless behind a `/v1/runs` API; sessions, compaction, thinking policy |
+| **`ahawr-runner`** | runs the Claude Code CLI headless behind a `/v1/runs` API; sessions, compaction, thinking policy |
 | **LiteLLM + llama.cpp** | the local model (Qwen3.8-27B) with prompt cache and speculative decoding |
 | **Retrieval service** | hybrid search over the workspace for the Worker and the Reviewer |
 | **Dashboard** | live runs, cost, cache and speed, click filters, full-text search, **mission board** |
@@ -42,8 +42,8 @@ An n8n workflow drives the loop, <code>claude-runner</code> runs the models, a d
 | | |
 |---|---|
 | ✅ **Done** | Claude Code runner · Postgres store · dashboard filters and search · mission board (0.5) · board views, task cards, operations control, launch settings window (0.6 – 0.7) · guards in the dashboard, cloud thinking control, adaptive split (0.8) · QA role, guards migration, Guards tab, attempt chains (0.9) · features config, all of QA (gate, container, layers, smoke), the Worker model by attempt with escalation (0.10) · host actions, the queue from the board, providers, report tasks, lessons library, QA agent and RAG quality tools (0.11.0 – 0.11.800) · Hermes engine, think proxy and QA gates behind flags (0.13.0) |
-| 🔄 **Now** | The mission queue and stability checks of the local model → next release **0.14.0** |
-| ➡️ **Next** | Configuration columns to JSON and the runner rename to `ahawr-runner` (**0.12.0**) · code review and refactoring · **1.0.0: Codex as the third executor** |
+| 🔄 **Now** | The mission queue, the KV-cache and Q2_0 benches of the local model → **1.1** |
+| ➡️ **Next** | The runner works with any of the three clients in every role · lessons library on · DeepSeek Harness evaluated |
 <!-- status:end -->
 
 Full plan with milestones and progress: [ROADMAP.md](ROADMAP.md) · page version: [sa1avatus.github.io/n8n-agent-orchestrator](https://sa1avatus.github.io/n8n-agent-orchestrator/roadmap.html).
@@ -65,17 +65,17 @@ Then import the workflows, create the Data Tables and run the first mission: [st
 |---|---|
 | [`CHANGELOG.md`](CHANGELOG.md) | every release, newest first |
 | [`ROADMAP.md`](ROADMAP.md) | milestones and the mission queue |
-| [`claude-runner/README.md`](claude-runner/README.md) | the runner, its API and settings |
-| [`claude-runner/docs/`](claude-runner/docs) | mission board design, data model, operations |
-| [`providers.md`](claude-runner/docs/providers.md) | providers, models, API types and keys in the web UI (flags `providers_db`, `litellm_sync`) |
-| [`host-actions.md`](claude-runner/docs/host-actions.md) | container restart and recreate by request, with operator confirmation (flag `HOST_ACTIONS`) |
-| [`queue-from-board.md`](claude-runner/docs/queue-from-board.md) | the mission queue read from `board.queue` (`QUEUE_FROM_BOARD`) |
-| [`report-pack.md`](claude-runner/docs/report-pack.md) | facts pack, rubric and escalation for report tasks (flag `report_pack`) |
+| [`ahawr-runner/README.md`](ahawr-runner/README.md) | the runner, its API and settings |
+| [`ahawr-runner/docs/`](ahawr-runner/docs) | mission board design, data model, operations |
+| [`providers.md`](ahawr-runner/docs/providers.md) | providers, models, API types and keys in the web UI (flags `providers_db`, `litellm_sync`) |
+| [`host-actions.md`](ahawr-runner/docs/host-actions.md) | container restart and recreate by request, with operator confirmation (flag `HOST_ACTIONS`) |
+| [`queue-from-board.md`](ahawr-runner/docs/queue-from-board.md) | the mission queue read from `board.queue` (`QUEUE_FROM_BOARD`) |
+| [`report-pack.md`](ahawr-runner/docs/report-pack.md) | facts pack, rubric and escalation for report tasks (flag `report_pack`) |
 | [`docs/`](docs) | thinking control, cold prefill, compaction, Telegram, retrieval |
 
 ## About
 
-An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`claude-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.0.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
+An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`ahawr-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.0.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
 
 The system separates **workflow logic**, **runtime configuration**, **agent prompts**, **missions**, and **secrets** so that the workflow can be maintained and reused without editing the main orchestration graph every time a model or mission changes.
 
@@ -384,21 +384,21 @@ The repository contains:
 ```text
 .
 ├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
-├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
+├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (ahawr-runner)
 ├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
-├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
+├── Claude_Code_Run_Manager_v1.json  # the same for ahawr-runner
 ├── AHAWR_Mission_Results.json       # writes the mission_results table (time, cost, speed, cache per mission)
 ├── AHAWR_Status_Bot.json            # Telegram status/control bot (see docs/telegram-bot.md)
 ├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
 ├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
 ├── missions.example.csv             # Data Table example: one mission
 ├── data-tables/                     # your live CSVs (gitignored): exports, mission files
-├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
+├── ahawr-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
 ├── docs/                            # retrieval, Telegram bot, thinking control, the roadmap page (GitHub Pages)
 ├── scripts/                         # helper scripts
-├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
+├── docker-compose.yml, Dockerfile   # the stack: n8n, ahawr-runner, ahawr-retrieval, litellm, dashboard
 ├── .env.example                     # every setting, with comments (copy to .env)
 ├── ARCHITECTURE_CONTRACT.md
 ├── CHANGELOG.md
@@ -527,7 +527,7 @@ Models and providers are configured through the `hermes_config` Data Table.
 
 In n8n:
 
-1. Import `Hermes_Run_Manager_v5.json` (Hermes variant) or `Claude_Code_Run_Manager_v1.json` (Claude Code variant, see [AHAWR on Claude Code](#ahawr-on-claude-code-claude-runner)).
+1. Import `Hermes_Run_Manager_v5.json` (Hermes variant) or `Claude_Code_Run_Manager_v1.json` (Claude Code variant, see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner)).
 2. Configure the required Hermes credentials.
 3. Run a simple test request.
 4. Confirm that Hermes can start a run and return a result.
@@ -555,7 +555,7 @@ the separator).
 | `default` | `AHAWR_v13.json` (Hermes) | OpenRouter Architect/Reviewer, local llama.cpp Worker |
 | `claude-code` (enabled) | `AHAWR_v13_ClaudeCode.json` | all roles on Anthropic |
 | `claude-code` (disabled) | same | Worker on the local model through LiteLLM (`worker_provider=local`) |
-| `claude-code` (disabled) | same | all roles on OpenAI (`provider=openai`); needs the Codex executor of mission `ahawr-codex-executor`, not in claude-runner yet |
+| `claude-code` (disabled) | same | all roles on OpenAI (`provider=openai`); needs the Codex executor of mission `ahawr-codex-executor`, not in ahawr-runner yet |
 
 The Claude Code workflow uses the first enabled `claude-code` row: enable exactly one of the three.
 The Hermes workflow uses the first enabled row among `default`, `test`, `openrouter`.
@@ -592,7 +592,7 @@ Import the workflow for your variant:
 
 ```text
 AHAWR_v13.json               # Hermes
-AHAWR_v13_ClaudeCode.json    # Claude Code (claude-runner)
+AHAWR_v13_ClaudeCode.json    # Claude Code (ahawr-runner)
 ```
 
 After importing, open the imported Run Manager and copy its workflow id from the URL (`/workflow/<id>`). If it is not `nhjwX1G7FiVTO2Ah`, put it into the `run_manager_workflow_id` column of `hermes_config`. `Architect/Worker/Reviewer Start` take the id from there. Their inputs are built by the `Build … Run Input` Code nodes, so re-selecting or re-importing the Run Manager never resets them.
@@ -708,7 +708,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 - Incremental indexing with chunk-level invalidation, and a retrieval cache with semantic query fingerprints for retries.
 - Its own local index by default; `rag-platform` can be attached as an external backend, with automatic fallback to the local index.
 - An Eval Harness (gold/silver datasets, retrieval, system and AHAWR-level metrics) decides on every later extension.
-- Agents can also search during a task: `ahawr-search "query"` in the claude-runner image queries the folder it runs in (fail-open, 1500-token budget). The Reviewer's context is focused on the files the Worker changed (`changed_paths`), and `ahawr-retrieval usage` reports per-profile precision, recall and search calls from the retrieval log and the runner events.
+- Agents can also search during a task: `ahawr-search "query"` in the ahawr-runner image queries the folder it runs in (fail-open, 1500-token budget). The Reviewer's context is focused on the files the Worker changed (`changed_paths`), and `ahawr-retrieval usage` reports per-profile precision, recall and search calls from the retrieval log and the runner events.
 
 `AHAWR_v13.json` calls `POST http://ahawr-retrieval:8500/retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only into the retrieval container at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
@@ -723,11 +723,11 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 
 The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
-### AHAWR on Claude Code (`claude-runner`)
+### AHAWR on Claude Code (`ahawr-runner`)
 
-`AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `claude-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
+`AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `ahawr-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
 
-- Container `claude-runner` in the same compose stack: `docker compose up -d --build` builds and starts it together with n8n, `ahawr-retrieval` and `litellm`. n8n reaches it at `http://claude-runner:8700`; the run API has no host port.
+- Container `ahawr-runner` in the same compose stack: `docker compose up -d --build` builds and starts it together with n8n, `ahawr-retrieval` and `litellm`. n8n reaches it at `http://ahawr-runner:8700`; the run API has no host port.
 - `Claude_Code_Run_Manager_v1.json` is `Hermes_Run_Manager_v5.json` with the runner endpoints and a role field. The Hermes TUI/WebSocket compression is replaced by `POST /v1/sessions/{id}/compact`, which runs Claude Code `/compact` only above a context threshold.
 - Sessions are resumable Claude Code sessions (`--resume`), kept in a volume. A run interrupted by a runner restart is reported as `run_not_found`, so the Run Manager continues the saved session.
 - Per-role permissions:
@@ -735,7 +735,7 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
   - Architect and Reviewer: read-only.
 - Model access: `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`), or Bedrock/Vertex/Foundry.
 - Projects: `missions.working_directory` (e.g. `D:\OpenAIProjects\app`) is where Claude Code runs and what retrieval indexes for that mission. The drive is mounted into the containers (`AHAWR_HOST_DRIVE`, default `D:\`).
-- Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`. With the flag `CLAUDE_RUNNER_PROVIDERS_DB=1` providers, models and write-only keys are also managed on the Providers tab of the board (`claude-runner/docs/providers.md`).
+- Providers per role, as with Hermes: roles with `*_provider=anthropic` go to Anthropic, and a role with `*_provider=local` goes through the `litellm` container to a local OpenAI-compatible llama.cpp server. See `litellm/config.yaml` and the `CLAUDE_RUNNER_PROVIDER_LOCAL__*` block of `.env.example`. With the flag `CLAUDE_RUNNER_PROVIDERS_DB=1` providers, models and write-only keys are also managed on the Providers tab of the board (`ahawr-runner/docs/providers.md`).
 - Configuration: the `claude-code` row and the `runner_url` column of `hermes_config`. Models are `opus` / `sonnet` / `haiku` or full model names.
 - Dashboard at `http://localhost:8701` (container `ahawr-dashboard`; read-only, 127.0.0.1 only). It shows the runs of every role in both variants: Claude Code runs and Hermes sessions (`HERMES_API_URL`, `HERMES_API_KEY`). The layout follows DeepSeek Harness' Trajectory view: a timeline, a colored ledger with thinking, tool calls and their results, steps with TTFT, generation time, tokens and tok/s, and an inspector for each record.
 
@@ -750,19 +750,27 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
 **Retries.** A `needs_changes` retry continues the Worker's session and hands it its previous report and the review. A context overflow forces a compaction before the retry. A failed task resumes where it stopped, and when compaction fails a fresh session gets the old session's digest. The attempt counter takes the highest attempt logged for the task, so `max_attempts_per_task` holds even if `task_attempt` is reset by hand.
 
-**Cost.** The dashboard shows Claude Code's own estimate per run (the run's share, not the session total). The image prices the local model like Claude Sonnet 5 through `claude-runner/managed-settings.json`, as a comparison with an all-Anthropic setup.
+**Cost.** The dashboard shows Claude Code's own estimate per run (the run's share, not the session total). The image prices the local model like Claude Sonnet 5 through `ahawr-runner/managed-settings.json`, as a comparison with an all-Anthropic setup.
 
 **Worker tools.** The image has git, pytest, ruff and mypy; build tools can be added with `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (e.g. `patch build-essential cmake`). The Worker cannot read `.env` files (every variant except `.env.example`), `git commit` or `git push`, and its prompt forbids printing environment variables.
 
 **Thinking of the local model.** `litellm/runtime/local_thinking` (`on`/`off`) switches thinking per request without a restart; the runner turns it off by itself for a task that has run longer than `AHAWR_THINK_OFF_AFTER_SECONDS` (default 3600) and back on for the next task; the chat template `llama/templates/qwen38-same-prefix.jinja` keeps the prompt prefix identical in both modes, so a switch does not drop the llama.cpp prompt cache. Details and setup: [`docs/thinking-control.md`](docs/thinking-control.md).
 
-The Hermes workflows are unchanged, and both variants can be imported side by side. See [`claude-runner/README.md`](claude-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
+The Hermes workflows are unchanged, and both variants can be imported side by side. See [`ahawr-runner/README.md`](ahawr-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
+
+### What 1.0 means
+
+Version 1.0.0 freezes the contracts, not the feature list. What is stable from here on: the `/v1/runs` API of `ahawr-runner`, the run event format (`docs/run-event-format.md`), the provider block (`docs/provider-block-schema.md`) and the JSON settings of `hermes_config`. A change to any of them is a new middle number and is announced in the changelog.
+
+Three executors run behind that one API: **Claude Code**, **Codex** (the ChatGPT subscription or a local model through the Codex CLI) and **Hermes** (the Hermes Agent installed inside the runner image). Each is chosen per provider with `ENGINE=` and each is installed only if its build flag is on (`INSTALL_CLAUDE_CODE`, `INSTALL_CODEX_CLI`, `INSTALL_HERMES`). New functions still ship behind a flag that is off by default.
+
+Not part of 1.0: the runner working with any client in every role (after 1.0), the lessons library switched on, DeepSeek Harness.
 
 ### Versioning
 
-The stack is versioned as a whole by the `claude-runner` package version (`claude-runner/pyproject.toml`, also reported by the runner API); the workflow files keep their own names (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial claude-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md). **0.4.0** (2026-10-14): the Telegram control bot actually works (webhook fed by `tg_relay.py`, command menu with descriptions), the retrieval index is in PostgreSQL with a memory limit, the slot cache is kept by a container (`slot_keeper.py` in `llama-cpp-dashboard`), the Reviewer can read the llama.cpp tree, the local run cost is computed as a Haiku/Sonnet equivalent, and the cold-prefill profile and mission report are in `docs/`. See `CHANGELOG.md`.
+The stack is versioned as a whole by the `ahawr-runner` package version (`ahawr-runner/pyproject.toml`, also reported by the runner API); the workflow files keep their own names (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial ahawr-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md). **0.4.0** (2026-10-14): the Telegram control bot actually works (webhook fed by `tg_relay.py`, command menu with descriptions), the retrieval index is in PostgreSQL with a memory limit, the slot cache is kept by a container (`slot_keeper.py` in `llama-cpp-dashboard`), the Reviewer can read the llama.cpp tree, the local run cost is computed as a Haiku/Sonnet equivalent, and the cold-prefill profile and mission report are in `docs/`. See `CHANGELOG.md`.
 
-**Version numbers (rule since 2026-10-15).** The number is `X.Y.Z`. A step with new functions raises the middle number by 1 (`0.4.0` → `0.5.0`, the last number goes back to 0). A release that only fixes bugs raises the last number by 100 (`0.5.0` → `0.5.100` → `0.5.200`). A small change (documentation, wording, a small fix) raises the last number by 10 (`0.5.100` → `0.5.110`), a tiny one (a typo, a link, one line) by 1 (`0.5.110` → `0.5.111`). Every push adds an entry to `CHANGELOG.md` with the version and the changes; for a bug-fix step the entry lists the fixed bugs. The number is changed in `claude-runner/pyproject.toml` and in `claude-runner/src/claude_runner/api.py` (`FastAPI(version=...)`), together with the changelog.
+**Version numbers (rule since 2026-10-15).** The number is `X.Y.Z`. A step with new functions raises the middle number by 1 (`0.4.0` → `0.5.0`, the last number goes back to 0). A release that only fixes bugs raises the last number by 100 (`0.5.0` → `0.5.100` → `0.5.200`). A small change (documentation, wording, a small fix) raises the last number by 10 (`0.5.100` → `0.5.110`), a tiny one (a typo, a link, one line) by 1 (`0.5.110` → `0.5.111`). Every push adds an entry to `CHANGELOG.md` with the version and the changes; for a bug-fix step the entry lists the fixed bugs. The number is changed in `ahawr-runner/pyproject.toml` and in `ahawr-runner/src/ahawr_runner/api.py` (`FastAPI(version=...)`), together with the changelog.
 
 ### Why it works this way: constraints and workarounds
 
@@ -785,7 +793,7 @@ Several parts of this stack look odd until you know what they work around. The W
 - *The Reviewer's verdict is parsed leniently.* A local Reviewer wrote unescaped double quotes inside `reason` and failed the run; `Parse Review` now reads such a verdict leniently and, with no verdict at all, asks the same session again for the JSON only (up to `reviewer_max_retries`).
 
 **4. Agents are made to search first, by a hook, not by a prompt.**
-- *What.* `ahawr-search "<question>"` in the claude-runner image asks the retrieval layer for the most relevant fragments of the folder the agent works in. With `SEARCH_FIRST` a PreToolUse hook refuses exploratory `grep`/`rg`/`find`/`Grep`/`Glob` until the session has used `ahawr-search`, and reminds the agent every few searches afterwards. The command is fail-open (exit 0 when the service is down), says why it failed (rejected request, service error, unreachable, timeout), accepts the usual spellings of `--k`/`--budget`, and clamps the budget.
+- *What.* `ahawr-search "<question>"` in the ahawr-runner image asks the retrieval layer for the most relevant fragments of the folder the agent works in. With `SEARCH_FIRST` a PreToolUse hook refuses exploratory `grep`/`rg`/`find`/`Grep`/`Glob` until the session has used `ahawr-search`, and reminds the agent every few searches afterwards. The command is fail-open (exit 0 when the service is down), says why it failed (rejected request, service error, unreachable, timeout), accepts the usual spellings of `--k`/`--budget`, and clamps the budget.
 - *Why.* A prompt rule ("MANDATORY: search with ahawr-search first") was followed in 4 of 26 local Worker runs, and only early in the run, against 413 `grep` commands. Retrieval context at the start of a task is also not enough: the Worker's file-level precision was 46% and recall 25%, and one 3408-line patch file took 44.8% of the context tokens. So retrieval is on demand, the Reviewer's context is focused on the files the Worker changed, and large `.patch` files are demoted.
 - *Cost.* A search costs a few seconds, and the first search of a new folder indexes it inside the request (8–9 s for 30 small files, hence the 30 s default timeout).
 
@@ -798,7 +806,7 @@ Several parts of this stack look odd until you know what they work around. The W
 The Reviewer judges the Worker's report and the files it can read. The Worker cannot run Docker, build a GPU image or run a live service, so a mission that needs those can pass review and still not work (a patch series once passed all reviews while it did not apply; a rebuilt image then crashed on the first request). For such missions the acceptance criteria say what the operator runs (for example `docker build` and a benchmark), and the mission is not considered done until that has passed. A change made by hand in a working tree must also end up in the artifact (the patch, the file under version control), not only in the tree; reviews cannot see the difference.
 
 **7. Cost numbers are estimates.**
-Claude Code reports a cost for every run. For the local model the image prices it like Claude Sonnet 5 (`claude-runner/managed-settings.json`) so that a local run can be compared with an all-Anthropic one; this is not a bill. Real spending is the Anthropic roles (usually the Opus Reviewer and Architect). The run's `cost_usd` is its own share: Claude Code restores the session's total on `--resume`, so the runner subtracts the previous run's total.
+Claude Code reports a cost for every run. For the local model the image prices it like Claude Sonnet 5 (`ahawr-runner/managed-settings.json`) so that a local run can be compared with an all-Anthropic one; this is not a bill. Real spending is the Anthropic roles (usually the Opus Reviewer and Architect). The run's `cost_usd` is its own share: Claude Code restores the session's total on `--resume`, so the runner subtracts the previous run's total.
 
 **8. Telegram notices are short and safe.**
 Task and review notices carry the task id, the attempt, the score and the reason cut at a sentence, not the whole review. The text is cut first and HTML-escaped after, because escaping first and cutting second can split an entity and make Telegram reject the message.
@@ -826,7 +834,7 @@ Only the fields in the allow-list in `docs/telegram-bot.md` (model/provider, pol
 - Worker and Reviewer cannot read `.env` files (every variant except `.env.example`) and cannot `git commit` or `git push`; the operator commits.
 
 **11. The Worker model changes by attempt, and after a heavy task.**
-- *What.* `roles_json` (the `hermes_config` row, or a mission's own) sets the model per attempt: for example attempt 1 on Haiku, attempt 2 on the local model, attempt 4 and later on Sonnet. A second key, `worker_escalate`, moves a task to a stronger model when the task was heavy: more than `above_steps` steps in the last run and a review score below `below_score` (the retry goes to the stronger model), or a split part whose split came from that many steps (the whole part runs on it). Example and every field: [`claude-runner/docs/roles-config.md`](claude-runner/docs/roles-config.md).
+- *What.* `roles_json` (the `hermes_config` row, or a mission's own) sets the model per attempt: for example attempt 1 on Haiku, attempt 2 on the local model, attempt 4 and later on Sonnet. A second key, `worker_escalate`, moves a task to a stronger model when the task was heavy: more than `above_steps` steps in the last run and a review score below `below_score` (the retry goes to the stronger model), or a split part whose split came from that many steps (the whole part runs on it). Example and every field: [`ahawr-runner/docs/roles-config.md`](ahawr-runner/docs/roles-config.md).
 - *Why.* The local 2-bit Worker is cheap and fast, and it solves most tasks, but on a hard task it burns 150 steps and a whole attempt for nothing. A cloud model on the first attempt wastes money on easy tasks, so the cheap model goes first and the expensive one is called only on evidence: many steps and a poor score, or a split.
 - *Why steps and score, and why after the task.* Stopping a run in the middle throws away work, and stopping a runaway run is the job of the adaptive split. The step count and the score are known only when a run has ended, so the choice is made for the next attempt or the next task. A first plain version, a score condition inside a chain value, was dropped: a chain stays a plain list of models and the exceptions live in one separate block.
 - *Cost.* Missing data (the runner does not answer, no previous run) counts as unknown and the block does nothing; the chain then decides alone.
@@ -972,7 +980,7 @@ Changing the mission should not require rewriting the orchestrator.
 
 ### Что делает проект
 
-Это система оркестрации автономных AI-агентов на базе **n8n**. Роли работают через **Hermes Gateway** или через **Claude Code** (`claude-runner`, с моделями Anthropic или локальной моделью llama.cpp), см. [AHAWR на Claude Code](#ahawr-на-claude-code-claude-runner). Последние изменения: [`CHANGELOG.md`](CHANGELOG.md).
+Это система оркестрации автономных AI-агентов на базе **n8n**. Роли работают через **Hermes Gateway** или через **Claude Code** (`ahawr-runner`, с моделями Anthropic или локальной моделью llama.cpp), см. [AHAWR на Claude Code](#ahawr-на-claude-code-ahawr-runner). Последние изменения: [`CHANGELOG.md`](CHANGELOG.md).
 
 Главный workflow — **Agentic Hub for Automation Workflow Routing (AHAWR)**.
 
@@ -1269,19 +1277,19 @@ logs
 ```text
 .
 ├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
-├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (claude-runner)
+├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (ahawr-runner)
 ├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
-├── Claude_Code_Run_Manager_v1.json  # the same for claude-runner
+├── Claude_Code_Run_Manager_v1.json  # the same for ahawr-runner
 ├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
 ├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
 ├── missions.example.csv             # Data Table example: one mission
 ├── data-tables/                     # your live CSVs (gitignored): exports, mission files
-├── claude-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
+├── ahawr-runner/                   # Claude Code CLI behind the /v1/runs API, dashboard
 ├── retrieval-service/               # ahawr-retrieval (Context Retrieval Layer)
 ├── litellm/                         # LiteLLM config and hook for the local llama.cpp model
 ├── docs/                            # retrieval docs, compaction analysis
 ├── scripts/                         # helper scripts
-├── docker-compose.yml, Dockerfile   # the stack: n8n, claude-runner, ahawr-retrieval, litellm, dashboard
+├── docker-compose.yml, Dockerfile   # the stack: n8n, ahawr-runner, ahawr-retrieval, litellm, dashboard
 ├── .env.example                     # every setting, with comments (copy to .env)
 ├── ARCHITECTURE_CONTRACT.md
 ├── CHANGELOG.md
@@ -1383,7 +1391,7 @@ Hermes Gateway
 
 В n8n:
 
-1. Импортируйте `Hermes_Run_Manager_v5.json` (вариант с Hermes) или `Claude_Code_Run_Manager_v1.json` (вариант с Claude Code, см. [AHAWR на Claude Code](#ahawr-на-claude-code-claude-runner)).
+1. Импортируйте `Hermes_Run_Manager_v5.json` (вариант с Hermes) или `Claude_Code_Run_Manager_v1.json` (вариант с Claude Code, см. [AHAWR на Claude Code](#ahawr-на-claude-code-ahawr-runner)).
 2. Настройте необходимые Hermes credentials.
 3. Выполните простой тестовый запрос.
 4. Убедитесь, что Hermes запускает run и возвращает результат.
@@ -1410,7 +1418,7 @@ missions
 | `default` | `AHAWR_v13.json` (Hermes) | Architect/Reviewer через OpenRouter, Worker — локальный llama.cpp |
 | `claude-code` (включена) | `AHAWR_v13_ClaudeCode.json` | все роли на Anthropic |
 | `claude-code` (выключена) | тот же | Worker на локальной модели через LiteLLM (`worker_provider=local`) |
-| `claude-code` (выключена) | тот же | все роли на OpenAI (`provider=openai`); нужен исполнитель Codex из миссии `ahawr-codex-executor`, в claude-runner его пока нет |
+| `claude-code` (выключена) | тот же | все роли на OpenAI (`provider=openai`); нужен исполнитель Codex из миссии `ahawr-codex-executor`, в ahawr-runner его пока нет |
 
 Workflow на Claude Code берёт первую включённую строку `claude-code`: включите ровно одну из трёх.
 Workflow на Hermes берёт первую включённую из `default`, `test`, `openrouter`.
@@ -1447,7 +1455,7 @@ state_namespace: test
 
 ```text
 AHAWR_v13.json               # Hermes
-AHAWR_v13_ClaudeCode.json    # Claude Code (claude-runner)
+AHAWR_v13_ClaudeCode.json    # Claude Code (ahawr-runner)
 ```
 
 После импорта откройте импортированный Run Manager и скопируйте его ID из адреса (`/workflow/<id>`). Если ID не `nhjwX1G7FiVTO2Ah`, впишите его в колонку `run_manager_workflow_id` таблицы `hermes_config`. `Architect/Worker/Reviewer Start` берут ID оттуда. Входы для них собирают Code-узлы `Build … Run Input`, поэтому повторный выбор или переимпорт Run Manager их не сбрасывает.
@@ -1531,7 +1539,7 @@ worker_provider
 - Инкрементальная индексация, инвалидация на уровне чанков, кэш с семантическим fingerprint для повторных попыток.
 - По умолчанию используется собственный локальный индекс. `rag-platform` можно подключить как внешний бэкенд; если он недоступен, сервис автоматически переходит на локальный индекс.
 - Все дальнейшие расширения принимаются по данным Eval Harness (gold/silver наборы; метрики retrieval, системы и AHAWR).
-- Агенты могут искать и по ходу задачи: команда `ahawr-search "запрос"` в образе claude-runner ищет по папке, из которой вызвана (fail-open, бюджет 1500 токенов). Контекст Reviewer'а фокусируется на файлах, изменённых Worker'ом (`changed_paths`), а `ahawr-retrieval usage` показывает по профилям точность, полноту и число поисков по журналу retrieval и событиям runner'а.
+- Агенты могут искать и по ходу задачи: команда `ahawr-search "запрос"` в образе ahawr-runner ищет по папке, из которой вызвана (fail-open, бюджет 1500 токенов). Контекст Reviewer'а фокусируется на файлах, изменённых Worker'ом (`changed_paths`), а `ahawr-retrieval usage` показывает по профилям точность, полноту и число поисков по журналу retrieval и событиям runner'а.
 
 `AHAWR_v13.json` вызывает `POST http://ahawr-retrieval:8500/retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется в контейнер retrieval только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
@@ -1547,11 +1555,11 @@ worker_provider
 Architect контекст из RAG не получает, только Worker и Reviewer.
 
 
-### AHAWR на Claude Code (`claude-runner`)
+### AHAWR на Claude Code (`ahawr-runner`)
 
-`AHAWR_v13_ClaudeCode.json` — это AHAWR v13, в котором вместо Hermes работает **Claude Code**. Своего HTTP API для запусков у Claude Code нет. `claude-runner/` запускает Claude Code CLI без интерактива и отдаёт тот же контракт `/v1/runs`, что и Hermes Gateway. Поэтому оркестрация, состояние в Data Tables, ретраи и восстановление не меняются.
+`AHAWR_v13_ClaudeCode.json` — это AHAWR v13, в котором вместо Hermes работает **Claude Code**. Своего HTTP API для запусков у Claude Code нет. `ahawr-runner/` запускает Claude Code CLI без интерактива и отдаёт тот же контракт `/v1/runs`, что и Hermes Gateway. Поэтому оркестрация, состояние в Data Tables, ретраи и восстановление не меняются.
 
-- Контейнер `claude-runner` входит в тот же compose-стек: `docker compose up -d --build` собирает и запускает его вместе с n8n, `ahawr-retrieval` и `litellm`. n8n обращается к нему по адресу `http://claude-runner:8700`.
+- Контейнер `ahawr-runner` входит в тот же compose-стек: `docker compose up -d --build` собирает и запускает его вместе с n8n, `ahawr-retrieval` и `litellm`. n8n обращается к нему по адресу `http://ahawr-runner:8700`.
 - `Claude_Code_Run_Manager_v1.json` — это `Hermes_Run_Manager_v5.json` с адресами runner. Компрессия через Hermes WebSocket заменена на `POST /v1/sessions/{id}/compact`: это `/compact` Claude Code, который запускается только при большом контексте.
 - Сессии Claude Code продолжаются через `--resume` и хранятся в томе. Прогон, прерванный рестартом runner, возвращает `run_not_found`, и Run Manager продолжает сессию.
 - Права по ролям:
@@ -1574,16 +1582,24 @@ Architect контекст из RAG не получает, только Worker �
 
 **Ретраи.** Ретрай после `needs_changes` продолжает сессию Worker'а и передаёт ему его прошлый отчёт и ревью. Переполнение контекста принудительно запускает сжатие перед ретраем. Упавшая задача продолжается с места остановки. Если сжатие не удалось, новая сессия получает дайджест старой. Счётчик попыток берёт наибольшую попытку из журнала задачи, поэтому `max_attempts_per_task` соблюдается, даже если `task_attempt` сброшен вручную.
 
-**Стоимость.** Дашборд показывает оценку самого Claude Code для каждого прогона: долю этого прогона, а не итог сессии. Образ оценивает локальную модель по ценам Claude Sonnet 5 через `claude-runner/managed-settings.json`, чтобы сравнивать с вариантом целиком на Anthropic.
+**Стоимость.** Дашборд показывает оценку самого Claude Code для каждого прогона: долю этого прогона, а не итог сессии. Образ оценивает локальную модель по ценам Claude Sonnet 5 через `ahawr-runner/managed-settings.json`, чтобы сравнивать с вариантом целиком на Anthropic.
 
 **Инструменты Worker'а.** В образе есть git, pytest, ruff и mypy. Инструменты сборки добавляются через `CLAUDE_RUNNER_EXTRA_APT_PACKAGES` (например, `patch build-essential cmake`). Worker не может читать файлы `.env` (любые варианты, кроме `.env.example`), делать `git commit` и `git push`, а промпт запрещает ему выводить переменные окружения.
 
 **Размышление локальной модели.** Файл `litellm/runtime/local_thinking` (`on`/`off`) переключает размышление на каждом запросе без перезапуска; runner сам выключает его для задачи, которая идёт дольше `AHAWR_THINK_OFF_AFTER_SECONDS` (по умолчанию 3600), и включает для следующей; шаблон чата `llama/templates/qwen38-same-prefix.jinja` делает начало промпта одинаковым в обоих режимах, поэтому переключение не сбрасывает кэш llama.cpp. Подробности: [`docs/thinking-control.md`](docs/thinking-control.md).
 
-Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`claude-runner/README.md`](claude-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
+Воркфлоу для Hermes не изменены, обе версии можно импортировать одновременно. Подробности в [`ahawr-runner/README.md`](ahawr-runner/README.md), [`CHANGELOG.md`](CHANGELOG.md).
+### Что значит 1.0
+
+Версия 1.0.0 фиксирует контракты, а не список функций. Стабильны: API `/v1/runs` раннера `ahawr-runner`, формат событий запуска (`docs/run-event-format.md`), блок провайдера (`docs/provider-block-schema.md`) и JSON-настройки `hermes_config`. Изменение любого из них — новое среднее число версии, запись в журнале изменений.
+
+За этим API работают три исполнителя: **Claude Code**, **Codex** (подписка ChatGPT или локальная модель через Codex CLI) и **Hermes** (Hermes Agent внутри образа раннера). Исполнитель выбирается в провайдере через `ENGINE=`, а в образ ставится только тот, чей флаг сборки включён (`INSTALL_CLAUDE_CODE`, `INSTALL_CODEX_CLI`, `INSTALL_HERMES`). Новые функции по-прежнему выходят за флагом, выключенным по умолчанию.
+
+Не входит в 1.0: работа раннера с любым клиентом в любой роли (после 1.0), включённая библиотека lessons, DeepSeek Harness.
+
 ### Версии
 
-Стек версионируется по версии пакета `claude-runner` (`claude-runner/pyproject.toml`, её же отдаёт API runner'а); файлы воркфлоу сохраняют свои имена (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый claude-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
+Стек версионируется по версии пакета `ahawr-runner` (`ahawr-runner/pyproject.toml`, её же отдаёт API runner'а); файлы воркфлоу сохраняют свои имена (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый ahawr-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Почему всё устроено именно так: ограничения и обходные решения
 
@@ -1606,7 +1622,7 @@ Architect контекст из RAG не получает, только Worker �
 - *Вердикт Reviewer'а разбирается мягко.* Локальный Reviewer написал в `reason` неэкранированные двойные кавычки, и прогон упал; теперь `Parse Review` читает такой вердикт мягко, а если вердикта нет совсем, снова просит ту же сессию вернуть только JSON (до `reviewer_max_retries` раз).
 
 **4. Агентов заставляет искать сначала хук, а не промпт.**
-- *Что.* `ahawr-search "<вопрос>"` в образе claude-runner просит слой retrieval найти самые подходящие фрагменты в папке, где работает агент. При `SEARCH_FIRST` хук PreToolUse отклоняет разведочные `grep`/`rg`/`find`/`Grep`/`Glob`, пока сессия не вызвала `ahawr-search`, и после этого напоминает каждые несколько поисков. Команда fail-open (выход 0, если сервис недоступен), говорит, почему не сработала (запрос отклонён, ошибка сервиса, недоступность, таймаут), принимает привычные написания `--k`/`--budget` и ограничивает бюджет.
+- *Что.* `ahawr-search "<вопрос>"` в образе ahawr-runner просит слой retrieval найти самые подходящие фрагменты в папке, где работает агент. При `SEARCH_FIRST` хук PreToolUse отклоняет разведочные `grep`/`rg`/`find`/`Grep`/`Glob`, пока сессия не вызвала `ahawr-search`, и после этого напоминает каждые несколько поисков. Команда fail-open (выход 0, если сервис недоступен), говорит, почему не сработала (запрос отклонён, ошибка сервиса, недоступность, таймаут), принимает привычные написания `--k`/`--budget` и ограничивает бюджет.
 - *Зачем.* Правило в промпте («ОБЯЗАТЕЛЬНО: сначала ищи через ahawr-search») выполнялось в 4 из 26 прогонов локального Worker'а и только в начале, против 413 команд `grep`. Контекста retrieval в начале задачи тоже не хватает: точность по файлам у Worker'а была 46%, полнота 25%, а один патч на 3408 строк занимал 44,8% токенов контекста. Поэтому поиск по требованию, контекст Reviewer'а фокусируется на файлах, изменённых Worker'ом, а крупные `.patch` понижаются в выдаче.
 - *Цена.* Поиск занимает несколько секунд, а первый поиск по новой папке индексирует её прямо в запросе (8–9 с на 30 небольших файлов, отсюда таймаут по умолчанию 30 с).
 
@@ -1619,7 +1635,7 @@ Architect контекст из RAG не получает, только Worker �
 Reviewer судит отчёт Worker'а и файлы, которые может прочитать. Worker не может запустить Docker, собрать образ с GPU или поднять живой сервис, поэтому миссия, которой это нужно, может пройти ревью и не заработать (серия патчей однажды прошла все ревью, хотя не применялась, а пересобранный образ упал на первом запросе). Для таких миссий в критериях приёмки указано, что запускает оператор (например `docker build` и бенчмарк), и миссия не считается завершённой, пока это не пройдёт. Ручная правка рабочего дерева должна попадать и в артефакт (патч, файл под версионным контролем), а не только в дерево: ревью этой разницы не видит.
 
 **7. Цифры стоимости — оценки.**
-Claude Code сообщает стоимость каждого прогона. Для локальной модели образ оценивает её по ценам Claude Sonnet 5 (`claude-runner/managed-settings.json`), чтобы сравнивать локальный прогон с полностью Anthropic; это не счёт. Реальные траты — роли на Anthropic (обычно Reviewer и Architect на Opus). `cost_usd` прогона — его собственная доля: Claude Code восстанавливает итог сессии при `--resume`, поэтому runner вычитает итог предыдущего прогона.
+Claude Code сообщает стоимость каждого прогона. Для локальной модели образ оценивает её по ценам Claude Sonnet 5 (`ahawr-runner/managed-settings.json`), чтобы сравнивать локальный прогон с полностью Anthropic; это не счёт. Реальные траты — роли на Anthropic (обычно Reviewer и Architect на Opus). `cost_usd` прогона — его собственная доля: Claude Code восстанавливает итог сессии при `--resume`, поэтому runner вычитает итог предыдущего прогона.
 
 **8. Telegram-уведомления короткие и безопасные.**
 Уведомления о задаче и ревью содержат id задачи, попытку, балл и причину, обрезанную по предложению, а не всё ревью. Текст сначала обрезается, а потом экранируется для HTML: если экранировать до обрезки, можно разрезать сущность, и Telegram отклонит сообщение.
@@ -1632,7 +1648,7 @@ Claude Code сообщает стоимость каждого прогона. �
 - Worker и Reviewer не могут читать файлы `.env` (любые варианты, кроме `.env.example`) и делать `git commit` и `git push`; коммитит оператор.
 
 **10. Модель Worker меняется по попыткам и после тяжёлой задачи.**
-- *Что.* `roles_json` (строка `hermes_config` или собственный у миссии) задаёт модель по попыткам: например, попытка 1 на Haiku, попытка 2 на локальной модели, попытка 4 и дальше на Sonnet. Второй ключ, `worker_escalate`, переводит задачу на более сильную модель, если она была тяжёлой: в последнем запуске больше `above_steps` шагов и скор ревью ниже `below_score` (ретрай идёт на сильную модель), либо это часть после сплита, который вызвало столько шагов (вся часть идёт на ней). Пример и все поля: [`claude-runner/docs/roles-config.md`](claude-runner/docs/roles-config.md).
+- *Что.* `roles_json` (строка `hermes_config` или собственный у миссии) задаёт модель по попыткам: например, попытка 1 на Haiku, попытка 2 на локальной модели, попытка 4 и дальше на Sonnet. Второй ключ, `worker_escalate`, переводит задачу на более сильную модель, если она была тяжёлой: в последнем запуске больше `above_steps` шагов и скор ревью ниже `below_score` (ретрай идёт на сильную модель), либо это часть после сплита, который вызвало столько шагов (вся часть идёт на ней). Пример и все поля: [`ahawr-runner/docs/roles-config.md`](ahawr-runner/docs/roles-config.md).
 - *Зачем.* Локальный 2-битный Worker дёшев и быстр и решает большинство задач, но на трудной задаче тратит 150 шагов и целую попытку впустую. Облачная модель на первой попытке тратит деньги на лёгких задачах, поэтому сначала идёт дешёвая, а дорогая подключается только по признакам: много шагов и плохой скор или сплит.
 - *Почему шаги и скор и почему после задачи.* Остановка запуска посередине выбрасывает работу, а останавливать убежавший запуск должен адаптивный сплит. Число шагов и скор известны только после конца запуска, поэтому выбор делается для следующей попытки или следующей задачи. Первый простой вариант, условие по скору внутри значения цепочки, отвергнут: цепочка остаётся простым списком моделей, а исключения лежат в одном отдельном блоке.
 - *Цена.* Нет данных (runner не ответил, нет предыдущего запуска) считается неизвестным, блок ничего не делает, решает одна цепочка.

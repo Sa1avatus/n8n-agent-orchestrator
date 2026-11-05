@@ -116,7 +116,7 @@ Silver sets are generated with `build-silver` (`cli.py:44-51`). Their tasks shou
   the fixed bugs.
 - A small change raises the last number by 10; a tiny one (typo, link, one line) by 1.
 - Every push adds a `CHANGELOG.md` entry with the version; the number lives in
-  `claude-runner/pyproject.toml` and `claude-runner/src/claude_runner/api.py` (`FastAPI(version=...)`).
+  `ahawr-runner/pyproject.toml` and `ahawr-runner/src/ahawr_runner/api.py` (`FastAPI(version=...)`).
 
 The CHANGELOG section dated 2026-10-15 is at `CHANGELOG.md:421-441` (versions 0.4.200, 0.4.100 and
 an unversioned entry).
@@ -471,7 +471,7 @@ The file is at `retrieval-service/eval/data/real_queries.jsonl`.
 Read-only. Paths are relative to the repository root `/d/n8n`. Line numbers were read on 2026-10-27.
 No code was changed.
 
-- Query received: `main` (`claude-runner/src/claude_runner/search_cli.py:177`). The query is built at
+- Query received: `main` (`ahawr-runner/src/ahawr_runner/search_cli.py:177`). The query is built at
   `search_cli.py:251` (`args.query = (args.query_option or " ".join(words)).strip()`), and the empty-query
   check is at `search_cli.py:252-253`.
 - HTTP call: `search_text` (`search_cli.py:143`) calls `resolve_root` (`search_cli.py:154`), then
@@ -492,14 +492,14 @@ No code was changed.
   read when the parser is built, so `monkeypatch.setenv` before `main()` is enough. `DEFAULT_URL`,
   `DEFAULT_TIMEOUT` and `DEFAULT_BUDGET` are at `search_cli.py:21-26`. `ALLOWED_PREFIXES` is at
   `search_cli.py:32`.
-- Test pattern (`claude-runner/tests/test_search_cli.py`): `_CapturingTransport` (`test_search_cli.py:23-38`)
+- Test pattern (`ahawr-runner/tests/test_search_cli.py`): `_CapturingTransport` (`test_search_cli.py:23-38`)
   is an `httpx.MockTransport` that stores the last request in `.request`. `_run` (`test_search_cli.py:41-50`)
   calls `main(argv, transport=...)` under `redirect_stdout`. A test passes the flags as `argv`, passes
   `--root /workspace` (allowed prefix), and checks `transport.request` or the stdout string. Env tests use
   `monkeypatch.setenv` (`test_search_cli.py:222-227`). A test that must show nothing was sent asserts
   `transport.request is None` (`test_search_cli.py:88`, `:336`). `search_text` is tested directly at
   `test_search_cli.py:303-336`. Tests are plain functions with `monkeypatch: pytest.MonkeyPatch`.
-- Run: `python -m pytest tests/test_search_cli.py -q --no-cov` from `claude-runner/`.
+- Run: `python -m pytest tests/test_search_cli.py -q --no-cov` from `ahawr-runner/`.
 
 ## Experiment variants (read-only; no DB writes; env set per command)
 
@@ -616,7 +616,7 @@ breakdown rows are only meaningful once the window holds several requests.
 
 ```
 docker compose exec ahawr-retrieval ahawr-retrieval usage \
-  --runner-url http://claude-runner:8700 \
+  --runner-url http://ahawr-runner:8700 \
   --runner-key "$RETRIEVAL_RUNNER_API_KEY" \
   --since <t_start> --json > /tmp/usage_before.json
 ```
@@ -659,7 +659,7 @@ After at least 5 live missions have run on the new settings:
 
 ```
 docker compose exec ahawr-retrieval ahawr-retrieval usage \
-  --runner-url http://claude-runner:8700 \
+  --runner-url http://ahawr-runner:8700 \
   --runner-key "$RETRIEVAL_RUNNER_API_KEY" \
   --since <t_after> --json > /tmp/usage_after.json
 ```

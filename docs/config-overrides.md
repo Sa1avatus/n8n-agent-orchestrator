@@ -76,7 +76,7 @@ has `parseCorpora(row.retrieval_corpora_json)`, the line that patch replaces.
 - Whether `overrides_json` exists in the live `missions` table (not read: the Data Table schema was out of scope).
 - `lessons_patch.py:45`: which variable `cfg` is bound to (not traced).
 - Whether `retrieval_config_patch.py` has been applied to the live workflow (the export still has the legacy line).
-- Readers in the runner and board source (`claude-runner/`): out of scope for this task.
+- Readers in the runner and board source (`ahawr-runner/`): out of scope for this task.
 
 ## Checks run
 
@@ -86,15 +86,15 @@ has `parseCorpora(row.retrieval_corpora_json)`, the line that patch replaces.
 
 ## Readers: runner, board, UI, docs
 
-Read only (T001B). Scope: `claude-runner/src/claude_runner` (not `codex_*.py`), `claude-runner/tests`, `docs`.
-Command: `grep -rn 'retrieval_corpora_json\|state_namespace\|overrides_json' claude-runner/src claude-runner/tests docs`.
+Read only (T001B). Scope: `ahawr-runner/src/ahawr_runner` (not `codex_*.py`), `ahawr-runner/tests`, `docs`.
+Command: `grep -rn 'retrieval_corpora_json\|state_namespace\|overrides_json' ahawr-runner/src ahawr-runner/tests docs`.
 Line numbers are from that grep and from the reads named in each row.
 
 The names `retrieval_corpora` (no `_json`, the API field of the mission) and `mission.state_namespace` in code are
 included where they read the column. The column grep does not match `retrieval_corpora`, so those hits are listed
 separately (marked "field").
 
-### Runner (Python), `claude-runner/src/claude_runner`
+### Runner (Python), `ahawr-runner/src/ahawr_runner`
 
 | File | Lines | Name | Reader or writer, what it does |
 |---|---|---|---|
@@ -120,7 +120,7 @@ separately (marked "field").
 | `retrieval_config.py` | 13 | `retrieval_corpora_json` | `DEFAULTS` (today's constant `[]`) |
 | `retrieval_config.py` | 22 | `retrieval_corpora_json` | `JSON_KEYS`: `corpora` maps to this column |
 
-### Board UI (JavaScript and i18n), `claude-runner/src/claude_runner`
+### Board UI (JavaScript and i18n), `ahawr-runner/src/ahawr_runner`
 
 | File | Lines | Name | Reader or writer, what it does |
 |---|---|---|---|
@@ -134,7 +134,7 @@ separately (marked "field").
 | `board_edit_win.js` | 27, 35, 848, 849 | `retrieval_corpora` (field) | launch window: context page keys, `LOCKED` list, summary card label and locked note. No column name in this file |
 | `board_mission_save.js` | 108 | `retrieval_corpora` (field) | comment: config list fields |
 
-### Tests, `claude-runner/tests`
+### Tests, `ahawr-runner/tests`
 
 | File | Lines | Name | Note |
 |---|---|---|---|
@@ -179,17 +179,17 @@ separately (marked "field").
 
 ### Launch settings window and its save route (for T004A)
 
-- Window: `claude-runner/src/claude_runner/board_edit_win.js`. Header and pages 1-16; `save()` at 117; summary card at 145;
+- Window: `ahawr-runner/src/ahawr_runner/board_edit_win.js`. Header and pages 1-16; `save()` at 117; summary card at 145;
   `retPlan()` at 586 and `saveRetrieval()` at 592 (retrieval JSON, not the columns); review page `reviewHtml()` at 863;
   discard confirm at 945.
-- Form and data path: `claude-runner/src/claude_runner/board_mission.js` (`FORM_ROWS` at 78-94, `renderMission` at 212);
-  `claude-runner/src/claude_runner/board_mission_save.js` (`readForm` at 72, `currentDiff` at 167, `retrievalSavePlan` at 252-260).
+- Form and data path: `ahawr-runner/src/ahawr_runner/board_mission.js` (`FORM_ROWS` at 78-94, `renderMission` at 212);
+  `ahawr-runner/src/ahawr_runner/board_mission_save.js` (`readForm` at 72, `currentDiff` at 167, `retrievalSavePlan` at 252-260).
 - Diff and confirm: `currentDiff` (`board_mission_save.js:167`) and `diffHtml` (`:184`) build the diff; `onSave`
   (`:331`) shows the diff and calls `window.confirm` at `:348`; `doSave` (`:358`) sends the save only after confirm.
 - Version check, client side: `doSave` sends `expected_version` with `POST /api/board/missions/{id}` (`:384-385`,
   value `mission.updated_at`) and with `POST /api/board/missions/{id}/config` (`:388-389`, value `version`). The retrieval
   save sends `expected_version` with `PUT /api/board/retrieval` (`board_mission_save.js:252-260`).
-- Version check, server side: route `update_mission` at `claude-runner/src/claude_runner/board_api.py:763-774`
+- Version check, server side: route `update_mission` at `ahawr-runner/src/ahawr_runner/board_api.py:763-774`
   (`expected_version` popped at `:769`); config route at `board_api.py:1301`; retrieval route `@router.put("/retrieval")`
   at `board_api.py:1659`.
 - Store check: `BoardStore.update_mission` at `board.py:787` calls `_check_version` at `board.py:794`; `_check_version`
@@ -224,7 +224,7 @@ equals `mission_id` in every row; the type of `overrides_json` and `retrieval_js
 
 ## Checks run (T001B)
 
-- `grep -rn 'retrieval_corpora_json\|state_namespace\|overrides_json' claude-runner/src claude-runner/tests docs`: 995 hits.
+- `grep -rn 'retrieval_corpora_json\|state_namespace\|overrides_json' ahawr-runner/src ahawr-runner/tests docs`: 995 hits.
   Hits in `docs/config-overrides.md` itself are excluded from the tables. Hits outside `docs/cold-prefill` are listed above
   by line. `docs/cold-prefill` (829 hits) is run-log data, summarised.
 - `grep -l ... | grep codex_`: no `codex_*` file matches the names, so nothing is excluded by the codex rule.
@@ -235,18 +235,18 @@ equals `mission_id` in every row; the type of `overrides_json` and `retrieval_js
 
 ### Что изменено
 
-- `claude-runner/src/claude_runner/overrides_config.py`: ядро на Python, `DEFAULTS`, `LEGACY_COLUMNS`, `validate`
-  (строка 109), `resolve` (122), `flatten` (132). Тесты: `claude-runner/tests/test_overrides_config.py`.
-- `claude-runner/src/claude_runner/board_overrides.js`: то же ядро на JavaScript. Общие кейсы:
-  `claude-runner/tests/overrides_cases.json`, тест `claude-runner/tests/board_overrides.test.js`.
-- `claude-runner/src/claude_runner/board_api.py:774-779`: при `POST /api/board/missions/<id>` поле `overrides_json`
+- `ahawr-runner/src/ahawr_runner/overrides_config.py`: ядро на Python, `DEFAULTS`, `LEGACY_COLUMNS`, `validate`
+  (строка 109), `resolve` (122), `flatten` (132). Тесты: `ahawr-runner/tests/test_overrides_config.py`.
+- `ahawr-runner/src/ahawr_runner/board_overrides.js`: то же ядро на JavaScript. Общие кейсы:
+  `ahawr-runner/tests/overrides_cases.json`, тест `ahawr-runner/tests/board_overrides.test.js`.
+- `ahawr-runner/src/ahawr_runner/board_api.py:774-779`: при `POST /api/board/missions/<id>` поле `overrides_json`
   проверяется через `overrides_config.validate` до записи.
-- `claude-runner/src/claude_runner/board_edit_win.js:600-650`: окно запуска читает и сохраняет `overrides_json`
+- `ahawr-runner/src/ahawr_runner/board_edit_win.js:600-650`: окно запуска читает и сохраняет `overrides_json`
   (страница 3, «Mission overrides (JSON)»), сохранение идёт с `expected_version`.
 - `data-tables/ops/propose_overrides_json.py`: dry run, предлагает `overrides_json` из legacy-колонок. Ничего не пишет.
-  Тест: `claude-runner/tests/test_propose_overrides_json.py`.
+  Тест: `ahawr-runner/tests/test_propose_overrides_json.py`.
 - `data-tables/ops/overrides_config_patch.py`: патч `Constants` workflow. Читает `overrides_json` первым, legacy-колонку
-  вторым. Не в git. Тест: `claude-runner/tests/test_overrides_config_patch.py`.
+  вторым. Не в git. Тест: `ahawr-runner/tests/test_overrides_config_patch.py`.
 - `CHANGELOG.md`, раздел «Step 5». Этот документ: `docs/config-overrides.md`.
 
 ### Шаги оператора

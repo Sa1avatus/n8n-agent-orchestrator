@@ -1274,7 +1274,7 @@ const CONSTANTS_STUB = {
   retry_delays: [15, 30, 60, 120, 300],
   service_provider: "anthropic",
   service_model: "claude-haiku-4-5",
-  runner_url: "http://claude-runner:8700",
+  runner_url: "http://ahawr-runner:8700",
   runner_api_key: "",
 };
 const PROMPTS_STUB = { worker_prompt: "WORKER PROMPT (stub)" };

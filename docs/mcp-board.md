@@ -3,8 +3,8 @@
 `ahawr-mcp-board` is an MCP stdio server over the board store. It lets a Claude Code session read the
 queue and missions, and make the same plan edits the board UI makes. It uses the same wire format as
 `ahawr-mcp-search` (newline-delimited JSON-RPC 2.0 on stdin/stdout, diagnostics on stderr). Code:
-`claude-runner/src/claude_runner/mcp_board.py`, entry point `ahawr-mcp-board` in
-`claude-runner/pyproject.toml`.
+`ahawr-runner/src/ahawr_runner/mcp_board.py`, entry point `ahawr-mcp-board` in
+`ahawr-runner/pyproject.toml`.
 
 ## Tools
 

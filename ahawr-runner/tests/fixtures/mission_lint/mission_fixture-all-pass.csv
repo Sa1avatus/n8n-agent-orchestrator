@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-all-pass,fixture-all-pass,working_dir,1,true,All checks pass,Read the staged export (operator copy at staged_export.json) and patch the node.,[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]"

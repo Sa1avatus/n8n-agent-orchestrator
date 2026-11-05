@@ -1,0 +1,1364 @@
+# ruff: noqa: E501  (fixture transcripts are kept one message per line)
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from ahawr_runner.api import create_app
+from ahawr_runner.board import InMemoryBoardStore
+from ahawr_runner.config import Settings
+from ahawr_runner.dashboard import DashboardSettings, create_dashboard_app
+from ahawr_runner.events import EventLog, StepTracker, entries_from
+from ahawr_runner.sources import hermes_entries
+from ahawr_runner.titles import role_of, title_of
+
+from .conftest import calls, wait_for
+from .test_runs import start
+
+
+def events(client: TestClient, run_id: str, after: int = 0, prefix: str = "/v1") -> Any:
+    response = client.get(f"{prefix}/runs/{run_id}/events", params={"after": after})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+# ------------------------------------------------------------------ ahawr-runner activity log
+def test_run_activity_is_logged(client: TestClient, tmp_path: Path) -> None:
+    run = start(client, role="worker", input="TASK T001: fix calc\n[[tools]]", provider="local")
+    wait_for(client, run["run_id"])
+    body = events(client, run["run_id"])
+    kinds = [e["kind"] for e in body["events"]]
+    assert kinds == [
+        "prompt", "init", "step", "thinking", "tool_use", "tool_result",
+        "text", "step", "result", "end",
+    ]  # fmt: skip
+    by_kind = {e["kind"]: e for e in body["events"]}
+    assert by_kind["thinking"]["text"] == "I should read calc.py."
+    assert by_kind["tool_use"]["name"] == "Read"
+    assert by_kind["tool_use"]["input"] == {"file_path": "calc.py"}
+    tool_result = by_kind["tool_result"]
+    assert tool_result["id"] == "toolu_1" and "return a + b" in tool_result["text"]
+    assert by_kind["end"]["status"] == "completed"
+    # steps: the tool round (no token deltas) and the streamed answer (timed)
+    first, second = [e for e in body["events"] if e["kind"] == "step"]
+    assert first["step"] == 1 and first["input_tokens"] == 50 and "ttft_ms" not in first
+    assert second["step"] == 2 and second["cache_read_tokens"] == 1000
+    assert second["output_tokens"] == 5 and second["ttft_ms"] >= 0 and second["duration_ms"] >= 0
+    assert by_kind["thinking"]["step"] == 1 and by_kind["text"]["step"] == 2
+    assert body["next"] == len(kinds) and body["live"] is None
+    assert body["run"]["title"] == "TASK T001: fix calc"
+    assert body["run"]["provider"] == "local" and body["run"]["source"] == "claude-code"
+    assert events(client, run["run_id"], after=8)["events"][0]["kind"] == "result"
+    assert "--include-partial-messages" in calls(tmp_path)[0]["args"]
+
+
+def test_steps_without_token_deltas(settings: Settings) -> None:
+    quiet = Settings(**{**settings.__dict__, "live_tokens": False})
+    with TestClient(create_app(quiet)) as client:
+        run = start(client, input="[[tools]]")
+        wait_for(client, run["run_id"])
+        steps = [e for e in events(client, run["run_id"])["events"] if e["kind"] == "step"]
+        assert [s["step"] for s in steps] == [1, 2]
+        assert steps[1]["cache_read_tokens"] == 1000 and "ttft_ms" not in steps[1]
+
+
+def test_live_block_while_generating(client: TestClient) -> None:
+    run = start(client, role="worker", input="slow [[stream_sleep:2]]")
+    deadline = time.monotonic() + 10
+    live = None
+    while time.monotonic() < deadline and not live:
+        live = events(client, run["run_id"])["live"]
+        time.sleep(0.05)
+    assert live and live["kind"] == "text" and live["text"] == "ec"
+    assert events(client, run["run_id"])["run"]["live"] is True
+    wait_for(client, run["run_id"])
+    body = events(client, run["run_id"])
+    assert body["live"] is None and body["run"]["live"] is False
+    step = next(e for e in body["events"] if e["kind"] == "step")
+    assert step["ttft_ms"] < 1500 <= step["duration_ms"] and step["generation_ms"] >= 1500
+
+
+def test_run_list_filters(client: TestClient) -> None:
+    a = start(client, role="architect", input="BEGIN MISSION\nMISSION: Calc\nEND MISSION")
+    wait_for(client, a["run_id"])
+    w = start(client, role="worker", input="x")
+    wait_for(client, w["run_id"])
+    runs = client.get("/v1/runs").json()["runs"]
+    assert [r["run_id"] for r in runs] == [w["run_id"], a["run_id"]]
+    assert runs[1]["title"] == "Plan: Calc" and runs[0]["tokens"]["output"] == 5
+    only = client.get("/v1/runs", params={"role": "architect"}).json()["runs"]
+    assert [r["run_id"] for r in only] == [a["run_id"]]
+    by_session = client.get("/v1/runs", params={"session_id": w["session_id"]}).json()["runs"]
+    assert [r["run_id"] for r in by_session] == [w["run_id"]]
+    assert client.get("/v1/runs/run_nope/events").status_code == 404
+
+
+def test_stats_for_a_set_of_runs(client: TestClient) -> None:
+    a = start(client, role="architect", input="BEGIN MISSION\nMISSION: Calc\nEND MISSION")
+    wait_for(client, a["run_id"])
+    w = start(client, role="worker", input="x")
+    wait_for(client, w["run_id"])
+    body = client.post("/v1/stats/runs", json={"run_ids": [a["run_id"], w["run_id"], "run_nope"]})
+    assert body.status_code == 200
+    stats = body.json()
+    assert stats["runs"] == 2  # an unknown id is skipped
+    assert stats["worker_hours"] >= 0 and stats["architect_minutes"] >= 0
+    assert stats["cost_estimate_usd"] >= stats["cost_real_usd"] >= 0
+    assert 0 <= stats["cache_ratio"] <= 1 and stats["compactions"] == 0
+    assert client.post("/v1/stats/runs", json={"run_ids": []}).json()["runs"] == 0
+
+
+def test_read_views_need_the_bearer(settings: Settings) -> None:
+    secured = Settings(**{**settings.__dict__, "api_key": "k"})
+    with TestClient(create_app(secured)) as api:
+        assert api.get("/v1/runs").status_code == 401
+        assert api.get("/v1/runs", headers={"Authorization": "Bearer k"}).status_code == 200
+
+
+def test_entries_cover_stream_events() -> None:
+    retry = {
+        "type": "system", "subtype": "api_retry", "attempt": 2, "max_retries": 10,
+        "error_status": 529, "error": "overloaded",
+    }  # fmt: skip
+    assert entries_from(retry) == [
+        {"kind": "retry", "attempt": 2, "max_retries": 10, "status": 529,
+         "error": "overloaded", "delay_ms": None}
+    ]  # fmt: skip
+    compact = entries_from(
+        {"type": "system", "subtype": "compact_boundary",
+         "compact_metadata": {"trigger": "manual", "pre_tokens": 9, "post_tokens": 1}}
+    )  # fmt: skip
+    assert compact[0]["kind"] == "compact" and compact[0]["post_tokens"] == 1
+    assert compact[0]["duration_ms"] is None  # older Claude Code builds do not report it
+    timed = entries_from(
+        {"type": "system", "subtype": "compact_boundary",
+         "compact_metadata": {"trigger": "auto", "pre_tokens": 59931, "post_tokens": 9749, "duration_ms": 136158}}
+    )  # fmt: skip
+    assert timed[0]["duration_ms"] == 136158
+    sub = entries_from(
+        {"type": "assistant", "parent_tool_use_id": "toolu_9",
+         "message": {"content": [{"type": "redacted_thinking"}, {"type": "text", "text": "hi"}]}}
+    )  # fmt: skip
+    assert [e["kind"] for e in sub] == ["thinking", "text"]
+    assert all(e["agent"] == "toolu_9" for e in sub)
+    big = entries_from(
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t", "name": "Write",
+             "input": {"file_path": "a", "content": "x" * 50_000}}]}}
+    )  # fmt: skip
+    assert len(big[0]["input"]["content"]) < 5_000 and big[0]["input"]["file_path"] == "a"
+    result = entries_from(
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t", "is_error": True,
+             "content": [{"type": "text", "text": "boom"}, {"type": "image"}]}, "plain"]}}
+    )  # fmt: skip
+    assert result[0] == {
+        "kind": "tool_result",
+        "id": "t",
+        "is_error": True,
+        "text": "boom\n[image]",
+    }
+    assert result[1] == {"kind": "user", "text": "plain"}
+    assert entries_from({"type": "system", "subtype": "status"}) == []
+
+
+def test_step_tracker_edges() -> None:
+    tracker = StepTracker()
+    start_event = {"type": "stream_event", "event": {"type": "message_start", "message": {}}}
+    assert tracker.feed(start_event, 10.0) == []
+    # a request cut off by the next one (or by the result) is still reported
+    closed = tracker.feed(start_event, 12.0)
+    assert closed[0]["step"] == 1 and closed[0]["duration_ms"] == 2000
+    assert tracker.feed({"type": "result"}, 13.0)[0]["step"] == 2
+    assert tracker.feed({"type": "stream_event", "event": {"type": "message_stop"}}, 14.0) == []
+    sub = {"type": "stream_event", "parent_tool_use_id": "x", "event": start_event["event"]}
+    assert tracker.feed(sub, 15.0) == []
+
+
+def test_event_log_prune_and_bad_ids(tmp_path: Path) -> None:
+    import os
+
+    log = EventLog(tmp_path / "ev", retention_days=0)
+    old = tmp_path / "ev" / "run_old.jsonl"
+    old.write_text('{"seq": 1}\nbroken\n')
+    assert log.read("run_old") == ([{"seq": 1}], None)
+    assert log.read("../etc/passwd") == ([], None)
+    os.utime(old, (0, 0))
+    assert log.prune(14) == 1 and not old.exists()
+
+
+def test_titles_and_roles() -> None:
+    assert title_of("prompt\n\nTASK T002: add tests\nOBJECTIVE:") == "TASK T002: add tests"
+    assert title_of("REVIEWER\nCURRENT TASK:\nCheck calc\n") == "Review: Check calc"
+    assert title_of("Continue the existing Worker task") == "Continue the existing Worker task"
+    assert title_of("") == ""
+    assert role_of("You are the lead architect and task planner") == "architect"
+    assert role_of("Ты локальный coding Worker.") == "worker"
+    assert role_of("Ты независимый технический Reviewer") == "reviewer"
+    assert role_of("hello") == "hermes"
+
+
+# ------------------------------------------------------------------ Hermes source
+NOW = time.time()
+SESSIONS = {
+    "w1": {
+        "id": "w1", "model": "qwen-local", "started_at": NOW - 100, "last_active": NOW - 5,
+        "api_call_count": 2, "input_tokens": 3000, "output_tokens": 120,
+        "cache_read_tokens": 1000, "estimated_cost_usd": 0.01, "preview": "Ты локальный coding Worker.",
+    },
+    "r1": {
+        "id": "r1", "model": "opus", "started_at": NOW - 7200, "last_active": NOW - 3600,
+        "preview": "Ты независимый Reviewer", "title": "auto title",
+    },
+}  # fmt: skip
+MESSAGES = {
+    "w1": [
+        {"role": "system", "content": "sys", "timestamp": NOW - 100},
+        {"role": "user", "content": "Ты локальный coding Worker.\nTASK T001: Fix calc", "timestamp": NOW - 90},
+        {"role": "assistant", "content": "", "reasoning_content": "Look at calc.py", "timestamp": NOW - 80,
+         "token_count": 40, "finish_reason": "tool_calls",
+         "tool_calls": '[{"id": "c1", "type": "function", "function": {"name": "read_file", "arguments": "{\\"path\\": \\"calc.py\\"}"}}]'},
+        {"role": "tool", "tool_call_id": "c1", "tool_name": "read_file", "content": '{"content": "def sub(a, b): return a + b", "total_lines": 1}', "timestamp": NOW - 79},
+        {"role": "assistant", "content": [{"type": "text", "text": "Fixed."}], "timestamp": NOW - 70, "token_count": 20,
+         "tool_calls": [{"id": "c2", "function": {"name": "terminal", "arguments": "not json"}}]},
+        {"role": "assistant", "content": "hidden", "display_kind": "hidden", "timestamp": NOW - 60},
+    ],
+    "r1": [{"role": "user", "content": [{"type": "text", "text": "REVIEWER\nCURRENT TASK:\nFix calc\n"}]}],
+}  # fmt: skip
+
+
+def hermes_handler(request: httpx.Request) -> httpx.Response:
+    if request.headers.get("authorization") != "Bearer hk":
+        return httpx.Response(401, json={"error": "unauthorized"})
+    path = request.url.path
+    if path == "/api/sessions":
+        assert request.url.params.get("source") == "api_server"
+        return httpx.Response(200, json={"object": "list", "data": list(SESSIONS.values())})
+    parts = path.split("/")
+    if len(parts) == 4 and parts[3] in SESSIONS:
+        return httpx.Response(200, json={"session": SESSIONS[parts[3]]})
+    if len(parts) == 5 and parts[4] == "messages" and parts[3] in MESSAGES:
+        offset = int(request.url.params.get("offset", 0))
+        limit = int(request.url.params.get("limit", 500))
+        page = MESSAGES[parts[3]][offset : offset + limit]
+        return httpx.Response(200, json={"data": page})
+    return httpx.Response(404, json={"error": "not found"})
+
+
+def test_hermes_tool_outcomes() -> None:
+    from ahawr_runner.sources import _tool_outcome
+
+    assert _tool_outcome('{"output": "2", "exit_code": 0, "error": null}') == {
+        "is_error": False,
+        "preview": "2",
+    }
+    assert _tool_outcome('{"output": "", "exit_code": 1}') == {"is_error": True}
+    assert _tool_outcome('{"error": "no such file"}')["is_error"] is True
+    assert _tool_outcome("plain text") == {"is_error": False}
+    assert _tool_outcome("[1, 2]") == {"is_error": False}
+
+
+def test_hermes_entries_steps_tools_and_timing() -> None:
+    entries = hermes_entries(MESSAGES["w1"])
+    assert [e["kind"] for e in entries] == [
+        "prompt",
+        "thinking",
+        "tool_use",
+        "step",
+        "tool_result",
+        "text",
+        "tool_use",
+        "step",
+    ]
+    step1 = entries[3]
+    assert step1["step"] == 1 and step1["duration_ms"] == 10_000 and step1["output_tokens"] == 40
+    assert step1["tokens_per_s"] == 4.0 and step1["approximate"] is True
+    assert entries[2]["input"] == {"path": "calc.py"} and entries[2]["step"] == 1
+    assert entries[4]["id"] == "c1" and entries[4]["name"] == "read_file"
+    assert entries[4]["preview"] == "def sub(a, b): return a + b" and not entries[4]["is_error"]
+    assert entries[6]["input"] == {"arguments": "not json"}
+    assert entries[7]["step"] == 2 and entries[7]["started"] == NOW - 79
+    assert (
+        hermes_entries([{"role": "assistant", "content": "x", "timestamp": 5}])[1]["started"] == 5
+    )
+
+
+def dashboard(runner_app: TestClient, **overrides: Any) -> TestClient:
+    """Dashboard wired to a ahawr-runner test app and the fake Hermes above."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "hermes":
+            return hermes_handler(request)
+        # preserve multi-value query params (repeated fields like role=a&role=b)
+        params = {k: request.url.params.get_list(k) for k in request.url.params}
+        response = runner_app.request(
+            request.method,
+            request.url.path,
+            params=params,
+            headers=dict(request.headers),
+            content=request.content,
+        )
+        return httpx.Response(
+            response.status_code,
+            content=response.content,
+            headers={"content-type": "application/json"},
+        )
+
+    values: dict[str, Any] = {
+        "runner_url": "http://ahawr-runner:8700",
+        "hermes_url": "http://hermes:8642",
+        "hermes_api_key": "hk",
+        "hermes_session_source": "api_server",
+        **overrides,
+    }
+    return TestClient(
+        create_dashboard_app(DashboardSettings(**values), transport=httpx.MockTransport(handler)),
+        base_url="http://localhost:8701",
+    )
+
+
+# ------------------------------------------------------------------ guards route
+def test_guards_route_off_by_default_and_stops_cleanly(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With DASHBOARD_GUARDS unset the route answers enabled=false with no
+    guards, no task runs, and the supervisor stops at shutdown."""
+    monkeypatch.delenv("DASHBOARD_GUARDS", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is False
+        assert body["guards"] == []
+        # no per-guard task is created while the master is off
+        assert dash.app.state.guards._tasks == {}
+        # the shutdown path stops the supervisor and marks it not running
+        assert dash.app.state.guards._running is True
+    assert dash.app.state.guards._running is False
+
+
+def test_guards_route_reports_dry_run_and_no_env_values(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The state fields are the supervisor's own; no environment value
+    (made-up Telegram variables here) appears in the response."""
+    token = "fake-token-12345"
+    chat = "987654321"
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_DRY_RUN", "1")
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_BOT_TOKEN", token)
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_CHAT_ID", chat)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is True
+        assert body["dry_run"] is True
+        assert body["running"] is True
+        # the six registered container guards (master on), all dry-run;
+        # the queue and mission-notice sources are unconfigured here, so they
+        # report unknown state and never act
+        names = [g["name"] for g in body["guards"]]
+        assert names == ["stall", "mission_notice", "queue_restart", "host_heartbeat", "tg_relay"]
+        assert all(g["dry_run"] is True for g in body["guards"])
+        # the two host heartbeat entries carry every required field;
+        # dry_run is True under DASHBOARD_GUARDS_DRY_RUN=1
+        hb_names = [h["name"] for h in body["heartbeats"]]
+        assert hb_names == ["docker_watchdog", "gpu_power_governor"]
+        for h in body["heartbeats"]:
+            assert set(h.keys()) == {
+                "name",
+                "status",
+                "time",
+                "last_action",
+                "last_result",
+                "dry_run",
+            }
+            assert h["dry_run"] is True
+        text = body.__repr__()
+        assert token not in text and chat not in text
+        # the supervisor still stops cleanly at shutdown
+    assert dash.app.state.guards._running is False
+
+
+def test_guards_route_unset_returns_previous_shape(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With DASHBOARD_GUARDS unset the response has no guards, no
+    heartbeats key, and the same body keys as before the guards were added."""
+    monkeypatch.delenv("DASHBOARD_GUARDS", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["enabled"] is False
+        assert body["guards"] == []
+        assert "heartbeats" not in body
+        assert set(body.keys()) == {"enabled", "dry_run", "running", "guards"}
+        assert dash.app.state.guards._tasks == {}
+    assert dash.app.state.guards._running is False
+
+
+def test_dashboard_theme_switcher(client: TestClient) -> None:
+    import re
+
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+        # theme toggle button and the localStorage key it persists to
+        assert 'id="themebtn"' in text
+        assert "ahawr-dashboard-theme" in text
+        # the switcher cycles through three states: auto, light, dark
+        assert '["auto", "light", "dark"]' in text
+        # the early <head> script that reads localStorage before any stylesheet
+        early = text.split("<style>")[0]
+        assert 'localStorage.getItem("ahawr-dashboard-theme")' in early
+
+        # the dark palette (:root[data-theme="dark"]) defines every visual
+        # variable the light palette (:root) does; --mono is theme-invariant
+        def vars_of(selector: str) -> set[str]:
+            m = re.search(selector + r"\s*\{([^}]*)\}", text)
+            return {v for v in re.findall(r"--([\w-]+)", m.group(1)) if v != "mono"}
+
+        assert vars_of(r":root\[data-theme=\"dark\"\]") >= vars_of(r":root ")
+
+
+def test_dashboard_data_attributes_and_handler(client: TestClient) -> None:
+    """The served HTML contains data-field attributes in both the renderList body
+    and the renderHead (header builder) body, the delegated click handler wires
+    #head and #list to onValueClick, the tag row has 'clear all' and the AND/OR
+    hint, the search input and the api/search call exist, and the old
+    f-source/f-role/f-status selects are gone."""
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+
+        # --- slice the renderList body: from "function renderList()" up to the
+        #     next "// ----" comment
+        list_start = text.index("function renderList()")
+        list_end = text.index("// ----", list_start + 1)
+        list_slice = text[list_start:list_end]
+
+        # --- slice the header builder body: from 'setHTML($("#head")' up to
+        #     the '<div class="stats">' marker
+        head_start = text.index('setHTML($("#head")')
+        head_end = text.index('<div class="stats">', head_start)
+        head_slice = text[head_start:head_end]
+
+        # --- the list makes no filters: no clickable values and no data-field in renderList
+        assert "data-field" not in list_slice and "fv" not in list_slice
+
+        # --- data-field attributes in the renderHead (header builder) slice
+        for field in ("status", "source", "role", "model", "provider"):
+            assert f'data-field="{field}"' in head_slice, f"data-field={field!r} not in renderHead"
+
+        # --- cwd and session are only in the header builder slice
+        assert 'data-field="cwd"' in head_slice
+        assert "data-session=" in head_slice
+
+        # --- the delegated click handler: both #head and #list reach onValueClick
+        # #head handler (in select() or the render init):
+        #   $("#head").addEventListener("click", (e) => {
+        #     ...
+        #     if (!a) { onValueClick(e); return; }
+        assert '$("#head").addEventListener("click"' in text
+        assert "if (!a) { onValueClick(e); return; }" in text
+        # #list handler only selects a run (it never calls onValueClick)
+        assert '$("#list").addEventListener("click"' in text
+        list_handler = text[text.index('$("#list").addEventListener("click"') :][:400]
+        assert "onValueClick" not in list_handler
+        # onValueClick itself reads dataset and calls toggleValue:
+        assert "el.dataset.field" in text
+        assert "el.dataset.value" in text
+        assert "toggleValue(S.filter" in text
+
+        # --- the tag row with 'clear all' and the AND/OR hint
+        assert "clear all" in text
+        assert 'id="taghint"' in text
+        assert "Fields are combined with AND" in text
+        assert "values of one field are combined with OR" in text
+
+        # --- the search input and the api/search call
+        assert 'id="fq"' in text
+        assert 'type="search"' in text
+        assert "api/search" in text
+
+        # --- the old selects are gone: no f-source, f-role, f-status, no #sessionchip
+        assert "f-source" not in text
+        assert "f-role" not in text
+        assert "f-status" not in text
+        assert "sessionchip" not in text
+
+
+def test_dashboard_escaping_in_html(client: TestClient) -> None:
+    """Values never reach data attributes unescaped: each data-value in the
+    renderList and renderHead bodies wraps its value in esc()."""
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200
+        text = page.text
+
+        # The esc function exists
+        assert "const esc" in text
+
+        # --- slice the renderList body
+        list_start = text.index("function renderList()")
+        list_end = text.index("// ----", list_start + 1)
+        list_slice = text[list_start:list_end]
+
+        # --- slice the header builder body
+        head_start = text.index('setHTML($("#head")')
+        head_end = text.index('<div class="stats">', head_start)
+        head_slice = text[head_start:head_end]
+
+        # renderList: values are escaped text, no data-value attributes
+        assert "data-value" not in list_slice
+        assert '${esc(r.model || "")}' in list_slice
+        # renderHead: model and cwd in data-value
+        assert 'data-value="${esc(r.model)}"' in head_slice
+        assert 'data-value="${esc(r.cwd)}"' in head_slice
+
+
+def test_dashboard_merges_claude_code_and_hermes(client: TestClient) -> None:
+    run = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, run["run_id"])
+    with dashboard(client) as dash:
+        page = dash.get("/")
+        assert page.status_code == 200 and "AHAWR" in page.text
+        assert dash.get("/healthz").json()["sources"] == ["ahawr-runner", "hermes"]
+        body = dash.get("/api/runs").json()
+        assert body["sources"] == {"ahawr-runner": "ok", "hermes": "ok"}
+        by_id = {r["run_id"]: r for r in body["runs"]}
+        worker = by_id["hermes:w1"]
+        assert worker["role"] == "worker" and worker["title"] == "TASK T001: Fix calc"
+        assert worker["status"] == "running" and worker["source"] == "hermes"
+        assert worker["tokens"]["cache_read"] == 1000 and worker["cost_usd"] == 0.01
+        reviewer = by_id["hermes:r1"]
+        assert reviewer["role"] == "reviewer" and reviewer["status"] == "idle"
+        assert reviewer["title"] == "Review: Fix calc"
+        assert by_id[run["run_id"]]["source"] == "claude-code"
+
+        only_hermes = dash.get("/api/runs", params={"source": "hermes", "role": "worker"}).json()
+        assert [r["run_id"] for r in only_hermes["runs"]] == ["hermes:w1"]
+        one = dash.get("/api/runs", params={"session_id": "hermes:r1"}).json()["runs"]
+        assert [r["run_id"] for r in one] == ["hermes:r1"]
+        mine = dash.get("/api/runs", params={"session_id": run["session_id"]}).json()["runs"]
+        assert [r["run_id"] for r in mine] == [run["run_id"]]
+
+        hermes_events = dash.get("/api/runs/hermes:w1/events", params={"after": 2}).json()
+        assert hermes_events["next"] == 8 and hermes_events["events"][0]["seq"] == 3
+        assert hermes_events["run"]["run_id"] == "hermes:w1"
+        claude_events = dash.get(f"/api/runs/{run['run_id']}/events").json()
+        assert claude_events["events"][-1]["kind"] == "end"
+        assert dash.get("/api/runs/hermes:nope/events").status_code == 404
+        assert dash.get("/api/runs/run_nope/events").status_code == 404
+        # nothing to start or change runs with (stopping one is tested below)
+        assert dash.post("/api/runs", json={"input": "x"}).status_code == 405
+        assert dash.post("/v1/runs", json={"input": "x"}).status_code == 404
+
+    with dashboard(client, hermes_api_key="wrong") as dash:
+        states = dash.get("/api/runs").json()["sources"]
+        assert states == {"ahawr-runner": "ok", "hermes": "Hermes: 401 (check the API key)"}
+
+
+def test_dashboard_lists_qa_agent_run_and_its_events(client: TestClient) -> None:
+    """A qa_agent run and its events are visible in the dashboard Runs list."""
+    qa = start(
+        client,
+        role="qa_agent",
+        input="TASK T014: verify qa_agent shows in runs\n[[tools]]",
+        provider="local",
+    )
+    wait_for(client, qa["run_id"])
+    with dashboard(client) as dash:
+        # the qa_agent run appears in the unfiltered list, with its role and source set
+        body = dash.get("/api/runs").json()
+        assert body["sources"] == {"ahawr-runner": "ok", "hermes": "ok"}
+        by_id = {r["run_id"]: r for r in body["runs"]}
+        assert qa["run_id"] in by_id
+        qa_run = by_id[qa["run_id"]]
+        assert qa_run["role"] == "qa_agent"
+        assert qa_run["source"] == "claude-code"
+        # role=qa_agent filter returns only the qa_agent run (AND across fields, OR within)
+        only_qa = dash.get("/api/runs", params={"role": "qa_agent"}).json()["runs"]
+        assert [r["run_id"] for r in only_qa] == [qa["run_id"]]
+        # the run's events are served through the dashboard, with the run summary intact
+        ev = dash.get(f"/api/runs/{qa['run_id']}/events").json()
+        assert ev["run"]["run_id"] == qa["run_id"]
+        assert ev["run"]["role"] == "qa_agent"
+        assert ev["run"]["source"] == "claude-code"
+        kinds = [e["kind"] for e in ev["events"]]
+        assert kinds[-1] == "end"
+
+
+def test_dashboard_multi_value_filters(client: TestClient) -> None:
+    w = start(client, role="worker", input="x", provider="local")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # two values of one field match with OR: the fetch is not narrowed by
+        # role[0], so both runner roles and both Hermes roles come back
+        both = dash.get("/api/runs", params={"role": ["worker", "reviewer"]}).json()["runs"]
+        assert {run["run_id"] for run in both} == {
+            w["run_id"],
+            r["run_id"],
+            "hermes:w1",
+            "hermes:r1",
+        }
+        # different fields match with AND: only the worker run has provider "local"
+        combo = dash.get(
+            "/api/runs", params={"role": ["worker", "reviewer"], "provider": "local"}
+        ).json()["runs"]
+        assert [run["run_id"] for run in combo] == [w["run_id"]]
+        # the limit is applied after the filter: all four runs match, one is returned
+        capped = dash.get("/api/runs", params={"role": ["worker", "reviewer"], "limit": 1}).json()
+        assert len(capped["runs"]) == 1
+        # a provider filter excludes Hermes runs (their provider is "hermes", cwd is "")
+        no_hermes = dash.get("/api/runs", params={"provider": "x"}).json()["runs"]
+        assert no_hermes == []
+        # an empty filter gives the same response as the unfiltered list
+        body = dash.get("/api/runs").json()
+        empty = dash.get("/api/runs", params={"role": [], "source": [], "session_id": []}).json()
+        assert body["runs"] == empty["runs"] and body["sources"] == empty["sources"]
+
+
+def test_dashboard_returns_unavailable_response_when_board_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GET /api/runs with a mission: with no DSN the board store is the
+    unavailable stub, so the dashboard answers 503 with the exact
+    {"code": "unavailable", "reason": ...} body _unavailable builds."""
+    monkeypatch.delenv("DASHBOARD_BOARD_PG_DSN", raising=False)
+    with dashboard(client) as dash:
+        response = dash.get("/api/runs", params={"mission": "m1"})
+        assert response.status_code == 503
+        assert response.json() == {
+            "code": "unavailable",
+            "reason": (
+                "the database is unavailable: DASHBOARD_BOARD_PG_DSN is not set "
+                "(PostgreSQL DSN for the board is not set)"
+            ),
+        }
+
+
+def test_dashboard_filter_by_model_provider_cwd(client: TestClient) -> None:
+    """Filter by model, provider, and cwd individually."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # read the cwd from the dashboard's own unfiltered list
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # model filter: the worker run uses "local-model", the reviewer uses "sonnet"
+        by_model = dash.get("/api/runs", params={"model": ["sonnet"]}).json()["runs"]
+        assert [run["run_id"] for run in by_model] == [r["run_id"]]
+        by_local_model = dash.get("/api/runs", params={"model": ["local-model"]}).json()["runs"]
+        assert [run["run_id"] for run in by_local_model] == [w["run_id"]]
+
+        # provider filter: "local" matches only the worker run; "hermes" matches both
+        # Hermes sessions
+        by_provider_local = dash.get("/api/runs", params={"provider": "local"}).json()["runs"]
+        assert [run["run_id"] for run in by_provider_local] == [w["run_id"]]
+        by_provider_hermes = dash.get("/api/runs", params={"provider": "hermes"}).json()["runs"]
+        assert {run["run_id"] for run in by_provider_hermes} == {"hermes:w1", "hermes:r1"}
+
+        # cwd filter: both runner runs share the workspace cwd; Hermes runs have cwd ""
+        ws_cwd = dash.get("/api/runs", params={"cwd": [w_cwd]}).json()["runs"]
+        assert {run["run_id"] for run in ws_cwd} == {w["run_id"], r["run_id"]}
+        # an empty-string value is stripped from the filter set (like an empty list),
+        # so cwd=[""] is unfiltered, not "cwd must be empty"
+        unfiltered = dash.get("/api/runs").json()["runs"]
+        empty_cwd = dash.get("/api/runs", params={"cwd": [""]}).json()["runs"]
+        assert {run["run_id"] for run in empty_cwd} == {run["run_id"] for run in unfiltered}
+
+
+def test_dashboard_filter_or_multiple_values(client: TestClient) -> None:
+    """Several values of one field are matched with OR."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # two provider values match with OR: local + hermes → worker + both Hermes
+        both = dash.get("/api/runs", params={"provider": ["local", "hermes"]}).json()["runs"]
+        assert {run["run_id"] for run in both} == {w["run_id"], "hermes:w1", "hermes:r1"}
+        # two model values (sonnet + qwen-local) match with OR: reviewer + Hermes w1
+        models = dash.get("/api/runs", params={"model": ["sonnet", "qwen-local"]}).json()["runs"]
+        assert {run["run_id"] for run in models} == {r["run_id"], "hermes:w1"}
+
+
+def test_dashboard_filter_and_across_fields(client: TestClient) -> None:
+    """Different fields combine with AND."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # role=worker AND provider=local → only the runner worker run
+        combo = dash.get("/api/runs", params={"role": "worker", "provider": "local"}).json()["runs"]
+        assert [run["run_id"] for run in combo] == [w["run_id"]]
+        # role=worker AND model=qwen-local → only the Hermes worker (hermes:w1)
+        combo2 = dash.get("/api/runs", params={"role": "worker", "model": "qwen-local"}).json()[
+            "runs"
+        ]
+        assert [run["run_id"] for run in combo2] == ["hermes:w1"]
+        # provider=local AND cwd=workspace → only the runner worker run
+        combo3 = dash.get("/api/runs", params={"provider": "local", "cwd": [w_cwd]}).json()["runs"]
+        assert [run["run_id"] for run in combo3] == [w["run_id"]]
+
+
+def test_dashboard_limit_counted_after_filter(client: TestClient) -> None:
+    """The limit applies to the filtered result, not the raw fetch."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        # without a filter, limit=1 returns one of four runs
+        unfiltered = dash.get("/api/runs", params={"limit": 1}).json()
+        assert len(unfiltered["runs"]) == 1
+        # with a filter that matches all four, limit=1 still returns one
+        all_matched = dash.get(
+            "/api/runs", params={"role": ["worker", "reviewer"], "limit": 1}
+        ).json()
+        assert len(all_matched["runs"]) == 1
+        # limit=1 with provider=local returns the worker run: the newest unfiltered
+        # run is the reviewer, so this fails if the limit is applied before the filter
+        local_capped = dash.get("/api/runs", params={"provider": "local", "limit": 1}).json()
+        assert [run["run_id"] for run in local_capped["runs"]] == [w["run_id"]]
+        # limit=1 with provider=hermes returns exactly one Hermes run (the newer one)
+        hermes_capped = dash.get("/api/runs", params={"provider": "hermes", "limit": 1}).json()
+        assert [run["run_id"] for run in hermes_capped["runs"]] == ["hermes:w1"]
+
+
+def test_dashboard_hermes_hidden_under_provider_cwd_filter(client: TestClient) -> None:
+    """Hermes runs have provider "hermes" and cwd "", so a non-matching filter hides them."""
+    w = start(client, role="worker", input="x", provider="local", model="local-model")
+    wait_for(client, w["run_id"])
+    r = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\n")
+    wait_for(client, r["run_id"])
+    with dashboard(client) as dash:
+        w_cwd = next(
+            run["cwd"]
+            for run in dash.get("/api/runs").json()["runs"]
+            if run["run_id"] == w["run_id"]
+        )
+        # provider=local hides both Hermes runs
+        no_hermes = dash.get("/api/runs", params={"provider": "local"}).json()["runs"]
+        assert all(run["source"] != "hermes" for run in no_hermes)
+        # cwd=workspace hides both Hermes runs (their cwd is "")
+        no_hermes_cwd = dash.get("/api/runs", params={"cwd": [w_cwd]}).json()["runs"]
+        assert all(run["source"] != "hermes" for run in no_hermes_cwd)
+        # provider=hermes shows only Hermes runs
+        only_hermes = dash.get("/api/runs", params={"provider": "hermes"}).json()["runs"]
+        assert {run["run_id"] for run in only_hermes} == {"hermes:w1", "hermes:r1"}
+
+
+def test_dashboard_hermes_session_filter_unchanged(client: TestClient) -> None:
+    """'hermes:' session filtering still works as before."""
+    with dashboard(client) as dash:
+        by_hermes = dash.get("/api/runs", params={"session_id": "hermes:w1"}).json()["runs"]
+        assert [run["run_id"] for run in by_hermes] == ["hermes:w1"]
+        by_r1 = dash.get("/api/runs", params={"session_id": "hermes:r1"}).json()["runs"]
+        assert [run["run_id"] for run in by_r1] == ["hermes:r1"]
+        # an unknown 'hermes:' session id matches nothing at all
+        no_match = dash.get("/api/runs", params={"session_id": "hermes:nope"}).json()["runs"]
+        assert no_match == []
+
+
+def test_dashboard_search_merges_sources(client: TestClient) -> None:
+    """GET /api/search merges per-run results from all sources, newest first."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle"}).json()
+        ids = {r["run_id"] for r in body["runs"]}
+        assert ids == {a["run_id"], b["run_id"]}
+        # each run carries snippets
+        assert all(r["snippets"] for r in body["runs"])
+        # newest first: the reviewer run is newer
+        assert body["runs"][0]["run_id"] == b["run_id"]
+        # incomplete is False when both sources complete
+        assert body["incomplete"] is False
+        assert body["sources"] == {"ahawr-runner": "ok", "hermes": "ok"}
+
+
+def test_dashboard_search_filter_forwarding(client: TestClient) -> None:
+    """Filter params are forwarded to sources, so tags narrow the search."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        # role=worker narrows to the worker run
+        only_worker = dash.get("/api/search", params={"q": "needle", "role": "worker"}).json()
+        assert [r["run_id"] for r in only_worker["runs"]] == [a["run_id"]]
+        # multi-value role: both worker and reviewer
+        both = dash.get(
+            "/api/search", params={"q": "needle", "role": ["worker", "reviewer"]}
+        ).json()
+        assert {r["run_id"] for r in both["runs"]} == {a["run_id"], b["run_id"]}
+        # provider=local narrows to the worker run (Hermes runs have provider "hermes")
+        by_provider = dash.get("/api/search", params={"q": "needle", "provider": "local"}).json()
+        assert [r["run_id"] for r in by_provider["runs"]] == [a["run_id"]]
+        # a non-matching filter returns no results
+        no_match = dash.get("/api/search", params={"q": "needle", "role": ["architect"]}).json()
+        assert no_match["runs"] == []
+
+
+def test_dashboard_search_short_query(client: TestClient) -> None:
+    """Short or empty q returns empty results."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    with dashboard(client) as dash:
+        # empty query
+        empty = dash.get("/api/search", params={"q": ""}).json()
+        assert empty["runs"] == []
+        assert empty["incomplete"] is False
+        # single-char query (below MIN_QUERY_LEN=2)
+        short = dash.get("/api/search", params={"q": "n"}).json()
+        assert short["runs"] == []
+        assert short["incomplete"] is False
+
+
+def test_dashboard_search_hermes_behaviour(client: TestClient) -> None:
+    """Hermes source returns empty results with a note (search covers Claude Code only)."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle"}).json()
+        # Hermes returned no results, but the note is visible
+        assert body["note"] == "search covers Claude Code runs only"
+        # the only results come from the ahawr-runner source
+        assert all(r["source"] == "claude-code" for r in body["runs"])
+        # Hermes source state is "ok" (it completed, just returned nothing)
+        assert body["sources"]["hermes"] == "ok"
+
+
+def test_dashboard_search_limit_capped(client: TestClient) -> None:
+    """The limit caps the merged result."""
+    a = start(client, role="worker", input="TASK T001: fix calc\nneedle alpha", provider="local")
+    wait_for(client, a["run_id"])
+    b = start(client, role="reviewer", input="CURRENT TASK:\nCheck calc\nneedle beta")
+    wait_for(client, b["run_id"])
+    with dashboard(client) as dash:
+        body = dash.get("/api/search", params={"q": "needle", "limit": 1}).json()
+        assert len(body["runs"]) == 1
+        # the newest run is returned
+        assert body["runs"][0]["run_id"] == b["run_id"]
+
+
+def test_dashboard_stops_a_run(client: TestClient) -> None:
+    run = start(client, input="[[sleep:30]]")
+    wait_for(client, run["run_id"], lambda r: r["status"] == "running", timeout=5)
+    stop = {"X-AHAWR-Dashboard": "1"}
+    with dashboard(client) as dash:
+        url = f"/api/runs/{run['run_id']}/cancel"
+        # a plain cross-site form post carries no custom header
+        assert dash.post(url).status_code == 403
+        assert client.get(f"/v1/runs/{run['run_id']}").json()["status"] == "running"
+        body = dash.post(url, headers=stop).json()
+        assert body["status"] == "cancelled" and body["source"] == "claude-code"
+        # stopping a finished run is a no-op that reports its status
+        assert dash.post(url, headers=stop).json()["status"] == "cancelled"
+        assert dash.post("/api/runs/run_nope/cancel", headers=stop).status_code == 404
+        assert dash.post("/api/runs/hermes:w1/cancel", headers=stop).status_code == 400
+        assert dash.get(url).status_code == 405
+
+    def failing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={})
+
+    app = create_dashboard_app(DashboardSettings(), transport=httpx.MockTransport(failing))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.post("/api/runs/run_x/cancel", headers=stop).status_code == 502
+    app = create_dashboard_app(DashboardSettings(runner_url=""))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.post("/api/runs/run_x/cancel", headers=stop).status_code == 404
+
+
+def test_dashboard_reports_source_problems() -> None:
+    settings = DashboardSettings(hermes_url="http://hermes:8642")
+
+    def failing(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "hermes":
+            return httpx.Response(500, text="boom")
+        return httpx.Response(404, json={})
+
+    app = create_dashboard_app(settings, transport=httpx.MockTransport(failing))
+    with TestClient(app, base_url="http://localhost") as dash:
+        states = dash.get("/api/runs").json()["sources"]
+        assert states["hermes"].startswith("Hermes: HTTP 500")
+        assert states["ahawr-runner"] == "ok"  # a 404 list is simply empty
+        assert dash.get("/api/runs/hermes:x/events").status_code == 502
+
+    def offline(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("refused", request=request)
+
+    app = create_dashboard_app(settings, transport=httpx.MockTransport(offline))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/runs").json()["sources"]["hermes"] == "unreachable (hermes:8642)"
+
+    def slow(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow", request=request)
+
+    app = create_dashboard_app(settings, transport=httpx.MockTransport(slow))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/runs").json()["sources"]["hermes"] == "timed out"
+
+    def old_hermes(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={})
+
+    only_hermes = DashboardSettings(runner_url="", hermes_url="http://hermes:8642")
+    app = create_dashboard_app(only_hermes, transport=httpx.MockTransport(old_hermes))
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert "update Hermes" in dash.get("/api/runs").json()["sources"]["hermes"]
+        assert dash.get("/api/runs/run_x/events").status_code == 404  # no ahawr-runner source
+
+
+def test_dashboard_settings_and_host_guard() -> None:
+    settings = DashboardSettings.from_env(
+        {"DASHBOARD_HERMES_URL": "http://h:8642", "DASHBOARD_HOSTS": "localhost, dash.lan"}
+    )
+    assert settings.hermes_url == "http://h:8642" and settings.hosts == ("localhost", "dash.lan")
+    assert settings.runner_url == "http://ahawr-runner:8700"
+    with TestClient(create_dashboard_app(settings), base_url="http://evil.example") as dash:
+        assert dash.get("/api/runs").status_code == 400
+
+
+def test_dashboard_providers_route_mounted_when_flag_on(tmp_path: Path) -> None:
+    settings = DashboardSettings(
+        runner_url="",
+        hermes_url="",
+        providers_db=True,
+        secrets_file=tmp_path / "provider-secrets.json",
+    )
+    app = create_dashboard_app(settings)
+    app.state.board_store = InMemoryBoardStore()
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/board/providers").status_code == 200
+
+
+def test_dashboard_main_runs_uvicorn(monkeypatch: Any) -> None:
+    import uvicorn
+
+    from ahawr_runner import dashboard as module
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    monkeypatch.delenv("AHAWR_DASHBOARD_BIND", raising=False)
+    assert module.main(["--host", "127.0.0.1", "--port", "9999"]) == 0
+    assert seen["host"] == "127.0.0.1"
+    assert seen["port"] == 9999
+    assert seen["log_level"] == "warning"
+    assert "ssl_certfile" not in seen
+    assert "ssl_keyfile" not in seen
+
+
+# ------------------------------------------------------------------ RAG and export
+RAG_PROMPT = """TASK T001: Fix calc
+OBJECTIVE:
+fix
+=== RETRIEVED CONTEXT profile=worker request=req123 chunks=2 ===
+Current files outrank retrieved text.
+--- [1] code | path=app/calc.py | lines=1-2 | symbol=sub | chunk=c1 | sha256=ab | version=v | snapshot=- | freshness=fresh | score=0.912
+def sub(a, b): return a + b
+--- [2] doc | path=README.md | lines=3-9 | section=Usage | chunk=c2 | sha256=cd | version=v | snapshot=- | freshness=stale | score=0.400
+Usage text with ``` fences
+=== END RETRIEVED CONTEXT ===
+[[tools]]"""
+
+
+def test_rag_blocks_are_parsed() -> None:
+    from ahawr_runner.export import rag_blocks
+
+    (block,) = rag_blocks(RAG_PROMPT)
+    assert block["profile"] == "worker" and block["request_id"] == "req123"
+    first, second = block["chunks"]
+    assert first == {
+        "authority": "code", "path": "app/calc.py", "lines": "1-2", "symbol": "sub",
+        "chunk": "c1", "freshness": "fresh", "score": "0.912",
+    }  # fmt: skip
+    assert second["section"] == "Usage" and second["authority"] == "doc"
+    assert rag_blocks("no context here") == []
+
+
+def test_export_run_and_session(client: TestClient) -> None:
+    first = start(client, role="worker", input=RAG_PROMPT)
+    wait_for(client, first["run_id"])
+    second = start(client, role="worker", session_id=first["session_id"], input="continue")
+    wait_for(client, second["run_id"])
+    with dashboard(client) as dash:
+        md = dash.get(f"/api/runs/{first['run_id']}/export", params={"format": "md"})
+        assert md.status_code == 200 and md.headers["content-type"].startswith("text/markdown")
+        assert (
+            'attachment; filename="ahawr-worker-TASK-T001-Fix-calc-'
+            in md.headers["content-disposition"]
+        )
+        text = md.text
+        assert text.startswith("# TASK T001: Fix calc")
+        assert "**RAG context:** 2 chunks" in text and "`app/calc.py:1-2` code · sub" in text
+        assert "#### Step 1" in text and "> 💭 *thinking*" in text
+        assert "**Tool `Read`**" in text and "return a + b" in text
+        assert "````" in text  # a fence longer than the ``` inside the prompt
+        assert "**Result:** success" in text and "**Run completed**" in text
+
+        js = dash.get(f"/api/runs/{first['run_id']}/export", params={"format": "json"}).json()
+        assert js["run"]["run_id"] == first["run_id"] and js["events"][0]["kind"] == "prompt"
+
+        session_md = dash.get(f"/api/sessions/{first['session_id']}/export").text
+        assert session_md.startswith(f"# Session {first['session_id']}")
+        assert session_md.index("TASK T001") < session_md.index("## continue")
+        session_js = dash.get(
+            f"/api/sessions/{first['session_id']}/export", params={"format": "json"}
+        ).json()
+        assert [r["run"]["run_id"] for r in session_js["runs"]] == [
+            first["run_id"],
+            second["run_id"],
+        ]
+
+        hermes_md = dash.get("/api/sessions/hermes:w1/export").text
+        assert hermes_md.startswith("# TASK T001: Fix calc") and "- **Source:** Hermes" in hermes_md
+        assert "**Tool `read_file`**" in hermes_md and "#### Step 1 · ≈10.00 s" in hermes_md
+        assert "(no result recorded)" in hermes_md  # the terminal call never answered
+
+        assert dash.get("/api/sessions/nope/export").status_code == 404
+        assert dash.get("/api/runs/run_nope/export").status_code == 404
+
+
+def test_export_errors() -> None:
+    def failing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    app = create_dashboard_app(
+        DashboardSettings(hermes_url="http://hermes:8642"),
+        transport=httpx.MockTransport(failing),
+    )
+    with TestClient(app, base_url="http://localhost") as dash:
+        assert dash.get("/api/sessions/s1/export").status_code == 502
+        assert dash.get("/api/sessions/hermes:s1/export").status_code == 502
+    no_runner = create_dashboard_app(DashboardSettings(runner_url=""))
+    with TestClient(no_runner, base_url="http://localhost") as dash:
+        assert dash.get("/api/sessions/s1/export").status_code == 404
+
+
+def test_markdown_covers_every_entry_kind() -> None:
+    from ahawr_runner.export import filename, run_markdown, session_markdown
+
+    run = {"run_id": "r1", "title": "T", "role": "worker", "source": "claude-code",
+           "error": {"code": "timeout", "message": "too slow"}}  # fmt: skip
+    entries = [
+        {"kind": "prompt", "text": "go", "seq": 1},
+        {"kind": "init", "version": "2", "model": "m", "tools": ["Read"], "permission_mode": "dontAsk", "cwd": "/w"},
+        {"kind": "retry", "attempt": 1, "max_retries": 3, "status": 529, "error": "overloaded"},
+        {"kind": "compact", "trigger": "auto", "pre_tokens": 20000, "post_tokens": 900},
+        {"kind": "thinking", "text": "hm", "step": 1, "agent": "toolu_x"},
+        {"kind": "tool_result", "id": "orphan", "text": "late"},
+        {"kind": "step", "step": 1, "model": "m", "duration_ms": 65_000, "ttft_ms": 500,
+         "generation_ms": 64_500, "input_tokens": 12, "cache_read_tokens": 20_000,
+         "output_tokens": 30, "tokens_per_s": 0.5, "finish_reason": "stop"},
+        {"kind": "text", "text": "done", "step": 1},
+        {"kind": "result", "subtype": "error_max_turns", "is_error": True, "text": "stopped",
+         "num_turns": 3, "duration_ms": 900, "cost_usd": 0.5,
+         "usage": {"input_tokens": 1, "cache_read_input_tokens": 2, "output_tokens": 3}},
+        {"kind": "end", "status": "failed", "error_code": "timeout", "error": "too slow", "stderr_tail": "trace"},
+    ]  # fmt: skip
+    text = run_markdown(run, entries)
+    for expected in (
+        "- **Error:** timeout: too slow", "*Claude Code 2 · m · 1 tools · dontAsk · /w*",
+        "⚠️ API retry 1/3: 529 overloaded", "🗜 Context compacted (auto): 20.0K → 900 tokens",
+        "> ↳ subagent", "<summary>Tool result</summary>",
+        "#### Step 1 · m · 1m05s · TTFT 500 ms · gen 1m04s · in 20.0K (cache 20.0K) · out 30 · 0.5 tok/s · stop",
+        "**Result:** error_max_turns · 3 turns · 900 ms · $0.5000 · tokens in 1 / cache read 2 / out 3",
+        "**Run failed**: timeout: too slow", "<summary>stderr</summary>",
+    ):  # fmt: skip
+        assert expected in text, expected
+    assert session_markdown("s", [{"run": run, "events": entries}]) == text
+    assert (
+        filename({"title": "", "run_id": "hermes:abc"}, "md") == "ahawr-run-untitled-hermes-abc.md"
+    )
+
+
+def test_board_static_whitelist_pattern(client: TestClient) -> None:
+    """/static serves board[a-z_]*.{js,css,html} only; anything else is 404."""
+    import re
+
+    pat = re.compile(r"^board[a-z_]*[.](js|css|html)$")
+    # the names the pattern admits (and their media types)
+    assert pat.fullmatch("board.html").group(1) == "html"
+    assert pat.fullmatch("board.js").group(1) == "js"
+    assert pat.fullmatch("board.css").group(1) == "css"
+    assert pat.fullmatch("board_logic.js").group(1) == "js"
+    assert pat.fullmatch("board_queue.js").group(1) == "js"
+    assert pat.fullmatch("board_dnd.js").group(1) == "js"
+    assert pat.fullmatch("board_actions.js").group(1) == "js"
+    assert pat.fullmatch("board_mission.js").group(1) == "js"
+    assert pat.fullmatch("board_mission_save.js").group(1) == "js"
+    assert pat.fullmatch("board_claude_md.js").group(1) == "js"
+    # the names the pattern must refuse
+    for bad in (
+        "dashboard.html",
+        "board.7js",
+        "board.js.map",
+        "boardx",
+        "index.html",
+        "board.html.bak",
+    ):
+        assert pat.fullmatch(bad) is None
+    # and the route honours it
+    with dashboard(client) as dash:
+        assert dash.get("/static/board.js").status_code in (200, 404)
+        assert dash.get("/static/board.css").status_code == 200
+        assert dash.get("/static/board.html").status_code == 200
+        assert dash.get("/static/dashboard.html").status_code == 404
+        assert dash.get("/static/board.7js").status_code == 404
+        assert dash.get("/static/index.html").status_code == 404
+        # the tab bar is wired in the main script block of the page
+        page = dash.get("/").text
+        main = page[page.rfind("<script>") :]
+        assert "tabboard" in main and "addEventListener" in main
+        m = page.split("function fromHash")
+        assert len(m) == 2 and "run=" in m[1]
+        # select() writes into #runview (inside #main), so #viewtabs / #boardpane
+        # must live outside #main — proved by the markup positions and by
+        # getElementById("viewtabs") never appearing in any script block.
+        # The three siblings now sit in one flex column, #content.
+        i_content = page.index('id="content"')
+        i_viewtabs = page.index('id="viewtabs"')
+        i_boardpane = page.index('id="boardpane"')
+        i_main = page.index('<main id="main">')
+        i_endmain = page.index("</main>")
+        i_endcontent = page.rindex("</div>")
+        assert i_content < i_viewtabs, "content must be before viewtabs"
+        assert i_content < i_boardpane, "content must be before boardpane"
+        assert i_content < i_main, "content must be before main"
+        assert i_viewtabs < i_boardpane < i_main
+        assert i_main < i_endmain
+        assert i_endmain < i_endcontent, "main must be closed before content"
+        assert 'getElementById("viewtabs")' not in page
+        # the run content now goes into #runview, not #main
+        assert '$("#runview").innerHTML' in main
+        i_runview = page.index('id="runview"')
+        assert i_main < i_runview < i_endmain, "runview must be inside #main"
+        assert page.count('id="boardframe"') == 1
+        # the <style> block is syntactically balanced (no rule lost its
+        # closing brace) and the new #content rules sit after the last
+        # @media block's closing brace, not inside it
+        style = page[page.index("<style>") : page.index("</style>")]
+        assert style.count("{") == style.count("}"), "style braces unbalanced"
+        i_content_rule = style.index("#content {")
+        i_media_close = style.rindex("}", 0, i_content_rule)
+        assert i_media_close < i_content_rule, "#content rule must follow the last @media close"
+
+
+def test_run_view_layout_chain_lets_the_ledger_scroll() -> None:
+    """0.5.0 wrapped the run view in #runview inside #main: without flex and min-height 0 on both, the ledger grew to its
+    content, body has overflow hidden and the lower part of every run could not be reached."""
+    import re
+    from importlib import resources
+
+    html = resources.files("ahawr_runner").joinpath("dashboard.html").read_text("utf-8")
+    main = re.search(r"^#main \{([^}]*)\}", html, re.M).group(1)
+    runview = re.search(r"^#runview \{([^}]*)\}", html, re.M).group(1)
+    for rule in (main, runview):
+        assert "min-height: 0" in rule and "flex-direction: column" in rule
+    assert "flex: 1" in runview and "display: flex" in runview
+
+
+def test_poll_keeps_running_after_a_drawing_error_and_has_a_request_timeout() -> None:
+    """A render error or a request that never answers used to end the polling for good (the page froze at the last frame)."""
+    from importlib import resources
+
+    html = resources.files("ahawr_runner").joinpath("dashboard.html").read_text("utf-8")
+    poll = html[
+        html.index("async function poll()") : html.index(
+            "// ---------------------------------------------------------------- RAG"
+        )
+    ]
+    assert "catch (e)" in poll and poll.index("catch (e)", poll.index("grew")) < poll.index(
+        "S.timer = setTimeout(poll, isActive"
+    )
+    assert "AbortController" in html and "25000" in html
+
+
+def test_guards_tab_off_keeps_the_answer_and_has_no_history_route(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without DASHBOARD_GUARDS_TAB the answer has no tab keys and the history is empty."""
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.delenv("DASHBOARD_GUARDS_TAB", raising=False)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert "tab" not in body and "history_summary" not in body
+        assert dash.get("/api/guards/history").json() == {"window": "24h", "guards": {}}
+
+
+def test_guards_tab_on_serves_history_and_rejects_a_bad_window(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    token = "fake-token-12345"
+    monkeypatch.setenv("DASHBOARD_GUARDS", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_TAB", "1")
+    monkeypatch.setenv("DASHBOARD_GUARDS_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("DASHBOARD_TELEGRAM_BOT_TOKEN", token)
+    with dashboard(client) as dash:
+        body = dash.get("/api/guards").json()
+        assert body["tab"] is True and "history_summary" in body
+        history = dash.get("/api/guards/history?window=7d")
+        assert history.status_code == 200 and history.json()["window"] == "7d"
+        assert token not in history.text
+        assert dash.get("/api/guards/history?window=9y").status_code == 422
+    assert (tmp_path / "guards_history.json").exists()
+
+
+def test_qa_fixture_refused_together_with_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DASHBOARD_QA_FIXTURE", "qa/fixtures/default.json")
+    monkeypatch.setenv("DASHBOARD_BOARD_PG_DSN", "postgresql://user:pw@db/board")
+    with pytest.raises(RuntimeError, match="DASHBOARD_QA_FIXTURE and DASHBOARD_BOARD_PG_DSN"):
+        create_dashboard_app(DashboardSettings())
+
+
+def test_qa_fixture_seeds_board_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = Path(__file__).resolve().parents[1] / "qa" / "fixtures" / "default.json"
+    monkeypatch.setenv("DASHBOARD_QA_FIXTURE", str(fixture))
+    monkeypatch.delenv("DASHBOARD_BOARD_PG_DSN", raising=False)
+    app = create_dashboard_app(DashboardSettings())
+    assert isinstance(app.state.board_store, InMemoryBoardStore)
+    assert app.state.board_store.get_mission("m01") is not None
+
+
+# ------------------------------------------------------------------ S4 hardcoded defaults
+def stub_dashboard(runs: list[dict[str, Any]]) -> tuple[TestClient, list[dict[str, Any]]]:
+    """Dashboard with a stub runner source; the stub serves `runs` on every source
+    path and records the params of each request that reached it."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append({"path": request.url.path, "params": dict(request.url.params)})
+        return httpx.Response(200, json={"runs": runs, "incomplete": False})
+
+    seen: list[dict[str, Any]] = []
+    app = create_dashboard_app(
+        DashboardSettings(runner_url="http://runner-stub:8700", hermes_url=""),
+        transport=httpx.MockTransport(handler),
+    )
+    return TestClient(app, base_url="http://localhost:8701"), seen
+
+
+def rows(count: int) -> list[dict[str, Any]]:
+    return [
+        {"run_id": f"r{i}", "created_at": f"2026-01-01T00:00:0{i % 10}Z", "role": "worker"}
+        for i in range(count)
+    ]  # fmt: skip
+
+
+def test_runs_list_default_limit_is_100_rows() -> None:
+    """GET /api/runs with no limit fetches and returns 100 rows (Query(100, le=500))."""
+    dash, seen = stub_dashboard(rows(600))
+    with dash:
+        body = dash.get("/api/runs").json()
+    assert len(body["runs"]) == 100
+    # the last request is the route call; the lifespan poller polled earlier
+    assert seen[-1]["params"].get("limit") == "100"
+
+
+def test_runs_list_limit_max_is_500_rows() -> None:
+    """The runs-list limit accepts 500 and rejects 501 (Query(..., le=500))."""
+    dash, _ = stub_dashboard(rows(2))
+    with dash:
+        assert dash.get("/api/runs", params={"limit": 500}).status_code == 200
+        assert dash.get("/api/runs", params={"limit": 501}).status_code == 422
+
+
+def test_runs_filter_fetch_is_capped_at_500_rows_before_the_limit() -> None:
+    """Role/status filters are matched after the fetch, so a filtered list asks the
+    source for 500 rows whatever the limit is (fetch = 500); the limit trims the result."""
+    dash, seen = stub_dashboard(rows(600))
+    with dash:
+        body = dash.get("/api/runs", params={"role": "worker", "limit": 1}).json()
+    assert len(body["runs"]) == 1
+    assert seen[-1]["path"] == "/v1/runs"
+    assert seen[-1]["params"]["limit"] == "500"
+
+
+def test_search_default_limit_is_50_rows() -> None:
+    """GET /api/search with no limit forwards 50 to each source (Query(50, le=200))."""
+    dash, seen = stub_dashboard(rows(300))
+    with dash:
+        body = dash.get("/api/search", params={"q": "needle"}).json()
+    assert len(body["runs"]) == 50
+    assert [p["params"].get("limit") for p in seen if p["path"] == "/v1/search"] == ["50"]
+
+
+def test_search_limit_max_is_200_rows() -> None:
+    """The search limit accepts 200 and rejects 201 (Query(..., le=200))."""
+    dash, _ = stub_dashboard(rows(2))
+    with dash:
+        assert dash.get("/api/search", params={"q": "needle", "limit": 200}).status_code == 200
+        assert dash.get("/api/search", params={"q": "needle", "limit": 201}).status_code == 422
+
+
+def test_dashboard_main_default_host_is_0_0_0_0(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dashboard CLI binds --host to 0.0.0.0 by default (the container inside)."""
+    import uvicorn
+
+    from ahawr_runner import dashboard as module
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    monkeypatch.delenv("AHAWR_DASHBOARD_BIND", raising=False)
+    monkeypatch.delenv("DASHBOARD_LAN_PORT", raising=False)
+    assert module.main([]) == 0
+    assert seen["host"] == "0.0.0.0"
+
+
+def test_dashboard_main_default_port_is_8701(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The dashboard CLI defaults to port 8701 (--port default)."""
+    import uvicorn
+
+    from ahawr_runner import dashboard as module
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    monkeypatch.delenv("AHAWR_DASHBOARD_BIND", raising=False)
+    monkeypatch.delenv("DASHBOARD_LAN_PORT", raising=False)
+    assert module.main([]) == 0
+    assert seen["port"] == 8701
+
+
+def test_dashboard_main_bind_fallback_is_loopback_when_env_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The startup check sees 127.0.0.1 when AHAWR_DASHBOARD_BIND is absent or empty,
+    and the env value when it is set; the loopback fallback is the fail-closed constant."""
+    import uvicorn
+
+    from ahawr_runner import dashboard as module
+
+    binds: list[str] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setattr(
+        module, "validate_startup", lambda settings, bind_host: binds.append(bind_host)
+    )
+    monkeypatch.delenv("AHAWR_DASHBOARD_BIND", raising=False)
+    monkeypatch.delenv("DASHBOARD_LAN_PORT", raising=False)
+    assert module.main([]) == 0
+    assert binds == ["127.0.0.1"]
+    monkeypatch.setenv("AHAWR_DASHBOARD_BIND", "10.1.2.3")
+    assert module.main([]) == 0
+    assert binds == ["127.0.0.1", "10.1.2.3"]
+    monkeypatch.setenv("AHAWR_DASHBOARD_BIND", "")
+    assert module.main([]) == 0
+    assert binds == ["127.0.0.1", "10.1.2.3", "127.0.0.1"]

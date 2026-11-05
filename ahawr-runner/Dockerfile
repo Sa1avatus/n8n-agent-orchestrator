@@ -1,0 +1,63 @@
+# ahawr-runner: Hermes-compatible /v1/runs API over the Claude Code CLI.
+FROM node:22-bookworm-slim
+
+# Pin for reproducible builds, e.g. --build-arg CLAUDE_CODE_VERSION=2.1.283
+ARG CLAUDE_CODE_VERSION=latest
+# Claude Code is installed unless --build-arg INSTALL_CLAUDE_CODE=false (an image for the Codex or Hermes engine
+# only); a run that needs it then fails with cli_unavailable.
+ARG INSTALL_CLAUDE_CODE=true
+# Optional Codex CLI, installed only with --build-arg INSTALL_CODEX_CLI=true; the pin is used then.
+ARG INSTALL_CODEX_CLI=false
+ARG CODEX_CLI_VERSION=0.159.0
+# Optional Hermes agent (the engine behind the HERMES provider), from its repository at a release tag, only with
+# --build-arg INSTALL_HERMES=true; the runner starts its gateway (hermes_gateway.py).
+ARG INSTALL_HERMES=false
+ARG HERMES_REF=v2026.9.14
+# Toolchains the Worker needs to build/test your project, e.g. "python3-pip make g++"
+ARG EXTRA_APT_PACKAGES=""
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       python3 python3-venv git ca-certificates curl ripgrep procps ${EXTRA_APT_PACKAGES} \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory '*' \
+    && git config --system core.autocrlf true \
+    && if [ "$INSTALL_CLAUDE_CODE" = "true" ]; then npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"; fi \
+    && if [ "$INSTALL_CODEX_CLI" = "true" ]; then npm install -g "@openai/codex@${CODEX_CLI_VERSION}"; fi \
+    && npm cache clean --force
+
+# Before the runner code is copied: a change of the code does not rebuild this layer.
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN if [ "$INSTALL_HERMES" = "true" ]; then       python3 -m venv /tmp/uvvenv && /tmp/uvvenv/bin/pip install --no-cache-dir uv       && git clone --depth 1 --branch "$HERMES_REF" https://github.com/NousResearch/hermes-agent.git /opt/hermes       && cd /opt/hermes       && UV_PROJECT_ENVIRONMENT=/opt/hermes/venv /tmp/uvvenv/bin/uv sync --frozen --no-dev --extra anthropic --python 3.12       && /tmp/uvvenv/bin/uv pip install --python /opt/hermes/venv/bin/python aiohttp==3.14.3 brotlicffi       && rm -rf /tmp/uvvenv /opt/hermes/.git;     fi
+
+WORKDIR /opt/ahawr-runner
+COPY pyproject.toml ./
+COPY src ./src
+# Claude Code price list for models it does not know (the local Worker model); see README.
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+# [dev] = pytest, ruff, mypy: Workers run the checks without building their own venv.
+# Python 3.12 (Debian bookworm ships 3.11): the Workers' projects (e.g. rag-platform) require >=3.12,
+# and a runner on 3.11 made their mypy/pytest baselines impossible. A standalone build from uv, in /opt/python.
+ENV UV_PYTHON_INSTALL_DIR=/opt/python
+RUN python3 -m venv /tmp/uvvenv \
+    && /tmp/uvvenv/bin/pip install --no-cache-dir uv \
+    && /tmp/uvvenv/bin/uv venv --seed --python 3.12 /opt/ahawr-runner/venv \
+    && /opt/ahawr-runner/venv/bin/pip install --no-cache-dir ".[dev]" \
+    && rm -rf /tmp/uvvenv \
+    && mkdir -p /data /home/node/.claude /workspace /secrets \
+    && chown -R node:node /data /home/node/.claude /secrets
+
+ENV PATH="/opt/ahawr-runner/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1 \
+    DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CONFIG_DIR=/home/node/.claude \
+    CLAUDE_RUNNER_DATA_DIR=/data \
+    CLAUDE_RUNNER_WORKSPACE=/workspace
+
+# Non-root: Claude Code refuses bypassPermissions (the Worker profile) as root.
+USER node
+# 8700: run API (stack network only); 8701: the read-only dashboard (ahawr-dashboard container)
+EXPOSE 8700 8701
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8700/health', timeout=3)"
+CMD ["ahawr-runner", "--host", "0.0.0.0", "--port", "8700"]

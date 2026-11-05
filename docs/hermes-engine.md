@@ -37,7 +37,7 @@ The main workflow does not call the Hermes gateway itself: its HTTP nodes go to 
 `Reviewer Verdict Retry Start`; `docs/config-cutover.md:98,100,101,114`). Default `nhjwX1G7FiVTO2Ah`
 (`docs/config-cutover.md:114`). The live `engine_json` example in `docs/config-columns-plan.md:72` names
 `6WE2ATGEDzUopBJH`, which is `Claude Code Run Manager v1` — that run manager calls
-`http://claude-runner:8700`, not Hermes. Which id the live `hermes_config` row names today is
+`http://ahawr-runner:8700`, not Hermes. Which id the live `hermes_config` row names today is
 **UNKNOWN** (no docker access), so whether Hermes is called at all in the current live setup is unknown.
 
 ### Base URL
@@ -157,7 +157,7 @@ body, or from a `4xx`/`5xx` inside the error text.
 
 ## Runner lifecycle mapping
 
-Sources for this section: the runner code itself (`claude-runner/src/claude_runner/`); Hermes calls as
+Sources for this section: the runner code itself (`ahawr-runner/src/ahawr_runner/`); Hermes calls as
 recorded above under "Current Hermes calls". A future Hermes engine module mirrors the Codex module layout.
 
 ### Hermes call -> runner step -> Codex counterpart
@@ -217,6 +217,40 @@ after the run at `codex_run.py:136-137`.
   `feed` (`events.py:341`), `close` (`events.py:356`); the text-clip helper `_clip` (`events.py:26`) is
   reused by `codex_events.py` (`codex_events.py:18`).
 
+## Thinking profiles
+
+The Architect may put an optional field `thinking` on a plan task with a profile name: `none`,
+`plan`, `plan+pulse`, `heavy`. A missing or unknown name means the global policy of `hermes_config`
+— the task runs as today. The catalog of profiles lives in `hermes_config` `thinking_json`: each
+profile is a think_policy variant list in the format `think_policy.py` already parses, plus a cap —
+the maximum thinking steps per task. The Architect picks only the name; the numbers come from the
+catalog.
+
+Example catalog (`none` means no thinking steps; `plan+pulse` is the current
+`data-tables/ops/think_policy_plan_pulse.json` — think 8, off 25, think 10, off):
+
+```json
+{
+  "profiles": {
+    "none": {"variants": [{"name": "none", "first": [["off", null]]}], "cap": 0},
+    "plan+pulse": {"variants": [{"name": "plan+pulse", "weight": 1,
+      "first": [["think", 8], ["off", 25], ["think", 10], ["off", null]],
+      "retry": [["think", 8], ["off", 25], ["think", 10], ["off", null]]}], "cap": 18}
+  }
+}
+```
+
+`plan` and `heavy` follow the same shape. The feature is behind the `features_json` flag
+`think_profiles`, OFF by default. With the flag off the behaviour is byte-for-byte unchanged: no
+task field is read and no per-run policy is added. With it on, the Worker launch passes the chosen
+profile as the per-run `think_policy` (`runs.think_policy` exists and ThinkSwitch follows it), and
+the profile name is recorded in `runs.think_variant` so statistics can group runs by it.
+
+Architect selection rule (DESIGN, item 5): `none` for mechanical edits (rename, move, constants),
+`plan` for tasks that read unfamiliar code, `plan+pulse` for tasks of five steps or more with
+debugging, `heavy` only for finding the cause of a failure. In a characterization-tests /
+one-change / checks trio: tests `plan`, change `plan+pulse`, checks `none`.
+
 ## Proposal: Run Manager change
 
 Text only, as asked: no patch file is written, nothing under `data-tables/ops` is created or changed,
@@ -266,7 +300,7 @@ than a second service the workflow talks to directly.
 - `CLAUDE_RUNNER_HERMES_ENGINE_ENABLED` on the runner container (`config.py:698`). With it off,
   `ENGINE=hermes` is rejected by the config with the pre-existing message (`config.py:329-335`) and the
   dispatch keeps the Claude Code path byte for byte — pinned by
-  `claude-runner/tests/test_hermes_run.py::test_flag_off_run_stays_on_the_claude_path_byte_for_byte`.
+  `ahawr-runner/tests/test_hermes_run.py::test_flag_off_run_stays_on_the_claude_path_byte_for_byte`.
 - The provider block whose name the run manager sends as `provider` must carry
   `CLAUDE_RUNNER_PROVIDER_<NAME>__ENGINE=hermes` plus the gateway env-variable NAMES
   (`HERMES_BASE_URL_VAR`, `HERMES_API_KEY_VAR`, `config.py:474-487`). Values stay in the runner's env;
@@ -313,7 +347,7 @@ what runs.
   start, poll, stop, session/continue, формы result и error — каждая строка с file:line
   (рекоп `Hermes_Run_Manager_v5.json`, staged-экспорты `scratchpad/`); все непроверенные
   факты помечены **UNKNOWN**.
-- **T002A–T002B — конфигурация.** `claude-runner/src/claude_runner/config.py`: ключи движка (имена переменных, не значения)
+- **T002A–T002B — конфигурация.** `ahawr-runner/src/ahawr_runner/config.py`: ключи движка (имена переменных, не значения)
   `HERMES_BASE_URL_VAR`, `HERMES_API_KEY_VAR` (имена переменных, не значения),
   `HERMES_START_TIMEOUT_MS`, `HERMES_POLL_INTERVAL_MS`, `HERMES_RUN_TIMEOUT_MS`,
   `HERMES_MAX_POLLS` (`config.py:188-193`, defaults `config.py:204-208`), поля профиля
@@ -321,7 +355,7 @@ what runs.
   (`config.py:329-335`); другие значения ENGINE по-прежнему дают `ValueError`. Флаг
   `CLAUDE_RUNNER_HERMES_ENGINE_ENABLED` OFF по умолчанию (`config.py:698`,
   `.env.example:204` — пустое значение).
-- **T003A–T003C — движок.** `claude-runner/src/claude_runner/hermes_run.py`: `start_run`
+- **T003A–T003C — движок.** `ahawr-runner/src/ahawr_runner/hermes_run.py`: `start_run`
   (`:94`), `poll_run` (`:149`) с bound-циклом `poll_count < profile.hermes_max_polls` и
   дедлайном (`:158`), `cancel_run` (`:173`), ошибка `HermesError` (`:34`); stdlib urllib,
   секретные значения в сообщениях не попадают. `hermes_events.py`: `route_for` (`:53`),
@@ -333,9 +367,9 @@ what runs.
 - **T004A — флаг.** Флаг OFF по умолчанию; с ним выключенным `ENGINE=hermes` rejected
   существующим сообщением и путь Claude Code не меняется ни на один символ — тест
   `test_flag_off_run_stays_on_the_claude_path_byte_for_byte`
-  (`claude-runner/tests/test_hermes_run.py:394`). Патч Run Manager НЕ писался: только
+  (`ahawr-runner/tests/test_hermes_run.py:394`). Патч Run Manager НЕ писался: только
   текстовое предложение в секции «Proposal: Run Manager change» выше.
-- **T005A–T005C — офлайн-тесты.** `claude-runner/tests/fake_hermes.py`
+- **T005A–T005C — офлайн-тесты.** `ahawr-runner/tests/fake_hermes.py`
   (`FakeHermesServer`, stdlib, `:80`); `test_hermes_run.py` — 8 тестов (нормальный run,
   follow-up со stored session, cancel, auth-401/403 без ключа в тексте, timeout по
   max_polls и дедлайну, unmapped-роут → fallback notice, rejection флага, byte-for-byte
@@ -396,9 +430,9 @@ stash не выполнялись; в n8n ничего не импортиров
 
 - `python -m pytest tests/test_hermes_run.py tests/test_hermes_events.py -q --no-cov` →
   `.............. (100%)` — 14 тестов (8 + 6) пройдено.
-- `python -m ruff check src/claude_runner/hermes_run.py src/claude_runner/hermes_events.py
-  src/claude_runner/config.py src/claude_runner/runs.py` → «All checks passed!».
-- `python -m mypy src/claude_runner/hermes_run.py src/claude_runner/hermes_events.py` →
+- `python -m ruff check src/ahawr_runner/hermes_run.py src/ahawr_runner/hermes_events.py
+  src/ahawr_runner/config.py src/ahawr_runner/runs.py` → «All checks passed!».
+- `python -m mypy src/ahawr_runner/hermes_run.py src/ahawr_runner/hermes_events.py` →
   «Success: no issues found in 2 source files».
 - `git diff --check` → exit 0 (предупреждения только про CRLF в `docs/roadmap.*`, не
   изменённых этой работой).
@@ -416,9 +450,9 @@ mypy/ruff остальных модулей.
 - Locator QA ищет именно видимый текст: `qa_runner.py:700`
   (`page.get_by_text(text, exact=True).locator(VISIBLE_ONLY).first`) и
   `qa_runner.py:705` (`wait_for` на видимом элементе).
-- Утверждать, что сбой не связан с рабочим деревом, нельзя: `claude-runner/src/claude_runner/
+- Утверждать, что сбой не связан с рабочим деревом, нельзя: `ahawr-runner/src/ahawr_runner/
   dashboard.html` имеет uncommitted-изменения другой работы (`git status --short`:
-  ` M claude-runner/src/claude_runner/dashboard.html`), и Worker не может проверить, при
+  ` M ahawr-runner/src/ahawr_runner/dashboard.html`), и Worker не может проверить, при
   каком состоянии dashборда падал QA.
 - Оператору: запустить QA UI на живом дашборде (`127.0.0.1:8701`) и зафиксировать
   воспроизведение; до воспроизведения вопрос остаётся открытым.

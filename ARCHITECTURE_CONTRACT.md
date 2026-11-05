@@ -286,7 +286,7 @@ Design, freshness model, cache, ranking and evaluation: `docs/retrieval/ARCHITEC
 `docs/retrieval/EVALUATION.md`, `docs/retrieval/ROADMAP.md`.
 
 
-## 10. Claude Code Execution Variant (AHAWR v13 — Claude Code, claude-runner 0.1)
+## 10. Claude Code Execution Variant (AHAWR v13 — Claude Code, ahawr-runner 0.1)
 
 `AHAWR_v13_ClaudeCode.json` differs from `AHAWR_v13.json` only in how it reaches the executor:
 
@@ -297,7 +297,7 @@ Design, freshness model, cache, ranking and evaluation: `docs/retrieval/ARCHITEC
 Data Table schemas, identifiers (`run_id`, `session_id`, `state_key`) and all recovery paths are
 the same.
 
-`claude-runner` implements the §3.1 run contract over the Claude Code CLI:
+`ahawr-runner` implements the §3.1 run contract over the Claude Code CLI:
 
 - **Run.** `POST /v1/runs` → `{run_id, session_id, status}`. `GET /v1/runs/{id}` → `{status,
   output, error:{code,message}, http_code}`.

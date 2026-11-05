@@ -58,7 +58,7 @@ For a selected Python source file `src/.../x.py`, the context pack may add relat
 
 ### `ahawr-search`
 
-`ahawr-search "query"` is a fail-open CLI (in the claude-runner image) that POSTs `/retrieve` with the worker profile, a corpus named after the working directory and a matching `corpus_roots` entry, then prints the top fragments as `path:start-end` plus text. The default budget is 1500 tokens (`--budget 1500`). The working directory `/tmp/<X>` is resolved with `realpath` (a symlink into `/d/rag-tmp/<X>`); only `/d/` and `/workspace` roots are accepted; if the folder is not available to the service, the CLI prints `folder <resolved> is unavailable to the retrieval service` and exits 0.
+`ahawr-search "query"` is a fail-open CLI (in the ahawr-runner image) that POSTs `/retrieve` with the worker profile, a corpus named after the working directory and a matching `corpus_roots` entry, then prints the top fragments as `path:start-end` plus text. The default budget is 1500 tokens (`--budget 1500`). The working directory `/tmp/<X>` is resolved with `realpath` (a symlink into `/d/rag-tmp/<X>`); only `/d/` and `/workspace` roots are accepted; if the folder is not available to the service, the CLI prints `folder <resolved> is unavailable to the retrieval service` and exits 0.
 
 ```bash
 ahawr-search "where is the retry delay applied?" --k 8 --budget 1500
@@ -77,10 +77,10 @@ ahawr-retrieval usage --runner-url http://localhost:8899 --json
 From inside the compose stack (container-to-container URL):
 
 ```bash
-docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://claude-runner:8700 --since -24h
+docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://ahawr-runner:8700 --since -24h
 ```
 
-Per profile it reports selected files, opened files, precision, recall, token share and `ahawr-search` call counts, plus the most-missed files (opened but never selected) from the retrieval log joined with the claude-runner API. `--since` accepts a unix timestamp, ISO-8601 or a relative offset (`-24h`, `-7d`, `-1w`).
+Per profile it reports selected files, opened files, precision, recall, token share and `ahawr-search` call counts, plus the most-missed files (opened but never selected) from the retrieval log joined with the ahawr-runner API. `--since` accepts a unix timestamp, ISO-8601 or a relative offset (`-24h`, `-7d`, `-1w`).
 
 ### Example `/retrieve` request with `changed_paths`
 
@@ -148,8 +148,8 @@ Context Retrieval Layer для AHAWR работает как контейнер 
 - Связанные тесты: к выбранному `src/.../x.py` в остаток бюджета добавляются `tests/test_x.py` и похожие, ближайший `conftest.py` и импортируемые ими `fake_*`, не больше 3 файлов и всегда после исходных фрагментов.
 - Гигиена индекса: резервные копии и артефакты (`*.bak`, `*.bak-*`, `*.orig`, `*.rej`, `*~`, `*_backup*`, `*backup[0-9]*`, `*.old`) не индексируются; список заменяется переменной `RETRIEVAL_EXCLUDE_GLOBS`. Фрагменты `.patch`/`.diff` длиннее `RETRIEVAL_LARGE_PATCH_LINES` (1000 строк) понижаются (× 0.8), если запрос не называет файл.
 - Намеренно выключенный реранкер (`RETRIEVAL_RERANKER=none`) — информационная пометка в `notes`, а не `degraded`; настоящие сбои эмбеддера, sync и индекса по-прежнему дают `degraded`.
-- `ahawr-search "запрос" [--k N] [--budget T]` — команда в образе claude-runner для агентов: ищет по папке, из которой вызвана (`/tmp/<X>` — симлинк в `/d/rag-tmp/<X>`), бюджет по умолчанию 1500 токенов, печатает фрагменты как `path:start-end`. При любой ошибке сервиса пишет `retrieval unavailable` и завершается с кодом 0.
-- Метрика использования: `docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://claude-runner:8700 --since -24h` — по профилям точность и полнота на уровне файлов, доля использованных токенов, вызовы `ahawr-search` и чаще всего пропущенные файлы (журнал retrieval + события claude-runner).
+- `ahawr-search "запрос" [--k N] [--budget T]` — команда в образе ahawr-runner для агентов: ищет по папке, из которой вызвана (`/tmp/<X>` — симлинк в `/d/rag-tmp/<X>`), бюджет по умолчанию 1500 токенов, печатает фрагменты как `path:start-end`. При любой ошибке сервиса пишет `retrieval unavailable` и завершается с кодом 0.
+- Метрика использования: `docker compose exec ahawr-retrieval ahawr-retrieval usage --runner-url http://ahawr-runner:8700 --since -24h` — по профилям точность и полнота на уровне файлов, доля использованных токенов, вызовы `ahawr-search` и чаще всего пропущенные файлы (журнал retrieval + события ahawr-runner).
 - A/B на живой задаче (с RAG и без) — раздел «Live-task A/B» выше и `docs/retrieval/EVALUATION.md`; пример сравнения на одном корпусе — `eval/results/2026-09-30-rag-usage-after.md`.
 
 ## PostgreSQL index store (used by the stack since 0.4.0)

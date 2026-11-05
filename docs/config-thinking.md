@@ -9,12 +9,12 @@ Status: inventory only. No code, patch or test was changed. Step 2 of `docs/conf
 - Run Manager: `scratchpad/live_run_manager_export.json` ("Claude Code Run Manager v1", 34 nodes). It has NO `worker_think_*`
   and NO `thinking_json` string.
 - `AHAWR_v13_ClaudeCode.json` was not used as a source.
-- Repository text read: `docs/config-columns-plan.md` (sections 2-5), `docs/naming.md`, `claude-runner/src/claude_runner/board_features.js`,
+- Repository text read: `docs/config-columns-plan.md` (sections 2-5), `docs/naming.md`, `ahawr-runner/src/ahawr_runner/board_features.js`,
   `board_roles.js` (header), `data-tables/ops/features_config_patch.py`, `data-tables/ops/roles_config_patch.py`,
   `data-tables/ops/_make_json_config_thinking_mission.py`.
 - Column names are the four legacy columns of `hermes_config` (profile `claude-code`). Their stored values are in the live
   data table, which is not in the export: **the current stored values are UNKNOWN**.
-- `thinking_json` is not read anywhere yet: 0 hits in the export, in `claude-runner/src` and in `data-tables/ops` (except the
+- `thinking_json` is not read anywhere yet: 0 hits in the export, in `ahawr-runner/src` and in `data-tables/ops` (except the
   mission generator that plans it).
 
 ## 1. Readers table
@@ -54,7 +54,7 @@ runs a think patch on `rm_live.json`, and `:61` allows it to be skipped).
 | `_deploy_*.sh`, `_make_*_mission.py`, `_make_board_mission.py` | text | deploy and mission generators: text only, no node reader |
 | `_make_json_config_thinking_mission.py:13-32` | `thinking_json` (planned) | mission text: the plan in section 5 |
 
-### 1c. Runner (`claude-runner/src/claude_runner/`)
+### 1c. Runner (`ahawr-runner/src/ahawr_runner/`)
 
 | File:line | Column / field | What it does with the value |
 |---|---|---|
@@ -84,7 +84,7 @@ runs a think patch on `rm_live.json`, and `:61` allows it to be skipped).
 
 ### 1e. Launch settings window
 
-`claude-runner/src/claude_runner/board_edit_win.js` is the launch settings editor (its header, line 3: "The launch settings
+`ahawr-runner/src/ahawr_runner/board_edit_win.js` is the launch settings editor (its header, line 3: "The launch settings
 editor as a window"):
 
 | File:line | Column | What it does with the value |
@@ -102,7 +102,7 @@ Whether the window saves through the version check and diff-and-confirm step is 
 - `docs/thinking-control.md:30, 31, 35, 50, 71`
 - `docs/roadmap.json:459`
 - `CHANGELOG.md:658, 673, 693, 694`
-- `claude-runner/docs/board-data-model.md:408-411, 418`: the documented defaults (see section 2). Outside the verification path (`docs/` only).
+- `ahawr-runner/docs/board-data-model.md:408-411, 418`: the documented defaults (see section 2). Outside the verification path (`docs/` only).
 
 ## 2. Current default constants per column
 
@@ -139,9 +139,9 @@ JSON defaults would change behaviour for a row with empty columns (code `0`/`-1`
 
 | Item | Planned name | Source / note |
 |---|---|---|
-| Pure core, JS | `claude-runner/src/claude_runner/board_thinking.js` | like `board_features.js` and `board_roles.js` (the `// === pure ... core ===` markers). The name is proposed, not established. `board_think.py` and `board_think_ui.js` already exist, so `board_thinking.js` is a near-clash: an open point |
-| Pure core, Python | `claude-runner/src/claude_runner/thinking_config.py` | like `features_config.py` and `roles_config.py`. Proposed: UNKNOWN whether a Python core is wanted |
-| Shared cases file | `claude-runner/tests/thinking_cases.json` | like `features_cases.json` and `roles_cases.json` (both in `claude-runner/tests`) |
+| Pure core, JS | `ahawr-runner/src/ahawr_runner/board_thinking.js` | like `board_features.js` and `board_roles.js` (the `// === pure ... core ===` markers). The name is proposed, not established. `board_think.py` and `board_think_ui.js` already exist, so `board_thinking.js` is a near-clash: an open point |
+| Pure core, Python | `ahawr-runner/src/ahawr_runner/thinking_config.py` | like `features_config.py` and `roles_config.py`. Proposed: UNKNOWN whether a Python core is wanted |
+| Shared cases file | `ahawr-runner/tests/thinking_cases.json` | like `features_cases.json` and `roles_cases.json` (both in `ahawr-runner/tests`) |
 | Patch | `data-tables/ops/thinking_config_patch.py` | named in `_make_json_config_thinking_mission.py:21`; ends in `_patch.py` (`docs/naming.md:77`) |
 | Migration dry run | `data-tables/ops/propose_thinking_json.py` | named in `_make_json_config_thinking_mission.py:23`; read-only |
 | Golden test | the cases file: empty JSON flattens to today's constants | `config-columns-plan.md:81` |
@@ -172,8 +172,8 @@ wins, the column is the fallback) and the run fields on lines 556-559 keep their
   and this anchor is stale for a re-run. Not changed here.
 - UNKNOWN: whether `board_edit_win.js` saves through the version check and diff-and-confirm step (not read in full).
 - Naming: `board_thinking.js` is close to `board_think.py` / `board_think_ui.js`; a different name may be wanted.
-- Not checked in this inventory: `claude-runner/tests/` (8 files mention the columns: e.g. `test_board_api.py`, `board_mission.test.js`),
-  `claude-runner/docs/` (`board-data-model.md`, `board-design.md`, `lessons.md`, `cloud-thinking-notes.md`,
+- Not checked in this inventory: `ahawr-runner/tests/` (8 files mention the columns: e.g. `test_board_api.py`, `board_mission.test.js`),
+  `ahawr-runner/docs/` (`board-data-model.md`, `board-design.md`, `lessons.md`, `cloud-thinking-notes.md`,
   `qa-acceptance.md`, `board-ops-notes.md`), `scratch`/`_scratch` copies under `data-tables/ops`. They are not readers of the
   live system, but a change would need to reach the tests.
 
@@ -181,14 +181,14 @@ wins, the column is the fallback) and the run fields on lines 556-559 keep their
 
 Targeted checks only, on the working tree (Windows host, Git Bash). Not the whole suite.
 
-- `python -m pytest tests/test_thinking_config.py tests/test_board_thinking_api.py tests/test_propose_thinking_json.py tests/test_board_api_part2.py --no-cov` (in `claude-runner/`): `48 passed in 12.51s`, exit 0.
+- `python -m pytest tests/test_thinking_config.py tests/test_board_thinking_api.py tests/test_propose_thinking_json.py tests/test_board_api_part2.py --no-cov` (in `ahawr-runner/`): `48 passed in 12.51s`, exit 0.
 - `python -m pytest tests/test_thinking_config_patch.py tests/test_propose_thinking_json.py --no-cov -v`: `19 passed in 1.75s`, exit 0. `test_thinking_config_patch.py` covers `data-tables/ops/thinking_config_patch.py`: a second apply returns False and leaves the workflow unchanged (`test_first_apply_patches_and_second_apply_changes_nothing`); each of the four anchors becomes exactly one replacement (`test_each_anchor_becomes_exactly_one_replacement`); a missing or doubled anchor raises `SystemExit` and writes nothing (`test_missing_anchor_raises_and_writes_nothing`, `test_duplicate_anchor_raises`). Modelled on `tests/test_roles_config_patch.py`.
 - `node --test tests/board_thinking.test.js tests/board_edit_win_features.test.js`: `# tests 25`, `# pass 25`, `# fail 0`.
 - `python -m ruff check` on `thinking_config.py`, `api.py`, `test_thinking_config.py`, `test_board_thinking_api.py`, `test_propose_thinking_json.py`: 0 errors. On `board_api.py`, `board_pg.py`, `test_board_api_part2.py`: 28, 26 and 6 errors, the same counts as the `git archive HEAD` copy (old errors, not fixed).
 - `python -m ruff check` on `data-tables/ops/thinking_config_patch.py`, `data-tables/ops/propose_thinking_json.py`, `tests/test_thinking_config_patch.py`: `All checks passed!`. These three files are untracked (`git ls-files` lists none), so there is no HEAD baseline. Before the fix they had 9 errors (8 E501 and 1 E402); the E402 is the `sys.path` import, suppressed with `# noqa: E402` as in `data-tables/ops/propose_roles_json.py:19`.
 - `MYPYPATH=src python -m mypy --python-version 3.12 data-tables/ops/thinking_config_patch.py data-tables/ops/propose_thinking_json.py tests/test_thinking_config_patch.py`: `Success: no issues found in 3 source files`. Without `--python-version 3.12` (the project's `3.11`) mypy stops on a numpy stub of another venv (`numpy/__init__.pyi:737: error: Type statement is only supported in Python 3.12`).
-- `python -m mypy src/claude_runner/thinking_config.py src/claude_runner/board_api.py src/claude_runner/board_pg.py src/claude_runner/api.py`: `Found 70 errors in 11 files (checked 4 source files)`. The HEAD copy gives `Found 70 errors in 11 files`. `thinking_config.py` has 0 errors; `api.py:254` (`unused-ignore`) is also at HEAD.
-- `git diff --check -- CHANGELOG.md claude-runner/src/claude_runner/board_api.py claude-runner/src/claude_runner/board_pg.py claude-runner/src/claude_runner/api.py claude-runner/src/claude_runner/board_edit_win.js claude-runner/tests/board_edit_win_features.test.js`: exit 0, no output. Only git's CRLF notices appear on stderr.
+- `python -m mypy src/ahawr_runner/thinking_config.py src/ahawr_runner/board_api.py src/ahawr_runner/board_pg.py src/ahawr_runner/api.py`: `Found 70 errors in 11 files (checked 4 source files)`. The HEAD copy gives `Found 70 errors in 11 files`. `thinking_config.py` has 0 errors; `api.py:254` (`unused-ignore`) is also at HEAD.
+- `git diff --check -- CHANGELOG.md ahawr-runner/src/ahawr_runner/board_api.py ahawr-runner/src/ahawr_runner/board_pg.py ahawr-runner/src/ahawr_runner/api.py ahawr-runner/src/ahawr_runner/board_edit_win.js ahawr-runner/tests/board_edit_win_features.test.js`: exit 0, no output. Only git's CRLF notices appear on stderr.
 - Untracked new files (`thinking_config.py`, `board_thinking.js`, `thinking_config_patch.py`, `propose_thinking_json.py`, `test_thinking_config_patch.py`, `docs/config-thinking.md`): `git diff --no-index --check /dev/null <file>` prints 0 whitespace lines for each. That command exits 1 whenever the files differ, so the exit code is not used.
 
 Not run: the full pytest and node suites; the patched Constants JS was not executed in node (the test checks the anchors and the replacement count, not the JS output).
@@ -202,21 +202,21 @@ Open: the planned `policy` key is not accepted (section 6).
 
 ### 8.1 Что изменено
 
-- Ядро: `claude-runner/src/claude_runner/thinking_config.py` (`validate`, `flatten`). Ключи `JSON_KEYS` на строках 15-19:
+- Ядро: `ahawr-runner/src/ahawr_runner/thinking_config.py` (`validate`, `flatten`). Ключи `JSON_KEYS` на строках 15-19:
   `from_task`, `off_after_seconds`, `off_after_steps`. Ключ `policy` пока не принимается.
-- Runner: `claude-runner/src/claude_runner/api.py:168` (поле `thinking_json` в теле запуска), `:391-401` (`flatten`; при
+- Runner: `ahawr-runner/src/ahawr_runner/api.py:168` (поле `thinking_json` в теле запуска), `:391-401` (`flatten`; при
   ошибке ответ `bad_thinking_json`, 422), `:410-413` (поля запуска).
-- Board API: `claude-runner/src/claude_runner/board_api.py:501-506` (`_thinking_fields`), `:1628-1643` (`GET` и `PUT
+- Board API: `ahawr-runner/src/ahawr_runner/board_api.py:501-506` (`_thinking_fields`), `:1628-1643` (`GET` и `PUT
   /api/board/thinking`; сохранение через `update_hermes_config` с проверкой версии).
-- Фронтенд: `claude-runner/src/claude_runner/board_thinking.js` (`BoardThinking.validate`, `thinkingSavePlan`); окно
-  настроек запуска `claude-runner/src/claude_runner/board_edit_win.js:59, 521-541, 753` (поле `thinking_json`, загрузка и
+- Фронтенд: `ahawr-runner/src/ahawr_runner/board_thinking.js` (`BoardThinking.validate`, `thinkingSavePlan`); окно
+  настроек запуска `ahawr-runner/src/ahawr_runner/board_edit_win.js:59, 521-541, 753` (поле `thinking_json`, загрузка и
   сохранение).
 - Патч workflow: `data-tables/ops/thinking_config_patch.py` (четыре якоря, идемпотентен, `main` на строке 102).
 - Dry run: `data-tables/ops/propose_thinking_json.py` (читает одну строку `hermes_config` и печатает предлагаемый
   `thinking_json`; ничего не пишет и никуда не отправляет).
 - `data-tables/ops/launch_mission.sh:43` уже вызывает `thinking_config_patch.py` для `wf_next.json`, сразу после
   `think_config_patch.py` (строка 42).
-- Тесты: `claude-runner/tests/test_thinking_config.py`, `test_board_thinking_api.py`, `test_propose_thinking_json.py`,
+- Тесты: `ahawr-runner/tests/test_thinking_config.py`, `test_board_thinking_api.py`, `test_propose_thinking_json.py`,
   `test_thinking_config_patch.py`, `board_thinking.test.js`, кейсы `thinking_cases.json`.
 - `CHANGELOG.md`, раздел Unreleased, строки 21-33.
 

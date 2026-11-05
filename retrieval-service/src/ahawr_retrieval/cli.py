@@ -44,13 +44,13 @@ def main(argv: list[str] | None = None) -> int:
     usage = sub.add_parser(
         "usage",
         help="per-profile retrieval-usage metrics (selected/opened files, missed files, "
-        "ahawr-search calls) from the log and the claude-runner API",
+        "ahawr-search calls) from the log and the ahawr-runner API",
     )
-    usage.add_argument("--runner-url", required=True, help="claude-runner base URL")
+    usage.add_argument("--runner-url", required=True, help="ahawr-runner base URL")
     usage.add_argument(
         "--runner-key",
         default=os.environ.get("RETRIEVAL_RUNNER_API_KEY", ""),
-        help="claude-runner API key (default: $RETRIEVAL_RUNNER_API_KEY; empty = none)",
+        help="ahawr-runner API key (default: $RETRIEVAL_RUNNER_API_KEY; empty = none)",
     )
     usage.add_argument(
         "--since",
@@ -195,7 +195,7 @@ async def _usage_async(args: argparse.Namespace, settings: Settings) -> int:
             with_breakdown=True,
         )
     except Exception as exc:
-        print(f"error: claude-runner not reachable at {args.runner_url}: {exc}", file=sys.stderr)
+        print(f"error: ahawr-runner not reachable at {args.runner_url}: {exc}", file=sys.stderr)
         return 1
     finally:
         with suppress(Exception):

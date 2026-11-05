@@ -77,7 +77,7 @@ Undefined-field codes (used in the tables below):
 | `B9` | `optNum`: not finite or below 100 gives 6000 (Constants line 54). |
 | `B10` | `optNum`: not finite or below 100 gives 5000 (Constants line 55). |
 | `B11` | Empty gives `null` as the trace label (Build Worker Retrieval Request and Build Reviewer Retrieval Request, line 24). |
-| `B12` | Empty gives `http://claude-runner:8700` (Constants line 40); the HTTP nodes use the same default. |
+| `B12` | Empty gives `http://ahawr-runner:8700` (Constants line 40); the HTTP nodes use the same default. |
 | `B13` | Empty gives `nhjwX1G7FiVTO2Ah` (Constants line 43). The Run Manager export has id `6WE2ATGEDzUopBJH`; see Open points. |
 | `B14` | Empty fails the `notEmpty` test (If, If2-If5, QA Notice Gate?): the Telegram send or the QA notice is skipped. |
 | `B15` | Policy gives `''`; from-task gives `0` (`Number(...) || 0`). |
@@ -99,18 +99,18 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 4 | Parse Plan | `max_tasks` | `const maxTasks = Number($('Constants').first().json.max_tasks ?? 20);` | 35 | 1 | `B1` throws `Invalid <field>` (run stops) | Fallback `?? 20` is unreachable: Constants throws first. |
 | 5 | Worker Start | `run_manager_workflow_id` | `={{ $('Constants').first().json.run_manager_workflow_id }}` | 1 | 1 | `B13` empty: `nhjwX1G7FiVTO2Ah` |  |
 | 6 | Reviewer Start | `run_manager_workflow_id` | `={{ $('Constants').first().json.run_manager_workflow_id }}` | 1 | 1 | `B13` empty: `nhjwX1G7FiVTO2Ah` |  |
-| 7 | Advance Task | `runner_url` | `url: cfg.runner_url + '/api/board/lessons/' + route,` | 18 | 1 | `B12` empty: `http://claude-runner:8700` |  |
+| 7 | Advance Task | `runner_url` | `url: cfg.runner_url + '/api/board/lessons/' + route,` | 18 | 1 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 8 | Advance Task | `state_namespace` | `body: { mission: String(cfg.state_namespace ?? ''), ...body },` | 20 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 9 | Advance Task | `max_attempts_per_task` | `max_attempts: Number(cfg.max_attempts_per_task ?? 1),` | 28 | 1 | `B1` throws `Invalid <field>` (run stops) | Fallback `?? 1` is unreachable. |
 | 10 | Retry Current Task | `max_attempts_per_task` | `const maxAttempts = Number($('Constants').first().json.max_attempts_per_task ?? 3);` | 17,44 | 2 | `B1` throws `Invalid <field>` (run stops) | Fallbacks `?? 3` and `?? 1` are unreachable. |
-| 11 | Retry Current Task | `runner_url` | `url: cfg.runner_url + '/api/board/lessons/' + route,` | 34 | 1 | `B12` empty: `http://claude-runner:8700` |  |
+| 11 | Retry Current Task | `runner_url` | `url: cfg.runner_url + '/api/board/lessons/' + route,` | 34 | 1 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 12 | Retry Current Task | `state_namespace` | `body: { mission: String(cfg.state_namespace ?? ''), ...body },` | 36 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 13 | Constants | `retry_delays_json` | `if (String(row.retry_delays_json ?? '').trim()) {` | 7,9,10,12 | 4 | `B4` empty: `[15, 30, 60, 120, 300]`; invalid JSON: throws |  |
 | 14 | Constants | `state_namespace` | `const stateNamespace = String(mission.state_namespace ?? '').trim();` | 15,16,77 | 3 | `B17` empty or missing: throws (Mission) | Line 16 error text is also a read path; no empty value reaches a reader. |
 | 15 | Constants | `retrieval_corpora_json` | `} catch (e) { throw new Error('Invalid retrieval_corpora_json: ${e.message}'); }` | 29,32 | 2 | `B7` empty: `[]`; invalid JSON: throws |  |
 | 16 | Constants | `retrieval_url` | `const retrievalUrl = (String(row.retrieval_url ?? '').trim() \|\| 'http://ahawr-retrieval:8500').replace(/\/` | 36,51 | 2 | `B6` empty: `http://ahawr-retrieval:8500` |  |
 | 17 | Constants | `retrieval_enabled` | `const retrievalRequested = row.retrieval_enabled === true \|\| String(row.retrieval_enabled ?? '').toLowerCase` | 37,50 | 3 | `B5` not `true`: no retrieval |  |
-| 18 | Constants | `runner_url` | `const runnerUrl = (String(row.runner_url ?? '').trim() \|\| 'http://claude-runner:8700').replace(/\/+$` | 40,46 | 2 | `B12` empty: `http://claude-runner:8700` |  |
+| 18 | Constants | `runner_url` | `const runnerUrl = (String(row.runner_url ?? '').trim() \|\| 'http://ahawr-runner:8700').replace(/\/+$` | 40,46 | 2 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 19 | Constants | `run_manager_workflow_id` | `// configurable): hermes_config.run_manager_workflow_id, default nhjwX1G7FiVTO2Ah.` | 42,43,45 | 3 | `B13` empty: `nhjwX1G7FiVTO2Ah` | Line 42 is a comment; reads are lines 43 and 45. |
 | 20 | Constants | `retrieval_timeout_ms` | `retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),` | 53 | 2 | `B8` not finite or below 1000: 120000 |  |
 | 21 | Constants | `retrieval_worker_max_tokens` | `retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),` | 54 | 2 | `B9` not finite or below 100: 6000 |  |
@@ -211,7 +211,7 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 116 | Build Architect Run Input | `state_namespace` | `state_key: ($('Constants').first().json.state_namespace),` | 384 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 117 | Build Architect Run Input | `service_provider` | `service_provider: ($('Constants').first().json.service_provider),` | 386 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
 | 118 | Build Architect Run Input | `service_model` | `service_model: ($('Constants').first().json.service_model),` | 387 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
-| 119 | Build Architect Run Input | `runner_url` | `runner_url: ($('Constants').first().json.runner_url),` | 388 | 2 | `B12` empty: `http://claude-runner:8700` |  |
+| 119 | Build Architect Run Input | `runner_url` | `runner_url: ($('Constants').first().json.runner_url),` | 388 | 2 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 120 | Build Worker Run Input | `architect_provider` | `architect_provider: config.planner_provider,` | 351 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 121 | Build Worker Run Input | `planner_provider` | `architect_provider: config.planner_provider,` | 351 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 122 | Build Worker Run Input | `architect_model` | `architect_model: config.planner_model,` | 352 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
@@ -221,7 +221,7 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 126 | Build Worker Run Input | `reviewer_provider` | `reviewer_provider: config.reviewer_provider,` | 355 | 2 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 127 | Build Worker Run Input | `reviewer_model` | `reviewer_model: config.reviewer_model` | 356 | 2 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 128 | Build Worker Run Input | `mission_roles_json` | `const roles = mergeRoles(parse(config.roles_json), parse(config.mission_roles_json));` | 358 | 1 | `B19` always empty (Mission has no `roles_json`) |  |
-| 129 | Build Worker Run Input | `runner_url` | `url: __lessonsCfg.runner_url + '/api/board/lessons/select',` | 398,481,553 | 4 | `B12` empty: `http://claude-runner:8700` |  |
+| 129 | Build Worker Run Input | `runner_url` | `url: __lessonsCfg.runner_url + '/api/board/lessons/select',` | 398,481,553 | 4 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 130 | Build Worker Run Input | `state_namespace` | `mission: String(__lessonsCfg.state_namespace ?? ''),` | 401,550 | 2 | `B17` empty or missing: throws (Mission) |  |
 | 131 | Build Worker Run Input | `worker_poll_seconds` | `poll_seconds: ($('Constants').first().json.worker_poll_seconds),` | 545 | 1 | `B1` throws `Invalid <field>` (run stops) |  |
 | 132 | Build Worker Run Input | `worker_max_polls` | `max_polls: ($('Constants').first().json.worker_max_polls),` | 546 | 1 | `B1` throws `Invalid <field>` (run stops) |  |
@@ -249,7 +249,7 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 154 | Build Reviewer Run Input | `state_namespace` | `eviewer State').first().json.state_key ?? $('Constants').first().json.state_namespace ?? '')),` | 447 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 155 | Build Reviewer Run Input | `service_model` | `service_model: ($('Constants').first().json.service_model),` | 448 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
 | 156 | Build Reviewer Run Input | `service_provider` | `service_provider: ($('Constants').first().json.service_provider),` | 449 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
-| 157 | Build Reviewer Run Input | `runner_url` | `runner_url: ($('Constants').first().json.runner_url),` | 450 | 2 | `B12` empty: `http://claude-runner:8700` |  |
+| 157 | Build Reviewer Run Input | `runner_url` | `runner_url: ($('Constants').first().json.runner_url),` | 450 | 2 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 158 | Load Previous Worker Report | `state_namespace` | `={{ String($('Constants').first().json.state_namespace) }}` | 1 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 159 | Prepare Verdict Retry | `reviewer_max_retries` | `// The number of re-asks is hermes_config.reviewer_max_retries; when used up, fail with the parse error.` | 2 | 1 | `B2` null or empty: 0 retries; undefined: throws | Line 2 is a comment: not a read. |
 | 160 | Prepare Verdict Retry | `reviewer_model` | `viewer Run Input').last().json : { model: $('Constants').first().json.reviewer_model, provider: $('Constants').first().json.reviewer_provider })` | 4 | 1 | `B3C` empty: used only when Build Reviewer did not run | Line 4: Constants value only when Build Reviewer Run Input has not run. |
@@ -261,10 +261,10 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 166 | Prepare Verdict Retry | `state_namespace` | `state_key: String(cfg.state_namespace ?? ''), service_model: cfg.service_model, service_provider:` | 25 | 1 | `B17` empty or missing: throws (Mission) |  |
 | 167 | Prepare Verdict Retry | `service_model` | `state_key: String(cfg.state_namespace ?? ''), service_model: cfg.service_model, service_provider: cfg.service_provider,` | 25 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
 | 168 | Prepare Verdict Retry | `service_provider` | `String(cfg.state_namespace ?? ''), service_model: cfg.service_model, service_provider: cfg.service_provider,` | 25 | 2 | `B3S` empty: Run Manager uses the run model; provider `anthropic` |  |
-| 169 | Prepare Verdict Retry | `runner_url` | `runner_url: cfg.runner_url, runner_api_key: cfg.runner_api_key,` | 26 | 2 | `B12` empty: `http://claude-runner:8700` |  |
+| 169 | Prepare Verdict Retry | `runner_url` | `runner_url: cfg.runner_url, runner_api_key: cfg.runner_api_key,` | 26 | 2 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 170 | Reviewer Verdict Retry Start | `run_manager_workflow_id` | `={{ $('Constants').first().json.run_manager_workflow_id }}` | 1 | 1 | `B13` empty: `nhjwX1G7FiVTO2Ah` |  |
 | 171 | Prepare Results Update | `state_namespace` | `return [{ json: { state_key: c.state_namespace, runner_url: c.runner_url, runner_api_key: c.runner_api_key` | 2 | 1 | `B17` empty or missing: throws (Mission) |  |
-| 172 | Prepare Results Update | `runner_url` | `return [{ json: { state_key: c.state_namespace, runner_url: c.runner_url, runner_api_key: c.runner_api_key } }];` | 2 | 2 | `B12` empty: `http://claude-runner:8700` |  |
+| 172 | Prepare Results Update | `runner_url` | `return [{ json: { state_key: c.state_namespace, runner_url: c.runner_url, runner_api_key: c.runner_api_key } }];` | 2 | 2 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 173 | Split Task Notice | `architect_provider` | `architect_provider: config.planner_provider,` | 653 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 174 | Split Task Notice | `planner_provider` | `architect_provider: config.planner_provider,` | 653 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 175 | Split Task Notice | `architect_model` | `architect_model: config.planner_model,` | 654 | 1 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
@@ -274,8 +274,8 @@ One row per node and legacy name. `Occ` counts the occurrences in that node; the
 | 179 | Split Task Notice | `reviewer_provider` | `reviewer_provider: config.reviewer_provider,` | 657 | 2 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 180 | Split Task Notice | `reviewer_model` | `reviewer_model: config.reviewer_model` | 658 | 2 | `B3` empty pair is not used; no `roles_json` entry: throws `no model configured` | Legacy block of `__roleConfig` (`legacyRole` line 252). |
 | 181 | Split Task Notice | `mission_roles_json` | `const roles = mergeRoles(parse(config.roles_json), parse(config.mission_roles_json));` | 660 | 1 | `B19` always empty (Mission has no `roles_json`) |  |
-| 182 | QA Request | `runner_url` | `={{ $('Constants').first().json.runner_url }}/v1/qa/requests` | 1 | 1 | `B12` empty: `http://claude-runner:8700` |  |
-| 183 | QA Poll | `runner_url` | `={{ $('Constants').first().json.runner_url }}/v1/qa/requests/{{ $('QA Request').first().json.id }}` | 1 | 1 | `B12` empty: `http://claude-runner:8700` |  |
+| 182 | QA Request | `runner_url` | `={{ $('Constants').first().json.runner_url }}/v1/qa/requests` | 1 | 1 | `B12` empty: `http://ahawr-runner:8700` |  |
+| 183 | QA Poll | `runner_url` | `={{ $('Constants').first().json.runner_url }}/v1/qa/requests/{{ $('QA Request').first().json.id }}` | 1 | 1 | `B12` empty: `http://ahawr-runner:8700` |  |
 | 184 | QA Notice Gate? | `telegram_chat_id` | `={{ $('Constants').first().json.telegram_chat_id }}` | 1 | 1 | `B14` empty: Telegram send or QA notice skipped |  |
 | 185 | QA Notice | `telegram_chat_id` | `={{ $('Constants').first().json.telegram_chat_id }}` | 1 | 1 | `B14` empty: Telegram send or QA notice skipped |  |
 
@@ -306,11 +306,11 @@ The Run Manager does not read `hermes_config`: no legacy column name appears in 
 |---|---|---|---|---|---|---|---|
 | 1 | Normalize Request | `service_model` | `service_model: String(i.service_model ?? i.model ?? '').trim(),` | 14,58 | 4 | `RMSVC_M` missing: run model; no model: `''` | Lines 14 and 58. |
 | 2 | Normalize Request | `service_provider` | `service_provider: String(i.service_provider ?? i.provider ?? '').trim(),` | 15,59 | 4 | `RMSVC_P` missing: run provider; no provider: `anthropic` | Lines 15 and 59. |
-| 3 | Normalize Request | `runner_url` | `runner_url: String(i.runner_url ?? '').trim().replace(/\/+$/, '') \|\| '` | 18 | 2 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
+| 3 | Normalize Request | `runner_url` | `runner_url: String(i.runner_url ?? '').trim().replace(/\/+$/, '') \|\| '` | 18 | 2 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
 | 4 | Normalize Request | `retry_delays` | `retry_delays: (() => {` | 26,27 | 2 | `RMRETRY` not an array or invalid JSON: `[15, 30, 60, 120, 300]`, no error | Lines 26-45; the catch (line 39) falls back silently. |
-| 5 | Start / Resume Run | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
-| 6 | Get Run Status | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
-| 7 | Resume Existing Session | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
+| 5 | Start / Resume Run | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
+| 6 | Get Run Status | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
+| 7 | Resume Existing Session | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
 | 8 | Retry Controller | `retry_delays` | `const delays=Array.isArray($json.retry_delays)?$json.retry_delays: [15,30,60,120,300];` | 3 | 2 | `RMRETRY` not an array or invalid JSON: `[15, 30, 60, 120, 300]`, no error | Non-array: default (line 3). |
 | 9 | Build Result | `service_model` | `austed ?? false), failure_reason: String($json.failure_reason ?? ''), service_model: String($json.service_model ?? ''), service_provider: Strin` | 1 | 2 | `RMEMPTY` `String(x ?? '')`: empty string, no error |  |
 | 10 | Build Result | `service_provider` | `lure_reason ?? ''), service_model: String($json.service_model ?? ''), service_provider: String($json.service_provider ?? ''), compression_failed:` | 1 | 2 | `RMEMPTY` `String(x ?? '')`: empty string, no error |  |
@@ -322,9 +322,9 @@ The Run Manager does not read `hermes_config`: no legacy column name appears in 
 | 16 | Restore Runner State — Run Context | `service_model` | `String(runner.model ?? ''), provider: String(runner.provider ?? ''), service_model: String(runner.service_model ?? ''), service_provider: Stri` | 3 | 2 | `RMEMPTY` `String(x ?? '')`: empty string, no error |  |
 | 17 | Restore Runner State — Run Context | `service_provider` | `r.provider ?? ''), service_model: String(runner.service_model ?? ''), service_provider: String(runner.service_provider ?? ''), working_directory:` | 3 | 2 | `RMEMPTY` `String(x ?? '')`: empty string, no error |  |
 | 18 | Restore Runner State — Run Context | `retry_delays` | `nner.max_retries ?? 3), retry_count: Number(runner.retry_count ?? 0), retry_delays: Array.isArray(runner.retry_delays) ? runner.retry_delays :` | 3 | 3 | `RMRETRY` not an array or invalid JSON: `[15, 30, 60, 120, 300]`, no error | Non-array: default. |
-| 19 | Start New Session from Handoff | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
-| 20 | Compact Session | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
-| 21 | Get Session Digest | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://claude-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://claude-runner:8700` |  |
+| 19 | Start New Session from Handoff | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
+| 20 | Compact Session | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
+| 21 | Get Session Digest | `runner_url` | `={{ String($('Normalize Request').first().json.runner_url \|\| 'http://ahawr-runner:8700').replace(/\/+$/, '') + '/v1/` | 1 | 1 | `RMURL` missing or empty: `http://ahawr-runner:8700` |  |
 
 Run Manager input keys that carry legacy values (not counted above):
 
@@ -344,7 +344,7 @@ Behaviour codes for the Run Manager rows:
 |---|---|
 | `RMSVC_M` | `service_model`: missing gives the run `model` (line 58); no model gives `''`. |
 | `RMSVC_P` | `service_provider`: missing gives `provider` (line 59); no provider gives `anthropic` (line 57). |
-| `RMURL` | `runner_url`: missing or empty gives `http://claude-runner:8700` (line 18); the request nodes apply the same default. |
+| `RMURL` | `runner_url`: missing or empty gives `http://ahawr-runner:8700` (line 18); the request nodes apply the same default. |
 | `RMRETRY` | `retry_delays`: not an array or invalid JSON gives `[15, 30, 60, 120, 300]`, silently (lines 26-45). |
 | `RMEMPTY` | `String(x ?? '')` in Build Result, Build Persist State and Restore Runner State: empty string, no error. |
 
@@ -535,7 +535,7 @@ Open risks: the `engine_config_patch.py` and `features_config_patch.py` reads of
 
 ## Runner and board readers (T001C)
 
-Scope: `claude-runner/src/claude_runner`. Grep: `grep -rnwE` with the 35 distinct names of the Legacy columns table (`retrieval_corpora_json` is in two rows of that table, so the earlier "38 names" was wrong), `grep -v codex_`: 303 lines. No `codex_*.py` file matches. Files of the scope list with no match: `roles_config.py`, `config.py`, `runs.py`, `handoff.py`, `board_mission_save.js`, `board_roles.js` (their legacy reads are built from role names, see the cores below).
+Scope: `ahawr-runner/src/ahawr_runner`. Grep: `grep -rnwE` with the 35 distinct names of the Legacy columns table (`retrieval_corpora_json` is in two rows of that table, so the earlier "38 names" was wrong), `grep -v codex_`: 303 lines. No `codex_*.py` file matches. Files of the scope list with no match: `roles_config.py`, `config.py`, `runs.py`, `handoff.py`, `board_mission_save.js`, `board_roles.js` (their legacy reads are built from role names, see the cores below).
 
 Missing-field behaviour, by kind of read:
 
@@ -548,9 +548,9 @@ Missing-field behaviour, by kind of read:
 
 Cores and cases file (paths opened and checked):
 
-- Python core: `claude-runner/src/claude_runner/roles_config.py` (`legacy_role` :274, `resolve` :285, `flatten` :388), and `claude-runner/src/claude_runner/board_engine.py` (`LEGACY_COLUMNS` :17, `flatten` :310).
-- JS core: `claude-runner/src/claude_runner/board_roles.js` (`legacyRole` :339, `pickModel` :370, `resolveRole` :419, `flatten` :586), and `claude-runner/src/claude_runner/board_engine.js` (`flatten` :304).
-- Shared cases file: `claude-runner/tests/roles_cases.json` (exists; top-level keys `description`, `providers`, `validation`, `resolve`, `flatten`; 53 `legacy` blocks). Consumers: `claude-runner/tests/test_roles_config.py:25` and `claude-runner/tests/board_roles.test.js:9`.
+- Python core: `ahawr-runner/src/ahawr_runner/roles_config.py` (`legacy_role` :274, `resolve` :285, `flatten` :388), and `ahawr-runner/src/ahawr_runner/board_engine.py` (`LEGACY_COLUMNS` :17, `flatten` :310).
+- JS core: `ahawr-runner/src/ahawr_runner/board_roles.js` (`legacyRole` :339, `pickModel` :370, `resolveRole` :419, `flatten` :586), and `ahawr-runner/src/ahawr_runner/board_engine.js` (`flatten` :304).
+- Shared cases file: `ahawr-runner/tests/roles_cases.json` (exists; top-level keys `description`, `providers`, `validation`, `resolve`, `flatten`; 53 `legacy` blocks). Consumers: `ahawr-runner/tests/test_roles_config.py:25` and `ahawr-runner/tests/board_roles.test.js:9`.
 
 
 Split: 129 rows are in the eight cover files (`api.py`, `board_api.py`, `board_edit_win.js`, `board_mission.js`, `board_pg.py`, `board_ready.py`, `board_stats.py`, `board_task.js`) and 174 rows are in the other 21 files. The table lists every grep line: one row per `file:line`, out-of-cover files first, in the order the reviewer gave. `UNKNOWN` is not used in this section: each row was resolved by opening the code at the cited lines.
@@ -871,18 +871,18 @@ Open risks: the SQL behaviour (a dropped column makes the statement fail) comes 
 
 ## Checks (T006A)
 
-Scope: the ops files changed for the legacy-column work (`data-tables/ops/launch_mission.sh`, `notify.py`, `legacy_columns_optional_patch.py`, `overrides_config_patch.py`, `check_legacy_columns.py`) and the tests for them (`claude-runner/tests/test_legacy_columns_optional_patch.py`, `test_overrides_config_patch.py`, `test_all_patches_constants_roles.py`, `test_ops_legacy_reads.py`, `test_check_legacy_columns.py`, and `test_ops_patches_qa.py`, which reads `launch_mission.sh`), plus the five board JS tests named in the review. Other files modified today (`test_board_api.py`, `test_qa_fixture.py`) are not part of this check. The host is WSL Linux, not the Windows host of the runner notes.
+Scope: the ops files changed for the legacy-column work (`data-tables/ops/launch_mission.sh`, `notify.py`, `legacy_columns_optional_patch.py`, `overrides_config_patch.py`, `check_legacy_columns.py`) and the tests for them (`ahawr-runner/tests/test_legacy_columns_optional_patch.py`, `test_overrides_config_patch.py`, `test_all_patches_constants_roles.py`, `test_ops_legacy_reads.py`, `test_check_legacy_columns.py`, and `test_ops_patches_qa.py`, which reads `launch_mission.sh`), plus the five board JS tests named in the review. Other files modified today (`test_board_api.py`, `test_qa_fixture.py`) are not part of this check. The host is WSL Linux, not the Windows host of the runner notes.
 
 Ran:
 
-- `node --test tests/board_roles.test.js tests/board_mission.test.js tests/board_i18n.test.js tests/board_edit_win_features.test.js tests/board_lessons_ui.test.js` (from `claude-runner`): `# tests 173`, `# pass 173`, `# fail 0`, exit 0. Nothing failed, so no comparison with a clean state was needed.
-- `python -m pytest tests/test_ops_patches_qa.py tests/test_all_patches_constants_roles.py -o addopts="" -q --no-cov`, three runs in a row (from `claude-runner`): run 1 `4 passed, 1 warning in 50.85s`, exit 0; run 2 `4 passed, 1 warning in 51.96s`, exit 0; run 3 `4 passed, 1 warning in 50.87s`, exit 0. No run failed. An earlier attempt failed both `test_ops_patches_qa.py` tests with `adaptive_split_patch failed: usage: adaptive_split_patch.py [-h] --src SRC --out OUT`; the cause is not established. `launch_mission.sh` was rewritten at 01:51:20, during that attempt.
+- `node --test tests/board_roles.test.js tests/board_mission.test.js tests/board_i18n.test.js tests/board_edit_win_features.test.js tests/board_lessons_ui.test.js` (from `ahawr-runner`): `# tests 173`, `# pass 173`, `# fail 0`, exit 0. Nothing failed, so no comparison with a clean state was needed.
+- `python -m pytest tests/test_ops_patches_qa.py tests/test_all_patches_constants_roles.py -o addopts="" -q --no-cov`, three runs in a row (from `ahawr-runner`): run 1 `4 passed, 1 warning in 50.85s`, exit 0; run 2 `4 passed, 1 warning in 51.96s`, exit 0; run 3 `4 passed, 1 warning in 50.87s`, exit 0. No run failed. An earlier attempt failed both `test_ops_patches_qa.py` tests with `adaptive_split_patch failed: usage: adaptive_split_patch.py [-h] --src SRC --out OUT`; the cause is not established. `launch_mission.sh` was rewritten at 01:51:20, during that attempt.
 - `python -m pytest` on the six test files (`-o addopts="" -q --no-cov`, earlier run, not repeated): `32 passed in 57.08s`, exit 0. It includes the double-apply tests `test_all_patches_twice_then_legacy_and_stripped_rows_resolve_the_same` and `test_all_launch_patches_twice_on_a_fresh_export`.
-- `python -m ruff check --no-cache --config claude-runner/pyproject.toml` on `check_legacy_columns.py` and the five new test files: `All checks passed!`.
+- `python -m ruff check --no-cache --config ahawr-runner/pyproject.toml` on `check_legacy_columns.py` and the five new test files: `All checks passed!`.
 - `python -m ruff check` on `data-tables/ops/notify.py`: 12 errors before, 11 after (the "before" is a copy of the file with the SELECT line in its pre-edit single-line form, made in `/tmp`). After is at most before, as required. The 11 remaining are E501 at 5, 28, 29, 32, 73, 82; SIM115 at 19, 46, 83; SIM105 at 36; UP031 at 37, all on lines this task did not touch.
 - `python -m ruff check` on `data-tables/ops/pgdb.py`: 8 errors. The file was not edited by this task (mtime 17:01, before the task's edits), so it has no before/after pair.
-- `python -m ruff check` on `claude-runner/tests/test_ops_patches_qa.py`: working copy and `git show HEAD:` copy both `All checks passed!`. The file is tracked and already modified by other work; this task did not edit it.
-- `python -m mypy --config-file claude-runner/pyproject.toml --python-version 3.12` on the new files: the 12 errors are all in `notify.py` (6) and `pgdb.py` (6), which the test imports pull in. None are in `check_legacy_columns.py` or the test files. Run with `MYPYPATH=data-tables/ops` so that `pgdb` resolves.
+- `python -m ruff check` on `ahawr-runner/tests/test_ops_patches_qa.py`: working copy and `git show HEAD:` copy both `All checks passed!`. The file is tracked and already modified by other work; this task did not edit it.
+- `python -m mypy --config-file ahawr-runner/pyproject.toml --python-version 3.12` on the new files: the 12 errors are all in `notify.py` (6) and `pgdb.py` (6), which the test imports pull in. None are in `check_legacy_columns.py` or the test files. Run with `MYPYPATH=data-tables/ops` so that `pgdb` resolves.
 - `python -m mypy` on `notify.py`: before 6 errors (untyped `_env`, `mission_tag`, `send` and their callers), after 6. `pgdb.py`: 6 before, 6 after (not edited). The project pins `python_version = "3.11"`; under 3.11 mypy stops on a numpy stub from another venv (`Type statement is only supported in Python 3.12 and greater`), so the 3.12 override was used. The config was not changed.
 - `python -m mypy --python-version 3.12` on `test_ops_patches_qa.py`, working copy and `git show HEAD:` copy: `Success: no issues found in 1 source file` for both.
 - `bash -n data-tables/ops/launch_mission.sh`: ok.
@@ -943,7 +943,7 @@ Open risks:
 - Патченный workflow не импортирован в n8n; реального запуска миссии не было.
 - Отчёт не запускался на продакшн-строке `hermes_config` (id 5): строка не читалась, доступа к БД не было.
 - Значения всех колонок UNKNOWN (раздел "Open points"). Экспорт workflow от 2026-10-23 может не совпадать с живым состоянием.
-- Проверка этой сводки: `tests/test_check_legacy_columns.py` (из `claude-runner`) `7 passed`, и вердикт `SAFE: 0, NOT SAFE: 34` на строке-заглушке. Реальной строкой проверки не было.
+- Проверка этой сводки: `tests/test_check_legacy_columns.py` (из `ahawr-runner`) `7 passed`, и вердикт `SAFE: 0, NOT SAFE: 34` на строке-заглушке. Реальной строкой проверки не было.
 
 ### Шаги оператора
 

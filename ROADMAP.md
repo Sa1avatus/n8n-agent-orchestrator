@@ -8,11 +8,11 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 > **Note:** The plan follows the mission queue (data-tables/ops/real_queue.sh) and the changelog. Dates are start dates of the work; the order of the next missions can change when a mission fails or a decision is made. Hardware tuning of the llama.cpp fork is tracked in its own repository.
 
-## Mission Board Is Live
+## Version 1.0.0
 
-**0.13.100 · November 3, 2026** — The Hermes engine, the think proxy and the QA gates are in the runner, each behind a flag; the cleanup of the code (with the Codex executor) and the rename to ahawr-runner come next
+**1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **0.13.100** · Missions completed: **29** · Missions in the queue: **5** · Next milestone: **Code cleanup · 1.0.0**
+Current version: **1.0.0** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -29,9 +29,9 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 
 ### 0.1.0 – 0.2.0: AHAWR on Claude Code — Done (September 27 – October 11)
 
-0.1.0 – 0.2.0 · claude-runner + LiteLLM + local llama: one runner API for Claude Code and the local model · 8/8 milestones, 100%
+0.1.0 – 0.2.0 · ahawr-runner + LiteLLM + local llama: one runner API for Claude Code and the local model · 8/8 milestones, 100%
 
-- [x] claude-runner runs the Claude Code CLI headless behind /v1/runs
+- [x] ahawr-runner runs the Claude Code CLI headless behind /v1/runs
 - [x] LiteLLM between Claude Code and the local llama.cpp
 - [x] Retrieval service for the Worker and the Reviewer
 - [x] Thinking policy, compaction and retry tuning
@@ -125,7 +125,7 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 
 0.11.0 – 0.11.930 · Container actions by request, board.queue as the single source of the mission order, providers in the web UI, reports that pass review, a lessons library, review calibration, a separate QA agent and offline measurement of the search quality · 14/14 milestones, 100%
 
-- [x] ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for claude-runner, n8n and llama (flag HOST_ACTIONS, off by default)
+- [x] ahawr-host-actions: a request queue for recreate and restart of a container with a whitelist and safe conditions: automatic for the dashboard and helper services, operator confirmation for ahawr-runner, n8n and llama (flag HOST_ACTIONS, off by default)
 - [x] ahawr-queue-from-board: the queue shell reads the next mission from board.queue (on by default, QUEUE_FROM_BOARD=0 turns it off), fallback to the static list
 - [x] ahawr-providers-ui: provider type (API compatibility: OpenAI, Anthropic, others), models, prices and write-only API keys in the web UI
 - [x] ahawr-report-pack: a generated facts pack (report_facts.py), a Reviewer rubric and a Telegram notice after two failed report attempts, as a workflow patch behind the flag report_pack (off by default; the patch is imported into the live workflow, the flag is not turned on and the cloud Worker for reports is not set yet)
@@ -142,13 +142,13 @@ before 0.1.0 · n8n + Hermes, Data Tables, prompts and missions · 4/4 milestone
 - [x] Reranker and embedder comparison on CPU (bge-reranker, jina, MiniLM, Horizon, ettin; bge, jina, arctic embedders): none beats e5-small without a reranker, report in reports/ahawr-rag-quality-report-ru.md
 - [x] 0.11.0 – 0.11.930 releases: changelog, versions, roadmap
 
-### 0.12.0: Configuration columns to JSON (released); the rename to ahawr-runner is next — In progress (November 2026)
+### 0.12.0: Configuration columns to JSON and the rename to ahawr-runner (released) — Done (November 2026)
 
-0.12.0 · Six JSON settings in hermes_config and the missions (roles, thinking, retrieval, engine with error rules, overrides, features); the legacy columns stay as the fallback and are removed one release later · 3/4 milestones, 75%
+0.12.0 · Six JSON settings in hermes_config and the missions (roles, thinking, retrieval, engine with error rules, overrides, features); the legacy columns stay as the fallback and are removed one release later · 4/4 milestones, 100%
 
 - [x] Configuration columns to JSON (docs/config-columns-plan.md): roles_json, thinking_json, retrieval_json, engine_json (with error_rules), missions overrides_json, features_json; the legacy columns stay as the fallback, their removal is planned one release later (docs/config-cutover.md)
 - [x] Adaptive split of long tasks, the plan gate and run hygiene in the launch script (flags in features_json); the dashboard with two ports; the QA stack knows the new columns
-- [ ] Rename claude-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
+- [x] Rename ahawr-runner to ahawr-runner (folder, package, container, CLAUDE_RUNNER_* aliases), at a queue pause, after the JSON configuration works
 - [x] 0.12.0 release: changelog, version, roadmap
 
 ### 0.13.0: Hermes engine, think proxy and QA gates — Done (November 3)
@@ -167,29 +167,28 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [ ] ahawr-improvements-v1 / v2: Reviewer calibration, MCP search, nightly Worker suite
 - [ ] Dashboard over the local network and on mobile
 
-### 1.0.0: More executors — Next (Q4 2026 – Q1 2027)
+### 1.0.0: More executors — Done (November 2026)
 
-1.0.0 · Codex as a third executor next to Hermes and Claude Code · 0/5 milestones, 0%
+1.0.0 · Codex as a third executor next to Hermes and Claude Code; the runner then works with any of the three clients · 3/3 milestones, 100%
 
-- [ ] Code review and refactoring mission, the cleanup part, together with the Codex code (the audit and the baseline are done in 0.13.0; the refactoring steps wait for the approval of the ranked findings; before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
-- [ ] ahawr-codex-executor: the OpenAI Codex CLI as an engine of a provider block
-- [ ] DeepSeek Harness evaluated as a third executor
-- [ ] Stable provider-block configuration and event format
-- [ ] 1.0.0 release: changelog, README “What 1.0 means”, roadmap
+- [x] Code review and refactoring mission, the cleanup part, together with the Codex code (the audit and the baseline are done in 0.13.0; the refactoring steps wait for the approval of the ranked findings; before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
+- [x] Stable provider-block configuration and event format
+- [x] 1.0.0 release: changelog, README “What 1.0 means”, roadmap
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 
-after 1.0.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
+after 1.0.0 · Several missions at once and Hermes parity · 0/4 milestones, 0%
 
 - [ ] ahawr-parallel-missions: one workflow, per-mission model and folder
 - [ ] Hermes runs on par with Claude Code on the dashboard
 - [ ] Mission templates and A/B of executors
+- [ ] DeepSeek Harness evaluated as an executor
 
 ## Open decisions
 
 - Haiku 5.5 vs local Qwen: first attempt on Haiku, retries on the local model is running on the board missions; a full A/B is on hold.
 - RAG precision stays at 8.6%: the quality mission is queued.
-- Executors for 1.0: Hermes and Claude Code already work; Codex comes first as the third, DeepSeek Harness is evaluated before it becomes an engine of a provider block.
+- Executors for 1.0: Hermes and Claude Code already work; Codex is the third (code in the runner, checked on a local model and on the subscription); DeepSeek Harness is evaluated after 1.0.
 - Problem: The agent shell of a Worker has no docker and no Playwright: tasks that need them are done by the operator on the host (a fresh workflow export, QA runs).
 - Problem: The local Worker loops on hard tasks (T010B ran 160+ steps): adaptive split is not live yet, so wide tasks are not cut automatically.
 - Problem: A Worker ran git stash against the rule and hid uncommitted work; restored from the stash. Missions now forbid stash; a technical guard is open.
@@ -201,6 +200,7 @@ after 1.0.0 · Several missions at once and Hermes parity · 0/3 milestones, 0%
 - Problem: Telegram token and database password rotation are pending; the runner API key is empty (no bearer check) and the runner port is published on the loopback only.
 - Problem: Reviewers sometimes accept a task that was not run, or reject for a missing file the agent shell cannot create: calibration is in ahawr-improvements.
 - Problem: QA is executed by a host process with the operator's rights, and the Windows host fails about 100 tests for POSIX reasons (the regression baseline would be dirty): ahawr-qa-container moves QA into a Linux container without the Docker socket.
+- Lessons library: built and released in 0.11.200 but OFF (`lessons_enabled`), and `lessons_scope.sql` (scope, promote) is not applied; decide when to switch it on. The rules of `ahawr-think-profiles` were copied from its mission by mistake.
 
 ---
 Generated by `scripts/make_roadmap.py` from `docs/roadmap.json` · AHAWR

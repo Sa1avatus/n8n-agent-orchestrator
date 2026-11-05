@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
     # Public resolvers for external names (api.telegram.org): the host/WSL resolver answered EAI_AGAIN now and then.
-    # Container names (claude-runner, ...) are still answered by Docker's own DNS.
+    # Container names (ahawr-runner, ...) are still answered by Docker's own DNS.
     dns:
       - 1.1.1.1
       - 8.8.8.8
@@ -115,17 +115,25 @@ services:
   # AHAWR v13 — Claude Code: executes Architect/Worker/Reviewer runs with the Claude Code CLI
   # behind a Hermes-compatible /v1/runs API. Built and started with the rest of the stack
   # (`docker compose up -d --build`); idle until AHAWR v13 — Claude Code sends runs.
-  # n8n reaches it at http://claude-runner:8700 over the stack network; the port is published on 127.0.0.1 only, for the host QA worker.
-  claude-runner:
+  # n8n reaches it at http://ahawr-runner:8700 over the stack network; the port is published on 127.0.0.1 only, for the host QA worker.
+  ahawr-runner:
     build:
-      context: ./claude-runner
+      context: ./ahawr-runner
       dockerfile: Dockerfile
       args:
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
         EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
+        INSTALL_CLAUDE_CODE: ${AHAWR_INSTALL_CLAUDE_CODE:-true}
+        INSTALL_CODEX_CLI: ${AHAWR_INSTALL_CODEX_CLI:-false}
+        INSTALL_HERMES: ${AHAWR_INSTALL_HERMES:-false}
 
-    container_name: claude-runner
+    container_name: ahawr-runner
     restart: unless-stopped
+    # the former name: the live n8n workflow still calls http://claude-runner:8700 (runner_url in hermes_config)
+    networks:
+      default:
+        aliases:
+          - claude-runner
     # the host QA worker (data-tables/ops/qa_worker.py) polls the QA request queue here; bound to the loopback only, the API key still applies
     ports:
       - "127.0.0.1:8700:8700"
@@ -165,7 +173,7 @@ services:
       # refuse exploratory grep/rg/find from local Workers until they have used ahawr-search
       - CLAUDE_RUNNER_PROVIDER_LOCAL__SEARCH_FIRST=${AHAWR_SEARCH_FIRST:-1}
       # a task (Worker session) of the local model that has run longer than this gets thinking switched off (the LiteLLM flag file,
-      # no restart); back on when the task ends. 0 = never. See claude_runner/think_switch.py
+      # no restart); back on when the task ends. 0 = never. See ahawr_runner/think_switch.py
       - CLAUDE_RUNNER_THINK_OFF_AFTER_SECONDS=${AHAWR_THINK_OFF_AFTER_SECONDS:-3600}
       - CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS=${AHAWR_THINK_OFF_AFTER_STEPS:-0}
       - CLAUDE_RUNNER_THINK_FLAG_FILE=/app/runtime/local_thinking
@@ -174,8 +182,32 @@ services:
       - CLAUDE_RUNNER_THINK_POLICY_FROM_TASK=${AHAWR_THINK_POLICY_FROM_TASK:-1}
       # the runner's think proxy (think_proxy.py): a provider whose endpoint reports an engine that ignores Claude Code's thinking setting (Strata) gets the thinking flag in its requests
       - CLAUDE_RUNNER_THINK_PROXY=${AHAWR_THINK_PROXY:-}
+      - CLAUDE_RUNNER_PROXY_CALL_REPAIR=${AHAWR_PROXY_CALL_REPAIR:-0}
+      - CLAUDE_RUNNER_PROXY_CALL_FEEDBACK=${AHAWR_PROXY_CALL_FEEDBACK:-0}
+      - CLAUDE_RUNNER_PROXY_SAMPLING_JSON=${AHAWR_PROXY_SAMPLING_JSON:-}
+      # the Hermes engine and its gateway inside this container (hermes_gateway.py; image built with AHAWR_INSTALL_HERMES=true):
+      # the gateway listens on loopback only; the key and the URL are read by the runner through the two variables named below,
+      # which the Worker's environment does not get (CLAUDE_RUNNER_*)
+      - CLAUDE_RUNNER_HERMES_ENGINE_ENABLED=${AHAWR_HERMES_GATEWAY:-0}
+      - CLAUDE_RUNNER_HERMES_GATEWAY=${AHAWR_HERMES_GATEWAY:-0}
+      - CLAUDE_RUNNER_HERMES_GATEWAY_KEY=${AHAWR_HERMES_GATEWAY_KEY:-}
+      - CLAUDE_RUNNER_HERMES_GATEWAY_URL=http://127.0.0.1:8642
+      # a Hermes-engine provider carries its own model endpoint: its name is what Hermes gets as `provider`
+      - CLAUDE_RUNNER_PROVIDER_HERMESSTRATA__ENGINE=${AHAWR_HERMES_ENGINE:-claude}
+      - CLAUDE_RUNNER_PROVIDER_HERMESSTRATA__HERMES_BASE_URL_VAR=CLAUDE_RUNNER_HERMES_GATEWAY_URL
+      - CLAUDE_RUNNER_PROVIDER_HERMESSTRATA__HERMES_API_KEY_VAR=CLAUDE_RUNNER_HERMES_GATEWAY_KEY
+      - CLAUDE_RUNNER_PROVIDER_HERMESSTRATA__ANTHROPIC_BASE_URL=${AHAWR_HERMESSTRATA_BASE_URL:-http://host.docker.internal:8080}
+      - CLAUDE_RUNNER_PROVIDER_HERMESSTRATA__ANTHROPIC_AUTH_TOKEN=${AHAWR_STRATA_API_KEY:-}
+      - CLAUDE_RUNNER_PROVIDER_CODEXSUB__ENGINE=${AHAWR_CODEXSUB_ENGINE:-codex}
+      - CLAUDE_RUNNER_PROVIDER_CODEXSUB__CODEX_AUTH=${AHAWR_CODEXSUB_AUTH:-chatgpt}
+      # Codex client on the local Strata model (Responses API, no OpenAI model): the key is passed to Codex as STRATA_KEY
+      - CLAUDE_RUNNER_PROVIDER_CODEXLOCAL__ENGINE=codex
+      - CLAUDE_RUNNER_PROVIDER_CODEXLOCAL__CODEX_AUTH=api_key
+      - CLAUDE_RUNNER_PROVIDER_CODEXLOCAL__CODEX_BASE_URL=${AHAWR_CODEXLOCAL_BASE_URL:-http://host.docker.internal:8080/v1}
+      - CLAUDE_RUNNER_PROVIDER_CODEXLOCAL__CODEX_API_KEY_VAR=STRATA_KEY
+      - CLAUDE_RUNNER_PROVIDER_CODEXLOCAL__STRATA_KEY=${AHAWR_STRATA_API_KEY:-}
       # what a local run would have cost on a cloud model (USD per MTok: input, output, cache read, cache write): steps made without thinking
-      # at the Haiku rates, with thinking at the Sonnet rates (claude_runner/local_pricing.py). Empty modes = the flat Claude Code price.
+      # at the Haiku rates, with thinking at the Sonnet rates (ahawr_runner/local_pricing.py). Empty modes = the flat Claude Code price.
       - CLAUDE_RUNNER_LOCAL_PRICE_SONNET=${AHAWR_LOCAL_PRICE_SONNET:-2,10,0.2,4}
       - CLAUDE_RUNNER_LOCAL_PRICE_HAIKU=${AHAWR_LOCAL_PRICE_HAIKU:-1,5,0.1,1.25}
       - CLAUDE_RUNNER_LOCAL_PRICE_THINKING_OFF=${AHAWR_LOCAL_PRICE_THINKING_OFF:-haiku}
@@ -211,6 +243,9 @@ services:
         bind:
           create_host_path: true
 
+    # Codex's bubblewrap sandbox needs user namespaces: the default Docker profile plus unshare/setns/clone/mount (data-tables/ops/seccomp)
+    security_opt:
+      - seccomp=./data-tables/ops/seccomp/ahawr-runner-userns.json
     extra_hosts:
       # model endpoints on the host (e.g. ANTHROPIC_BASE_URL=http://host.docker.internal:4000)
       - "host.docker.internal:host-gateway"
@@ -218,16 +253,16 @@ services:
     depends_on:
       litellm:
         condition: service_started
-        # claude-runner still starts if LiteLLM is down (Claude API used directly).
+        # ahawr-runner still starts if LiteLLM is down (Claude API used directly).
         required: false
 
     stop_grace_period: 60s
 
-  # AHAWR QA worker: runs the QA scenarios in its own container (claude-runner/qa/Dockerfile.qa).
+  # AHAWR QA worker: runs the QA scenarios in its own container (ahawr-runner/qa/Dockerfile.qa).
   # It polls the runner over the stack network; it publishes no port and gets no host access beyond the mounts below.
   ahawr-qa:
     build:
-      context: ./claude-runner
+      context: ./ahawr-runner
       dockerfile: qa/Dockerfile.qa
 
     container_name: ahawr-qa
@@ -246,11 +281,11 @@ services:
     cpus: ${AHAWR_QA_CPUS:-2}
 
     environment:
-      - CLAUDE_RUNNER_URL=http://claude-runner:8700
+      - CLAUDE_RUNNER_URL=http://ahawr-runner:8700
       - CLAUDE_RUNNER_API_KEY=${CLAUDE_RUNNER_API_KEY:-}
       # the QA data (scenarios, fixtures, baselines) lives in the repository next to the source: run the QA code from the read-only mount,
       # not from the installed copy in the image (its qa/ folder is not there), so the checked tree is the one that is tested
-      - PYTHONPATH=/d/n8n/claude-runner/src
+      - PYTHONPATH=/d/n8n/ahawr-runner/src
       - QA_RUNS_DIR=/qa-runs
       # the repository is mounted read-only: tool caches and bytecode go to /tmp
       - PYTHONDONTWRITEBYTECODE=1
@@ -263,7 +298,7 @@ services:
       - CLAUDE_RUNNER_PATH_MAP=${AHAWR_WORKSPACE_DIR:-D:\n8n\workspace}=/workspace,${AHAWR_HOST_DRIVE:-D:\}=/d
 
     volumes:
-      # the repository and the missions' working directories, read-only (the same mapping as claude-runner)
+      # the repository and the missions' working directories, read-only (the same mapping as ahawr-runner)
       - type: bind
         source: ${AHAWR_HOST_DRIVE:-D:\}
         target: /d
@@ -277,15 +312,15 @@ services:
           create_host_path: true
       # the regression baselines are written here, the only writable place of the repository
       - type: bind
-        source: ./claude-runner/qa/baselines
-        target: /d/n8n/claude-runner/qa/baselines
+        source: ./ahawr-runner/qa/baselines
+        target: /d/n8n/ahawr-runner/qa/baselines
         bind:
           create_host_path: true
       # verdicts, screenshots and logs of the QA runs
       - qa-runs:/qa-runs
 
     depends_on:
-      claude-runner:
+      ahawr-runner:
         condition: service_started
       qa-postgres:
         condition: service_healthy
@@ -312,11 +347,11 @@ services:
 
   # AHAWR dashboard: http://localhost:8701 (127.0.0.1 only, read-only). Every agent run with its
   # thinking, tool calls and results, steps, timings and tokens: Claude Code runs from
-  # claude-runner and Hermes sessions from the Hermes API server (HERMES_API_URL/HERMES_API_KEY).
-  # Its own container, so the Hermes key never reaches claude-runner, where the Worker runs commands.
+  # ahawr-runner and Hermes sessions from the Hermes API server (HERMES_API_URL/HERMES_API_KEY).
+  # Its own container, so the Hermes key never reaches ahawr-runner, where the Worker runs commands.
   ahawr-dashboard:
     build:
-      context: ./claude-runner
+      context: ./ahawr-runner
       dockerfile: Dockerfile
       args:
         CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
@@ -346,7 +381,7 @@ services:
       - DASHBOARD_HOSTS_EXTRA=${DASHBOARD_HOSTS_EXTRA:-}
       - DASHBOARD_TLS_CERT=${DASHBOARD_TLS_CERT:-}
       - DASHBOARD_TLS_KEY=${DASHBOARD_TLS_KEY:-}
-      - DASHBOARD_RUNNER_URL=http://claude-runner:8700
+      - DASHBOARD_RUNNER_URL=http://ahawr-runner:8700
       - DASHBOARD_BOARD_PG_DSN=${DASHBOARD_BOARD_PG_DSN:-}
       # provider keys (docs/providers.md, section 10): one encrypted file on a volume shared by the runner and the dashboard;
       # the master key stays in the host .env and is not passed to the Worker (the CLI env drops CLAUDE_RUNNER_*)
@@ -363,7 +398,8 @@ services:
       - DASHBOARD_GUARDS=${DASHBOARD_GUARDS:-0}
       - DASHBOARD_GUARDS_DRY_RUN=${DASHBOARD_GUARDS_DRY_RUN:-1}
       - DASHBOARD_GUARDS_MISSION_NOTICE_ENABLED=${DASHBOARD_GUARDS_MISSION_NOTICE_ENABLED:-0}
-      - DASHBOARD_GUARDS_IDLE_ENABLED=${DASHBOARD_GUARDS_IDLE_ENABLED:-0}
+      - DASHBOARD_GUARDS_STALL_ENABLED=${DASHBOARD_GUARDS_STALL_ENABLED:-0}
+      - DASHBOARD_GUARDS_STALL_MINUTES=${DASHBOARD_GUARDS_STALL_MINUTES:-15}
       - DASHBOARD_GUARDS_QUEUE_RESTART_ENABLED=${DASHBOARD_GUARDS_QUEUE_RESTART_ENABLED:-0}
       - DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED=${DASHBOARD_GUARDS_HOST_HEARTBEAT_ENABLED:-0}
       - DASHBOARD_GUARDS_TG_RELAY_ENABLED=${DASHBOARD_GUARDS_TG_RELAY_ENABLED:-0}
@@ -415,14 +451,14 @@ services:
       retries: 3
 
     depends_on:
-      claude-runner:
+      ahawr-runner:
         condition: service_started
         required: false
 
   # LiteLLM: lets Claude Code (Anthropic Messages API) use a local llama.cpp server
   # (OpenAI-compatible). Built and started with the rest of the stack; used only when
-  # ANTHROPIC_BASE_URL=http://litellm:4000 is set for claude-runner.
-  # claude-runner reaches it at http://litellm:4000; no port is published.
+  # ANTHROPIC_BASE_URL=http://litellm:4000 is set for ahawr-runner.
+  # ahawr-runner reaches it at http://litellm:4000; no port is published.
   litellm:
     build:
       context: ./litellm

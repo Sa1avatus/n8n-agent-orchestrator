@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-colliding-id,fixture-colliding-id,working_dir,1,true,Colliding task id,"Task T001A is too wide, split it before launch.",[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]"

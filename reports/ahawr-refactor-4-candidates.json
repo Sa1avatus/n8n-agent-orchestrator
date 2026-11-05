@@ -1,0 +1,4753 @@
+{
+  "mission": "ahawr-refactor-4",
+  "source": "reports/audit-python.json",
+  "audit_hardcoded_under_src": 108,
+  "record_count": 108,
+  "class_counts": {
+    "false_positive": 24,
+    "constant": 22,
+    "setting": 59,
+    "excluded": 3
+  },
+  "step_counts": {
+    "S1": 10,
+    "S2": 9,
+    "S3": 16,
+    "S4": 8,
+    "next mission": 62,
+    "none": 3
+  },
+  "entries": [
+    {
+      "audit_id": "a084",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 513,
+      "current_line": 513,
+      "literal": "0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "none",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 30
+        },
+        {
+          "command": "grep -l '0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 512
+        },
+        {
+          "command": "grep -c '0' claude-runner/tests/test_qa_stack.py",
+          "hits": 33
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 9
+        }
+      ],
+      "reason": "Regex artifact: the word \"timeout\" and the digit 0 co-occur in returncode == 0 / args[0] checks, not in a timeout value. The QA timeouts are already named (DOCKER_TIMEOUT_SECONDS, HEALTH_REQUEST_SECONDS).; marked none: nothing to pin, regex artifact"
+    },
+    {
+      "audit_id": "a086",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 538,
+      "current_line": 538,
+      "literal": "0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "none",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 30
+        },
+        {
+          "command": "grep -l '0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 512
+        },
+        {
+          "command": "grep -c '0' claude-runner/tests/test_qa_stack.py",
+          "hits": 33
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 9
+        }
+      ],
+      "reason": "Regex artifact: the word \"timeout\" and the digit 0 co-occur in returncode == 0 / args[0] checks, not in a timeout value. The QA timeouts are already named (DOCKER_TIMEOUT_SECONDS, HEALTH_REQUEST_SECONDS).; marked none: nothing to pin, regex artifact"
+    },
+    {
+      "audit_id": "a087",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 558,
+      "current_line": 558,
+      "literal": "0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "none",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 30
+        },
+        {
+          "command": "grep -l '0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 512
+        },
+        {
+          "command": "grep -c '0' claude-runner/tests/test_qa_stack.py",
+          "hits": 33
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 9
+        }
+      ],
+      "reason": "Regex artifact: the word \"timeout\" and the digit 0 co-occur in returncode == 0 / args[0] checks, not in a timeout value. The QA timeouts are already named (DOCKER_TIMEOUT_SECONDS, HEALTH_REQUEST_SECONDS).; marked none: nothing to pin, regex artifact"
+    },
+    {
+      "audit_id": "a076",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 223,
+      "current_line": 223,
+      "literal": "127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 226,
+          "change": "a076: docker -p publish literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a077",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 234,
+      "current_line": 234,
+      "literal": "127.0.0.1",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 237,
+          "change": "a077: pg_isready -h literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a078",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 247,
+      "current_line": 247,
+      "literal": "127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 250,
+          "change": "a078: dashboard -p literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a079",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 251,
+      "current_line": 251,
+      "literal": "0.0.0.0",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_CONTAINER_BIND_HOST",
+      "default": "0.0.0.0",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0.0.0.0' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '0.0.0.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 36
+        },
+        {
+          "command": "grep -c '0.0.0.0' claude-runner/tests/test_qa_stack.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'QA_CONTAINER_BIND_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "Bind address of the published QA container port; publishing stays loopback-per-loopback, so it is a constant, not a per-environment setting.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 254,
+          "change": "a079: dashboard --host literal -> QA_CONTAINER_BIND_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a080",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 257,
+      "current_line": 257,
+      "literal": "http://127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 260,
+          "change": "a080: dashboard_url literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a081",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 275,
+      "current_line": 275,
+      "literal": "http://127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 278,
+          "change": "a081: dashboard_url literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a082",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 297,
+      "current_line": 297,
+      "literal": "http://127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 300,
+          "change": "a082: dashboard_url literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a083",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 349,
+      "current_line": 349,
+      "literal": "127.0.0.1",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 352,
+          "change": "a083: --host literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a085",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 519,
+      "current_line": 519,
+      "literal": "http://127.0.0.1:",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 522,
+          "change": "a085: healthz url literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a088",
+      "file": "claude-runner/src/claude_runner/qa_stack.py",
+      "audit_line": 565,
+      "current_line": 565,
+      "literal": "127.0.0.1",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "QA_LOOPBACK_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_qa_stack.py",
+      "step": "S1",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_stack.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_qa_stack.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'QA_LOOPBACK_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "QA stack binds and probes loopback only (docker -p publish and probe URLs); the QA containers are local, not operator-facing hosts, so the value stays a named constant. The QA PG host comes from the environment, which is separate.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 568,
+          "change": "a088: _free_port bind literal -> QA_LOOPBACK_HOST"
+        }
+      ]
+    },
+    {
+      "audit_id": "a042",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 397,
+      "current_line": 406,
+      "literal": "1",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1,
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1' claude-runner/src/claude_runner/config.py",
+          "hits": 50
+        },
+        {
+          "command": "grep -l '1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 517
+        },
+        {
+          "command": "grep -c '1' claude-runner/tests/test_config.py",
+          "hits": 17
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/config.py",
+          "hits": 20
+        }
+      ],
+      "reason": "Regex artifact: max(1, ...) floors in bounds (run_timeout_ms // poll_interval_ms and the _int clamp minimum), not a timeout value.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "406",
+          "change": "no change: max(1, ...) floor of the poll bounds is a validation lower bound, not a setable literal."
+        }
+      ]
+    },
+    {
+      "audit_id": "a044",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 758,
+      "current_line": 776,
+      "literal": "1",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1,
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1' claude-runner/src/claude_runner/config.py",
+          "hits": 50
+        },
+        {
+          "command": "grep -l '1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 517
+        },
+        {
+          "command": "grep -c '1' claude-runner/tests/test_config.py",
+          "hits": 17
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/config.py",
+          "hits": 20
+        }
+      ],
+      "reason": "The `1` is the floor argument of _int(env, \"CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS\", 600, 1) (config.py:767): a validation lower bound, not a value the operator can set. The env var exists; nothing to move.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "776",
+          "change": "no change: the `1` is the floor argument of _int(..., DEFAULT_COMPACT_TIMEOUT_SECONDS, 1), a validation lower bound."
+        }
+      ]
+    },
+    {
+      "audit_id": "a043",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 758,
+      "current_line": 776,
+      "literal": "600",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "compact_timeout_seconds",
+      "default": 600,
+      "proposed_env": "CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS",
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c '600' claude-runner/src/claude_runner/config.py",
+          "hits": 5
+        },
+        {
+          "command": "grep -l '600' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 44
+        },
+        {
+          "command": "grep -c '600' claude-runner/tests/test_config.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -rn 'compact_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 1
+        }
+      ],
+      "reason": "already an env-backed setting of RunnerSettings (config.py:767); the env exists, so no new variable: name the default of 600.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "220",
+          "change": "added module constant DEFAULT_COMPACT_TIMEOUT_SECONDS = 600"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "627",
+          "change": "Settings.compact_timeout_seconds default = DEFAULT_COMPACT_TIMEOUT_SECONDS (was the literal 600)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "776",
+          "change": "from_env fallback for CLAUDE_RUNNER_COMPACT_TIMEOUT_SECONDS now DEFAULT_COMPACT_TIMEOUT_SECONDS; the env name and default value unchanged"
+        }
+      ]
+    },
+    {
+      "audit_id": "a047",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 773,
+      "current_line": 791,
+      "literal": "1",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1,
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1' claude-runner/src/claude_runner/config.py",
+          "hits": 50
+        },
+        {
+          "command": "grep -l '1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 517
+        },
+        {
+          "command": "grep -c '1' claude-runner/tests/test_config.py",
+          "hits": 17
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/config.py",
+          "hits": 20
+        }
+      ],
+      "reason": "The `1` is the floor argument of _int(env, \"CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS\", 60, 1) (config.py:782): a validation lower bound, not a settable value.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "791",
+          "change": "no change: the `1` is the floor argument of _int(..., DEFAULT_WATCHDOG_INTERVAL_SECONDS, 1), a validation lower bound."
+        }
+      ]
+    },
+    {
+      "audit_id": "a046",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 773,
+      "current_line": 791,
+      "literal": "60",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "watchdog_interval_seconds",
+      "default": 60,
+      "proposed_env": "CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS",
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c '60' claude-runner/src/claude_runner/config.py",
+          "hits": 7
+        },
+        {
+          "command": "grep -l '60' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 229
+        },
+        {
+          "command": "grep -c '60' claude-runner/tests/test_config.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -rn 'watchdog_interval_seconds' claude-runner/src | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 1
+        }
+      ],
+      "reason": "already env-backed in RunnerSettings (config.py:782); keep the env, name the default.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "221",
+          "change": "added module constant DEFAULT_WATCHDOG_INTERVAL_SECONDS = 60"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "655",
+          "change": "Settings.watchdog_interval_seconds default = DEFAULT_WATCHDOG_INTERVAL_SECONDS (was the literal 60)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "791",
+          "change": "from_env fallback for CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS now DEFAULT_WATCHDOG_INTERVAL_SECONDS"
+        },
+        {
+          "file": ".env.example",
+          "line": "132-133",
+          "change": "name-only line CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS= added (the comment line above names the unit and default: in seconds, default 60)"
+        }
+      ]
+    },
+    {
+      "audit_id": "a040",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 362,
+      "current_line": 371,
+      "literal": "http://",
+      "category": "host",
+      "class": "excluded",
+      "proposed_name": null,
+      "default": "http://",
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'http://' claude-runner/src/claude_runner/config.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l 'http://' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 143
+        },
+        {
+          "command": "grep -c 'http://' claude-runner/tests/test_config.py",
+          "hits": 4
+        }
+      ],
+      "reason": "_codex_base_url scheme check: the ENGINE=codex branch of config.py, excluded from this mission (codex_* modules and the codex part of config.py / runs.py).",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "371",
+          "change": "no change: _codex_base_url scheme check is the ENGINE=codex part, excluded from this mission."
+        }
+      ]
+    },
+    {
+      "audit_id": "a041",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 362,
+      "current_line": 371,
+      "literal": "https://",
+      "category": "host",
+      "class": "excluded",
+      "proposed_name": null,
+      "default": "https://",
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'https://' claude-runner/src/claude_runner/config.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l 'https://' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 4
+        },
+        {
+          "command": "grep -c 'https://' claude-runner/tests/test_config.py",
+          "hits": 1
+        }
+      ],
+      "reason": "Same _codex_base_url scheme check, ENGINE=codex part: excluded.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "371",
+          "change": "no change: same _codex_base_url scheme check, ENGINE=codex part, excluded."
+        }
+      ]
+    },
+    {
+      "audit_id": "a045",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 767,
+      "current_line": 785,
+      "literal": "http://127.0.0.1:8700",
+      "category": "host",
+      "class": "setting",
+      "proposed_name": "think_proxy_url",
+      "default": "http://127.0.0.1:8700",
+      "proposed_env": "CLAUDE_RUNNER_THINK_PROXY_URL",
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'http://127.0.0.1:8700' claude-runner/src/claude_runner/config.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l 'http://127.0.0.1:8700' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 9
+        },
+        {
+          "command": "grep -c 'http://127.0.0.1:8700' claude-runner/tests/test_config.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'think_proxy_url' claude-runner/src | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_THINK_PROXY_URL' claude-runner/src/claude_runner/config.py",
+          "hits": 1
+        }
+      ],
+      "reason": "already env-backed in RunnerSettings (config.py:776); the loopback default is a setting, not a constant.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "222",
+          "change": "added module constant DEFAULT_THINK_PROXY_URL = \"http://127.0.0.1:8700\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "638",
+          "change": "Settings.think_proxy_url default = DEFAULT_THINK_PROXY_URL (was the literal)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "785",
+          "change": "from_env fallback for CLAUDE_RUNNER_THINK_PROXY_URL now DEFAULT_THINK_PROXY_URL"
+        },
+        {
+          "file": ".env.example",
+          "line": "134-135",
+          "change": "name-only line CLAUDE_RUNNER_THINK_PROXY_URL= added (the comment line above names the default: http://127.0.0.1:8700)"
+        }
+      ]
+    },
+    {
+      "audit_id": "a048",
+      "file": "claude-runner/src/claude_runner/config.py",
+      "audit_line": 832,
+      "current_line": 851,
+      "literal": "generic",
+      "category": "profile name",
+      "class": "constant",
+      "proposed_name": "GENERIC_PROFILE_NAME",
+      "default": "generic",
+      "proposed_env": null,
+      "test_file": "test_config.py",
+      "step": "S2",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'generic' claude-runner/src/claude_runner/config.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l 'generic' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c 'generic' claude-runner/tests/test_config.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'GENERIC_PROFILE_NAME' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "profile key in the ROLES tuple and the roles_json vocabulary: a vocabulary token, not a per-environment value; naming it keeps the string single-sourced.",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "21",
+          "change": "added module constant GENERIC_PROFILE_NAME = \"generic\"; ROLES (22), DEFAULT_PROFILES (544) and Settings.profile (851) use it instead of the bare literal"
+        }
+      ]
+    },
+    {
+      "audit_id": "a010",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 128,
+      "current_line": 128,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_commands_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_COMMANDS_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "default `limit` of list_commands in the ops store (board_ops_store.py:122/355, board_ops_store_pg.py:105/424): a rows cap of a query, not a changelog cap; move the default to settings."
+    },
+    {
+      "audit_id": "a011",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 164,
+      "current_line": 164,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit default in the changelog signatures; move to settings."
+    },
+    {
+      "audit_id": "a012",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 169,
+      "current_line": 169,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_queue_log_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_queue_log_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "queue-log tail cap in the store signatures; move the default into settings (the board_ops_settings mechanism), unit in the name."
+    },
+    {
+      "audit_id": "a013",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 174,
+      "current_line": 174,
+      "literal": "100",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_snapshot_max_rows",
+      "default": 100,
+      "proposed_env": "CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '100' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '100' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 89
+        },
+        {
+          "command": "grep -c '100' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_snapshot_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "snapshot tail cap in the get_snapshot signatures; move the default to settings."
+    },
+    {
+      "audit_id": "a014",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 361,
+      "current_line": 361,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_commands_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_COMMANDS_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "default `limit` of list_commands in the ops store (board_ops_store.py:122/355, board_ops_store_pg.py:105/424): a rows cap of a query, not a changelog cap; move the default to settings."
+    },
+    {
+      "audit_id": "a015",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 438,
+      "current_line": 438,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit default in the changelog signatures; move to settings."
+    },
+    {
+      "audit_id": "a016",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 445,
+      "current_line": 445,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_queue_log_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_queue_log_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "queue-log tail cap in the store signatures; move the default into settings (the board_ops_settings mechanism), unit in the name."
+    },
+    {
+      "audit_id": "a017",
+      "file": "claude-runner/src/claude_runner/board_ops_store.py",
+      "audit_line": 449,
+      "current_line": 449,
+      "literal": "100",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_snapshot_max_rows",
+      "default": 100,
+      "proposed_env": "CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '100' claude-runner/src/claude_runner/board_ops_store.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '100' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 89
+        },
+        {
+          "command": "grep -c '100' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_snapshot_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "snapshot tail cap in the get_snapshot signatures; move the default to settings."
+    },
+    {
+      "audit_id": "a018",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 110,
+      "current_line": 111,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_commands_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_COMMANDS_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "default `limit` of list_commands in the ops store (board_ops_store.py:122/355, board_ops_store_pg.py:105/424): a rows cap of a query, not a changelog cap; move the default to settings."
+    },
+    {
+      "audit_id": "a019",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 127,
+      "current_line": 128,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_queue_log_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_queue_log_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "same cap as the store class; one setting for both providers."
+    },
+    {
+      "audit_id": "a020",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 131,
+      "current_line": 132,
+      "literal": "100",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_snapshot_max_rows",
+      "default": 100,
+      "proposed_env": "CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '100' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '100' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 89
+        },
+        {
+          "command": "grep -c '100' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_snapshot_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "same snapshot cap as the store class."
+    },
+    {
+      "audit_id": "a021",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 176,
+      "current_line": 177,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit default in the changelog signatures; move to settings."
+    },
+    {
+      "audit_id": "a022",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 429,
+      "current_line": 430,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_commands_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_COMMANDS_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "default `limit` of list_commands in the ops store (board_ops_store.py:122/355, board_ops_store_pg.py:105/424): a rows cap of a query, not a changelog cap; move the default to settings."
+    },
+    {
+      "audit_id": "a023",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 579,
+      "current_line": 580,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit default in the changelog signatures; move to settings."
+    },
+    {
+      "audit_id": "a024",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 601,
+      "current_line": 602,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_queue_log_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_queue_log_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "same cap as the store class; one setting for both providers."
+    },
+    {
+      "audit_id": "a025",
+      "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+      "audit_line": 611,
+      "current_line": 612,
+      "literal": "100",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_snapshot_max_rows",
+      "default": 100,
+      "proposed_env": "CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "S3",
+      "grep_evidence": [
+        {
+          "command": "grep -c '100' claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -l '100' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 89
+        },
+        {
+          "command": "grep -c '100' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_snapshot_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "same snapshot cap as the store class."
+    },
+    {
+      "audit_id": "a055",
+      "test": "test_dashboard_main_default_port_is_8701",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 969,
+      "current_line": 969,
+      "literal": "8701",
+      "category": "port",
+      "class": "setting",
+      "proposed_name": "dashboard_port",
+      "default": 8701,
+      "proposed_env": "CLAUDE_RUNNER_DASHBOARD_PORT",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '8701' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '8701' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 125
+        },
+        {
+          "command": "grep -c '8701' claude-runner/tests/test_dashboard.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'dashboard_port' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_DASHBOARD_PORT' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "argparse --port default with no env today; naming.md section 5 lists port 8701 as a hard-coded value; a new CLAUDE_RUNNER_-prefixed variable, nothing renamed."
+    },
+    {
+      "audit_id": "a054",
+      "test": "test_dashboard_main_default_host_is_0_0_0_0",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 968,
+      "current_line": 968,
+      "literal": "0.0.0.0",
+      "category": "host",
+      "class": "setting",
+      "proposed_name": "dashboard_bind_host",
+      "default": "0.0.0.0",
+      "proposed_env": "AHAWR_DASHBOARD_BIND",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0.0.0.0' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '0.0.0.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 36
+        },
+        {
+          "command": "grep -c '0.0.0.0' claude-runner/tests/test_dashboard.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'dashboard_bind_host' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'AHAWR_DASHBOARD_BIND' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "argparse --host default already governed by the existing AHAWR_DASHBOARD_BIND env (checked at dashboard.py:982); no new variable and no rename."
+    },
+    {
+      "audit_id": "a056",
+      "test": "test_dashboard_main_bind_fallback_is_loopback_when_env_unset",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 983,
+      "current_line": 983,
+      "literal": "127.0.0.1",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "LOOPBACK_BIND_HOST",
+      "default": "127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_dashboard.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -rn 'LOOPBACK_BIND_HOST' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "fail-closed fallback bind when AHAWR_DASHBOARD_BIND is unset; the safe loopback fallback must stay a constant."
+    },
+    {
+      "audit_id": "a049",
+      "test": "test_runs_list_default_limit_is_100_rows",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 417,
+      "current_line": 417,
+      "literal": "100",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "runs_list_default_rows",
+      "default": 100,
+      "proposed_env": "CLAUDE_RUNNER_RUNS_LIST_DEFAULT_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '100' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '100' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 89
+        },
+        {
+          "command": "grep -c '100' claude-runner/tests/test_dashboard.py",
+          "hits": 6
+        },
+        {
+          "command": "grep -rn 'runs_list_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUNS_LIST_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Query(100, ge=1, le=500) default of the runs list; move to settings."
+    },
+    {
+      "audit_id": "a050",
+      "test": "test_runs_list_limit_max_is_500_rows",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 417,
+      "current_line": 417,
+      "literal": "500",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "runs_list_max_rows",
+      "default": 500,
+      "proposed_env": "CLAUDE_RUNNER_RUNS_LIST_MAX_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '500' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '500' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 65
+        },
+        {
+          "command": "grep -c '500' claude-runner/tests/test_dashboard.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -rn 'runs_list_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUNS_LIST_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "upper bound of the runs-list Query and the fetch=500 cap in the filter route; one setting shared by both."
+    },
+    {
+      "audit_id": "a051",
+      "test": "test_runs_filter_fetch_is_capped_at_500_rows_before_the_limit",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 459,
+      "current_line": 459,
+      "literal": "500",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "runs_list_max_rows",
+      "default": 500,
+      "proposed_env": "CLAUDE_RUNNER_RUNS_LIST_MAX_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '500' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '500' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 65
+        },
+        {
+          "command": "grep -c '500' claude-runner/tests/test_dashboard.py",
+          "hits": 10
+        },
+        {
+          "command": "grep -rn 'runs_list_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUNS_LIST_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "upper bound of the runs-list Query and the fetch=500 cap in the filter route; one setting shared by both."
+    },
+    {
+      "audit_id": "a053",
+      "test": "test_search_limit_max_is_200_rows",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 507,
+      "current_line": 507,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "search_max_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_SEARCH_MAX_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_dashboard.py",
+          "hits": 19
+        },
+        {
+          "command": "grep -rn 'search_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_SEARCH_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "upper bound of the search Query; move to settings."
+    },
+    {
+      "audit_id": "a052",
+      "test": "test_search_default_limit_is_50_rows",
+      "file": "claude-runner/src/claude_runner/dashboard.py",
+      "audit_line": 507,
+      "current_line": 507,
+      "literal": "50",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "search_default_rows",
+      "default": 50,
+      "proposed_env": "CLAUDE_RUNNER_SEARCH_DEFAULT_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "S4",
+      "grep_evidence": [
+        {
+          "command": "grep -c '50' claude-runner/src/claude_runner/dashboard.py",
+          "hits": 9
+        },
+        {
+          "command": "grep -l '50' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 121
+        },
+        {
+          "command": "grep -c '50' claude-runner/tests/test_dashboard.py",
+          "hits": 17
+        },
+        {
+          "command": "grep -rn 'search_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_SEARCH_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Query(50, ge=1, le=200) default of the search route; move to settings."
+    },
+    {
+      "audit_id": "a101",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 839,
+      "current_line": 843,
+      "literal": "0.05",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "kill_check_interval_seconds",
+      "default": 0.05,
+      "proposed_env": "CLAUDE_RUNNER_KILL_CHECK_INTERVAL_SECONDS",
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0.05' claude-runner/src/claude_runner/runs.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '0.05' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 9
+        },
+        {
+          "command": "grep -c '0.05' claude-runner/tests/test_runs.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -rn 'kill_check_interval_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_KILL_CHECK_INTERVAL_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "asyncio.sleep tick of the kill-wait loop; a bounded polling interval that belongs in settings."
+    },
+    {
+      "audit_id": "a094",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 61,
+      "current_line": 62,
+      "literal": "4",
+      "category": "limit",
+      "class": "constant",
+      "proposed_name": "PROMPT_JOIN_CHARS",
+      "default": 4,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '- 4' claude-runner/src/claude_runner/runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -l '- 4' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '- 4' claude-runner/tests/test_runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'PROMPT_JOIN_CHARS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "join-character count between prompt parts in the budget arithmetic (runs.py:62, 65); an algorithm constant shared with qa_agent_prompt."
+    },
+    {
+      "audit_id": "a095",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 64,
+      "current_line": 65,
+      "literal": "4",
+      "category": "limit",
+      "class": "constant",
+      "proposed_name": "PROMPT_JOIN_CHARS",
+      "default": 4,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '- 4' claude-runner/src/claude_runner/runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -l '- 4' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '- 4' claude-runner/tests/test_runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'PROMPT_JOIN_CHARS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "join-character count between prompt parts in the budget arithmetic (runs.py:62, 65); an algorithm constant shared with qa_agent_prompt."
+    },
+    {
+      "audit_id": "a096",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 600,
+      "current_line": 601,
+      "literal": "1024",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1024,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1024' claude-runner/src/claude_runner/runs.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1024' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 4
+        },
+        {
+          "command": "grep -c '1024' claude-runner/tests/test_runs.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: 64 * 1024 * 1024 and limit * 1024 * 1024 are MiB-to-bytes conversions inside already-named expressions (proc_data_limit_mb, the pipe cap)."
+    },
+    {
+      "audit_id": "a098",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 600,
+      "current_line": 601,
+      "literal": "1024",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1024,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1024' claude-runner/src/claude_runner/runs.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1024' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 4
+        },
+        {
+          "command": "grep -c '1024' claude-runner/tests/test_runs.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: 64 * 1024 * 1024 and limit * 1024 * 1024 are MiB-to-bytes conversions inside already-named expressions (proc_data_limit_mb, the pipe cap)."
+    },
+    {
+      "audit_id": "a097",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 600,
+      "current_line": 601,
+      "literal": "64",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "subprocess_pipe_limit_bytes",
+      "default": "64 * 1024 * 1024 (bytes)",
+      "proposed_env": "CLAUDE_RUNNER_SUBPROCESS_PIPE_LIMIT_BYTES",
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '64 * 1024' claude-runner/src/claude_runner/runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -l '64 * 1024' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '64 * 1024' claude-runner/tests/test_runs.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'subprocess_pipe_limit_bytes' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_SUBPROCESS_PIPE_LIMIT_BYTES' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "asyncio subprocess pipe cap written as 64 * 1024 * 1024 at runs.py:601; the unit goes into the name (bytes), the value is a per-process buffer limit that belongs in settings."
+    },
+    {
+      "audit_id": "a099",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 749,
+      "current_line": 750,
+      "literal": "1024",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1024,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1024' claude-runner/src/claude_runner/runs.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1024' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 4
+        },
+        {
+          "command": "grep -c '1024' claude-runner/tests/test_runs.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: 64 * 1024 * 1024 and limit * 1024 * 1024 are MiB-to-bytes conversions inside already-named expressions (proc_data_limit_mb, the pipe cap)."
+    },
+    {
+      "audit_id": "a100",
+      "file": "claude-runner/src/claude_runner/runs.py",
+      "audit_line": 749,
+      "current_line": 750,
+      "literal": "1024",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1024,
+      "proposed_env": null,
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1024' claude-runner/src/claude_runner/runs.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1024' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 4
+        },
+        {
+          "command": "grep -c '1024' claude-runner/tests/test_runs.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: 64 * 1024 * 1024 and limit * 1024 * 1024 are MiB-to-bytes conversions inside already-named expressions (proc_data_limit_mb, the pipe cap)."
+    },
+    {
+      "audit_id": "a030",
+      "file": "claude-runner/src/claude_runner/board_pg.py",
+      "audit_line": 1810,
+      "current_line": 1802,
+      "literal": "@127.0.0.1",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "DSN_REDACTION_HOST_TOKENS",
+      "default": "@127.0.0.1",
+      "proposed_env": null,
+      "test_file": "test_board_pg.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '@127.0.0.1' claude-runner/src/claude_runner/board_pg.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '@127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '@127.0.0.1' claude-runner/tests/test_board_pg.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'DSN_REDACTION_HOST_TOKENS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "same redaction tuple: a token of the error-message scrubber, not a configurable host."
+    },
+    {
+      "audit_id": "a029",
+      "file": "claude-runner/src/claude_runner/board_pg.py",
+      "audit_line": 1810,
+      "current_line": 1802,
+      "literal": "@localhost",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "DSN_REDACTION_HOST_TOKENS",
+      "default": "@localhost",
+      "proposed_env": null,
+      "test_file": "test_board_pg.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '@localhost' claude-runner/src/claude_runner/board_pg.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '@localhost' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '@localhost' claude-runner/tests/test_board_pg.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'DSN_REDACTION_HOST_TOKENS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "secret-redaction token in the DSN-error tuple; the literal must stay (it is what appears in error messages), so a module constant instead of a setting."
+    },
+    {
+      "audit_id": "a027",
+      "file": "claude-runner/src/claude_runner/board_pg.py",
+      "audit_line": 209,
+      "current_line": 210,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_pg.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_pg.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_pg.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "changelog query cap in the board_pg queries; move to settings/config."
+    },
+    {
+      "audit_id": "a028",
+      "file": "claude-runner/src/claude_runner/board_pg.py",
+      "audit_line": 648,
+      "current_line": 649,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_pg.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_pg.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_pg.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "changelog query cap in the board_pg queries; move to settings/config."
+    },
+    {
+      "audit_id": "a026",
+      "file": "claude-runner/src/claude_runner/board_pg.py",
+      "audit_line": 56,
+      "current_line": 57,
+      "literal": "claude-code",
+      "category": "profile name",
+      "class": "setting",
+      "proposed_name": "hermes_profile_name",
+      "default": "claude-code",
+      "proposed_env": "CLAUDE_RUNNER_HERMES_PROFILE_NAME",
+      "test_file": "test_board_pg.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'claude-code' claude-runner/src/claude_runner/board_pg.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l 'claude-code' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 16
+        },
+        {
+          "command": "grep -c 'claude-code' claude-runner/tests/test_board_pg.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'hermes_profile_name' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_HERMES_PROFILE_NAME' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "profile row of hermes_config the board uses; today a module constant _HERMES_PROFILE, it should come from settings/config like config.py does."
+    },
+    {
+      "audit_id": "a102",
+      "file": "claude-runner/src/claude_runner/sources.py",
+      "audit_line": 107,
+      "current_line": 107,
+      "literal": "60",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "cancel_request_timeout_seconds",
+      "default": 60,
+      "proposed_env": "CLAUDE_RUNNER_CANCEL_REQUEST_TIMEOUT_SECONDS",
+      "test_file": "test_dashboard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '60' claude-runner/src/claude_runner/sources.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '60' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 229
+        },
+        {
+          "command": "grep -c '60' claude-runner/tests/test_dashboard.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -rn 'cancel_request_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CANCEL_REQUEST_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "httpx timeout of the run-cancel request (sources.py:107); a setting."
+    },
+    {
+      "audit_id": "a103",
+      "file": "claude-runner/src/claude_runner/sources.py",
+      "audit_line": 226,
+      "current_line": 226,
+      "literal": "1000",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000,
+      "proposed_env": null,
+      "test_file": "test_dashboard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '* 1000' claude-runner/src/claude_runner/sources.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '* 1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 2
+        },
+        {
+          "command": "grep -c '* 1000' claude-runner/tests/test_dashboard.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: * 1000 is a seconds-to-ms stamp conversion, not a limit."
+    },
+    {
+      "audit_id": "a104",
+      "file": "claude-runner/src/claude_runner/sources.py",
+      "audit_line": 273,
+      "current_line": 273,
+      "literal": "5",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "probe_message_rows",
+      "default": 5,
+      "proposed_env": "CLAUDE_RUNNER_PROBE_MESSAGE_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '5' claude-runner/src/claude_runner/sources.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '5' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 372
+        },
+        {
+          "command": "grep -c '5' claude-runner/tests/test_dashboard.py",
+          "hits": 42
+        },
+        {
+          "command": "grep -rn 'probe_message_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_PROBE_MESSAGE_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit=5 of the probe session-messages fetch (sources.py:273); a setting."
+    },
+    {
+      "audit_id": "a105",
+      "file": "claude-runner/src/claude_runner/sources.py",
+      "audit_line": 327,
+      "current_line": 327,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "session_list_max_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_SESSION_LIST_MAX_ROWS",
+      "test_file": "test_dashboard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/sources.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_dashboard.py",
+          "hits": 19
+        },
+        {
+          "command": "grep -rn 'session_list_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_SESSION_LIST_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "row cap of the session list request; a setting."
+    },
+    {
+      "audit_id": "a005",
+      "file": "claude-runner/src/claude_runner/board_ops_api.py",
+      "audit_line": 256,
+      "current_line": 241,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_live_state_queue_log_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_api.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_live_state_queue_log_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "the 200-row queue-log tail fetched for the live-state payload (get_queue_log(limit=200)); name the cap and reuse the queue-log setting."
+    },
+    {
+      "audit_id": "a006",
+      "file": "claude-runner/src/claude_runner/board_ops_api.py",
+      "audit_line": 472,
+      "current_line": 457,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_live_state_queue_log_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_api.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_api.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -rn 'ops_live_state_queue_log_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "the 200-row queue-log tail fetched for the live-state payload (get_queue_log(limit=200)); name the cap and reuse the queue-log setting."
+    },
+    {
+      "audit_id": "a007",
+      "file": "claude-runner/src/claude_runner/board_ops_api.py",
+      "audit_line": 501,
+      "current_line": 486,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_commands_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_COMMANDS_MAX_ROWS",
+      "test_file": "test_board_ops_api.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/board_ops_api.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_board_ops_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_commands_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_COMMANDS_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "upper bound of the commands Query(limit=1000); a limit that belongs in settings."
+    },
+    {
+      "audit_id": "a031",
+      "file": "claude-runner/src/claude_runner/board_ready.py",
+      "audit_line": 132,
+      "current_line": 132,
+      "literal": "5.0",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "ready_check_timeout_seconds",
+      "default": 5.0,
+      "proposed_env": "CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS",
+      "test_file": "test_board_ready.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '5.0' claude-runner/src/claude_runner/board_ready.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '5.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 85
+        },
+        {
+          "command": "grep -c '5.0' claude-runner/tests/test_board_ready.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'ready_check_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "request timeout of the ready probes (runner_url, litellm_url, probe_url); one setting shared by the three probes."
+    },
+    {
+      "audit_id": "a032",
+      "file": "claude-runner/src/claude_runner/board_ready.py",
+      "audit_line": 153,
+      "current_line": 153,
+      "literal": "5.0",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "ready_check_timeout_seconds",
+      "default": 5.0,
+      "proposed_env": "CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS",
+      "test_file": "test_board_ready.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '5.0' claude-runner/src/claude_runner/board_ready.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '5.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 85
+        },
+        {
+          "command": "grep -c '5.0' claude-runner/tests/test_board_ready.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'ready_check_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "request timeout of the ready probes (runner_url, litellm_url, probe_url); one setting shared by the three probes."
+    },
+    {
+      "audit_id": "a033",
+      "file": "claude-runner/src/claude_runner/board_ready.py",
+      "audit_line": 172,
+      "current_line": 172,
+      "literal": "5.0",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "ready_check_timeout_seconds",
+      "default": 5.0,
+      "proposed_env": "CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS",
+      "test_file": "test_board_ready.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '5.0' claude-runner/src/claude_runner/board_ready.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '5.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 85
+        },
+        {
+          "command": "grep -c '5.0' claude-runner/tests/test_board_ready.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'ready_check_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_READY_CHECK_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "request timeout of the ready probes (runner_url, litellm_url, probe_url); one setting shared by the three probes."
+    },
+    {
+      "audit_id": "a036",
+      "file": "claude-runner/src/claude_runner/claude_cli.py",
+      "audit_line": 87,
+      "current_line": 87,
+      "literal": "10",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "search_tool_timeout_seconds",
+      "default": 10,
+      "proposed_env": "CLAUDE_RUNNER_SEARCH_TOOL_TIMEOUT_SECONDS",
+      "test_file": "test_claude_cli.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '10' claude-runner/src/claude_runner/claude_cli.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '10' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 338
+        },
+        {
+          "command": "grep -c '10' claude-runner/tests/test_claude_cli.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'search_tool_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_SEARCH_TOOL_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "timeout given to the search tool in the CLI args (claude_cli.py:87); a setting."
+    },
+    {
+      "audit_id": "a037",
+      "file": "claude-runner/src/claude_runner/claude_cli.py",
+      "audit_line": 427,
+      "current_line": 427,
+      "literal": "0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0",
+      "proposed_env": null,
+      "test_file": "test_claude_cli.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0' claude-runner/src/claude_runner/claude_cli.py",
+          "hits": 21
+        },
+        {
+          "command": "grep -l '0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 512
+        },
+        {
+          "command": "grep -c '0' claude-runner/tests/test_claude_cli.py",
+          "hits": 18
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/claude_cli.py",
+          "hits": 4
+        }
+      ],
+      "reason": "Sentinel in the signature timeout_seconds: int = 0 meaning \"no timeout\"; the real value comes from callers and settings, not from a per-call literal."
+    },
+    {
+      "audit_id": "a038",
+      "file": "claude-runner/src/claude_runner/claude_cli.py",
+      "audit_line": 450,
+      "current_line": 450,
+      "literal": "408",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 408,
+      "proposed_env": null,
+      "test_file": "test_claude_cli.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '408' claude-runner/src/claude_runner/claude_cli.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '408' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c '408' claude-runner/tests/test_claude_cli.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/claude_cli.py",
+          "hits": 4
+        }
+      ],
+      "reason": "HTTP status code in Outcome(..., \"timeout\", message, 408, ...); a status code, not a timeout."
+    },
+    {
+      "audit_id": "a062",
+      "file": "claude-runner/src/claude_runner/guards.py",
+      "audit_line": 278,
+      "current_line": 278,
+      "literal": "0.0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0.0",
+      "proposed_env": null,
+      "test_file": "test_guards.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0.0' claude-runner/src/claude_runner/guards.py",
+          "hits": 18
+        },
+        {
+          "command": "grep -l '0.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 254
+        },
+        {
+          "command": "grep -c '0.0' claude-runner/tests/test_guards.py",
+          "hits": 12
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/guards.py",
+          "hits": 1
+        }
+      ],
+      "reason": "Regex artifact: a max(value, 0.0) clamp floor; the interval itself is already a named constant DEFAULT_INTERVAL_S = 60.0."
+    },
+    {
+      "audit_id": "a064",
+      "file": "claude-runner/src/claude_runner/guards.py",
+      "audit_line": 494,
+      "current_line": 494,
+      "literal": "30",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "telegram_request_timeout_seconds",
+      "default": 30,
+      "proposed_env": "CLAUDE_RUNNER_TELEGRAM_REQUEST_TIMEOUT_SECONDS",
+      "test_file": "test_guards.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '30' claude-runner/src/claude_runner/guards.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '30' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 234
+        },
+        {
+          "command": "grep -c '30' claude-runner/tests/test_guards.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'telegram_request_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_TELEGRAM_REQUEST_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "urllib timeout of the Telegram notice send (guards.py:494); a setting."
+    },
+    {
+      "audit_id": "a063",
+      "file": "claude-runner/src/claude_runner/guards.py",
+      "audit_line": 488,
+      "current_line": 488,
+      "literal": "https://api.telegram.org/bot",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "TELEGRAM_API_URL_PREFIX",
+      "default": "https://api.telegram.org/bot",
+      "proposed_env": null,
+      "test_file": "test_guards.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'api.telegram.org' claude-runner/src/claude_runner/guards.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l 'api.telegram.org' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 1
+        },
+        {
+          "command": "grep -c 'api.telegram.org' claude-runner/tests/test_guards.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'TELEGRAM_API_URL_PREFIX' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "fixed Telegram Bot API endpoint of the notice sender; an external service URL, not an operator-configurable host."
+    },
+    {
+      "audit_id": "a065",
+      "file": "claude-runner/src/claude_runner/hermes_run.py",
+      "audit_line": 80,
+      "current_line": 80,
+      "literal": "1000",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000,
+      "proposed_env": null,
+      "test_file": "test_hermes_run.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '/ 1000' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '/ 1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 11
+        },
+        {
+          "command": "grep -c '/ 1000' claude-runner/tests/test_hermes_run.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 7
+        }
+      ],
+      "reason": "Regex artifact: / 1000 is the ms-to-seconds division; the real values are profile fields hermes_start_timeout_ms / hermes_run_timeout_ms / hermes_poll_interval_ms from hermes_config."
+    },
+    {
+      "audit_id": "a066",
+      "file": "claude-runner/src/claude_runner/hermes_run.py",
+      "audit_line": 155,
+      "current_line": 155,
+      "literal": "1000",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000,
+      "proposed_env": null,
+      "test_file": "test_hermes_run.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '/ 1000' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '/ 1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 11
+        },
+        {
+          "command": "grep -c '/ 1000' claude-runner/tests/test_hermes_run.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 7
+        }
+      ],
+      "reason": "Regex artifact: / 1000 is the ms-to-seconds division; the real values are profile fields hermes_start_timeout_ms / hermes_run_timeout_ms / hermes_poll_interval_ms from hermes_config."
+    },
+    {
+      "audit_id": "a067",
+      "file": "claude-runner/src/claude_runner/hermes_run.py",
+      "audit_line": 167,
+      "current_line": 167,
+      "literal": "1000",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000,
+      "proposed_env": null,
+      "test_file": "test_hermes_run.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '/ 1000' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '/ 1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 11
+        },
+        {
+          "command": "grep -c '/ 1000' claude-runner/tests/test_hermes_run.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/hermes_run.py",
+          "hits": 7
+        }
+      ],
+      "reason": "Regex artifact: / 1000 is the ms-to-seconds division; the real values are profile fields hermes_start_timeout_ms / hermes_run_timeout_ms / hermes_poll_interval_ms from hermes_config."
+    },
+    {
+      "audit_id": "a001",
+      "file": "claude-runner/src/claude_runner/board.py",
+      "audit_line": 250,
+      "current_line": 250,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -cw '200' claude-runner/src/claude_runner/board.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'def changelog' claude-runner/src/claude_runner/board.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'changelog' claude-runner/tests/test_board.py",
+          "hits": 17
+        },
+        {
+          "command": "grep -rn 'CHANGELOG' claude-runner/src/claude_runner/config.py | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "board.py:250/764 are the two `changelog(self, limit: int = 200)` signatures (board store and in-memory store): a rows cap that the dashboard and the ops API read through. One setting feeds both, the same default as board_pg.py:210/649 and board_ops_store.py:164."
+    },
+    {
+      "audit_id": "a002",
+      "file": "claude-runner/src/claude_runner/board.py",
+      "audit_line": 764,
+      "current_line": 764,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -cw '200' claude-runner/src/claude_runner/board.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'self._changelog[-limit:]' claude-runner/src/claude_runner/board.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -c 'changelog' claude-runner/tests/test_board.py",
+          "hits": 17
+        }
+      ],
+      "reason": "second changelog signature (board.py:764), same cap as board.py:250: one named setting feeds both."
+    },
+    {
+      "audit_id": "a004",
+      "file": "claude-runner/src/claude_runner/board_api.py",
+      "audit_line": 1444,
+      "current_line": 1406,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "max_changelog_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_MAX_CHANGELOG_ROWS",
+      "test_file": "test_board_api.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -cw '1000' claude-runner/src/claude_runner/board_api.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -c 'le=1000' claude-runner/src/claude_runner/board_api.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -c 'le=1000' claude-runner/tests/test_board_api.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rc 'le=1000' data-tables/ops/*.py | awk -F: '{s+=$1} END{print s}'",
+          "hits": 0
+        }
+      ],
+      "reason": "the FastAPI `le=1000` upper bound of the changelog route: a hard cap on rows the operator can ask for; settings give it a named ceiling."
+    },
+    {
+      "audit_id": "a003",
+      "file": "claude-runner/src/claude_runner/board_api.py",
+      "audit_line": 1444,
+      "current_line": 1406,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_api.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -cw '200' claude-runner/src/claude_runner/board_api.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'Query(200, ge=1, le=1000' claude-runner/src/claude_runner/board_api.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -c 'changelog' claude-runner/tests/test_board_api.py",
+          "hits": 72
+        },
+        {
+          "command": "grep -c 'changelog' claude-runner/src/claude_runner/board_history_ui.js",
+          "hits": 11
+        }
+      ],
+      "reason": "GET /api/board/changelog default `limit` at board_api.py:1406 (audit line 1444, the file has grown since the audit): the UI sends no limit, so this default is the effective row count. The second standalone `200` in the file (board_api.py:1455) is the text `HTTP 200` in a docstring, not a limit."
+    },
+    {
+      "audit_id": "a034",
+      "file": "claude-runner/src/claude_runner/board_think.py",
+      "audit_line": 360,
+      "current_line": 360,
+      "literal": "1",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1,
+      "proposed_env": null,
+      "test_file": "test_board_think.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1' claude-runner/src/claude_runner/board_think.py",
+          "hits": 72
+        },
+        {
+          "command": "grep -l '1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 517
+        },
+        {
+          "command": "grep -c '1' claude-runner/tests/test_board_think.py",
+          "hits": 38
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/board_think.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: no timeout literal at the audited line (the current line is round(pass_diff, 1)); grep -c timeout on board_think.py returns 0. The audit ran against an older export of the file."
+    },
+    {
+      "audit_id": "a035",
+      "file": "claude-runner/src/claude_runner/board_think.py",
+      "audit_line": 468,
+      "current_line": 468,
+      "literal": "5",
+      "category": "limit",
+      "class": "constant",
+      "proposed_name": "MIN_SAMPLE_DRAWS",
+      "default": 5,
+      "proposed_env": null,
+      "test_file": "test_board_think.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '5' claude-runner/src/claude_runner/board_think.py",
+          "hits": 11
+        },
+        {
+          "command": "grep -l '5' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 372
+        },
+        {
+          "command": "grep -c '5' claude-runner/tests/test_board_think.py",
+          "hits": 34
+        },
+        {
+          "command": "grep -rn 'MIN_SAMPLE_DRAWS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "bootstrap-sampling floor (draws = max(5, len(seconds))); a statistical lower bound that must stay."
+    },
+    {
+      "audit_id": "a057",
+      "file": "claude-runner/src/claude_runner/dashboard_auth_config.py",
+      "audit_line": 41,
+      "current_line": 41,
+      "literal": "127.0.0.1",
+      "category": "host",
+      "class": "setting",
+      "proposed_name": "dashboard_bind_address",
+      "default": "127.0.0.1",
+      "proposed_env": "AHAWR_DASHBOARD_BIND",
+      "test_file": "test_dashboard_auth_config.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/dashboard_auth_config.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '127.0.0.1' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 60
+        },
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/tests/test_dashboard_auth_config.py",
+          "hits": 15
+        },
+        {
+          "command": "grep -rn 'dashboard_bind_address' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'AHAWR_DASHBOARD_BIND' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "bind default already read from the existing AHAWR_DASHBOARD_BIND in DashboardAuthSettings.from_env; keep the env, no rename."
+    },
+    {
+      "audit_id": "a058",
+      "file": "claude-runner/src/claude_runner/dashboard_auth_config.py",
+      "audit_line": 57,
+      "current_line": 57,
+      "literal": "localhost",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "LOOPBACK_HOST_NAME",
+      "default": "localhost",
+      "proposed_env": null,
+      "test_file": "test_dashboard_auth_config.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'localhost' claude-runner/src/claude_runner/dashboard_auth_config.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l 'localhost' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 176
+        },
+        {
+          "command": "grep -c 'localhost' claude-runner/tests/test_dashboard_auth_config.py",
+          "hits": 4
+        },
+        {
+          "command": "grep -rn 'LOOPBACK_HOST_NAME' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "host-name comparison in the auth rules (loopback detection); the vocabulary of the check must stay."
+    },
+    {
+      "audit_id": "a068",
+      "file": "claude-runner/src/claude_runner/local_pricing.py",
+      "audit_line": 123,
+      "current_line": 132,
+      "literal": "1000000",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000000,
+      "proposed_env": null,
+      "test_file": "test_local_pricing.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1_000_000' claude-runner/src/claude_runner/local_pricing.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1_000_000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '1_000_000' claude-runner/tests/test_local_pricing.py",
+          "hits": 8
+        }
+      ],
+      "reason": "Regex artifact: / 1_000_000 is the price-per-million-tokens conversion, not a limit."
+    },
+    {
+      "audit_id": "a069",
+      "file": "claude-runner/src/claude_runner/local_pricing.py",
+      "audit_line": 126,
+      "current_line": 135,
+      "literal": "1000000",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 1000000,
+      "proposed_env": null,
+      "test_file": "test_local_pricing.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1_000_000' claude-runner/src/claude_runner/local_pricing.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1_000_000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '1_000_000' claude-runner/tests/test_local_pricing.py",
+          "hits": 8
+        }
+      ],
+      "reason": "Regex artifact: / 1_000_000 is the price-per-million-tokens conversion, not a limit."
+    },
+    {
+      "audit_id": "a072",
+      "file": "claude-runner/src/claude_runner/provider_api_types.py",
+      "audit_line": 164,
+      "current_line": 164,
+      "literal": "localhost",
+      "category": "host",
+      "class": "constant",
+      "proposed_name": "LOCAL_HOST_NAME",
+      "default": "localhost",
+      "proposed_env": null,
+      "test_file": "test_provider_api_types.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'localhost' claude-runner/src/claude_runner/provider_api_types.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l 'localhost' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 176
+        },
+        {
+          "command": "grep -c 'localhost' claude-runner/tests/test_provider_api_types.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'LOCAL_HOST_NAME' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "validation that rejects a localhost provider base_url; the vocabulary of the check must stay."
+    },
+    {
+      "audit_id": "a073",
+      "file": "claude-runner/src/claude_runner/provider_api_types.py",
+      "audit_line": 165,
+      "current_line": 165,
+      "literal": "base_url must not be localhost",
+      "category": "host",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "base_url must not be localhost",
+      "proposed_env": null,
+      "test_file": "test_provider_api_types.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'must not be localhost' claude-runner/src/claude_runner/provider_api_types.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l 'must not be localhost' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'must not be localhost' claude-runner/tests/test_provider_api_types.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: the literal is the text of a ValueError message, not a host value."
+    },
+    {
+      "audit_id": "a090",
+      "file": "claude-runner/src/claude_runner/remote_manager.py",
+      "audit_line": 134,
+      "current_line": 134,
+      "literal": "20.0",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "remote_request_timeout_seconds",
+      "default": 20.0,
+      "proposed_env": "CLAUDE_RUNNER_REMOTE_REQUEST_TIMEOUT_SECONDS",
+      "test_file": "test_remote_manager.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '20.0' claude-runner/src/claude_runner/remote_manager.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '20.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 52
+        },
+        {
+          "command": "grep -c '20.0' claude-runner/tests/test_remote_manager.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'remote_request_timeout_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_REMOTE_REQUEST_TIMEOUT_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "default timeout of the remote_manager request helpers; a setting."
+    },
+    {
+      "audit_id": "a089",
+      "file": "claude-runner/src/claude_runner/remote_manager.py",
+      "audit_line": 91,
+      "current_line": 91,
+      "literal": "500",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "remote_runs_max_rows",
+      "default": 500,
+      "proposed_env": "CLAUDE_RUNNER_REMOTE_RUNS_MAX_ROWS",
+      "test_file": "test_remote_manager.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '500' claude-runner/src/claude_runner/remote_manager.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -l '500' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 65
+        },
+        {
+          "command": "grep -c '500' claude-runner/tests/test_remote_manager.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'remote_runs_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_REMOTE_RUNS_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "min(limit, 500) cap and the GET /v1/runs?limit=500 list; a setting for the remote-list fetch."
+    },
+    {
+      "audit_id": "a092",
+      "file": "claude-runner/src/claude_runner/run_views.py",
+      "audit_line": 101,
+      "current_line": 101,
+      "literal": "50",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "run_view_default_rows",
+      "default": 50,
+      "proposed_env": "CLAUDE_RUNNER_RUN_VIEW_DEFAULT_ROWS",
+      "test_file": "test_run_summary_fields.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '50' claude-runner/src/claude_runner/run_views.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '50' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 121
+        },
+        {
+          "command": "grep -c '50' claude-runner/tests/test_run_summary_fields.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'run_view_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUN_VIEW_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Query(50, ge=1, le=500) default of the run views; move to settings."
+    },
+    {
+      "audit_id": "a093",
+      "file": "claude-runner/src/claude_runner/run_views.py",
+      "audit_line": 101,
+      "current_line": 101,
+      "literal": "500",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "run_view_max_rows",
+      "default": 500,
+      "proposed_env": "CLAUDE_RUNNER_RUN_VIEW_MAX_ROWS",
+      "test_file": "test_run_summary_fields.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '500' claude-runner/src/claude_runner/run_views.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '500' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 65
+        },
+        {
+          "command": "grep -c '500' claude-runner/tests/test_run_summary_fields.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'run_view_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUN_VIEW_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "upper bound of the run-view Query; move to settings."
+    },
+    {
+      "audit_id": "a107",
+      "file": "claude-runner/src/claude_runner/think_switch.py",
+      "audit_line": 324,
+      "current_line": 324,
+      "literal": "262144",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "transcript_tail_bytes",
+      "default": 262144,
+      "proposed_env": "CLAUDE_RUNNER_TRANSCRIPT_TAIL_BYTES",
+      "test_file": "test_think_switch.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '262144' claude-runner/src/claude_runner/think_switch.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '262144' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '262144' claude-runner/tests/test_think_switch.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'transcript_tail_bytes' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_TRANSCRIPT_TAIL_BYTES' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "the 256 KB transcript tail already flagged as a shortcut in the comment; the byte limit belongs in settings."
+    },
+    {
+      "audit_id": "a108",
+      "file": "claude-runner/src/claude_runner/think_switch.py",
+      "audit_line": 333,
+      "current_line": 333,
+      "literal": "262144",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "transcript_tail_bytes",
+      "default": 262144,
+      "proposed_env": "CLAUDE_RUNNER_TRANSCRIPT_TAIL_BYTES",
+      "test_file": "test_think_switch.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '262144' claude-runner/src/claude_runner/think_switch.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '262144' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '262144' claude-runner/tests/test_think_switch.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'transcript_tail_bytes' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_TRANSCRIPT_TAIL_BYTES' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "the 256 KB transcript tail already flagged as a shortcut in the comment; the byte limit belongs in settings."
+    },
+    {
+      "audit_id": "a008",
+      "file": "claude-runner/src/claude_runner/board_ops_guard.py",
+      "audit_line": 145,
+      "current_line": 145,
+      "literal": "60",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "rate_limit_window_seconds",
+      "default": 60,
+      "proposed_env": "CLAUDE_RUNNER_RATE_LIMIT_WINDOW_SECONDS",
+      "test_file": "test_board_ops_guard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '60' claude-runner/src/claude_runner/board_ops_guard.py",
+          "hits": 8
+        },
+        {
+          "command": "grep -l '60' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 229
+        },
+        {
+          "command": "grep -c '60' claude-runner/tests/test_board_ops_guard.py",
+          "hits": 16
+        },
+        {
+          "command": "grep -rn 'rate_limit_window_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RATE_LIMIT_WINDOW_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "count_recent(60) window of the ops rate limit; the window belongs in the existing board_ops_settings alongside ops_rate_limit_per_min."
+    },
+    {
+      "audit_id": "a009",
+      "file": "claude-runner/src/claude_runner/board_ops_livestate.py",
+      "audit_line": 186,
+      "current_line": 186,
+      "literal": "200",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_changelog_default_rows",
+      "default": 200,
+      "proposed_env": "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+      "test_file": "test_board_ops_livestate.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '200' claude-runner/src/claude_runner/board_ops_livestate.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '200' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 103
+        },
+        {
+          "command": "grep -c '200' claude-runner/tests/test_board_ops_livestate.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'ops_changelog_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "changelog tail used to build live state; same default as the store changelog."
+    },
+    {
+      "audit_id": "a039",
+      "file": "claude-runner/src/claude_runner/codex_run.py",
+      "audit_line": 218,
+      "current_line": 218,
+      "literal": "408",
+      "category": "timeout",
+      "class": "excluded",
+      "proposed_name": null,
+      "default": 408,
+      "proposed_env": null,
+      "test_file": "test_codex_run.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '408' claude-runner/src/claude_runner/codex_run.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '408' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 3
+        },
+        {
+          "command": "grep -c '408' claude-runner/tests/test_codex_run.py",
+          "hits": 0
+        }
+      ],
+      "reason": "codex_* module out of mission scope (excluded group); also an HTTP status, not a timeout."
+    },
+    {
+      "audit_id": "a059",
+      "file": "claude-runner/src/claude_runner/dashboard_auth_limit.py",
+      "audit_line": 61,
+      "current_line": 61,
+      "literal": "0.0",
+      "category": "timeout",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": "0.0",
+      "proposed_env": null,
+      "test_file": "test_dashboard_auth_limit.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '0.0' claude-runner/src/claude_runner/dashboard_auth_limit.py",
+          "hits": 9
+        },
+        {
+          "command": "grep -l '0.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 254
+        },
+        {
+          "command": "grep -c '0.0' claude-runner/tests/test_dashboard_auth_limit.py",
+          "hits": 22
+        },
+        {
+          "command": "grep -c 'timeout' claude-runner/src/claude_runner/dashboard_auth_limit.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: a delay > 0.0 comparison, not a timeout value; the delays come from the limiter settings."
+    },
+    {
+      "audit_id": "a060",
+      "file": "claude-runner/src/claude_runner/export.py",
+      "audit_line": 52,
+      "current_line": 52,
+      "literal": "2",
+      "category": "limit",
+      "class": "constant",
+      "proposed_name": "FENCE_BASE_CHARS",
+      "default": 2,
+      "proposed_env": null,
+      "test_file": "none",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c 'default=2' claude-runner/src/claude_runner/export.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l 'default=2' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'FENCE_BASE_CHARS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "fallback in _fence: longest backtick run found + 1, default 2 when none is found; a markdown-fence algorithm constant that must stay."
+    },
+    {
+      "audit_id": "a061",
+      "file": "claude-runner/src/claude_runner/guard_queue.py",
+      "audit_line": 44,
+      "current_line": 44,
+      "literal": "1000",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "ops_queue_log_max_rows",
+      "default": 1000,
+      "proposed_env": "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+      "test_file": "test_guard_queue.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1000' claude-runner/src/claude_runner/guard_queue.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1000' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 35
+        },
+        {
+          "command": "grep -c '1000' claude-runner/tests/test_guard_queue.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'ops_queue_log_max_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "guard_queue already names QUEUE_LOG_LIMIT = 1000 (guard_queue.py:31); the signature default should reuse it, and the limit belongs to the queue-log setting shared with the store."
+    },
+    {
+      "audit_id": "a070",
+      "file": "claude-runner/src/claude_runner/mem_guard.py",
+      "audit_line": 146,
+      "current_line": 146,
+      "literal": "1.0",
+      "category": "timeout",
+      "class": "setting",
+      "proposed_name": "mem_guard_interval_seconds",
+      "default": 1.0,
+      "proposed_env": "CLAUDE_RUNNER_MEM_GUARD_INTERVAL_SECONDS",
+      "test_file": "test_mem_guard.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '1.0' claude-runner/src/claude_runner/mem_guard.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '1.0' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 231
+        },
+        {
+          "command": "grep -c '1.0' claude-runner/tests/test_mem_guard.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -rn 'mem_guard_interval_seconds' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_MEM_GUARD_INTERVAL_SECONDS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "poll interval of the memory guard; a setting."
+    },
+    {
+      "audit_id": "a071",
+      "file": "claude-runner/src/claude_runner/mission_stats.py",
+      "audit_line": 24,
+      "current_line": 24,
+      "literal": "60",
+      "category": "limit",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": 60,
+      "proposed_env": null,
+      "test_file": "test_mission_stats.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '/ 60' claude-runner/src/claude_runner/mission_stats.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -l '/ 60' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 11
+        },
+        {
+          "command": "grep -c '/ 60' claude-runner/tests/test_mission_stats.py",
+          "hits": 0
+        }
+      ],
+      "reason": "Regex artifact: / 60 is a seconds-to-minutes conversion, not a limit."
+    },
+    {
+      "audit_id": "a074",
+      "file": "claude-runner/src/claude_runner/qa_agent_prompt.py",
+      "audit_line": 34,
+      "current_line": 34,
+      "literal": "4",
+      "category": "limit",
+      "class": "constant",
+      "proposed_name": "PROMPT_JOIN_CHARS",
+      "default": 4,
+      "proposed_env": null,
+      "test_file": "test_qa_agent_prompt.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '- 4' claude-runner/src/claude_runner/qa_agent_prompt.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -l '- 4' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c '- 4' claude-runner/tests/test_qa_agent_prompt.py",
+          "hits": 0
+        },
+        {
+          "command": "grep -rn 'PROMPT_JOIN_CHARS' claude-runner/src | wc -l",
+          "hits": 0
+        }
+      ],
+      "reason": "the number of join characters between prompt sections in the budget arithmetic (qa_agent_prompt.py:34); an algorithm constant shared with runs.py."
+    },
+    {
+      "audit_id": "a075",
+      "file": "claude-runner/src/claude_runner/qa_smoke.py",
+      "audit_line": 205,
+      "current_line": 205,
+      "literal": "127.0.0.1, localhost",
+      "category": "host",
+      "class": "false_positive",
+      "proposed_name": null,
+      "default": null,
+      "proposed_env": null,
+      "test_file": "test_qa_smoke.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '127.0.0.1' claude-runner/src/claude_runner/qa_smoke.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'LOCAL_HOSTS' claude-runner/src/claude_runner/qa_smoke.py",
+          "hits": 2
+        },
+        {
+          "command": "grep -c 'HostRefusedError' claude-runner/tests/test_qa_smoke.py",
+          "hits": 3
+        },
+        {
+          "command": "grep -rc 'allow-host' data-tables/ops/*.py data-tables/ops/*.sh | awk -F: '{s+$1} END{print s}'",
+          "hits": 0
+        }
+      ],
+      "reason": "The literal sits in the HostRefusedError message text (qa_smoke.py:204-206), not in a value. The hosts the check accepts are already named: LOCAL_HOSTS = frozenset({\"127.0.0.1\", \"localhost\"}) at qa_smoke.py:63 and QA_HOST_PREFIX; --allow-host is the extension point. Nothing to move into settings."
+    },
+    {
+      "audit_id": "a091",
+      "file": "claude-runner/src/claude_runner/roles_config.py",
+      "audit_line": 339,
+      "current_line": 339,
+      "literal": "2",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "model_switch_from_attempt",
+      "default": 2,
+      "proposed_env": "CLAUDE_RUNNER_MODEL_SWITCH_FROM_ATTEMPT",
+      "test_file": "test_roles_config.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '2' claude-runner/src/claude_runner/roles_config.py",
+          "hits": 7
+        },
+        {
+          "command": "grep -l '2' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 512
+        },
+        {
+          "command": "grep -c '2' claude-runner/tests/test_roles_config.py",
+          "hits": 7
+        },
+        {
+          "command": "grep -rn 'model_switch_from_attempt' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_MODEL_SWITCH_FROM_ATTEMPT' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "attempt number at which the model-switch fallback starts; naming.md: an option of a role belongs in roles_json/config settings."
+    },
+    {
+      "audit_id": "a106",
+      "file": "claude-runner/src/claude_runner/store.py",
+      "audit_line": 373,
+      "current_line": 373,
+      "literal": "50",
+      "category": "limit",
+      "class": "setting",
+      "proposed_name": "runs_store_default_rows",
+      "default": 50,
+      "proposed_env": "CLAUDE_RUNNER_RUNS_STORE_DEFAULT_ROWS",
+      "test_file": "test_runs.py",
+      "step": "next mission",
+      "grep_evidence": [
+        {
+          "command": "grep -c '50' claude-runner/src/claude_runner/store.py",
+          "hits": 1
+        },
+        {
+          "command": "grep -l '50' data-tables/ops/*.py data-tables/ops/*.sh | wc -l",
+          "hits": 121
+        },
+        {
+          "command": "grep -c '50' claude-runner/tests/test_runs.py",
+          "hits": 6
+        },
+        {
+          "command": "grep -rn 'runs_store_default_rows' claude-runner/src | wc -l",
+          "hits": 0
+        },
+        {
+          "command": "grep -c 'CLAUDE_RUNNER_RUNS_STORE_DEFAULT_ROWS' claude-runner/src/claude_runner/config.py",
+          "hits": 0
+        }
+      ],
+      "reason": "limit default of the store listing signature; a setting."
+    }
+  ],
+  "baseline_before": {
+    "recorded": "2026-11-04",
+    "source_of_baseline": "reports/review-baseline.json (ruff_by_file / mypy_by_file from the 2026-11-03 whole-src run)",
+    "commands": [
+      "cd claude-runner && python -m ruff check src/claude_runner/qa_stack.py src/claude_runner/config.py src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/dashboard.py --statistics",
+      "cd claude-runner && python -m mypy src/claude_runner/qa_stack.py src/claude_runner/config.py src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/dashboard.py",
+      "cd claude-runner && python -m pytest tests/test_qa_stack.py tests/test_config.py tests/test_board_ops_api.py tests/test_dashboard.py -q --no-cov"
+    ],
+    "files": {
+      "src/claude_runner/qa_stack.py": {
+        "step": "S1",
+        "ruff_before": 0,
+        "ruff_baseline": 0,
+        "mypy_before": 0,
+        "mypy_baseline": 0,
+        "test_files": [
+          "tests/test_qa_stack.py"
+        ],
+        "pytest": {
+          "collected": 48,
+          "passed": 48,
+          "failed": 0,
+          "failing_tests": []
+        }
+      },
+      "src/claude_runner/config.py": {
+        "step": "S2",
+        "ruff_before": 0,
+        "ruff_baseline": 0,
+        "mypy_before": 0,
+        "mypy_baseline": 0,
+        "test_files": [
+          "tests/test_config.py"
+        ],
+        "pytest": {
+          "collected": 29,
+          "passed": 29,
+          "failed": 0,
+          "failing_tests": []
+        }
+      },
+      "src/claude_runner/board_ops_store.py": {
+        "step": "S3",
+        "ruff_before": 3,
+        "ruff_baseline": 3,
+        "ruff_rules_before": {
+          "F401": 1,
+          "UP035": 1,
+          "E501": 1
+        },
+        "mypy_before": 0,
+        "mypy_baseline": 0,
+        "test_files": [
+          "tests/test_board_ops_api.py"
+        ],
+        "pytest": {
+          "collected": 23,
+          "passed": 23,
+          "failed": 0,
+          "failing_tests": []
+        }
+      },
+      "src/claude_runner/board_ops_store_pg.py": {
+        "step": "S3",
+        "ruff_before": 0,
+        "ruff_baseline": 0,
+        "mypy_before": 6,
+        "mypy_baseline": 7,
+        "mypy_lines_before": [
+          280,
+          285,
+          306,
+          461,
+          515,
+          577
+        ],
+        "test_files": [
+          "tests/test_board_ops_api.py"
+        ],
+        "pytest": {
+          "collected": 23,
+          "passed": 23,
+          "failed": 0,
+          "failing_tests": []
+        }
+      },
+      "src/claude_runner/dashboard.py": {
+        "step": "S4",
+        "ruff_before": 0,
+        "ruff_baseline": 0,
+        "mypy_before": 1,
+        "mypy_baseline": 0,
+        "mypy_lines_before": [
+          431
+        ],
+        "test_files": [
+          "tests/test_dashboard.py"
+        ],
+        "pytest": {
+          "collected": 48,
+          "passed": 47,
+          "failed": 1,
+          "failing_tests": [
+            "test_board_static_whitelist_pattern"
+          ]
+        }
+      }
+    },
+    "totals": {
+      "ruff": 3,
+      "mypy_step_files": 7,
+      "pytest_collected": 148,
+      "pytest_passed": 147,
+      "pytest_failed": 1
+    },
+    "key_output_lines": [
+      "ruff --statistics: 1 UP035, 1 E501, 1 F401 -> Found 3 errors. [*] 2 fixable with --fix (all in board_ops_store.py)",
+      "board_ops_store.py:25:22 F401 `datetime.UTC` imported but unused",
+      "board_ops_store.py:26:1 UP035 Import from `collections.abc` instead: `Callable`",
+      "board_ops_store.py:299:101 E501 Line too long (130 > 100)",
+      "qa_stack.py: All checks passed! | config.py: All checks passed! | board_ops_store_pg.py: All checks passed! | dashboard.py: All checks passed!",
+      "mypy: Found 83 errors in 12 files (checked 5 source files)",
+      "mypy per step file: qa_stack.py 0, config.py 0, board_ops_store.py 0, board_ops_store_pg.py 6, dashboard.py 1",
+      "board_ops_store_pg.py:280/285/306/461/515 Value of type \"dict[str, Any] | None\" is not indexable [index]",
+      "board_ops_store_pg.py:577 Incompatible return value type (got \"Setting | None\", expected \"Setting\") [return-value]",
+      "dashboard.py:431 Module \"claude_runner.board_api\" does not explicitly export attribute \"_unavailable\" [attr-defined]",
+      "pytest test_qa_stack.py exit=0 (48 dots, no F) | test_config.py exit=0 (29) | test_board_ops_api.py exit=0 (23) | test_dashboard.py exit=1",
+      "FAILED tests/test_dashboard.py::test_board_static_whitelist_pattern - assert 'getElementById(\"viewtabs\")' not in '<!doctype h...>'",
+      "test_dashboard.py:1132 asserts the string never appears; dashboard.html:1428 and :1512 have document.getElementById(\"viewtabs\") - stale markup pin, not POSIX/Windows"
+    ],
+    "already_failing_tests": [
+      {
+        "test": "tests/test_dashboard.py::test_board_static_whitelist_pattern",
+        "kind": "pre-existing assertion, not POSIX/Windows",
+        "detail": "the test pins the markup of the dashboard page: it asserts 'getElementById(\"viewtabs\")' never appears; dashboard.html:1428 and dashboard.html:1512 contain it. Later steps must not chase it."
+      }
+    ],
+    "env_text_check": {
+      "file": ".env.example",
+      "lines": 403,
+      "assignment_keys": 97,
+      "comment_lines": 295,
+      "duplicate_keys": 0,
+      "note": "ruff/mypy do not apply to a .env file; the text check is the line/key/duplicate counts. config.py references no os.environ name directly, so nothing to cross-check there."
+    },
+    "notes": [
+      "mypy follows imports: the same run reported 83 errors in 12 files; only the counts attributed to the step files are recorded here (board_api.py, board_pg.py, board_ready.py, board_stats.py, board_order.py, board_providers_api.py, runs.py carry the rest).",
+      "pytest 9.2 with -q prints no totals line when nothing fails; exit codes and the dot progress lines are the evidence.",
+      "A logged psycopg.errors.UndefinedTable: relation \"host_snapshot\" does not exist appears inside test_dashboard.py runs (the dashboard ops snapshot path is exercised with no live table); it is a logged message, not a test failure.",
+      "review-baseline.json lists no ruff or mypy entry for qa_stack.py, config.py, dashboard.py: read as 0."
+    ]
+  },
+  "worklist": {
+    "S1": {
+      "step": "S1",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": "29-30",
+          "change": "added constants QA_LOOPBACK_HOST = \"127.0.0.1\" and QA_CONTAINER_BIND_HOST = \"0.0.0.0\""
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 226,
+          "change": "a076: docker -p publish literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 237,
+          "change": "a077: pg_isready -h literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 250,
+          "change": "a078: dashboard -p literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 254,
+          "change": "a079: dashboard --host literal -> QA_CONTAINER_BIND_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 260,
+          "change": "a080: dashboard_url literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 278,
+          "change": "a081: dashboard_url literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 300,
+          "change": "a082: dashboard_url literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 352,
+          "change": "a083: --host literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 522,
+          "change": "a085: healthz url literal -> QA_LOOPBACK_HOST"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/qa_stack.py",
+          "line": 568,
+          "change": "a088: _free_port bind literal -> QA_LOOPBACK_HOST"
+        }
+      ],
+      "env_vars_added_to_env_example": [],
+      "checks": {
+        "recorded": "2026-11-04",
+        "commands": [
+          "cd claude-runner && python -m pytest tests/test_qa_stack.py tests/test_config.py -q --no-cov",
+          "cd claude-runner && python -m ruff check src/claude_runner/qa_stack.py src/claude_runner/config.py",
+          "cd claude-runner && python -m mypy src/claude_runner/qa_stack.py src/claude_runner/config.py",
+          "git diff --check -- claude-runner/src/claude_runner/qa_stack.py claude-runner/src/claude_runner/config.py claude-runner/tests/test_qa_stack.py"
+        ],
+        "ruff_after": {
+          "src/claude_runner/qa_stack.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "ruff_before": {
+          "src/claude_runner/qa_stack.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_after": {
+          "src/claude_runner/qa_stack.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_before": {
+          "src/claude_runner/qa_stack.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "pytest_after": {
+          "tests/test_qa_stack.py": {
+            "collected": 58,
+            "passed": 58,
+            "failed": 0
+          },
+          "tests/test_config.py": {
+            "collected": 29,
+            "passed": 29,
+            "failed": 0
+          }
+        },
+        "pytest_before": {
+          "tests/test_qa_stack.py": {
+            "collected": 48,
+            "passed": 48,
+            "failed": 0
+          },
+          "tests/test_config.py": {
+            "collected": 29,
+            "passed": 29,
+            "failed": 0
+          }
+        },
+        "note": "test_qa_stack.py collected 58 tests after T004 (11 parametrized cases added to the file that held 48 before); all pass, so no failure was introduced. This pytest prints no 'N passed' summary line in this environment: counts here are the dots per file plus exit code 0 and 'grep -c FAILED' = 0.",
+        "git_diff_check": "clean: exit 0, no whitespace errors in the S1 files; only pre-existing 'LF will be replaced by CRLF' working-copy warnings",
+        "key_lines": [
+          "python -m pytest tests/test_qa_stack.py tests/test_config.py -q --no-cov  ->  exit=0, 87 dots (58 + 29), no FAILED/ERROR lines",
+          "python -m pytest tests/test_qa_stack.py -q --no-cov  ->  .......................................................... [100%]  exit=0",
+          "python -m pytest tests/test_config.py -q --no-cov   ->  ............................. [100%]  exit=0",
+          "python -m ruff check src/claude_runner/qa_stack.py src/claude_runner/config.py  ->  All checks passed!",
+          "python -m mypy src/claude_runner/qa_stack.py src/claude_runner/config.py  ->  Success: no issues found in 2 source files",
+          "git diff --check -- claude-runner/src/claude_runner/qa_stack.py ...  ->  exit=0 (no trailing-whitespace lines)"
+        ]
+      }
+    },
+    "S2": {
+      "step": "S2",
+      "checks": {
+        "recorded": "2026-11-04",
+        "commands": [
+          "cd claude-runner && python -m pytest tests/test_config.py tests/test_config_cli.py tests/test_features_config.py -q --no-cov",
+          "cd claude-runner && python -m ruff check src/claude_runner/config.py",
+          "cd claude-runner && python -m mypy src/claude_runner/config.py",
+          "git diff --check -- claude-runner/src/claude_runner/config.py claude-runner/tests/test_config_cli.py"
+        ],
+        "ruff_before": {
+          "src/claude_runner/config.py": 0
+        },
+        "ruff_after": {
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_before": {
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_after": {
+          "src/claude_runner/config.py": 0
+        },
+        "pytest_before": {
+          "tests/test_config.py": {
+            "collected": 29,
+            "passed": 29,
+            "failed": 0
+          },
+          "note": "baseline_before recorded test_config.py only; test_config_cli.py and test_features_config.py have no baseline counts in this file"
+        },
+        "pytest_after": {
+          "tests/test_config.py": {
+            "collected": 36,
+            "passed": 36,
+            "failed": 0
+          },
+          "tests/test_config_cli.py": {
+            "collected": 22,
+            "passed": 19,
+            "failed": 3,
+            "failing_tests": [
+              "test_reviewer_default_profile_allows_read_only_bash_and_ahawr_search",
+              "test_result_placement_rule_in_prompts_keeps_reviewer_read_only",
+              "test_child_env_local_runs_get_a_task_independent_prompt_start"
+            ]
+          },
+          "tests/test_features_config.py": {
+            "collected": 14,
+            "passed": 14,
+            "failed": 0
+          }
+        },
+        "git_diff_check": {
+          "exit": 0,
+          "result": "clean for the S2 files (no trailing-whitespace errors)"
+        },
+        "key_output_lines": [
+          "ruff config.py: All checks passed! (exit 0)",
+          "mypy config.py: Success: no issues found in 1 source file (exit 0)",
+          "pytest combined: 72 collected, 69 passed, 3 failed (exit 1); test_config.py exit=0 with 36 dots, no F; test_features_config.py exit=0 (14 dots)",
+          "FAILED tests/test_config_cli.py::test_reviewer_default_profile_allows_read_only_bash_and_ahawr_search - assert 'sed' not in 'Bash(...)' (tests/test_config_cli.py:487)",
+          "FAILED tests/test_config_cli.py::test_result_placement_rule_in_prompts_keeps_reviewer_read_only - assert 'sed' not in joined (tests/test_config_cli.py:526)",
+          "FAILED tests/test_config_cli.py::test_child_env_local_runs_get_a_task_independent_prompt_start - assert 'CLAUDE_CODE_ATTRIBUTION_HEADER' not in child_env(None, shared_prefix=True) (tests/test_config_cli.py:542)",
+          "git diff --check exit=0 (only warnings about LF->CRLF conversion of unrelated files); scoped check on config.py + test_config_cli.py also exit=0"
+        ],
+        "notes": [
+          "The three test_config_cli.py failures are pre-existing on HEAD, not caused by the S2 change: 'sed -n' sits in _REVIEWER_BASH_ALLOW in the committed config.py (git show HEAD:...config.py:111) and the test's 'sed' assertion is committed too; the working diff of config.py does not touch _REVIEWER_BASH_ALLOW.",
+          "The child_env failure is env-pollution: CLAUDE_CODE_ATTRIBUTION_HEADER is set in the worker's os.environ (test -n \"$CLAUDE_CODE_ATTRIBUTION_HEADER\" -> set) and child_env(None, ...) copies os.environ (claude_cli.py:249). Not a S2 regression.",
+          "No new failures against baseline_before (0 failures recorded there for the step files); config.py ruff/mypy both 0 before and 0 after."
+        ]
+      }
+    },
+    "S3": {
+      "step": "S3",
+      "recorded": "2026-11-04",
+      "shared_definition": "the four caps are defined once in claude_runner/config.py (env-backed, defaults = the old literals) and imported by both stores; no local constant duplicated in the stores",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "594-609",
+          "change": "added the four row-cap constants OPS_COMMANDS_DEFAULT_ROWS=200, OPS_CHANGELOG_DEFAULT_ROWS=200, OPS_QUEUE_LOG_MAX_ROWS=1000, OPS_SNAPSHOT_MAX_ROWS=100 read through the existing _int(env, name, default, minimum) helper"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": "32-37",
+          "change": "from .config import (OPS_CHANGELOG_DEFAULT_ROWS, OPS_COMMANDS_DEFAULT_ROWS, OPS_QUEUE_LOG_MAX_ROWS, OPS_SNAPSHOT_MAX_ROWS)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 134,
+          "change": "a010: OpsStore.list_commands limit default 200 -> OPS_COMMANDS_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 170,
+          "change": "a011: OpsStore.changelog limit default 200 -> OPS_CHANGELOG_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 175,
+          "change": "a012: OpsStore.get_queue_log limit default 1000 -> OPS_QUEUE_LOG_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 180,
+          "change": "a013: OpsStore.get_snapshot limit default 100 -> OPS_SNAPSHOT_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 367,
+          "change": "a014: InMemoryOpsStore.list_commands limit default 200 -> OPS_COMMANDS_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 444,
+          "change": "a015: InMemoryOpsStore.changelog limit default 200 -> OPS_CHANGELOG_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 451,
+          "change": "a016: InMemoryOpsStore.get_queue_log limit default 1000 -> OPS_QUEUE_LOG_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store.py",
+          "line": 455,
+          "change": "a017: InMemoryOpsStore.get_snapshot limit default 100 -> OPS_SNAPSHOT_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": "37-41",
+          "change": "from .config import (OPS_CHANGELOG_DEFAULT_ROWS, OPS_COMMANDS_DEFAULT_ROWS, OPS_QUEUE_LOG_MAX_ROWS, OPS_SNAPSHOT_MAX_ROWS) (isort order kept: board, board_common, board_ops_store, board_pg, config)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 117,
+          "change": "a018: UnavailableOpsStore.list_commands limit default 200 -> OPS_COMMANDS_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 134,
+          "change": "a019: UnavailableOpsStore.get_queue_log limit default 1000 -> OPS_QUEUE_LOG_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 138,
+          "change": "a020: UnavailableOpsStore.get_snapshot limit default 100 -> OPS_SNAPSHOT_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 183,
+          "change": "a021: UnavailableOpsStore.changelog limit default 200 -> OPS_CHANGELOG_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 436,
+          "change": "a022: PgOpsStore.list_commands limit default 200 -> OPS_COMMANDS_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 586,
+          "change": "a023: PgOpsStore.changelog limit default 200 -> OPS_CHANGELOG_DEFAULT_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 608,
+          "change": "a024: PgOpsStore.get_queue_log limit default 1000 -> OPS_QUEUE_LOG_MAX_ROWS"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+          "line": 618,
+          "change": "a025: PgOpsStore.get_snapshot limit default 100 -> OPS_SNAPSHOT_MAX_ROWS"
+        },
+        {
+          "file": ".env.example",
+          "line": "253-257",
+          "change": "four commented name-only lines (no values) for the new variables, under the ops-tab block"
+        },
+        {
+          "file": "claude-runner/tests/test_config.py",
+          "line": "3, 8, 275-288",
+          "change": "import importlib / from claude_runner import config plus two tests: the caps default to the old literals (200/200/1000/100) and an env override is read at import (monkeypatch + importlib.reload, env restored and reloaded in a finally)"
+        }
+      ],
+      "env_vars_added_to_env_example": [
+        "CLAUDE_RUNNER_OPS_COMMANDS_DEFAULT_ROWS",
+        "CLAUDE_RUNNER_CHANGELOG_DEFAULT_ROWS",
+        "CLAUDE_RUNNER_OPS_QUEUE_LOG_MAX_ROWS",
+        "CLAUDE_RUNNER_OPS_SNAPSHOT_MAX_ROWS"
+      ],
+      "not_changed": "no SQL text, no LIMIT value, no DB column, no method signature other than the default value, no return type; the two pre-existing uncommitted hunks of board_ops_store_pg.py (from .board_common import _iso and the removal of the local _iso) are still present in git diff",
+      "checks": {
+        "commands": [
+          "cd claude-runner && python -m pytest tests/test_board_ops_api.py tests/test_config.py -q --no-cov -W ignore",
+          "cd claude-runner && python -m ruff check src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/config.py tests/test_config.py",
+          "cd claude-runner && python -m mypy src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/config.py",
+          "cd claude-runner/src && python -c \"import claude_runner.board_ops_store, claude_runner.board_ops_store_pg; print('import ok')\"",
+          "git diff --check -- claude-runner/src/claude_runner/board_ops_store.py claude-runner/src/claude_runner/board_ops_store_pg.py claude-runner/src/claude_runner/config.py .env.example",
+          "cd claude-runner && grep -n 'OPS_[A-Z_]*_ROWS\\|OPS_SNAPSHOT_MAX_ROWS' src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py"
+        ],
+        "pytest_before": {
+          "tests/test_board_ops_api.py": {
+            "collected": 23,
+            "passed": 23,
+            "failed": 0
+          },
+          "tests/test_config.py": {
+            "collected": 36,
+            "passed": 36,
+            "failed": 0
+          }
+        },
+        "pytest_after": {
+          "tests/test_board_ops_api.py": {
+            "collected": 32,
+            "passed": 32,
+            "failed": 0
+          },
+          "tests/test_config.py": {
+            "collected": 38,
+            "passed": 38,
+            "failed": 0
+          },
+          "combined": {
+            "collected": 70,
+            "passed": 70,
+            "failed": 0,
+            "exit": 0
+          },
+          "note": "test_board_ops_api.py is unchanged; its T009 pins (default LIMIT params 200/200/1000/100 and the UnavailableOpsStore inspect.signature defaults) still pass through the new constants"
+        },
+        "ruff_before": {
+          "src/claude_runner/board_ops_store.py": 3,
+          "src/claude_runner/board_ops_store_pg.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "ruff_after": {
+          "src/claude_runner/board_ops_store.py": 3,
+          "src/claude_runner/board_ops_store_pg.py": 0,
+          "src/claude_runner/config.py": 0,
+          "tests/test_config.py": 0
+        },
+        "ruff_key_lines": [
+          "board_ops_store.py: Found 3 errors (F401, UP035, E501 - the same three as before, none added by S3)",
+          "board_ops_store_pg.py: All checks passed!",
+          "config.py: All checks passed!"
+        ],
+        "mypy_before": {
+          "board_ops_store.py": 0,
+          "board_ops_store_pg.py": 6,
+          "config.py": 0
+        },
+        "mypy_after": {
+          "board_ops_store.py": 0,
+          "board_ops_store_pg.py": 6,
+          "config.py": 0
+        },
+        "mypy_key_lines": [
+          "found 6 errors attributed to board_ops_store_pg.py (lines 286, 291, 312, 467, 521, 583) - the same six as baseline (280, 285, 306, 461, 515, 577), each shifted +6 by the new import block; no new error",
+          "config.py: Success: no issues found in 1 source file"
+        ],
+        "git_diff_check": {
+          "exit": 0,
+          "result": "clean (only the pre-existing LF/CRLF notice for board_ops_store.py, no whitespace errors)"
+        },
+        "import_check": "import ok - no cycle; config.py imports only stdlib plus claude_runner.local_pricing, so stores -> config is a one-way edge",
+        "t011_rerun_2026_11_04": {
+          "recorded": "2026-11-04 (T011 narrow recheck, attempt 1)",
+          "commands": [
+            "cd claude-runner && python -m pytest tests/test_board_ops_api.py tests/test_config.py -q --no-cov -W ignore",
+            "cd claude-runner && python -m ruff check src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/config.py",
+            "cd claude-runner && python -m mypy src/claude_runner/board_ops_store.py src/claude_runner/board_ops_store_pg.py src/claude_runner/config.py",
+            "git diff --check"
+          ],
+          "pytest_after_rerun": {
+            "tests/test_board_ops_api.py": {
+              "collected": 32,
+              "passed": 32,
+              "failed": 0
+            },
+            "tests/test_config.py": {
+              "collected": 38,
+              "passed": 38,
+              "failed": 0
+            },
+            "combined": {
+              "collected": 70,
+              "passed": 70,
+              "failed": 0,
+              "exit": 0
+            }
+          },
+          "ruff_after_rerun": {
+            "src/claude_runner/board_ops_store.py": 3,
+            "src/claude_runner/board_ops_store_pg.py": 0,
+            "src/claude_runner/config.py": 0
+          },
+          "mypy_after_rerun": {
+            "src/claude_runner/board_ops_store.py": 0,
+            "src/claude_runner/board_ops_store_pg.py": 6,
+            "src/claude_runner/config.py": 0
+          },
+          "git_diff_check_rerun": {
+            "exit": 0,
+            "result": "clean: only 'LF will be replaced by CRLF' working-copy warnings, no trailing-whitespace lines"
+          },
+          "key_lines": [
+            "pytest: 70 dots total (32 + 38), [100%], exit=0, no FAILED lines",
+            "ruff board_ops_store.py: 'Found 3 errors.' (F401 line 25 UTC, UP035 line 26 Callable, E501 line 305) - identical to the 3 baseline_before and review-baseline.json",
+            "ruff board_ops_store_pg.py and config.py: 'All checks passed!' (0 before, 0 now)",
+            "mypy: 6 errors attributed to board_ops_store_pg.py at lines 286, 291, 312, 467, 521, 583 (the six baseline lines shifted +6 by the new import block, no new error); board_ops_store.py 0; config.py 'Success: no issues found in 1 source file'",
+            "git diff --check: exit 0, no whitespace errors"
+          ],
+          "note": "rerun counts equal the recorded after counts exactly; mypy_baseline 7 in review-baseline.json came from the whole-src run (one error attributed to a different file), the narrow per-file count is 6, unchanged."
+        },
+        "not_run": "node --test (no JS touched); the whole test suite (only the two affected test files were run)"
+      }
+    },
+    "S4": {
+      "step": "S4",
+      "recorded": "2026-11-04",
+      "shared_definition": "the dashboard CLI defaults and the runs-list / search row caps are read once in claude_runner/config.py (env-backed, defaults = the old literals), imported by dashboard.py; the fail-closed loopback bind stays a module-level named constant in dashboard.py",
+      "changes": [
+        {
+          "file": "claude-runner/src/claude_runner/config.py",
+          "line": "611-630",
+          "change": "added DASHBOARD_PORT (a055, env CLAUDE_RUNNER_DASHBOARD_PORT, default 8701), DASHBOARD_BIND_HOST = \"0.0.0.0\" (a054), RUNS_LIST_DEFAULT_ROWS = 100 / RUNS_LIST_MAX_ROWS = 500 (a049, a050, a051), SEARCH_DEFAULT_ROWS = 50 / SEARCH_MAX_ROWS = 200 (a052, a053) - the four row caps are read through the existing _int(dict(os.environ), name, default, minimum) helper, same style as the S3 OPS_* block"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": "44-51",
+          "change": "from .config import (DASHBOARD_BIND_HOST, DASHBOARD_PORT, RUNS_LIST_DEFAULT_ROWS, RUNS_LIST_MAX_ROWS, SEARCH_DEFAULT_ROWS, SEARCH_MAX_ROWS) (isort order kept; the _bool import of the same line is unchanged)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": 83,
+          "change": "a056: module-level constant LOOPBACK_BIND_HOST = \"127.0.0.1\" (constant class, no env variable, as the audit says)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": 438,
+          "change": "a049, a050: list_runs limit: int = Query(100, ge=1, le=500) -> Query(RUNS_LIST_DEFAULT_ROWS, ge=1, le=RUNS_LIST_MAX_ROWS)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": 480,
+          "change": "a051: fetch = 500 if any(values.values()) or mission else limit -> fetch = RUNS_LIST_MAX_ROWS if ... (same cap as the Query bound)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": 528,
+          "change": "a052, a053: search limit: int = Query(50, ge=1, le=200) -> Query(SEARCH_DEFAULT_ROWS, ge=1, le=SEARCH_MAX_ROWS)"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": "1024-1025",
+          "change": "a054, a055: parser.add_argument(\"--host\", default=\"0.0.0.0\") -> default=DASHBOARD_BIND_HOST; parser.add_argument(\"--port\", type=int, default=8701) -> default=DASHBOARD_PORT"
+        },
+        {
+          "file": "claude-runner/src/claude_runner/dashboard.py",
+          "line": 1039,
+          "change": "a056: bind fallback else \"127.0.0.1\" -> else LOOPBACK_BIND_HOST"
+        },
+        {
+          "file": ".env.example",
+          "line": "258-264",
+          "change": "one header comment plus five commented name-only lines (no values) for the new variables, after the ops-row-cap block; every existing line is untouched"
+        },
+        {
+          "file": "claude-runner/tests/test_config.py",
+          "line": "293-311",
+          "change": "two tests pinning the new defaults to the old literals (test_dashboard_defaults_match_the_literals_they_used_to_be: 8701, \"0.0.0.0\", 100, 500, 50, 200) and one env-override reload test (test_dashboard_row_caps_env_override_is_read_at_import: CLAUDE_RUNNER_SEARCH_MAX_ROWS=300, monkeypatch + importlib.reload, env restored and reloaded in a finally), mirroring the S3 OPS_* tests"
+        }
+      ],
+      "env_vars_added_to_env_example": [
+        "CLAUDE_RUNNER_DASHBOARD_PORT",
+        "CLAUDE_RUNNER_RUNS_LIST_DEFAULT_ROWS",
+        "CLAUDE_RUNNER_RUNS_LIST_MAX_ROWS",
+        "CLAUDE_RUNNER_SEARCH_DEFAULT_ROWS",
+        "CLAUDE_RUNNER_SEARCH_MAX_ROWS"
+      ],
+      "no_env_variable_added": "a054 DASHBOARD_BIND_HOST: the audit proposed AHAWR_DASHBOARD_BIND, but that variable already names the published address in dashboard_auth_config.py:41 (bind_address=env.get(\"AHAWR_DASHBOARD_BIND\", \"127.0.0.1\")), which is not the host the container listens on - the --host default keeps its literal value as a named constant in config.py:619 and the reason is stated in the config.py comment (lines 613-615). DASHBOARD_PORT got an env variable because every neighbouring default in config.py has one.",
+      "not_changed": "no route path, no query parameter name, no header (X-AHAWR-Dashboard untouched), no API field, no default value: every substituted name evaluates to the literal it replaced (100/500, 50/200, 8701, \"0.0.0.0\", \"127.0.0.1\"); the ge/le bounds are the same numbers; dashboard.py:608 runner.list_runs(500, session_id, \"\", \"\") is a literal outside the pinned S4 set (audit ids a049-a056 are the eight entries) and is left as-is",
+      "checks": {
+        "commands": [
+          "cd claude-runner && python -m pytest tests/test_dashboard.py tests/test_config.py -q --no-cov",
+          "cd claude-runner && python -m pytest tests/test_dashboard.py -q --no-cov -k \"runs_list or search or bind or port or cli\"",
+          "cd claude-runner && python -m ruff check src/claude_runner/dashboard.py src/claude_runner/config.py tests/test_config.py",
+          "cd claude-runner && python -m mypy src/claude_runner/config.py",
+          "cd claude-runner && python -m mypy src/claude_runner/dashboard.py",
+          "git diff --check -- claude-runner/src/claude_runner/dashboard.py claude-runner/src/claude_runner/config.py .env.example claude-runner/tests/test_config.py",
+          "git diff -- claude-runner/src/claude_runner/dashboard.py claude-runner/src/claude_runner/config.py .env.example"
+        ],
+        "pytest_before": {
+          "tests/test_dashboard.py": {
+            "collected": 48,
+            "passed": 47,
+            "failed": 1,
+            "failing_tests": [
+              "test_board_static_whitelist_pattern"
+            ]
+          },
+          "tests/test_config.py": {
+            "collected": 38,
+            "passed": 38,
+            "failed": 0
+          }
+        },
+        "pytest_after": {
+          "tests/test_dashboard.py": {
+            "collected": 56,
+            "passed": 55,
+            "failed": 1,
+            "failing_tests": [
+              "test_board_static_whitelist_pattern"
+            ]
+          },
+          "tests/test_config.py": {
+            "collected": 40,
+            "passed": 40,
+            "failed": 0
+          },
+          "combined": {
+            "collected": 96,
+            "passed": 95,
+            "failed": 1
+          },
+          "note": "test_dashboard.py and its T012 pins are not edited by S4; the one failure is the pre-existing board-UI assertion (test_dashboard.py:1132 assert 'getElementById(\"viewtabs\")' not in page) which fails at HEAD too - dashboard.html is unmodified in git status and contains that string. The -k run of the runs-list / search tests showed 15 dots, 0 FAILED (exit 0); tests/test_config.py alone showed 40 dots, exit 0."
+        },
+        "ruff_before": {
+          "src/claude_runner/dashboard.py": 0,
+          "src/claude_runner/config.py": 0
+        },
+        "ruff_after": {
+          "src/claude_runner/dashboard.py": 0,
+          "src/claude_runner/config.py": 0,
+          "tests/test_config.py": 0
+        },
+        "ruff_key_lines": [
+          "All checks passed! (three files together, exit 0)"
+        ],
+        "mypy_before": {
+          "src/claude_runner/dashboard.py": 1,
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_after": {
+          "src/claude_runner/dashboard.py": 1,
+          "src/claude_runner/config.py": 0
+        },
+        "mypy_key_lines": [
+          "config.py: Success: no issues found in 1 source file",
+          "dashboard.py: the one error (line 452, attr-defined on _unavailable) is the baseline one (recorded at line 431 before this change), shifted by the other people's uncommitted hunks; no new error at a config/dashboard line S4 touched"
+        ],
+        "git_diff_check": {
+          "exit": 0,
+          "result": "clean - no trailing whitespace or added blank lines"
+        },
+        "rerun_t014": {
+          "date": "2026-11-04",
+          "commands": [
+            "cd claude-runner && python -m pytest tests/test_dashboard.py tests/test_config.py -q --no-cov",
+            "cd claude-runner && python -m ruff check src/claude_runner/dashboard.py src/claude_runner/config.py",
+            "cd claude-runner && python -m mypy src/claude_runner/dashboard.py src/claude_runner/config.py",
+            "git diff --check (whole working tree)"
+          ],
+          "pytest_after_rerun": {
+            "combined": {
+              "collected": 96,
+              "passed": 95,
+              "failed": 1
+            },
+            "failing_tests": [
+              "test_board_static_whitelist_pattern"
+            ]
+          },
+          "ruff_after_rerun": {
+            "src/claude_runner/dashboard.py": 0,
+            "src/claude_runner/config.py": 0
+          },
+          "mypy_after_rerun": {
+            "src/claude_runner/dashboard.py": 1,
+            "src/claude_runner/config.py": 0
+          },
+          "git_diff_check_rerun": {
+            "exit": 0,
+            "result": "clean over the whole working tree; only 'LF will be replaced by CRLF' working-copy warnings (24 lines), no trailing-whitespace lines"
+          },
+          "key_lines": [
+            "pytest: 95 dots then one F, [100%], FAILED tests/test_dashboard.py::test_board_static_whitelist_pattern - assert 'getElementById(\"viewtabs\")' not in page (96 tests total)",
+            "ruff dashboard.py config.py: 'All checks passed!' (exit 0)",
+            "mypy: 'Found 83 errors in 12 files (checked 2 source files)' - 1 line attributed to dashboard.py (line 452, _unavailable attr-defined, the baseline error shifted from line 431), 0 to config.py",
+            "git diff --check: exit 0, no whitespace errors"
+          ],
+          "note": "rerun counts equal the recorded after counts exactly (pytest 96/95/1, ruff 0/0, mypy 1/0); the single pytest failure is the pre-existing stale viewtabs pin already listed in baseline_before key_output_lines (dashboard.html contains document.getElementById(\"viewtabs\")), unrelated to the S4 constants; git diff --check ran once over the whole tree, exit 0."
+        },
+        "diff_review": "the dashboard.py diff lines for S4 are exactly: the six-name import block, LOOPBACK_BIND_HOST = \"127.0.0.1\", three Query/fetch replacements, two argparse defaults and the bind fallback - nothing else in those lines; the other diff hunks are the pre-existing uncommitted work (guard stall constants, codx/hermes config)"
+      },
+      "not_run": "node --test (no JS touched); the whole suite (only the two affected test files were run, per CLAUDE.md); mypy on the whole src (only the two changed files were checked)"
+    }
+  }
+}

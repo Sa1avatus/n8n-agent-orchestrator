@@ -19,7 +19,7 @@ The export is 8 days old. If the operator stages a newer export, the node line n
 
 ## The 17 columns: proposed `roles_json` key and default
 
-Role names and the `"provider/model"` format come from `claude-runner/docs/roles-config.md` (role list at line 110;
+Role names and the `"provider/model"` format come from `ahawr-runner/docs/roles-config.md` (role list at line 110;
 model format at lines 39–48). Polling and retry options go under `options`, as in `docs/config-columns-plan.md:58–61`.
 
 | # | Legacy column | Constants field (export) | Proposed `roles_json` key | Default today |
@@ -44,7 +44,7 @@ model format at lines 39–48). Polling and retry options go under `options`, as
 
 Defaults and sources:
 
-- Columns 1, 2, 6 and 9–17 (12 values) agree in both sources: `claude-runner/docs/board-data-model.md` lines 477–485
+- Columns 1, 2, 6 and 9–17 (12 values) agree in both sources: `ahawr-runner/docs/board-data-model.md` lines 477–485
   (row id=5, profile `claude-code`) and `hermes_config.example.csv` line 4 (`claude-code;true;…`).
 - Columns 3, 4, 5, 7, 8 are UNKNOWN: the two sources disagree. `board-data-model.md:479–481` gives worker
   `local`/`qwen3.8-27b-gsq-rco-iq2-s-mtp`, reviewer `anthropic`/`sonnet`, service `anthropic`/`sonnet`; the example CSV
@@ -163,7 +163,7 @@ Not run: the live `hermes_config` row (no docker access, not allowed to run it);
 
 ## Runner, board, UI and docs readers
 
-Scope: `claude-runner/src/claude_runner` (Python and JS), `claude-runner/tests`, `claude-runner/docs`, `docs/`, `README.md`,
+Scope: `ahawr-runner/src/ahawr_runner` (Python and JS), `ahawr-runner/tests`, `ahawr-runner/docs`, `docs/`, `README.md`,
 `.env.example`. The grep used the 17 names plus the Constants field names of the table above. `docs/cold-prefill/*.jsonl`
 (run transcripts; 171 of 1341 files have hits) is excluded: it is not documentation. `dashboard.py` and `dashboard.html` have
 no hit. `board_roles.js` and `board_features.js` have no hit on a legacy column (only `roles_json` and `features_json`).
@@ -172,18 +172,18 @@ no hit. `board_roles.js` and `board_features.js` have no hit on a legacy column 
 
 | Location | Symbol | Columns | What it does with them |
 |---|---|---|---|
-| `claude-runner/src/claude_runner/board_api.py:494-497` | `_DEFAULT_KEYS`, read at 506 in `_config_defaults` | 1–4, 5–6 (architect, worker, reviewer provider and model) | Shows the hermes_config defaults on the board |
-| `claude-runner/src/claude_runner/board_pg.py:817-823` | allow-list in `update_hermes_config` (def at 797) | all 17 | Columns the PostgreSQL store may write; `roles_json` and `features_json` at 830 |
-| `claude-runner/src/claude_runner/board_plan.py:76-90` | `MIDRUN_CONFIG_FIELDS` (used at 509) | 3–8, 9–17 except the architect model and provider (15 names) | Fields that may change while a mission runs |
-| `claude-runner/src/claude_runner/board_mission.js:51-57` | `MIDRUN_CONFIG_FIELDS` (JS copy, comment at 50) | same 15 names | Same list for the board UI |
-| `claude-runner/src/claude_runner/board_mission.js:77-90` | `FORM_ROWS` | 1–6 (architect, worker, reviewer model and provider), rows at 85–90 | Mission form rows, labelled by `form.field.*` |
-| `claude-runner/src/claude_runner/board_edit_win.js:23-26` | `PAGES`, page "exec" keys | 1–6 | Keys of the launch window's Execution page |
-| `claude-runner/src/claude_runner/board_edit_win.js:29-32` | `ROLES` | 1–6 (architect, worker, reviewer); service is not in the window | Role rows of the window |
-| `claude-runner/src/claude_runner/board_edit_win.js:119-124` | `eff()` | the keys above | Shows the form value, or the hermes_config default as a placeholder |
-| `claude-runner/src/claude_runner/board_edit_win.js:127-129` | summary card | 1–6 | Shows "model · provider" per role |
-| `claude-runner/src/claude_runner/board_ready.py:401` | `_service_urls`, `worker_model` (`config.get`) | 3 (worker model) | Model name probed against llama-server (`check_llama_model`, 172–212) |
-| `claude-runner/src/claude_runner/board_i18n.js:356-361`, `board_i18n_en.json:37`, `board_i18n_ru.json:37` | `form.field.*` labels | 1–6 | Label texts only, not values |
-| `claude-runner/tests/roles_cases.json:759-767, 784-789, 803-804, 820-821, 842-843` | `legacy_fallback_*` inputs | 3, 4, 5, 6, 10, 13, 16 | Shared cases file: legacy inputs that must resolve |
+| `ahawr-runner/src/ahawr_runner/board_api.py:494-497` | `_DEFAULT_KEYS`, read at 506 in `_config_defaults` | 1–4, 5–6 (architect, worker, reviewer provider and model) | Shows the hermes_config defaults on the board |
+| `ahawr-runner/src/ahawr_runner/board_pg.py:817-823` | allow-list in `update_hermes_config` (def at 797) | all 17 | Columns the PostgreSQL store may write; `roles_json` and `features_json` at 830 |
+| `ahawr-runner/src/ahawr_runner/board_plan.py:76-90` | `MIDRUN_CONFIG_FIELDS` (used at 509) | 3–8, 9–17 except the architect model and provider (15 names) | Fields that may change while a mission runs |
+| `ahawr-runner/src/ahawr_runner/board_mission.js:51-57` | `MIDRUN_CONFIG_FIELDS` (JS copy, comment at 50) | same 15 names | Same list for the board UI |
+| `ahawr-runner/src/ahawr_runner/board_mission.js:77-90` | `FORM_ROWS` | 1–6 (architect, worker, reviewer model and provider), rows at 85–90 | Mission form rows, labelled by `form.field.*` |
+| `ahawr-runner/src/ahawr_runner/board_edit_win.js:23-26` | `PAGES`, page "exec" keys | 1–6 | Keys of the launch window's Execution page |
+| `ahawr-runner/src/ahawr_runner/board_edit_win.js:29-32` | `ROLES` | 1–6 (architect, worker, reviewer); service is not in the window | Role rows of the window |
+| `ahawr-runner/src/ahawr_runner/board_edit_win.js:119-124` | `eff()` | the keys above | Shows the form value, or the hermes_config default as a placeholder |
+| `ahawr-runner/src/ahawr_runner/board_edit_win.js:127-129` | summary card | 1–6 | Shows "model · provider" per role |
+| `ahawr-runner/src/ahawr_runner/board_ready.py:401` | `_service_urls`, `worker_model` (`config.get`) | 3 (worker model) | Model name probed against llama-server (`check_llama_model`, 172–212) |
+| `ahawr-runner/src/ahawr_runner/board_i18n.js:356-361`, `board_i18n_en.json:37`, `board_i18n_ru.json:37` | `form.field.*` labels | 1–6 | Label texts only, not values |
+| `ahawr-runner/tests/roles_cases.json:759-767, 784-789, 803-804, 820-821, 842-843` | `legacy_fallback_*` inputs | 3, 4, 5, 6, 10, 13, 16 | Shared cases file: legacy inputs that must resolve |
 
 ### B. Runner tests that name a column (not run in this step)
 
@@ -200,16 +200,16 @@ no hit. `board_roles.js` and `board_features.js` have no hit on a legacy column 
 | `README.md:660-661` | 3, 4 | `hermes_config.worker_model` and `worker_provider` |
 | `README.md:885` | 1 | Says the compression model is independent of `architect_model` |
 | `.env.example:277-279` | 1–6 | Commented examples only; no service or poll keys |
-| `claude-runner/docs/board-data-model.md:413-420` | 7–8 | Service model and provider, applied to every run |
-| `claude-runner/docs/board-data-model.md:437-455` | 1–17 | Column table with types (double precision for the numeric ones) |
-| `claude-runner/docs/board-data-model.md:478-485` | 1–17 | Example row (id=5, profile `claude-code`); source of the defaults in section above |
-| `claude-runner/docs/board-design.md:256-257` | 3, 4, 5, 1 | Example update of row id=5 |
-| `claude-runner/docs/board-ops-notes.md:358, 428-430, 452` | 3, 4, 5, 6, 1, 2, 7, 8, 9–17 | Ops notes; `board_ready.py:279-295` probe of `worker_model` (line 452) |
-| `claude-runner/docs/board-ops.md:111, 282` | 3–6 | `model_pairs` entries and `switch_model_pair` |
-| `claude-runner/docs/board-ops-agent.md:200` | 3, 4 | `switch_model_pair` |
-| `claude-runner/docs/cloud-thinking-notes.md:217` | 4 | Reads `worker_provider` from Constants |
-| `claude-runner/docs/lessons.md:44, 74` | 4, 7 | Anchor note; service_model found only in field lists |
-| `claude-runner/docs/qa-acceptance.md` | 134 matching lines | Not read line by line: UNKNOWN which columns each line uses |
+| `ahawr-runner/docs/board-data-model.md:413-420` | 7–8 | Service model and provider, applied to every run |
+| `ahawr-runner/docs/board-data-model.md:437-455` | 1–17 | Column table with types (double precision for the numeric ones) |
+| `ahawr-runner/docs/board-data-model.md:478-485` | 1–17 | Example row (id=5, profile `claude-code`); source of the defaults in section above |
+| `ahawr-runner/docs/board-design.md:256-257` | 3, 4, 5, 1 | Example update of row id=5 |
+| `ahawr-runner/docs/board-ops-notes.md:358, 428-430, 452` | 3, 4, 5, 6, 1, 2, 7, 8, 9–17 | Ops notes; `board_ready.py:279-295` probe of `worker_model` (line 452) |
+| `ahawr-runner/docs/board-ops.md:111, 282` | 3–6 | `model_pairs` entries and `switch_model_pair` |
+| `ahawr-runner/docs/board-ops-agent.md:200` | 3, 4 | `switch_model_pair` |
+| `ahawr-runner/docs/cloud-thinking-notes.md:217` | 4 | Reads `worker_provider` from Constants |
+| `ahawr-runner/docs/lessons.md:44, 74` | 4, 7 | Anchor note; service_model found only in field lists |
+| `ahawr-runner/docs/qa-acceptance.md` | 134 matching lines | Not read line by line: UNKNOWN which columns each line uses |
 | `docs/telegram-bot.md:68-69, 85-93, 227-230` | 3, 4, 5, 6, 12–14 (type and range rows at 85–93) | `/set` and `/model` allow-list and examples |
 
 Patches under `data-tables/ops` are in section B of the workflow part above and are not repeated here.
@@ -218,12 +218,12 @@ Patches under `data-tables/ops` are in section B of the workflow part above and 
 
 ### Python and JS roles core
 
-- Python core: `claude-runner/src/claude_runner/roles_config.py` (356 lines; no FastAPI or route import). Public
+- Python core: `ahawr-runner/src/ahawr_runner/roles_config.py` (356 lines; no FastAPI or route import). Public
   names: `validate_roles_json` (54), `validate_roles` (64), `merge` (237), `legacy_role` (245), `resolve` (256),
   `qa_layers` (198). Constants: `MODEL_SEPARATOR = "/"` (10), `OPTIONS_KEY = "options"` (11), `FIRST_ATTEMPT_KEY = "1"` (12),
   `COMMON_OPTION_KEYS` (16: `fresh`, `think`, `max_polls`, `poll_seconds`, `max_retries`), `QA_OPTION_KEYS` (17, includes
   `smoke`), `FALLBACK_ROLES` (224: `qa` to `reviewer`, `report` to `worker`), `LEGACY_OPTION_KEYS` (223).
-- JS core: `claude-runner/src/claude_runner/board_roles.js`, lines 3–551, bounded by `// === pure roles core` (3) and
+- JS core: `ahawr-runner/src/ahawr_runner/board_roles.js`, lines 3–551, bounded by `// === pure roles core` (3) and
   `// === end pure roles core ===` (551). Functions: `validateRolesJson` (147), `validateRoles` (166), `mergeRoles` (300),
   `legacyRole` (304), `pickModel` (335), `resolveRole` (384), QA helpers (427–545), `loadQaRoles` and `saveQaRoles`
   (526–539, the `api` argument is injected). Export block starts at 553.
@@ -239,20 +239,20 @@ Patches under `data-tables/ops` are in section B of the workflow part above and 
 
 ### Shared cases file and the tests that run it
 
-- Cases: `claude-runner/tests/roles_cases.json` (one file for both cores).
-- Python runs it: `claude-runner/tests/test_roles_config.py:24` (`(Path(__file__).parent / "roles_cases.json")`).
-- JS runs it: `claude-runner/tests/board_roles.test.js:9` (`CASES = JSON.parse(...)`); run with
-  `node --test tests/board_roles.test.js` from `claude-runner/`.
-- The features cases (`claude-runner/tests/features_cases.json`) follow the same pattern: `test_features_config.py:12`
+- Cases: `ahawr-runner/tests/roles_cases.json` (one file for both cores).
+- Python runs it: `ahawr-runner/tests/test_roles_config.py:24` (`(Path(__file__).parent / "roles_cases.json")`).
+- JS runs it: `ahawr-runner/tests/board_roles.test.js:9` (`CASES = JSON.parse(...)`); run with
+  `node --test tests/board_roles.test.js` from `ahawr-runner/`.
+- The features cases (`ahawr-runner/tests/features_cases.json`) follow the same pattern: `test_features_config.py:12`
   and `board_features.test.js:9`.
 
 ### flatten() today
 
 There is no `flatten` in the roles core. The only `flatten` in the runner is for features:
-`claude-runner/src/claude_runner/features_config.py:137-149` (Python) and `claude-runner/src/claude_runner/board_features.js:97-110`
+`ahawr-runner/src/ahawr_runner/features_config.py:137-149` (Python) and `ahawr-runner/src/ahawr_runner/board_features.js:97-110`
 (JS, exported at 117). Both return the same eight keys: `plan_no_truncate` (0/1), `max_tasks`, `max_tasks_hard`,
 `adaptive_split` (0/1), `split_steps`, `max_splits`, `max_total_tasks`, `run_hygiene` (0/1). No caller of either
-`flatten` exists in `src/claude_runner` beyond its export; `test_features_config.py:9` imports it. Consumer: UNKNOWN.
+`flatten` exists in `src/ahawr_runner` beyond its export; `test_features_config.py:9` imports it. Consumer: UNKNOWN.
 None of the proposed `roles_json` keys in part 1 goes through `flatten`.
 
 ### Consistency with the proposed keys (part 1)
@@ -267,14 +267,14 @@ None of the proposed `roles_json` keys in part 1 goes through `flatten`.
 
 ### Launch-window save path (roles_json)
 
-1. The window's Save runs `onNext` in `claude-runner/src/claude_runner/board_edit_win.js` (the last page). It calls `saveQa()`
+1. The window's Save runs `onNext` in `ahawr-runner/src/ahawr_runner/board_edit_win.js` (the last page). It calls `saveQa()`
    (`board_edit_win.js:301-306`), then `saveFeatures()`, then `save().doSave(box)`.
 2. `saveQa()` calls `BoardRoles.saveQaRoles(...)` (`board_roles.js:534-539`). If the QA diff is empty it returns without a
    request (`board_roles.js:532-533`). Otherwise it sends `PUT` with body `{roles_json, expected_version}`
    (`board_roles.js:536`).
-3. `postJson` in `claude-runner/src/claude_runner/board_mission_save.js:587-600` sends the header `X-AHAWR-Dashboard: 1`
+3. `postJson` in `ahawr-runner/src/ahawr_runner/board_mission_save.js:587-600` sends the header `X-AHAWR-Dashboard: 1`
    (line 596).
-4. Route: `PUT /api/board/missions/{mission_id}/roles`, `claude-runner/src/claude_runner/board_api.py:1575-1589`
+4. Route: `PUT /api/board/missions/{mission_id}/roles`, `ahawr-runner/src/ahawr_runner/board_api.py:1575-1589`
    (`put_mission_roles`). It runs `_require_dashboard_header` (the header check), `_roles_text` (131-143), then
    `roles_config.validate_roles_json(text, providers)` (141; `providers` from `registry.profiles()`).
 5. Version check: `expected_version` is passed to `store.set_mission_config(..., expected_version=...)`
@@ -285,14 +285,14 @@ None of the proposed `roles_json` keys in part 1 goes through `flatten`.
    belongs to `onSave`, which is a different entry point and is not on this path.
 7. The other 17 columns, when edited in the window, go through `doSave` to `POST /api/board/missions/{id}/config`
    (`board_mission_save.js:334-365`; route `board_api.py:1275-1300`, with `expected_version` and `dry_run` diff).
-8. The global `PUT /api/board/roles` (`board_api.py:1555-1562`) has no caller in `claude-runner/src/claude_runner/*.js`.
+8. The global `PUT /api/board/roles` (`board_api.py:1555-1562`) has no caller in `ahawr-runner/src/ahawr_runner/*.js`.
    The only reference is the fake API in `board_roles.test.js:255-256`. The launch window does not use it.
 
 ### Checks for this step
 
 | Check | Result |
 |---|---|
-| `grep -rn -E` of the 17 names and the Constants names over `claude-runner/src/claude_runner`, `claude-runner/docs`, `docs`, `README.md`, `.env.example` (`cold-prefill` excluded) | hits listed in sections A–C; every listed reader has its file:line |
+| `grep -rn -E` of the 17 names and the Constants names over `ahawr-runner/src/ahawr_runner`, `ahawr-runner/docs`, `docs`, `README.md`, `.env.example` (`cold-prefill` excluded) | hits listed in sections A–C; every listed reader has its file:line |
 | `grep -n "roles_json" board_api.py` etc. | save route lines 1553–1589 confirmed by reading the code |
 | `git diff --check` | run after the write (see the report) |
 
@@ -313,10 +313,10 @@ None of the proposed `roles_json` keys in part 1 goes through `flatten`.
 | Задача | Что сделано | Файл:строки |
 |---|---|---|
 | T001 | Инвентаризация 17 legacy-колонок (этот документ) | `docs/config-roles-step1.md:1-305` (файл новый, не отслеживается git) |
-| T002 | Ядро ролей: константы и значения по умолчанию, `flatten` в Python и JS, общие кейсы | `claude-runner/src/claude_runner/roles_config.py:28-39` (константы), `:388` (`flatten`); `claude-runner/src/claude_runner/board_roles.js:586` (`flatten`); `claude-runner/tests/roles_cases.json` (golden: `golden_empty_roles_json` 1401, `golden_missing_roles_json` 1438); `claude-runner/tests/test_roles_config.py:73` (`test_shared_flatten_case`); `claude-runner/tests/board_roles.test.js` |
-| T003 | Читатели: `Constants` берет роли из `roles_json`, legacy-колонки последним fallback; `_config_defaults` на доске | `data-tables/ops/roles_options_patch.py:84` (`replacements`), `:104` (`patch`); `claude-runner/tests/test_roles_options_patch.py:35`; `claude-runner/src/claude_runner/board_api.py:500` (`_config_defaults`, `flatten` at 509) |
-| T004 | Окно запуска: polling-хелперы, сохранение, проверка опций, форма миссии | `claude-runner/src/claude_runner/board_roles.js:610` (`POLLING_ROLES`), `:614` (`pollingValuesOf`), `:625` (`pollingDiffRows`), `:638` (`pollingRolesText`); `board_edit_win.js:312, 353, 359, 371, 374`; `board_mission.js:366-374` (`configValues`); `roles_config.py:193` (`_check_polling`), `:205` (`_is_whole_number`); `claude-runner/tests/test_board_roles_api.py:101, 108, 122, 133`; `claude-runner/tests/board_mission.test.js` |
-| T005 | Сухой прогон: печатает предлагаемый `roles_json` | `data-tables/ops/propose_roles_json.py:22` (`propose`), `:29` (`legacy_roles`), `:49` (`_overlay`), `:64` (`_existing_roles`), `:80` (`main`); `claude-runner/tests/test_propose_roles_json.py:63-115` |
+| T002 | Ядро ролей: константы и значения по умолчанию, `flatten` в Python и JS, общие кейсы | `ahawr-runner/src/ahawr_runner/roles_config.py:28-39` (константы), `:388` (`flatten`); `ahawr-runner/src/ahawr_runner/board_roles.js:586` (`flatten`); `ahawr-runner/tests/roles_cases.json` (golden: `golden_empty_roles_json` 1401, `golden_missing_roles_json` 1438); `ahawr-runner/tests/test_roles_config.py:73` (`test_shared_flatten_case`); `ahawr-runner/tests/board_roles.test.js` |
+| T003 | Читатели: `Constants` берет роли из `roles_json`, legacy-колонки последним fallback; `_config_defaults` на доске | `data-tables/ops/roles_options_patch.py:84` (`replacements`), `:104` (`patch`); `ahawr-runner/tests/test_roles_options_patch.py:35`; `ahawr-runner/src/ahawr_runner/board_api.py:500` (`_config_defaults`, `flatten` at 509) |
+| T004 | Окно запуска: polling-хелперы, сохранение, проверка опций, форма миссии | `ahawr-runner/src/ahawr_runner/board_roles.js:610` (`POLLING_ROLES`), `:614` (`pollingValuesOf`), `:625` (`pollingDiffRows`), `:638` (`pollingRolesText`); `board_edit_win.js:312, 353, 359, 371, 374`; `board_mission.js:366-374` (`configValues`); `roles_config.py:193` (`_check_polling`), `:205` (`_is_whole_number`); `ahawr-runner/tests/test_board_roles_api.py:101, 108, 122, 133`; `ahawr-runner/tests/board_mission.test.js` |
+| T005 | Сухой прогон: печатает предлагаемый `roles_json` | `data-tables/ops/propose_roles_json.py:22` (`propose`), `:29` (`legacy_roles`), `:49` (`_overlay`), `:64` (`_existing_roles`), `:80` (`main`); `ahawr-runner/tests/test_propose_roles_json.py:63-115` |
 
 Линтеры (запущены на `roles_config.py`, `propose_roles_json.py`, `roles_options_patch.py`):
 

@@ -81,7 +81,7 @@ COMMANDS = {
     "/missions": ("view", "List of missions: id, name, enabled, version."),
     "/mission":  ("view", "Details of one mission; enable or disable it (/mission <id> [enable|disable]) or edit it (/mission <id> edit <field> ...) with confirmation."),
     "/progress": ("view", "The plan with the score and attempt count of every task. /progress [mission]."),
-    "/agents":   ("view", "Active agent runs from claude-runner (role, task, time, tokens) and the n8n execution. Alias /tasks."),
+    "/agents":   ("view", "Active agent runs from ahawr-runner (role, task, time, tokens) and the n8n execution. Alias /tasks."),
     "/usage":    ("view", "Tokens, tokens per second, cache share and time per task of the current mission, from the runner events. /usage [reset [--force]]."),
     "/insights": ("view", "Scores and retries per task over the last N days, slowest tasks. /insights [days]."),
     "/errors":   ("view", "The last failed executions with node name and message (secrets masked). /errors [N]."),

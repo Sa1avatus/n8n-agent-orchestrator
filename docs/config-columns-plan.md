@@ -68,7 +68,7 @@ means "the defaults" and behaviour must stay byte-for-byte what it is today.
  "timeout_ms": 60000, "worker_max_tokens": "<current value>", "reviewer_max_tokens": "<current value>", "label": "hybrid-v1"}
 
 // engine_json (new): loop and infrastructure
-{"max_attempts_per_task": 5, "retry_delays": [15, 30, 60, 120, 300], "runner_url": "http://claude-runner:8700",
+{"max_attempts_per_task": 5, "retry_delays": [15, 30, 60, 120, 300], "runner_url": "http://ahawr-runner:8700",
  "run_manager_workflow_id": "6WE2ATGEDzUopBJH", "telegram_chat_id": "<id>"}
 ```
 

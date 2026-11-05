@@ -1,4 +1,4 @@
-"""LiteLLM proxy hooks for claude-runner → local OpenAI-compatible models.
+"""LiteLLM proxy hooks for ahawr-runner → local OpenAI-compatible models.
 
 Claude Code sends some context (e.g. the "# Environment" block) as ``role: "system"`` messages
 in the middle of ``messages``. Many local chat templates (Qwen, Llama, Gemma ...) accept a

@@ -67,7 +67,7 @@ ahawr-retrieval-eval ahawr-metrics --attempts attempts.json \
 # features for later LTR
 ahawr-retrieval export-logs --out features.jsonl
 
-# retrieval-usage metrics per profile (log + claude-runner API)
+# retrieval-usage metrics per profile (log + ahawr-runner API)
 ahawr-retrieval usage --runner-url http://localhost:8899 --since -7d
 ```
 

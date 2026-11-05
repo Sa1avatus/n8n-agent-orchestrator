@@ -1,8 +1,8 @@
 # Memory levels of a runner session
 
-Inventory of where a session keeps its memory, read from `claude-runner/src/claude_runner/`
+Inventory of where a session keeps its memory, read from `ahawr-runner/src/ahawr_runner/`
 (`runs.py`, `handoff.py`, `claude_cli.py`, `store.py`, `events.py`, `config.py`, `context_probe.py`,
-`api.py`) and `claude-runner/README.md`. Line numbers were checked against the working tree on the
+`api.py`) and `ahawr-runner/README.md`. Line numbers were checked against the working tree on the
 day of writing. `UNKNOWN` means the code in this repository does not prove the fact.
 
 Level 1 is the context of one Claude Code session while it runs. Level 2 is what the runner keeps
@@ -27,7 +27,7 @@ sets the inputs and checks them.
 
 | item | location (file:line) | size limit | writer | reader | clearing |
 |---|---|---|---|---|---|
-| Autocompact trigger | `config.py:261` (`_autocompact_threshold`), `context_probe.py:93` (static 44344 = 67.66% of 65536) | window − min(max_output, 20000) − 13000 (`claude-runner/README.md`, "Claude Code's own autocompact trigger"; the formula is not in code in scope, UNKNOWN there) | operator, via provider block `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` / `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (`config.py:219-221`); runner sets env from the probe (`context_probe.py:119`) | Claude Code | UNKNOWN (done by Claude Code; the runner does not clear) |
+| Autocompact trigger | `config.py:261` (`_autocompact_threshold`), `context_probe.py:93` (static 44344 = 67.66% of 65536) | window − min(max_output, 20000) − 13000 (`ahawr-runner/README.md`, "Claude Code's own autocompact trigger"; the formula is not in code in scope, UNKNOWN there) | operator, via provider block `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` / `CLAUDE_CODE_AUTO_COMPACT_WINDOW` (`config.py:219-221`); runner sets env from the probe (`context_probe.py:119`) | Claude Code | UNKNOWN (done by Claude Code; the runner does not clear) |
 | Startup validation of the trigger | `config.py:358-369` | trigger must stay in the 65536 window and leave 20000 tokens of headroom (`config.py:358-369` docstring and checks) | runner at startup (refuses to start on violation) | runner | n/a (config, not data) |
 | Event record of the window used | `runs.py:540-544` | n/a | runner writes `context_window` event | dashboard, event log | with the event file (Level 2, `events.py:308-318`) |
 | Pre-resume `/compact` threshold | `config.py:513` (`compact_min_tokens` = 120000), `runs.py:864-865`, `runs.py:901-914` | 120000 default; provider `…__COMPACT_MIN_TOKENS` overrides (`runs.py:901-902`); probed window scales it (`runs.py:908-910`, `context_probe.py:108`) | runner (`runs.py:883-914`) | runner decides whether to compact before resume (`mode == "auto" and tokens < threshold`, `runs.py:912-917`) | n/a: the compaction result is recorded (see PreCompact summary) |
@@ -39,8 +39,8 @@ the transcript.
 
 | item | location (file:line) | size limit | writer | reader | clearing |
 |---|---|---|---|---|---|
-| Instruction text (default) | `config.py:37` (`DEFAULT_COMPACT_INSTRUCTIONS`), `config.py:618-621` (`CLAUDE_RUNNER_COMPACT_INSTRUCTIONS` overrides; empty = stock summarizer) | Target 1500–2000 tokens, hard cap 2000 per `claude-runner/README.md:115`; the runner code in scope does not enforce it (UNKNOWN). The `max_tokens` cap 3000 is in `ahawr_hooks.py`, outside this scope (UNKNOWN here) | operator (env) or default in code | Claude Code (via hook or `/compact` text) | n/a (config) |
-| PreCompact settings file `compact-settings.json` | `claude_cli.py:46-70` (`_compact_settings_path`), `claude_cli.py:52` (path `config_dir()/compact-settings.json`), `claude_cli.py:56` (`PreCompact` key) | the hook prints the instruction text (`claude_cli.py:42-43`) | runner, written on each run that needs it (`claude_cli.py:190-203`) | Claude Code appends hook stdout to the compaction request (behaviour stated in `claude-runner/README.md:112`, not proven by code here) | overwritten by the next run that writes it; never deleted (UNKNOWN whether anything removes it) |
+| Instruction text (default) | `config.py:37` (`DEFAULT_COMPACT_INSTRUCTIONS`), `config.py:618-621` (`CLAUDE_RUNNER_COMPACT_INSTRUCTIONS` overrides; empty = stock summarizer) | Target 1500–2000 tokens, hard cap 2000 per `ahawr-runner/README.md:115`; the runner code in scope does not enforce it (UNKNOWN). The `max_tokens` cap 3000 is in `ahawr_hooks.py`, outside this scope (UNKNOWN here) | operator (env) or default in code | Claude Code (via hook or `/compact` text) | n/a (config) |
+| PreCompact settings file `compact-settings.json` | `claude_cli.py:46-70` (`_compact_settings_path`), `claude_cli.py:52` (path `config_dir()/compact-settings.json`), `claude_cli.py:56` (`PreCompact` key) | the hook prints the instruction text (`claude_cli.py:42-43`) | runner, written on each run that needs it (`claude_cli.py:190-203`) | Claude Code appends hook stdout to the compaction request (behaviour stated in `ahawr-runner/README.md:112`, not proven by code here) | overwritten by the next run that writes it; never deleted (UNKNOWN whether anything removes it) |
 | Search-first settings (also carries `PreCompact`) | `claude_cli.py:72-100` | same text as above | runner | Claude Code | overwritten, as above |
 | Which runs get the instructions | `claude_cli.py:184-194` (`compact_hook`: local provider with `isolates_credentials`, and `local_compact_instructions` on, `config.py:517`) | n/a | runner | n/a | n/a |
 | `/compact <instructions>` text on a resume compaction | `runs.py:916-931` (`"/compact " + compact_instructions`, local provider only) | same text | runner | Claude Code | n/a (sent as the prompt of a `kind="compact"` run) |
@@ -92,7 +92,7 @@ is the main writer; the runner's board code reads it and writes it through the b
 | Delete of the row with a mission | `board_api.py:786-800` (in-memory store only; the Pg store raises, `board_api.py:791-793`) | n/a | operator via `DELETE /missions/{id}` with `confirm=true` for a running mission | n/a | the row is removed only in memory |
 | Control flags (Telegram) in a table also named "Autonomous Agent Live State" | `board_ops_livestate.py:1-10` (`data_table_user_innMqY8MMiUE9Lrf`) | whitelisted columns | `set_flags` in `board_ops_livestate.py` (version check, changelog) | `get_flags` in the same module | UNKNOWN whether this is the same physical table as `board_pg.py:52` |
 
-Related tables the workflow writes per task (named in `claude-runner/docs/lessons.md:38-39`):
+Related tables the workflow writes per task (named in `ahawr-runner/docs/lessons.md:38-39`):
 `Autonomous Agent Task Attempts` (events, `task_attempt`, `review_status`) and `Autonomous Agent Task State`.
 Their link to the Live State row is UNKNOWN in this inventory (the workflow export is not in the repo).
 
@@ -103,7 +103,7 @@ other items are inputs that the Worker or the search reads.
 
 | item | location (file:line) | size limit | writer | reader | clearing |
 |---|---|---|---|---|---|
-| Lessons library `board.lessons` (Pg) | `claude-runner/docs/board-lessons.sql:11-28` (table, CHECK limits); store `board_lessons.py:242` (`PgLessonStore`) | mission 64, task_id 16, situation 400, lesson 300, evidence 1200 characters (`board-lessons.sql:13-19`) | `POST /api/board/lessons/write` (`board_api.py:1818-1836`) via `build_candidate` and `decide` (`board_lessons_extract.py:129`, `:183`) | `POST /lessons/select` (`board_api.py:1838-1857`); `GET /missions/{id}/lessons` (`board_api.py:1760`) | status `retired` (not deleted): `board_lessons.py:398-408`; delete only with `confirm` (`board_api.py:1811-1816`, `board_lessons.py:334`) |
+| Lessons library `board.lessons` (Pg) | `ahawr-runner/docs/board-lessons.sql:11-28` (table, CHECK limits); store `board_lessons.py:242` (`PgLessonStore`) | mission 64, task_id 16, situation 400, lesson 300, evidence 1200 characters (`board-lessons.sql:13-19`) | `POST /api/board/lessons/write` (`board_api.py:1818-1836`) via `build_candidate` and `decide` (`board_lessons_extract.py:129`, `:183`) | `POST /lessons/select` (`board_api.py:1838-1857`); `GET /missions/{id}/lessons` (`board_api.py:1760`) | status `retired` (not deleted): `board_lessons.py:398-408`; delete only with `confirm` (`board_api.py:1811-1816`, `board_lessons.py:334`) |
 | Lessons in memory | `board_lessons.py:79` (`InMemoryLessonStore`), used when the table is not reachable (`board_api.py:151-168`) | same | same | same | lost on restart |
 | Lesson-shown link `board.lesson_shown` | `board-lessons.sql:34-40` (`ON DELETE CASCADE`) | one row per lesson, mission and task | `record_shown` (`board_lessons.py:357-377`, called from `board_api.py:1856`) | `lessons_for_task` (`board_lessons.py:410`) | cascades with the lesson |
 | Retrieval corpora of a mission | `board.py:79` (`retrieval_corpora`) | list of names | operator, mission config | retrieval service (`retrieval-service/src/ahawr_retrieval/pg_store.py`, read-side only seen) | UNKNOWN: the corpus contents are not in the runner |
@@ -168,19 +168,19 @@ Each item: EXISTS (file:line) or MISSING. UNKNOWN is marked where the code in th
 | Guarded routes: retire | EXISTS | `board_api.py:1799-1803` |
 | Guarded routes: restore | EXISTS | `board_api.py:1805-1809` |
 | Guarded routes: delete with confirm | EXISTS | `board_api.py:1811-1816`; confirm in store `board_lessons.py:167`, Pg `board_lessons.py:334` |
-| SQL files | EXISTS, not applied | `claude-runner/docs/board-lessons.sql:1-6` ("NOT APPLIED"); UNKNOWN whether the live database has it |
+| SQL files | EXISTS, not applied | `ahawr-runner/docs/board-lessons.sql:1-6` ("NOT APPLIED"); UNKNOWN whether the live database has it |
 | `board_lessons_extract.py` | EXISTS | `board_lessons_extract.py:129` (`build_candidate`), `:183` (`decide`), `:216` (`render_lessons_block`) |
 | Selection function | EXISTS | `board_lessons_extract.py:222-249` (`select_lessons`) |
 | `times_shown` recording | EXISTS | `board_lessons.py:183` (InMemory), `board_lessons.py:357-377` (Pg, `times_shown + 1`), called from `board_api.py:1856` |
 | `data-tables/ops/lessons_patch.py` | EXISTS | `data-tables/ops/lessons_patch.py:1-9` (docstring, anchors); not in git (CLAUDE.md) |
-| `claude-runner/docs/lessons.md` | EXISTS | `claude-runner/docs/lessons.md:198-203` (counters), `:235-264` ("Activation (operator)") |
+| `ahawr-runner/docs/lessons.md` | EXISTS | `ahawr-runner/docs/lessons.md:198-203` (counters), `:235-264` ("Activation (operator)") |
 | `lessons_enabled` flag | EXISTS | read `board_api.py:210-211`; gate `board_api.py:1840`; patch `lessons_patch.py` FLAG_MARK |
 | Mission Lessons panel | EXISTS | `board_mission.js:340` (call), `:772` (`renderLessonsSection`), `:739` (`lessonsStatsHtml`) |
 | Holdout switch in mission view | EXISTS | `board_mission.js:753-776` (checkbox `lessons_holdout_enabled`), `:832` (write) |
 | Task view lessons | EXISTS | `board_task.js:76-85` (`givenLessonsHtml`); route `board_api.py:1772-1781`. The 2026-10-27 close note (`data-tables/ops/_close_lessons_t013_2026_10_27.py`) said this route was missing; it is present now |
 | Stats split by lessons | EXISTS | `board_stats.py:546-560` (`lessons_stats`), route `board_api.py:1765-1770` |
 | Lesson scope stored as a field | MISSING | `LessonCandidate` has no scope field (`board_lessons.py:54-63`); `scope` is an input of `/lessons/select` only (`board_api.py:1851`) |
-| `lessons_same_workdir` flag | MISSING in code | documented at `claude-runner/docs/lessons.md:173` and `:196`; no match in `claude-runner/src` |
+| `lessons_same_workdir` flag | MISSING in code | documented at `ahawr-runner/docs/lessons.md:173` and `:196`; no match in `ahawr-runner/src` |
 | `lessons_holdout_every` setting | MISSING in code | `lessons.md:207` names it; `board_stats.py:514` says the period is fixed at 2 (shortcut) |
 | Lessons written for the workflow's Reviewer input | UNKNOWN | `lessons_patch.py` anchors the Worker input only (docstring lines 5-9) |
 
@@ -198,7 +198,7 @@ without DDL. A new column or table would be a database schema change, which CLAU
 - Whether `runner.sqlite` `sessions` and `runs` rows are ever removed: no `DELETE` in `store.py`.
 - Where the enforcement of the 1500–2000 token instruction target happens: not in the scope files.
 - The autocompact trigger formula (window − min(max_output, 20000) − 13000) is documented in
-  `claude-runner/README.md` only; the code that computes it is `config.py:261` and the constants it
+  `ahawr-runner/README.md` only; the code that computes it is `config.py:261` and the constants it
   uses were not traced further.
 
 ## Сводка по библиотеке уроков (русский)
@@ -208,39 +208,39 @@ without DDL. A new column or table would be a database schema change, which CLAU
 
 ### Что изменилось (file:line)
 
-- `claude-runner/src/claude_runner/board_lessons.py:24-25` - константы `LESSONS_PROMOTE_MIN_MISSIONS = 3` и ключ `lessons_promote_min_missions`.
+- `ahawr-runner/src/ahawr_runner/board_lessons.py:24-25` - константы `LESSONS_PROMOTE_MIN_MISSIONS = 3` и ключ `lessons_promote_min_missions`.
 - `board_lessons.py:58-66` - `promote_min_missions`: читает ключ из hermes_config, по умолчанию 3; bool, не целое и значение меньше 1 дают ошибку.
 - `board_lessons.py:69-82` - `promoted_scope`: правило повышения. Вне тестов не вызывается (в `board_lessons_extract.py` ссылок нет), поэтому `decide` ничего не повышает автоматически.
 - `board_lessons.py:103` - поле `Lesson.scope`: `mission` (по умолчанию) или `project`.
 - `board_lessons.py:203-208` (InMemory) и `:391-395` (Pg) - `promote`: ставит `scope = project` и проверяет `expected_version`.
 - `board_lessons.py:270` и `:336` - Pg-хранилище читает и фильтрует колонку `scope`.
-- `claude-runner/src/claude_runner/board_api.py:1810-1814` - `POST /lessons/{lesson_id}/promote`; заголовок `X-AHAWR-Dashboard: 1` проверяется, флаг `lessons_enabled` не нужен.
+- `ahawr-runner/src/ahawr_runner/board_api.py:1810-1814` - `POST /lessons/{lesson_id}/promote`; заголовок `X-AHAWR-Dashboard: 1` проверяется, флаг `lessons_enabled` не нужен.
 - `board_api.py:1862` - в `/lessons/select` параметр `scope` означает слова области задачи, а не поле урока.
-- `claude-runner/docs/board-lessons.sql` - таблица `board.lessons`; колонки `scope` в нём нет.
-- `claude-runner/docs/lessons_scope.sql` - новый файл, НЕ применён: добавляет колонку `scope`.
-- `claude-runner/tests/test_board_lessons.py:561-591` - тесты `promoted_scope` и `promote_min_missions`.
+- `ahawr-runner/docs/board-lessons.sql` - таблица `board.lessons`; колонки `scope` в нём нет.
+- `ahawr-runner/docs/lessons_scope.sql` - новый файл, НЕ применён: добавляет колонку `scope`.
+- `ahawr-runner/tests/test_board_lessons.py:561-591` - тесты `promoted_scope` и `promote_min_missions`.
 
 ### Флаги
 
-- `lessons_enabled` - OFF по умолчанию. Читается из строки hermes_config профиля `claude-code` (`board_api.py:210-211`). Шлюзы: запись `board_api.py:1831`, выборка `:1851`, исход `:1872`. Выключен - блок не добавляется и вызовов рантайма нет (`claude-runner/docs/lessons.md`, раздел "Flag").
-- `lessons_promote_min_missions` - сколько разных миссий нужно для автоматического повышения; по умолчанию 3 (`board_lessons.py:24`). Код его читает, но вызова в рабочем пути нет, значение сейчас ни на что не влияет. `claude-runner/docs/lessons.md:255` ещё пишет "not read by code yet": в части чтения это устарело.
+- `lessons_enabled` - OFF по умолчанию. Читается из строки hermes_config профиля `claude-code` (`board_api.py:210-211`). Шлюзы: запись `board_api.py:1831`, выборка `:1851`, исход `:1872`. Выключен - блок не добавляется и вызовов рантайма нет (`ahawr-runner/docs/lessons.md`, раздел "Flag").
+- `lessons_promote_min_missions` - сколько разных миссий нужно для автоматического повышения; по умолчанию 3 (`board_lessons.py:24`). Код его читает, но вызова в рабочем пути нет, значение сейчас ни на что не влияет. `ahawr-runner/docs/lessons.md:255` ещё пишет "not read by code yet": в части чтения это устарело.
 - `lessons_holdout_enabled` - настройка миссии, OFF; чередование задач проверяется в `board_stats.py:509-513`.
 
 ### Что ещё не измерено
 
 - Эффект уроков не измерен. Метрика `lessons_stats` (`board_stats.py:613`) сравнивает долю первых попыток, прошедших с первого раза, у задач с блоком и без него. Нужны несколько миссий с `lessons_enabled` включённым и `lessons_holdout_enabled` (чередование). Одна миссия ничего не доказывает.
-- Размер выборки в `claude-runner/docs/lessons.md` (раздел "Measurement plan") - расчёт, а не измерение: около 82 задач на вариант при доле 0.60 и 0.80.
+- Размер выборки в `ahawr-runner/docs/lessons.md` (раздел "Measurement plan") - расчёт, а не измерение: около 82 задач на вариант при доле 0.60 и 0.80.
 - Не проверено: автоматическое повышение (не подключено), колонка `scope` в живой базе, маршрут promote на живой доске, n8n-патч (`lessons_patch.py` читает только `lessons_enabled`).
 
 ### Шаги оператора
 
-1. Таблица: если `board.lessons` ещё нет, применить `claude-runner/docs/board-lessons.sql` после `board-schema.sql` (идемпотентен).
-2. Колонка `scope`: Pg-хранилище её читает (`board_lessons.py:270`), без неё запросы упадут. Файл `claude-runner/docs/lessons_scope.sql` сам помечен как предложение; это изменение схемы, решение за оператором (CLAUDE.md, "Ask first").
+1. Таблица: если `board.lessons` ещё нет, применить `ahawr-runner/docs/board-lessons.sql` после `board-schema.sql` (идемпотентен).
+2. Колонка `scope`: Pg-хранилище её читает (`board_lessons.py:270`), без неё запросы упадут. Файл `ahawr-runner/docs/lessons_scope.sql` сам помечен как предложение; это изменение схемы, решение за оператором (CLAUDE.md, "Ask first").
 3. n8n: вручную в интерфейсе n8n (не SQL) добавить boolean-колонку `lessons_enabled` в строку hermes профиля `claude-code` (таблица данных `data_table_user_1S21PsMqT0FpR7eD`). Колонку `lessons_promote_min_missions` добавлять не нужно: workflow её не читает.
 4. Патч workflow: `PYTHONIOENCODING=utf-8 python data-tables/ops/lessons_patch.py <workflow.json>`, затем `node data-tables/ops/js_syntax_check.js <patched.json>`; ожидается `bad 0`. Импорт в n8n делает оператор (шаги 4-6 в `lessons.md`, раздел "Activation (operator)").
 5. Включить: `lessons_enabled` = `true` в строке hermes. Выключить: `false`; сохранённые уроки остаются в таблице.
 
 ### Открытые пункты
 
-- Номер версии: предложение 0.12.0 в CHANGELOG совпадает с "Proposed 0.12.0"; `claude-runner/pyproject.toml` стоит на 1.0.0. Выбор номера за оператором.
+- Номер версии: предложение 0.12.0 в CHANGELOG совпадает с "Proposed 0.12.0"; `ahawr-runner/pyproject.toml` стоит на 1.0.0. Выбор номера за оператором.
 - Колонка для входа оператора в `promoted_scope` не решена (см. заголовок `lessons_scope.sql`).

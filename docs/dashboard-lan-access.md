@@ -10,7 +10,7 @@ hash, token, secret, key or certificate into a document, an issue or a chat.
 ## 1. Variables and safe defaults
 
 Defaults are taken from `docker-compose.yml` (service `ahawr-dashboard`, lines 329-339) and from
-`claude-runner/src/claude_runner/dashboard_auth_config.py`.
+`ahawr-runner/src/ahawr_runner/dashboard_auth_config.py`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -40,7 +40,7 @@ Startup refuses unsafe combinations (fail closed), with a message that names the
 ## 2. Password hash and session secret
 
 Hash the password with the console script `ahawr-dashboard-hash-password`
-(`claude-runner/pyproject.toml:29`). It reads one line from stdin, refuses an empty password, and prints the hash
+(`ahawr-runner/pyproject.toml:29`). It reads one line from stdin, refuses an empty password, and prints the hash
 (`dashboard_auth_crypto.py:171-183`). Use stdin, never a command-line argument, so the password does not reach the
 shell history:
 
@@ -194,7 +194,7 @@ the trusted certificate) and log in from the phone.
 ## 9. Manual phone check
 
 Run these on a real phone, on the LAN, after section 5. Automated checks in
-`claude-runner/tests/test_dashboard_mobile.py` cover the markup only, so the phone check is what proves the layout.
+`ahawr-runner/tests/test_dashboard_mobile.py` cover the markup only, so the phone check is what proves the layout.
 
 1. Width 360 to 430 px: the header, the run list and the tabs fit without sideways scrolling. Code and `pre`
    blocks scroll on their own (`test_dashboard_mobile_pre_and_code_scroll_horizontally`).

@@ -453,7 +453,7 @@ def test_usage_help_documents_all_options() -> None:
     ):
         assert option in text, f"missing {option} in help"
     # Every option has a description in the help text.
-    assert "claude-runner base URL" in text
+    assert "ahawr-runner base URL" in text
     assert "unix timestamp or ISO/relative" in text
     assert "retrieval log sqlite path" in text
     assert "one profile only" in text

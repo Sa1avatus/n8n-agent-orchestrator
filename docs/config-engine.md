@@ -136,11 +136,11 @@ written here. A patch that moves these to `engine_json` must keep those literals
 
 ## Runner, board and docs readers
 
-Scope: `claude-runner/src/claude_runner` (Python and JS, `codex_*.py` excluded and not read), `claude-runner/tests`,
-`docs/` (excluding `docs/cold-prefill`, which is run transcripts), `claude-runner/docs`, `README.md`, `.env.example`.
+Scope: `ahawr-runner/src/ahawr_runner` (Python and JS, `codex_*.py` excluded and not read), `ahawr-runner/tests`,
+`docs/` (excluding `docs/cold-prefill`, which is run transcripts), `ahawr-runner/docs`, `README.md`, `.env.example`.
 Whole-word counts (`grep -rwo`), read at the time of this inventory:
 
-| Column | src | tests | docs (non-cold, excluding this file) | claude-runner/docs |
+| Column | src | tests | docs (non-cold, excluding this file) | ahawr-runner/docs |
 |---|---|---|---|---|
 | max_attempts_per_task | 17 | 18 | 12 | 15 |
 | retry_delays_json | 1 | 0 | 1 | 4 |
@@ -150,11 +150,11 @@ Whole-word counts (`grep -rwo`), read at the time of this inventory:
 
 Readers of the column value (not names that only look alike; see the note after the list):
 
-- `max_attempts_per_task`: `claude-runner/src/claude_runner/board_stats.py:185-190` (`_max_attempts`, reads
+- `max_attempts_per_task`: `ahawr-runner/src/ahawr_runner/board_stats.py:185-190` (`_max_attempts`, reads
   `board.hermes_config()`), which feeds the stats at `board_stats.py:291` and `:471`.
-- `max_attempts_per_task`: `claude-runner/src/claude_runner/board_api.py:498` (`_DEFAULT_KEYS`, the placeholder keys)
+- `max_attempts_per_task`: `ahawr-runner/src/ahawr_runner/board_api.py:498` (`_DEFAULT_KEYS`, the placeholder keys)
   read by `_config_defaults` at `board_api.py:511-520` (`store.hermes_config()` at `:513`).
-- `max_attempts_per_task`, `max_tasks`, `retry_delays`: key lists in `claude-runner/src/claude_runner/board_mission.js:58`
+- `max_attempts_per_task`, `max_tasks`, `retry_delays`: key lists in `ahawr-runner/src/ahawr_runner/board_mission.js:58`
   and `board_plan.py:92`. UNKNOWN: how each list is used; not traced.
 - `max_attempts_per_task`: `board_mission.js:198` maps the key `attempts_per_task` to it. UNKNOWN: the callers of that map.
 - Generic readers: `board_pg.py:529-538` (`SELECT * FROM` the hermes table) returns the whole row, so every column above
@@ -167,7 +167,7 @@ Readers of the column value (not names that only look alike; see the note after 
   matches are other names: `dashboard.py:72, 88, 122, 161, 239, 257` (`DashboardSettings.runner_url`, from the env
   `DASHBOARD_RUNNER_URL`); `board_ready.py:132-149, 382-393` (a local, from `ANTHROPIC_BASE_URL` or `CLAUDE_RUNNER_URL`);
   `qa_worker.py:101-117` (`_runner_url()`, from the env). `board_ready.py:135-149` checks the runner URL it is given.
-- `telegram_chat_id`: no src reader. Tests only: `claude-runner/tests/test_board_api_part2.py:124` (a fixture row) and the
+- `telegram_chat_id`: no src reader. Tests only: `ahawr-runner/tests/test_board_api_part2.py:124` (a fixture row) and the
   assertion at `:127` that the value is not returned by `_config_defaults`.
 
 Note: `board_stats.py:291, 471`, `board_mission.js:401`, `board_tasks.js:92`, `board_task.js:107` and `dashboard.py` use
@@ -175,15 +175,15 @@ the same words for their own fields; they are listed so a search does not count 
 
 ### Fixtures and tests containing the columns (grep only)
 
-- `claude-runner/tests/test_board_api_part2.py:124, 127` (`telegram_chat_id`, `runner_url`, `max_attempts_per_task`)
-- `claude-runner/tests/test_board_pg.py:434, 438` (`max_attempts_per_task`, a row fixture)
-- `claude-runner/tests/test_mission_stats.py:98` (writes `max_attempts_per_task` through `update_hermes_config`)
-- `claude-runner/tests/test_board_stats.py:464-483`, `test_board.py:889, 1008`, `test_board_stats.py` (stats and queue overrides)
-- `claude-runner/tests/fixtures/board_part2/task_stats.json:25`, `claude-runner/tests/board_mission.test.js:208`,
-  `claude-runner/tests/e2e/test_board_views2_e2e.py:59` (stats fixtures, not the hermes row)
-- `claude-runner/tests/test_dashboard.py:313, 869-1034` and `test_board_ready.py:800-802` (`runner_url` as a
+- `ahawr-runner/tests/test_board_api_part2.py:124, 127` (`telegram_chat_id`, `runner_url`, `max_attempts_per_task`)
+- `ahawr-runner/tests/test_board_pg.py:434, 438` (`max_attempts_per_task`, a row fixture)
+- `ahawr-runner/tests/test_mission_stats.py:98` (writes `max_attempts_per_task` through `update_hermes_config`)
+- `ahawr-runner/tests/test_board_stats.py:464-483`, `test_board.py:889, 1008`, `test_board_stats.py` (stats and queue overrides)
+- `ahawr-runner/tests/fixtures/board_part2/task_stats.json:25`, `ahawr-runner/tests/board_mission.test.js:208`,
+  `ahawr-runner/tests/e2e/test_board_views2_e2e.py:59` (stats fixtures, not the hermes row)
+- `ahawr-runner/tests/test_dashboard.py:313, 869-1034` and `test_board_ready.py:800-802` (`runner_url` as a
   `DashboardSettings` field, not the column)
-- `claude-runner/tests/test_qa_workflow_patch.py:416`, `test_report_pack_patch.py:70`, `test_roles_config_patch.py:411`
+- `ahawr-runner/tests/test_qa_workflow_patch.py:416`, `test_report_pack_patch.py:70`, `test_roles_config_patch.py:411`
   (patch fixtures for the `runner_url` anchor)
 
 ### Docs naming the columns (grep only)
@@ -193,17 +193,17 @@ the same words for their own fields; they are listed so a search does not count 
 - `docs/guards.md:106`, `docs/config-columns-plan.md:25, 28, 71-72, 104, 114`, `docs/review-calibration.md:11, 38, 124`,
   `docs/telegram-bot.md:34, 64, 90, 230, 256`, `docs/retrieval/INTEGRATION.md:65`,
   `docs/mission-reports/mission-report-T013-ru.md:43, 70`
-- `claude-runner/docs/board-data-model.md:446, 456-457, 465-466, 482-493`, `board-ops-notes.md:431-436`,
+- `ahawr-runner/docs/board-data-model.md:446, 456-457, 465-466, 482-493`, `board-ops-notes.md:431-436`,
   `board-part2-notes.md:99`, `board-design.md:258`, `lessons.md:60, 72, 211`, `qa-acceptance.md:60, 162, 177, 246-247`,
   `roles-config.md:135, 206`, `report-pack.md:78`, `guards-notes.md:200, 374, 383, 717`
 
 ## Launch settings save path
 
-Entry: the launch window in `claude-runner/src/claude_runner/board_edit_win.js` (`openWin` `:836`, `buildWindow` `:847`).
+Entry: the launch window in `ahawr-runner/src/ahawr_runner/board_edit_win.js` (`openWin` `:836`, `buildWindow` `:847`).
 Its Save is `onNext` (`:815-835`), which runs in order: `saveQa()` (`:375-378`), `savePolls()` (`:381-388`),
 `saveFeatures()` (`:512-516`), `saveThinking()` (`:546`), `saveRetrieval()` (`:580`), then `save().doSave(box)`.
 
-Routes and handlers (`claude-runner/src/claude_runner/board_api.py`):
+Routes and handlers (`ahawr-runner/src/ahawr_runner/board_api.py`):
 
 - `GET/PUT /api/board/roles`: `get_roles` `:1570-1573`, `put_roles` `:1575-1582` (global `roles_json`; no JS caller).
 - `GET/PUT /api/board/missions/{mission_id}/roles`: `put_mission_roles` `:1595-1609` (per-mission `roles_json` in
@@ -218,7 +218,7 @@ Shared checks in `board_api.py`:
 - Validation: `_roles_text` `:134-146` (`roles_config.validate_roles_json`, providers from `registry.profiles()`);
   `put_features` `:1622-1624` (`features_config.validate_features_json`); `_features_text` `:212` (not read in full).
 - Version check: each PUT passes `body.get("expected_version")` to the store. `update_hermes_config` in
-  `claude-runner/src/claude_runner/board_pg.py:797-811` reads `updatedAt` with `FOR UPDATE` and raises `_conflict` on a
+  `ahawr-runner/src/ahawr_runner/board_pg.py:797-811` reads `updatedAt` with `FOR UPDATE` and raises `_conflict` on a
   mismatch. `ConflictError` (`board.py:48-54`) is mapped to HTTP 409 (`board_api.py:424`).
   UNKNOWN: the in-memory `update_hermes_config` (`board.py:837`) and `set_mission_config`: not read.
 
@@ -263,13 +263,13 @@ Functions to reuse for a save path in this window: `_require_dashboard_header`, 
 Target: the five loop and infrastructure columns move to `engine_json` (`docs/config-columns-plan.md`, section 3). Line
 numbers are the 1-based lines of the Constants `jsCode` in `scratchpad/live_workflow_export.json` (node id
 `3c50a3dc-f6b1-48a3-a17f-6b5e1d522b74`), not of the JSON file. `max_tasks` is NOT moved: it lives in `features_json`
-(`claude-runner/docs/features-config.md`, flattened by `flatten()`).
+(`ahawr-runner/docs/features-config.md`, flattened by `flatten()`).
 
 | Legacy column | engine_json key | Type | Validation (Constants code) | Default today (file:line) |
 |---|---|---|---|---|
-| `max_attempts_per_task` | `max_attempts_per_task` | number (integer intended) | `num(..., 1)`: finite and >= 1, otherwise throws (line 66) | None in code: a missing or non-numeric value throws. Live row value UNKNOWN; `docs/config-columns-plan.md:25` records 5. Runner side: no default, `_max_attempts` returns `None` when absent (`claude-runner/src/claude_runner/board_stats.py:190-193`) |
+| `max_attempts_per_task` | `max_attempts_per_task` | number (integer intended) | `num(..., 1)`: finite and >= 1, otherwise throws (line 66) | None in code: a missing or non-numeric value throws. Live row value UNKNOWN; `docs/config-columns-plan.md:25` records 5. Runner side: no default, `_max_attempts` returns `None` when absent (`ahawr-runner/src/ahawr_runner/board_stats.py:190-193`) |
 | `retry_delays_json` | `retry_delays` | array of numbers >= 0 | Parsed from the JSON string (see below); each element `Number(v)` must be finite and >= 0 (lines 7-12) | `[15, 30, 60, 120, 300]` (line 6, `let retryDelays`) |
-| `runner_url` | `runner_url` | string, base URL | Trimmed, trailing `/` removed (line 40); no scheme or format check | `http://claude-runner:8700` (line 40). Same value as a runner-side constant, `claude-runner/src/claude_runner/qa_worker.py:56` |
+| `runner_url` | `runner_url` | string, base URL | Trimmed, trailing `/` removed (line 40); no scheme or format check | `http://ahawr-runner:8700` (line 40). Same value as a runner-side constant, `ahawr-runner/src/ahawr_runner/qa_worker.py:56` |
 | `run_manager_workflow_id` | `run_manager_workflow_id` | string (n8n workflow id) | Trimmed; empty falls back to the default (line 43); no format check | `nhjwX1G7FiVTO2Ah` (line 43) |
 | `telegram_chat_id` | `telegram_chat_id` | string (chat id) | Trimmed (line 76); no check | None: an absent value is the empty string (line 76). The value is not recorded here |
 
@@ -311,19 +311,19 @@ Facts that are UNKNOWN:
 
 ### Что изменено (file:line)
 
-- `claude-runner/src/claude_runner/board_engine.py` (новый): значения по умолчанию `:10-15`, колонки `:17-24`,
+- `ahawr-runner/src/ahawr_runner/board_engine.py` (новый): значения по умолчанию `:10-15`, колонки `:17-24`,
   `parse_engine` `:93`, `validate_engine_json` `:119`, `flatten` `:124`.
-- `claude-runner/src/claude_runner/board_engine.js` (новый): то же ядро для браузера и для `Constants`
+- `ahawr-runner/src/ahawr_runner/board_engine.js` (новый): то же ядро для браузера и для `Constants`
   (`parseEngine` `:84`, `flatten` в конце ядра, экспорт `BoardEngine`).
-- `claude-runner/src/claude_runner/board_api.py:1671-1687`: `GET /api/board/engine` и `PUT /api/board/engine`
+- `ahawr-runner/src/ahawr_runner/board_api.py:1671-1687`: `GET /api/board/engine` и `PUT /api/board/engine`
   (заголовок `X-AHAWR-Dashboard`, проверка текста до сохранения, `expected_version`).
-- `claude-runner/src/claude_runner/board_stats.py:25`, `:185-191`: `configured_value` читает значения через `flatten`.
-- `claude-runner/src/claude_runner/board_edit_win.js`: ключи `:36-37`, блок «Настройки движка» `:598-` (`makeEngineFields`
+- `ahawr-runner/src/ahawr_runner/board_stats.py:25`, `:185-191`: `configured_value` читает значения через `flatten`.
+- `ahawr-runner/src/ahawr_runner/board_edit_win.js`: ключи `:36-37`, блок «Настройки движка» `:598-` (`makeEngineFields`
   `:619`, `fillEngine` `:643`, `engineSavePlan` `:705`, `saveEngine` `:722`). `telegram_chat_id` в окне только для чтения.
   В этом файле есть и правки других задач, поэтому весь `git diff` файла больше одного блока.
 - Подписи: `board_i18n_en.json:59-75`, `board_i18n_ru.json:59-75`, `board_i18n.js:113-129` (ключи `ew.eng.*`, внутри
   `BUNDLED_EN` `:19-677`). `board.html:53` загружает `board_engine.js`.
-- Тесты: `claude-runner/tests/test_board_engine.py`, `test_propose_engine_json.py`, `board_engine.test.js`,
+- Тесты: `ahawr-runner/tests/test_board_engine.py`, `test_propose_engine_json.py`, `board_engine.test.js`,
   `engine_cases.json` (общие случаи для Python и JS), `board_edit_win_features.test.js:371-` (раздел engine).
 - Операторские скрипты, не в git: `data-tables/ops/propose_engine_json.py` (сухой прогон),
   `data-tables/ops/engine_config_patch.py` (патч `Constants`), `data-tables/ops/test_engine_config_patch.py`.
@@ -337,7 +337,7 @@ CHANGELOG «Step: engine settings». Сверьте с заметками зад
   `board_engine.js` (`parseEngine` `:84`, `validateEngineJson` `:113`, `flatten` после них).
 - T002A, маршруты: сделано. `board_api.py:1671-1687`, `GET` и `PUT /api/board/engine`, с заголовком и `expected_version`.
 - T003A, `error_rules` (правила ошибок для Evaluate Status и Retry Controller, таблица правил в окне): НЕ РЕАЛИЗОВАНО.
-  `grep -rn error_rules claude-runner/src data-tables/ops docs` даёт одно совпадение: `data-tables/ops/transient_400_patch.py:8`,
+  `grep -rn error_rules ahawr-runner/src data-tables/ops docs` даёт одно совпадение: `data-tables/ops/transient_400_patch.py:8`,
   строка docstring «Interim step: engine_json.error_rules replaces the sets». Чтения ключа нет ни в `board_engine.py`,
   ни в `board_engine.js`, ни в `board_api.py`, ни в `board_edit_win.js`; таблицы правил в окне нет (слово «rule» в
   `board_edit_win.js` встречается только в разделе правил миссии `:24`, `:765-767`). Остаются правила по умолчанию из
@@ -389,19 +389,19 @@ CHANGELOG «Step: engine settings». Сверьте с заметками зад
 
 ### Версия
 
-Миссия просит версию `0.12.x`. `claude-runner/pyproject.toml:7` и `claude-runner/src/claude_runner/api.py:308` уже стоят на
+Миссия просит версию `0.12.x`. `ahawr-runner/pyproject.toml:7` и `ahawr-runner/src/ahawr_runner/api.py:308` уже стоят на
 `1.0.0`, поэтому `0.12.x` ниже текущей версии. Выбор версии за оператором; в CHANGELOG для этого шага записано «no version bump».
 
 ### Конфликт с миссией
 
-Правила миссии 1 и критерии приёмки описывают функцию уроков (lessons): `claude-runner/src/claude_runner/board_lessons.py`,
-`board_lessons_extract.py`, `data-tables/ops/lessons_patch.py`, `claude-runner/docs/lessons.md`. Этот план `engine_json` её не
+Правила миссии 1 и критерии приёмки описывают функцию уроков (lessons): `ahawr-runner/src/ahawr_runner/board_lessons.py`,
+`board_lessons_extract.py`, `data-tables/ops/lessons_patch.py`, `ahawr-runner/docs/lessons.md`. Этот план `engine_json` её не
 реализовал и не трогал. Текст правил миссии я не сверял дословно: он не передан в задаче.
 
 ## Error rules
 
 Read-only inventory. No code was changed by this step. The rule list is a plan: nothing in the code reads `error_rules` yet
-(`grep -rn error_rules claude-runner/src data-tables/ops docs` finds only the docstring at `transient_400_patch.py:8`
+(`grep -rn error_rules ahawr-runner/src data-tables/ops docs` finds only the docstring at `transient_400_patch.py:8`
 and the notes in this file).
 
 Sources: `scratchpad/live_run_manager_export.json` (Run Manager, a list with one workflow; line numbers are 1-based lines of
@@ -456,7 +456,7 @@ Regexes (exact text, applied to the lower-case error text):
 
 Retry counts and delays in the sources:
 - Retry limit (`max_retries`): default 3 in Normalize Request (line 24) and Retry Controller (line 2); roles defaults worker 3,
-  architect 5, reviewer 5 (`claude-runner/src/claude_runner/roles_config.py:36-38`, `board_roles.js:28-30`).
+  architect 5, reviewer 5 (`ahawr-runner/src/ahawr_runner/roles_config.py:36-38`, `board_roles.js:28-30`).
 - Minimum 0 (`board_roles.js:25`, `roles_config.py:33`). No upper bound is enforced anywhere in the sources.
 - Delays: `[15, 30, 60, 120, 300]` (Normalize Request line 44, Retry Controller line 3). Unit: UNKNOWN.
 
@@ -528,7 +528,7 @@ Result: the RECOMMENDED list is not a superset of the LEGACY list. Shipping it a
 Раздел для оператора. Ничего из описанного здесь в этой задаче не выполнялось: ни запусков, ни вызовов провайдеров, ни импорта в n8n.
 
 Что есть в коде и данных:
-- `claude-runner/src/claude_runner/board_engine.py`: проверка списка, `LEGACY_ERROR_RULES` (поведение как сейчас) и
+- `ahawr-runner/src/ahawr_runner/board_engine.py`: проверка списка, `LEGACY_ERROR_RULES` (поведение как сейчас) и
   `RECOMMENDED_ERROR_RULES` (предустановка из раздела «RECOMMENDED preset»).
 - `data-tables/ops/error_rules_patch.py` (не в git): правит экспорт Run Manager.
 - Окно настроек движка (`board_edit_win.js`): таблица правил и кнопка «Load recommended».

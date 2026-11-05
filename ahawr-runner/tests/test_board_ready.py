@@ -1,0 +1,990 @@
+"""Readiness checks, start guard, rollback and mission creation
+(ahawr_runner/board_ready.py): each check alone, the start guard,
+the optimistic rollback against a drift, and the atomic mission creation."""
+
+from __future__ import annotations
+
+import asyncio
+import http.server
+import json
+import subprocess
+import threading
+import time
+from typing import Any
+
+import pytest
+
+from ahawr_runner import board_ready
+from ahawr_runner.board import ConflictError, InMemoryBoardStore, LiveState, Mission, QueueEntry
+from ahawr_runner.board_ready import (
+    MissionIdError,
+    check_live_state_present,
+    check_llama_model,
+    check_not_running,
+    check_plan_present,
+    check_preflight_fresh,
+    check_qa_ready,
+    check_required_files,
+    check_runner_health,
+    check_working_folder,
+    collect_readiness,
+    create_mission,
+    rollback,
+    save_template,
+    start_guard,
+)
+
+
+@pytest.fixture
+def board() -> InMemoryBoardStore:
+    """A fresh in-memory store (no seed: put rows in per test)."""
+    return InMemoryBoardStore()
+
+
+def seed(board: InMemoryBoardStore) -> None:
+    """The store updates rows but has no create: put the mission row in directly."""
+    board._missions["m1"] = Mission(
+        mission_id="m1", state_namespace="sk1", name="Source",
+        working_directory="/tmp/x", rules=["r1"],
+        acceptance_criteria=["c1"], retrieval_corpora=["corpus"],
+    )
+    board.set_mission_config(
+        "m1", {"required_files": ["/tmp/x/a.md"], "hints": "HINTS"}, None
+    )
+    board._queue["m1"] = QueueEntry(position=0, mission_id="m1", enabled=True)
+    board._queue_order.append("m1")
+
+
+class _LocalServer:
+    """One local HTTP server for the health checks: status, body, optional delay.
+
+    Used by the characterization tests of the broad ``except Exception`` blocks
+    (ruff BLE001 at board_ready.py lines 144, 164, 192): ``delay_seconds`` makes
+    the client time out, which raises inside the try body.
+    """
+
+    def __init__(self, status: int = 200, body: bytes = b"", delay_seconds: float = 0.0) -> None:
+        self.status = status
+        self.body = body
+        self.delay_seconds = delay_seconds
+
+    def __enter__(self) -> str:
+        status, body, delay = self.status, self.body, self.delay_seconds
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if delay:
+                    time.sleep(delay)
+                self.send_response(status)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args: Any) -> None:
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self._server = server
+        return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def __exit__(self, *args: Any) -> None:
+        self._server.shutdown()
+
+
+# -------------------------------------------------------------------------- checks
+
+
+class TestWorkingFolder:
+    def test_missing_folder_is_an_error(self):
+        item = check_working_folder("/no/such/dir")
+        assert item == {"check": "working_folder", "status": "error",
+                       "reason": "working folder '/no/such/dir' does not exist"}
+
+    def test_present_folder_is_ok(self):
+        item = check_working_folder("/tmp")
+        assert item["status"] == "ok"
+        assert item["reason"] == "/tmp"
+
+    def test_unset_folder_is_a_warning(self):
+        assert check_working_folder(None) == {
+            "check": "working_folder", "status": "warning",
+            "reason": "working folder is not set",
+        }
+
+    def test_host_path_is_a_warning(self):
+        item = check_working_folder("/host/only/path", host_visible=False)
+        assert item["status"] == "warning"
+        assert item["reason"] == "checked on the host"
+
+
+class TestRequiredFiles:
+    def test_no_files_is_ok(self):
+        assert check_required_files(None) == {
+            "check": "required_files", "status": "ok",
+            "reason": "no required files declared",
+        }
+
+    def test_missing_files_are_an_error(self):
+        item = check_required_files(["/no/such/a.md", "/tmp/x/a.md"])
+        assert item["status"] == "error"
+        assert "/no/such/a.md" in item["reason"]
+        assert item["files"] == ["/no/such/a.md", "/tmp/x/a.md"]
+
+    def test_host_files_are_a_warning(self):
+        item = check_required_files(["/host/file.md"], host_visible=False)
+        assert item["status"] == "warning"
+        assert item["reason"] == "checked on the host"
+
+
+class TestRunnerHealth:
+    def test_missing_url_is_a_warning(self):
+        item = asyncio.run(check_runner_health(""))
+        assert item == {"check": "runner", "status": "warning",
+                       "reason": "runner URL is not set"}
+
+    def test_unreachable_url_is_an_error(self):
+        item = asyncio.run(check_runner_health("http://127.0.0.1:59999"))
+        assert item["status"] == "error"
+        assert "runner unreachable" in item["reason"]
+
+    def test_health_not_ok_is_an_error(self):
+        import http.server
+        import json as _json
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = _json.dumps({"status": "degraded"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}"
+            item = asyncio.run(check_runner_health(url))
+        finally:
+            server.shutdown()
+        assert item["status"] == "error"
+        assert "not 'ok'" in item["reason"]
+
+    def test_healthy_runner_is_ok(self):
+        import http.server
+        import json as _json
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = _json.dumps({"status": "ok"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}"
+            item = asyncio.run(check_runner_health(url))
+        finally:
+            server.shutdown()
+        assert item["status"] == "ok"
+        assert "is up" in item["reason"]
+
+    # BLE001 board_ready.py:144 -- the broad except catches the exceptions the
+    # try body really raises (httpx ConnectError/ReadTimeout, SourceError from
+    # _check, JSONDecodeError from response.json()); the fallback is pinned here.
+    def test_read_timeout_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _LocalServer(delay_seconds=1.0) as url:
+            item = asyncio.run(check_runner_health(url, timeout=0.3))
+        # httpx ReadTimeout has no message: the fallback text ends empty.
+        assert item == {"check": "runner", "status": "error",
+                        "reason": "runner unreachable: "}
+        assert not caplog.records
+
+    def test_http_500_falls_back_to_unreachable_not_not_ok(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # _check raises SourceError for a 500, so the broad except answers it as
+        # "unreachable", never with the "health is not 'ok'" message.
+        with _LocalServer(status=500, body=b"boom") as url:
+            item = asyncio.run(check_runner_health(url))
+        assert item == {"check": "runner", "status": "error",
+                       "reason": "runner unreachable: ahawr-runner: HTTP 500 boom"}
+        assert not caplog.records
+
+    def test_bad_json_body_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _LocalServer(body=b"not json") as url:
+            item = asyncio.run(check_runner_health(url))
+        assert item["status"] == "error"
+        assert item["reason"].startswith("runner unreachable: Expecting value")
+        assert not caplog.records
+
+
+class TestLitellmHealth:
+    def test_missing_url_is_a_warning(self):
+        from ahawr_runner.board_ready import check_litellm_health
+
+        item = asyncio.run(check_litellm_health(""))
+        assert item == {"check": "litellm", "status": "warning",
+                       "reason": "litellm URL is not set"}
+
+    def test_unreachable_url_is_an_error(self):
+        from ahawr_runner.board_ready import check_litellm_health
+
+        item = asyncio.run(check_litellm_health("http://127.0.0.1:59999"))
+        assert item["status"] == "error"
+        assert "litellm unreachable" in item["reason"]
+
+    def test_liveliness_not_ok_is_an_error(self):
+        import http.server
+        import threading
+
+        from ahawr_runner.board_ready import check_litellm_health
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(503)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}"
+            item = asyncio.run(check_litellm_health(url))
+        finally:
+            server.shutdown()
+        assert item["status"] == "error"
+        assert "HTTP 503" in item["reason"]
+
+    # BLE001 board_ready.py:164 -- the only exception that can reach the broad
+    # except in the try body is an httpx transport error (ConnectError,
+    # ReadTimeout): the status code is checked outside the try.
+    def test_liveliness_200_is_ok(self, caplog: pytest.LogCaptureFixture) -> None:
+        from ahawr_runner.board_ready import check_litellm_health
+
+        with _LocalServer(body=b'{"status": "ok"}') as url:
+            item = asyncio.run(check_litellm_health(url))
+        assert item == {"check": "litellm", "status": "ok",
+                       "reason": f"litellm {url} is up"}
+        assert not caplog.records
+
+    def test_read_timeout_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from ahawr_runner.board_ready import check_litellm_health
+
+        with _LocalServer(delay_seconds=1.0) as url:
+            item = asyncio.run(check_litellm_health(url, timeout=0.3))
+        # httpx ReadTimeout has no message: the fallback text ends empty.
+        assert item == {"check": "litellm", "status": "error",
+                        "reason": "litellm unreachable: "}
+        assert not caplog.records
+
+
+class TestLlamaModel:
+    def test_missing_url_is_a_warning(self):
+        item = check_llama_model("", "k", "model")
+        assert item == {"check": "llama_model", "status": "warning",
+                       "reason": "llama probe URL is not set"}
+
+    def test_missing_model_is_a_warning(self):
+        item = check_llama_model("http://x", "k", "")
+        assert item == {"check": "llama_model", "status": "warning",
+                       "reason": "worker_model is not set"}
+
+    def test_unreachable_server_is_an_error(self):
+        item = check_llama_model("http://127.0.0.1:59999", "k", "model")
+        assert item["status"] == "error"
+        assert "llama-server unreachable" in item["reason"]
+
+    def test_model_not_listed_is_an_error(self):
+        import http.server
+        import json as _json
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = _json.dumps({"data": [{"id": "other-model"}]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}"
+            item = check_llama_model(url, "", "model")
+        finally:
+            server.shutdown()
+        assert item["status"] == "error"
+        assert "not in llama-server's /v1/models" in item["reason"]
+
+    def test_listed_model_with_ctx_size_is_ok(self):
+        import http.server
+        import json as _json
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                body = _json.dumps({"data": [{
+                    "id": "model",
+                    "status": {"args": ["--ctx-size", "32768", "--parallel", "2"]},
+                }]}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}"
+            item = check_llama_model(url, "", "model")
+        finally:
+            server.shutdown()
+        assert item["status"] == "ok"
+        assert item["reason"] == "model 'model' is up (context 16384 tokens)"
+
+    # BLE001 board_ready.py:192 -- the try body can raise urllib.error.URLError
+    # (existing test), HTTPError from urlopen, a timeout, and JSONDecodeError
+    # from _json.loads; each lands in the broad except as the same fallback.
+    def test_http_404_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _LocalServer(status=404, body=b"no models") as url:
+            item = check_llama_model(url, "", "model")
+        assert item == {"check": "llama_model", "status": "error",
+                       "reason": "llama-server unreachable: HTTP Error 404: Not Found"}
+        assert not caplog.records
+
+    def test_bad_json_body_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _LocalServer(body=b"not json") as url:
+            item = check_llama_model(url, "", "model")
+        assert item["status"] == "error"
+        assert item["reason"].startswith("llama-server unreachable: Expecting value")
+        assert not caplog.records
+
+    def test_read_timeout_falls_back_to_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _LocalServer(delay_seconds=1.0) as url:
+            item = check_llama_model(url, "", "model", timeout=0.3)
+        assert item["status"] == "error"
+        assert "llama-server unreachable" in item["reason"]
+        assert not caplog.records
+
+
+class TestPlanAndLiveState:
+    def test_plan_check(self):
+        assert check_plan_present(None) == {
+            "check": "plan", "status": "error",
+            "reason": "the mission has no plan in the Live State row",
+        }
+        # a plan with no tasks is an error too
+        item = check_plan_present(LiveState(state_key="sk", plan={"tasks": []}))
+        assert item["status"] == "error"
+        assert "no tasks" in item["reason"]
+        live = LiveState(state_key="sk", plan={"tasks": [{"id": "T1"}]})
+        item = check_plan_present(live)
+        assert item["status"] == "ok"
+        assert item["reason"] == "plan with 1 task(s)"
+
+    def test_live_state_check(self):
+        assert check_live_state_present(None) == {
+            "check": "live_state", "status": "error",
+            "reason": "the mission has no Live State row",
+        }
+        live = LiveState(state_key="sk", status="active")
+        assert check_live_state_present(live)["status"] == "ok"
+
+
+class TestNotRunning:
+    def test_running_mission_is_an_error(self, board: InMemoryBoardStore):
+        board._missions["m1"] = Mission(mission_id="m1", state_namespace="sk1")
+        board.upsert_live_state("sk1", None, status="active")
+        item = check_not_running(board, "m1")
+        assert item["status"] == "error"
+        assert "is running" in item["reason"]
+
+    def test_idle_mission_is_ok(self, board: InMemoryBoardStore):
+        board._missions["m1"] = Mission(mission_id="m1", state_namespace="sk1")
+        board.upsert_live_state("sk1", None, status="queued")
+        assert check_not_running(board, "m1")["status"] == "ok"
+
+
+class TestPreflight:
+    def test_no_preflight_is_an_error(self, board: InMemoryBoardStore):
+        item = check_preflight_fresh(board, "m1")
+        assert item["status"] == "error"
+        assert "no preflight recorded" in item["reason"]
+
+    def test_fresh_preflight_is_ok(self, board: InMemoryBoardStore):
+        board.record_preflight("m1", [{"check": "x"}])
+        item = check_preflight_fresh(board, "m1")
+        assert item["status"] == "ok"
+        assert item["checked_at"]
+
+
+    def test_stale_preflight_is_a_warning(self, board: InMemoryBoardStore):
+        board.record_preflight("m1", [{"check": "x"}])
+        item = check_preflight_fresh(board, "m1", max_age_seconds=-1)
+        assert item["status"] == "warning"
+        assert "s old" in item["reason"]
+
+
+# -------------------------------------------------------------------------- guard
+
+
+class TestStartGuard:
+    def test_errors_block_the_start(self):
+        summary = {"errors": [{"check": "runner", "status": "error",
+                              "reason": "down"}]}
+        guard = start_guard(summary)
+        assert guard["allowed"] is False
+        assert guard["blocked_by"] == summary["errors"]
+        assert "runner" in guard["reason"]
+
+    def test_confirm_overrides_the_block(self):
+        summary = {"errors": [{"check": "runner", "status": "error", "reason": "down"}]}
+        guard = start_guard(summary, confirmed=True)
+        assert guard["allowed"] is True
+        assert guard["blocked_by"] == []
+        assert guard["confirmed"] is True
+
+    def test_no_errors_allow_the_start(self):
+        summary = {"errors": []}
+        guard = start_guard(summary)
+        assert guard["allowed"] is True
+
+
+# -------------------------------------------------------------------------- rollback
+
+
+class TestRollback:
+    def test_backup_row_is_saved_before_the_change(self, board: InMemoryBoardStore):
+        seed(board)
+        board._missions["m1"].objective = ""
+        before = board.get_mission("m1").updated_at
+        board.update_mission("m1", before, objective="new")
+        entry = next(e for e in board.changelog()
+                    if e.action == "mission update" and e.mission_id == "m1")
+        # the changelog row keeps the full row exactly as it was before the
+        # change (the backup row)
+        assert entry.before_json["objective"] == ""
+        assert entry.before_json["name"] == "Source"
+        assert entry.before_json["working_directory"] == "/tmp/x"
+        assert entry.before_json["updated_at"] == before
+        # and it differs from the row after the change
+        assert entry.after_json["objective"] == "new"
+
+    def test_rollback_restores_the_previous_value(self, board: InMemoryBoardStore):
+        seed(board)
+        board._missions["m1"].objective = ""
+        before = board.get_mission("m1").updated_at
+        board.update_mission("m1", before, objective="new")
+        entry_id = next(e.id for e in board.changelog()
+                        if e.action == "mission update" and e.mission_id == "m1")
+        result = rollback(board, entry_id)
+        assert result["restored"]["objective"] == ""
+        assert board.get_mission("m1").objective == ""
+
+    def test_rollback_raises_when_the_row_changed_after_the_entry(
+        self, board: InMemoryBoardStore
+    ):
+        seed(board)
+        before = board.get_mission("m1").updated_at
+        board.update_mission("m1", before, objective="new")
+        entry_id = next(e.id for e in board.changelog()
+                        if e.action == "mission update" and e.mission_id == "m1")
+        # a second change after the entry: the entry's after_json no longer
+        # matches the row, so the rollback is refused
+        before2 = board.get_mission("m1").updated_at
+        board.update_mission("m1", before2, objective="newer")
+        with pytest.raises(ConflictError):
+            rollback(board, entry_id)
+
+    def test_rollback_of_a_live_state_row(self, board: InMemoryBoardStore):
+        board.upsert_live_state("sk1", None, status="queued",
+                              plan={"tasks": [{"id": "T1"}]})
+        before = board.get_live_state("sk1").updated_at
+        board.upsert_live_state("sk1", before, status="active")
+        entry_id = next(
+            e.id for e in board.changelog()
+            if e.action == "live state upsert" and e.mission_id is None
+            and e.task_key is None
+        )
+        # the live-state audit keeps the mission_id as the state key in the
+        # in-memory store; address it by the state key
+        next(e for e in board.changelog() if e.id == entry_id)
+        result = rollback(board, entry_id)
+        assert result["restored"]["status"] == "queued"
+        assert board.get_live_state("sk1").status == "queued"
+
+
+# -------------------------------------------------------------------------- create
+
+
+class TestCreateMission:
+    def test_create_copies_config_rules_criteria_hints(self, board: InMemoryBoardStore):
+        seed(board)
+        result = create_mission(
+            board, "m2", source_mission_id="m1", objective="do it",
+            plan={"tasks": [
+                {"id": "T1", "objective": "one", "status": "active", "attempt": 1}
+            ]},
+            who="me",
+        )
+        assert result["mission"]["mission_id"] == "m2"
+        assert result["mission"]["rules"] == ["r1"]
+        assert result["mission"]["acceptance_criteria"] == ["c1"]
+        assert result["mission"]["retrieval_corpora"] == ["corpus"]
+        # a copied plan keeps the task definitions but drops status and attempt
+        assert result["live_state"]["plan"]["tasks"] == [
+            {"id": "T1", "objective": "one"}
+        ]
+        # the config (with the hints/CLAUDE.md) is on its own row
+        assert board.mission_config("m2") == {
+            "required_files": ["/tmp/x/a.md"], "hints": "HINTS"
+        }
+        # all three rows are present; with no explicit position the new
+        # mission lands at the end of the queue (the source mission keeps
+        # its place in front of it)
+        assert board.get_mission("m2") is not None
+        assert board.get_live_state("m2") is not None
+        assert [e.mission_id for e in board.queue()] == ["m1", "m2"]
+        # the audit keeps the three rows together in one change
+        entry = next(e for e in board.changelog() if e.action == "mission create")
+        assert set(entry.after_json) == {"mission", "live_state", "queue"}
+        # and the queue order is the same as the audit's queue snapshot
+        assert [q["mission_id"] for q in entry.after_json["queue"]] == ["m1", "m2"]
+
+    def test_create_from_a_template(self, board: InMemoryBoardStore):
+        board.set_template("base", {"name": "Base", "rules": ["r"],
+                                   "acceptance_criteria": ["c"],
+                                   "config_json": {"required_files": ["/tmp/x/a.md"],
+                                                   "hints": "H"},
+                                   "working_directory": "/tmp/x"})
+        result = create_mission(board, "m2", template_name="base",
+                              objective="do it",
+                              plan={"tasks": [{"id": "T1"}]}, who="me")
+        assert result["mission"]["rules"] == ["r"]
+        assert result["mission"]["acceptance_criteria"] == ["c"]
+        assert board.mission_config("m2") == {
+            "required_files": ["/tmp/x/a.md"], "hints": "H"
+        }
+        # the diff shows the fields that changed against the template
+        # (the mission keeps the template's display name: no diff there)
+        assert result["diff"] == {}
+
+    def test_create_rejects_an_invalid_id(self, board: InMemoryBoardStore):
+        with pytest.raises(MissionIdError):
+            create_mission(board, "Bad Id")
+
+    def test_create_rejects_a_duplicate_id(self, board: InMemoryBoardStore):
+        seed(board)
+        with pytest.raises(MissionIdError):
+            create_mission(board, "m1", source_mission_id="m1")
+
+    def test_create_refuses_a_running_source(self, board: InMemoryBoardStore):
+        seed(board)
+        board.upsert_live_state("sk1", None, status="active")
+        with pytest.raises(ValueError, match="is running"):
+            create_mission(board, "m2", source_mission_id="m1")
+
+    def test_create_all_rows_or_none(self, board: InMemoryBoardStore, monkeypatch):
+        """The rows land together: a failed config write leaves no trace of the
+        new mission, and the other missions keep their exact prior state —
+        the same positions, the same queue version, the same changelog."""
+        seed(board)
+        board._missions["m4"] = Mission(
+            mission_id="m4", state_namespace="sk4", name="Other",
+            working_directory="/tmp/y", rules=["r4"],
+        )
+        board._queue["m4"] = QueueEntry(position=1, mission_id="m4", enabled=True)
+        board._queue_order.append("m4")
+        previous = [(e.mission_id, e.position) for e in board.queue()]
+        previous_version = board._queue_version
+        previous_changelog = len(board.changelog())
+
+        class FailingConfigDict(dict):
+            """A config-table stand-in whose write fails (simulates a failed
+            config row insert inside the atomic step).  It keeps the existing
+            entries (so the source config is still copied) but refuses the
+            new write."""
+
+            def __setitem__(self, key, value):
+                raise RuntimeError("simulated failure in the config write")
+
+        # make the config write fail: the atomic step stores the config row
+        # into ``_mission_config``; swapping in a dict that refuses the new
+        # write (but keeps the existing rows) simulates the failure there.
+        original_config = board._mission_config
+        board._mission_config = FailingConfigDict(dict(original_config))
+        try:
+            with pytest.raises(RuntimeError):
+                create_mission(board, "m2", source_mission_id="m1")
+        finally:
+            board._mission_config = original_config
+        assert board.get_mission("m2") is None
+        assert board.get_live_state("m2") is None
+        assert board.mission_config("m2") is None
+        assert all(e.mission_id != "m2" for e in board.queue())
+        # the other missions are exactly as they were before the failed step
+        assert [(e.mission_id, e.position) for e in board.queue()] == previous
+        assert board._queue_version == previous_version
+        assert len(board.changelog()) == previous_changelog
+
+    def test_create_default_position_is_end_of_queue(self, board: InMemoryBoardStore):
+        """With no ``position`` the new mission lands at the end of the queue."""
+        seed(board)
+        board._missions["m4"] = Mission(
+            mission_id="m4", state_namespace="sk4", name="Other",
+            working_directory="/tmp/y", rules=["r4"],
+        )
+        board._queue["m4"] = QueueEntry(position=1, mission_id="m4", enabled=True)
+        board._queue_order.append("m4")
+        create_mission(board, "m3", source_mission_id="m1")
+        assert [e.mission_id for e in board.queue()] == ["m1", "m4", "m3"]
+        assert [e.position for e in board.queue()] == [0, 1, 2]
+
+    def test_create_uses_only_the_public_store_interface(self, monkeypatch):
+        """create_mission must not touch the store's private attributes: a store
+        that implements only the public interface (with the atomic
+        create_mission_rows) is enough."""
+        missions: dict[str, Mission] = {}
+        live_states: dict[str, LiveState] = {}
+        configs: dict[str, dict[str, Any]] = {}
+        queue_entries: list[QueueEntry] = []
+
+        class PublicOnlyStore:
+            def __init__(self):
+                self._tracked: dict[str, Any] = {}
+
+            def get_mission(self, mission_id: str) -> Mission | None:
+                return missions.get(mission_id)
+
+            def get_live_state(self, state_key: str) -> LiveState | None:
+                return live_states.get(state_key)
+
+            def list_missions(self) -> list[Mission]:
+                return list(missions.values())
+
+            def mission_config(self, mission_id: str) -> dict[str, Any] | None:
+                return configs.get(mission_id)
+
+            def templates(self) -> list[dict[str, Any]]:
+                return []
+
+            def queue(self) -> list[QueueEntry]:
+                return list(queue_entries)
+
+            def create_mission_rows(
+                self, mission, live, config, position=None, note=None, who="",
+            ) -> None:
+                # record that the atomic step was called, and record the
+                # writes through the public views (as the store would)
+                self._tracked["create_mission_rows"] = True
+                missions[mission.mission_id] = mission
+                live_states[live.state_key] = live
+                if config:
+                    configs[mission.mission_id] = dict(config)
+                queue_entries.append(
+                    QueueEntry(
+                        position=len(queue_entries),
+                        mission_id=mission.mission_id,
+                        enabled=True,
+                        note=note,
+                    )
+                )
+
+        store = PublicOnlyStore()
+        missions["m1"] = Mission(
+            mission_id="m1", state_namespace="sk1", name="Source",
+            working_directory="/tmp/x", rules=["r1"],
+            acceptance_criteria=["c1"], retrieval_corpora=["corpus"],
+        )
+        configs["m1"] = {"required_files": ["/tmp/x/a.md"], "hints": "HINTS"}
+
+        result = create_mission(
+            store, "m2", source_mission_id="m1", objective="do it"
+        )
+        # the atomic method was used, and the public views show the new rows
+        assert store._tracked.get("create_mission_rows") is True
+        assert result["mission"]["mission_id"] == "m2"
+        assert store.get_mission("m2") is not None
+        assert store.get_live_state("m2") is not None
+        assert store.mission_config("m2") == {
+            "required_files": ["/tmp/x/a.md"], "hints": "HINTS"
+        }
+        assert [e.mission_id for e in store.queue()] == ["m2"]
+
+
+# -------------------------------------------------------------------------- template
+
+
+class TestSaveTemplate:
+    def test_save_template_drops_objective_and_plan(self, board: InMemoryBoardStore):
+        seed(board)
+        template = save_template(board, "m1", "base", who="me")
+        # the stored row: the name, the source mission id, the config dict
+        # (rules, criteria, corpora, working folder, hints inside it)
+        assert template["name"] == "base"
+        assert template["source_mission_id"] == "m1"
+        assert "objective" not in template
+        assert "plan" not in template
+        cfg = template["config_json"]
+        assert cfg["rules"] == ["r1"]
+        assert cfg["acceptance_criteria"] == ["c1"]
+        assert cfg["working_directory"] == "/tmp/x"
+        assert cfg["config_json"] == {"required_files": ["/tmp/x/a.md"], "hints": "HINTS"}
+        # the template row is usable for creation
+        result = create_mission(board, "m2", template_name="base",
+                              objective="do it",
+                              plan={"tasks": [{"id": "T1"}]})
+        assert result["mission"]["rules"] == ["r1"]
+
+    def test_save_template_refuses_an_unknown_mission(self, board: InMemoryBoardStore):
+        with pytest.raises(KeyError):
+            save_template(board, "nope", "base")
+
+
+# -------------------------------------------------------------------------- readiness
+
+
+class TestCollectReadiness:
+    def test_collect_readiness_reports_each_item(self, board: InMemoryBoardStore):
+        seed(board)
+        # no Live State row yet: the mission is not ready
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        checks = {i["check"] for i in summary["items"]}
+        assert checks == {
+            "working_folder", "required_files", "runner", "litellm",
+            "llama_model", "plan", "live_state", "not_running", "preflight", "qa",
+        }
+        assert summary["status"] == "error"
+        assert summary["confirmed_needed"] is True
+        # the working folder is set but does not exist on the runner
+        assert next(i for i in summary["items"]
+                    if i["check"] == "working_folder")["status"] == "error"
+        # the guard blocks on the errors
+        assert start_guard(summary)["allowed"] is False
+
+    def test_a_fully_ready_mission_is_ok(self, board: InMemoryBoardStore, tmp_path):
+        workdir = tmp_path / "mission"
+        workdir.mkdir()
+        (workdir / "a.md").write_text("x")
+        seed(board)
+        board._missions["m1"].working_directory = str(workdir)
+        board.set_mission_config(
+            "m1", {"required_files": [str(workdir / "a.md")]}, None
+        )
+        board.upsert_live_state(
+            "sk1", None, plan={"tasks": [{"id": "T1"}]}, status="queued"
+        )
+        board.record_preflight("m1", [{"check": "ok"}])
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        # without settings the URL checks are warnings, the rest are ok
+        assert summary["status"] == "warning"
+        assert all(
+            i["status"] != "error" for i in summary["items"]
+            if i["check"] in ("working_folder", "required_files",
+                             "plan", "live_state", "not_running", "preflight")
+        )
+        assert start_guard(summary)["allowed"] is True
+        # a confirmed start is allowed even with warnings
+        assert start_guard(summary, confirmed=True)["allowed"] is True
+
+
+QA_PARTS_PRESENT = {"playwright": None, "chromium": None, "stack": None}
+REAL_PROBE_QA_ENVIRONMENT = board_ready.probe_qa_environment
+
+
+@pytest.fixture(autouse=True)
+def qa_parts_present(monkeypatch):
+    monkeypatch.setattr(board_ready, "probe_qa_environment", lambda: dict(QA_PARTS_PRESENT))
+
+
+class TestQaReady:
+    def test_mode_off_is_a_warning_even_with_missing_parts(self):
+        environment = {"playwright": "playwright is not installed", "chromium": None,
+                       "stack": None}
+        item = check_qa_ready({}, environment)
+        assert item["check"] == "qa"
+        assert item["status"] == "warning"
+        assert item["mode"] == "off"
+
+    def test_mode_on_with_every_part_present_is_ok(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "final"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "ok"
+        assert item["model"] == "anthropic/sonnet"
+
+    def test_mode_on_with_missing_chromium_is_a_blocker(self):
+        environment = {"playwright": None, "chromium": "chromium is not installed", "stack": None}
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "nightly"}}}
+        item = check_qa_ready(roles, environment)
+        assert item["status"] == "error"
+        assert "chromium is not installed" in item["reason"]
+
+    def test_invalid_mode_is_a_blocker(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "always"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "error"
+        assert "'always'" in item["reason"]
+
+    def test_invalid_model_setting_is_a_blocker(self):
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"fresh": "maybe"}}}
+        item = check_qa_ready(roles, QA_PARTS_PRESENT)
+        assert item["status"] == "error"
+
+    def test_missing_playwright_skips_the_chromium_lookup(self, monkeypatch):
+        monkeypatch.setattr(board_ready.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(board_ready, "_stack_help_problem", lambda: None)
+        monkeypatch.setattr(
+            board_ready, "_chromium_problem",
+            lambda: pytest.fail("chromium must not be checked without playwright"),
+        )
+        environment = REAL_PROBE_QA_ENVIRONMENT()
+        assert "not installed" in environment["playwright"]
+        assert environment["stack"] is None
+
+    def test_stack_help_failure_is_reported(self, monkeypatch):
+        completed = subprocess.CompletedProcess(args=[], returncode=2)
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._stack_help_problem() == "qa stack --help exited with 2"
+
+    def test_stack_help_success_is_no_problem(self, monkeypatch):
+        completed = subprocess.CompletedProcess(args=[], returncode=0)
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._stack_help_problem() is None
+
+    def test_chromium_missing_on_disk_is_reported(self, monkeypatch, tmp_path):
+        missing = tmp_path / "chrome"
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{missing}\n")
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert "playwright install chromium" in board_ready._chromium_problem()
+
+    def test_chromium_present_on_disk_is_no_problem(self, monkeypatch, tmp_path):
+        binary = tmp_path / "chrome"
+        binary.write_text("")
+        completed = subprocess.CompletedProcess(args=[], returncode=0, stdout=f"{binary}\n")
+        monkeypatch.setattr(board_ready.subprocess, "run", lambda *a, **k: completed)
+        assert board_ready._chromium_problem() is None
+
+    def test_collect_readiness_uses_the_mission_qa_mode(self, board: InMemoryBoardStore):
+        seed(board)
+        roles = {"qa": {"1": "anthropic/sonnet", "options": {"mode": "final"}}}
+        board.set_mission_config("m1", {"roles_json": json.dumps(roles)}, None)
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        qa = next(i for i in summary["items"] if i["check"] == "qa")
+        assert qa["status"] == "ok"
+
+    def test_collect_readiness_blocks_on_unparseable_roles_json(self, board: InMemoryBoardStore):
+        seed(board)
+        board.set_mission_config("m1", {"roles_json": "{not json"}, None)
+        summary = asyncio.run(collect_readiness(board, board.get_mission("m1")))
+        qa = next(i for i in summary["items"] if i["check"] == "qa")
+        assert qa["status"] == "error"
+
+
+def test_settings_without_providers_do_not_break_the_service_urls(monkeypatch):
+    """The dashboard's settings object has no ``providers``; the readiness route answered 500."""
+    from ahawr_runner import board_ready
+    from ahawr_runner.dashboard import DashboardSettings
+
+    monkeypatch.setenv("LITELLM_URL", "http://litellm:4000")
+    runner_url, litellm_url, *_ = board_ready._service_urls(DashboardSettings())
+    assert litellm_url == "http://litellm:4000"
+    assert runner_url == "" or runner_url.startswith("http")
+
+
+class _HermesSettings:
+    def __init__(self, config):
+        self._config = config
+
+    def hermes_config(self):
+        return self._config
+
+
+def test_service_urls_worker_model_comes_from_the_column_without_roles_json():
+    settings = _HermesSettings({"worker_model": "qwen", "roles_json": ""})
+    assert board_ready._service_urls(settings)[4] == "qwen"
+
+
+def test_service_urls_roles_json_worker_model_wins_over_the_column():
+    roles = {"worker": {"1": "local/qwen-next"}}
+    config = {"worker_model": "qwen", "roles_json": json.dumps(roles)}
+    assert board_ready._service_urls(_HermesSettings(config))[4] == "qwen-next"
+
+
+def test_service_urls_unparseable_roles_json_keeps_the_column():
+    config = {"worker_model": "qwen", "roles_json": "{not json"}
+    assert board_ready._service_urls(_HermesSettings(config))[4] == "qwen"
+
+
+# BLE001 board_ready.py:399 -- the try body is settings.hermes_config(): a real
+# board store (UnavailableBoardStore) raises RuntimeError, a PG connection
+# failure raises psycopg errors; both end with config = {} and no worker model.
+def test_service_urls_worker_model_is_empty_when_hermes_store_raises(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from ahawr_runner.board_pg import UnavailableBoardStore
+
+    monkeypatch.delenv("CLAUDE_RUNNER_URL", raising=False)
+    monkeypatch.delenv("LITELLM_URL", raising=False)
+    monkeypatch.delenv("LLAMACPP_API_KEY", raising=False)
+    monkeypatch.delenv("LLAMACPP_CONTEXT_PROBE_URL", raising=False)
+
+    urls = board_ready._service_urls(UnavailableBoardStore("no DSN configured"))
+    assert urls == ("", "", "", "", "")
+    assert caplog.records
+    assert "hermes config unreadable" in caplog.records[0].message
+
+
+def test_service_urls_worker_model_is_empty_when_the_hermes_query_raises(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import psycopg
+
+    class _BrokenSettings:
+        def hermes_config(self) -> dict[str, Any]:
+            raise psycopg.OperationalError("connection failed")
+
+    monkeypatch.delenv("CLAUDE_RUNNER_URL", raising=False)
+    monkeypatch.delenv("LITELLM_URL", raising=False)
+
+    urls = board_ready._service_urls(_BrokenSettings())
+    assert urls[4] == ""
+    assert caplog.records
+    assert "hermes config unreadable" in caplog.records[0].message

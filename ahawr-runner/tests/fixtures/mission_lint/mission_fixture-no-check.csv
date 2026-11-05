@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-no-check,fixture-no-check,working_dir,1,true,Criterion with no check,Fix the bug in the node.,[],"[""the dashboard looks nice on the board""]"

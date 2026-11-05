@@ -1,0 +1,14 @@
+{
+  "suite": "worker-suite",
+  "tasks": [
+    {"id": "english-task-russian-report", "dir": "english-task-russian-report", "timeout_minutes": 20},
+    {"id": "find-right-file", "dir": "find-right-file", "timeout_minutes": 15},
+    {"id": "fix-from-reviewer", "dir": "fix-from-reviewer", "timeout_minutes": 10},
+    {"id": "large-file-one-function", "dir": "large-file-one-function", "timeout_minutes": 20},
+    {"id": "no-repeat-probe", "dir": "no-repeat-probe", "timeout_minutes": 10},
+    {"id": "fix-and-update-test", "dir": "fix-and-update-test", "timeout_minutes": 15},
+    {"id": "literal-to-named-constant", "dir": "literal-to-named-constant", "timeout_minutes": 10},
+    {"id": "caller-and-callee-cents", "dir": "caller-and-callee-cents", "timeout_minutes": 15},
+    {"id": "docs-only-retry-heading", "dir": "docs-only-retry-heading", "timeout_minutes": 10}
+  ]
+}

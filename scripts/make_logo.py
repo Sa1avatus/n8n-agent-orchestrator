@@ -182,7 +182,7 @@ def banner():
 <text x="60" y="130" font-family="{FONT}" font-size="96" font-weight="800" fill="url(#amber)" letter-spacing="4">AHAWR</text>
 <text x="64" y="176" font-family="{FONT}" font-size="22" fill="{TXT}">Agentic Hub for Automation Workflow Routing</text>
 <text x="64" y="212" font-family="{FONT}" font-size="16" fill="{GRY}">Missions in, reviewed code out.</text>
-<text x="64" y="236" font-family="{FONT}" font-size="16" fill="{GRY}">n8n drives the loop, claude-runner runs the models.</text>
+<text x="64" y="236" font-family="{FONT}" font-size="16" fill="{GRY}">n8n drives the loop, ahawr-runner runs the models.</text>
 <g transform="translate(588 30)">{mark_svg()}</g>
 <g transform="translate(600 34)">{legend()}</g></svg>'''
 
@@ -208,14 +208,14 @@ def flow():
     out += f'<text x="628" y="144" fill="{VIO}" font-size="12.5" font-weight="600">retry with the review</text>'
     out += box(292, 116, 140, 50, TEAL, "Retrieval", "context for the roles")
     out += f'<path d="M432 141H452V104" stroke="{TEAL}" stroke-width="2" stroke-dasharray="3 4" fill="none" marker-end="url(#a)"/>'
-    layers = ((AXIS, "n8n: the axis", "the loop, queue, retries, state"), (GRY, "claude-runner", "runs the roles, sessions"),
+    layers = ((AXIS, "n8n: the axis", "the loop, queue, retries, state"), (GRY, "ahawr-runner", "runs the roles, sessions"),
               (GRY, "Models", "local and cloud"), (GRY, "Dashboard + Telegram", "runs, board, notices, report"))
     for i, (c, t, s) in enumerate(layers):
         x = 30 + i * 262
         out += (f'<rect x="{x}" y="206" width="250" height="56" rx="12" fill="#1b1e26" stroke="{LINE}"/><rect x="{x}" y="206" width="6" height="56" rx="3" fill="{c}"/>'
                 f'<text x="{x + 20}" y="229" text-anchor="start" fill="{c if c != GRY else TXT}" font-size="14" font-weight="700">{t}</text>'
                 f'<text x="{x + 20}" y="248" text-anchor="start" fill="{GRY}" font-size="11.5" font-weight="500">{s}</text>')
-    out += f'<text x="550" y="296" fill="{GRY}" font-size="12.5">the loop runs in n8n; every role runs through claude-runner</text>'
+    out += f'<text x="550" y="296" fill="{GRY}" font-size="12.5">the loop runs in n8n; every role runs through ahawr-runner</text>'
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 310" role="img" aria-label="How a mission runs"><defs>{DEFS}</defs>
 <rect width="1100" height="310" rx="18" fill="#17191f"/><rect x="1" y="1" width="1098" height="308" rx="17" fill="none" stroke="{LINE}"/>
 <g font-family="{FONT}" text-anchor="middle">{out}</g></svg>'''

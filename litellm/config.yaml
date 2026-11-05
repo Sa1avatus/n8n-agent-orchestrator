@@ -1,4 +1,4 @@
-# LiteLLM for claude-runner: Claude Code speaks the Anthropic Messages API (/v1/messages);
+# LiteLLM for ahawr-runner: Claude Code speaks the Anthropic Messages API (/v1/messages);
 # LiteLLM translates it to the OpenAI-compatible /v1/chat/completions of a local llama.cpp
 # server (llama-server). Values come from the container environment (see ../.env.example).
 

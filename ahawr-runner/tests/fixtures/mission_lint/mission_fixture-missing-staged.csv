@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-missing-staged,fixture-missing-staged,working_dir,1,true,Missing staged input,Read the staged copy (operator copy at staged/missing_export.json) and patch the node.,[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]"

@@ -9,9 +9,9 @@ them are optional and the stack runs without them.
 - File content `off` = LiteLLM adds `chat_template_kwargs: {"enable_thinking": false}` to every request for a non-Claude model
   (`litellm/ahawr_hooks.py`, read on each request, at most 2 s old). Claude models are never touched.
 - Set it by writing the file. `docker-compose.yml` mounts `./litellm/runtime` read-only into LiteLLM and read-write into
-  `claude-runner`.
+  `ahawr-runner`.
 
-## 2. Automatic switch for a long task: `claude_runner/think_switch.py`
+## 2. Automatic switch for a long task: `ahawr_runner/think_switch.py`
 
 - `AHAWR_THINK_OFF_AFTER_SECONDS` (default 3600, `0` = never; see `.env.example`).
 - A Worker session is one task. When the runs of a local Worker session add up to more than the limit and the task is still

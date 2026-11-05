@@ -10,7 +10,7 @@ The A/B procedure below decides that.
 
 ## How the server works
 
-`ahawr-mcp-search` (`claude-runner/src/claude_runner/mcp_search.py`, entry point in `claude-runner/pyproject.toml`)
+`ahawr-mcp-search` (`ahawr-runner/src/ahawr_runner/mcp_search.py`, entry point in `ahawr-runner/pyproject.toml`)
 is a stdio MCP server. It speaks newline-delimited JSON-RPC 2.0: protocol messages go to stdout, diagnostics to stderr.
 
 - `initialize` and `tools/list` advertise one tool, `ahawr_search`, with the arguments `query` (required),
@@ -29,9 +29,9 @@ Usage counting: `retrieval-service/src/ahawr_retrieval/usage.py` counts an MCP c
 
 ## The flag
 
-- Name: `CLAUDE_RUNNER_MCP_SEARCH` (`claude-runner/src/claude_runner/config.py`, default `False`).
+- Name: `CLAUDE_RUNNER_MCP_SEARCH` (`ahawr-runner/src/ahawr_runner/config.py`, default `False`).
 - Default: off. `docker-compose.yml` passes `CLAUDE_RUNNER_MCP_SEARCH=${CLAUDE_RUNNER_MCP_SEARCH:-0}`
-  to the `claude-runner` service, so an unset value is `0`.
+  to the `ahawr-runner` service, so an unset value is `0`.
 - Scope: the local Worker only. `mcp_search_args` adds the MCP config only when the role is `worker` and the
   provider is `LOCAL`. Architect, Reviewer and cloud-provider runs are unchanged with the flag on.
 - With the flag off, no MCP config is written and the command line is byte-for-byte unchanged.
@@ -39,10 +39,10 @@ Usage counting: `retrieval-service/src/ahawr_retrieval/usage.py` counts an MCP c
 ## How to enable (operator)
 
 1. In the host `.env`, set `CLAUDE_RUNNER_MCP_SEARCH=1`. Do not commit `.env`.
-2. Recreate the runner so it reads the new value: `docker compose up -d claude-runner`.
+2. Recreate the runner so it reads the new value: `docker compose up -d ahawr-runner`.
 3. Check the setting in the container, without printing other variables:
-   `docker compose exec claude-runner sh -c 'test "$CLAUDE_RUNNER_MCP_SEARCH" = 1 && echo on'`.
-4. To turn it off, set the value back to `0` (or remove the line) and recreate `claude-runner` again.
+   `docker compose exec ahawr-runner sh -c 'test "$CLAUDE_RUNNER_MCP_SEARCH" = 1 && echo on'`.
+4. To turn it off, set the value back to `0` (or remove the line) and recreate `ahawr-runner` again.
 
 ## A/B procedure (not run)
 

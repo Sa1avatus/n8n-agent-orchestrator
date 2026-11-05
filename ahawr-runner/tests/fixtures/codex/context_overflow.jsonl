@@ -1,0 +1,8 @@
+# Fake fixture for a turn that fails because the context window is full. Not captured from a real run.
+# CONFIRMED (docs/codex-executor.md): turn.failed with error.message (missing-env-var run, R); the class name
+#   contextWindowExceeded (S, CodexErrorInfo); the strings full_context_window_limit_reached and token_limit_reached (B).
+# HYPOTHESIS: the codexErrorInfo key and its snake or camel casing in exec JSON; the message text; the exit code 1.
+# exit_code: 1
+{"type":"thread.started","thread_id":"0195a1c2-7d3e-7c10-9a4b-2f6e1d8c0a11"}
+{"type":"turn.started"}
+{"type":"turn.failed","error":{"message":"Your input exceeds the context window of this model. Please adjust your input and try again.","codexErrorInfo":"contextWindowExceeded"}}

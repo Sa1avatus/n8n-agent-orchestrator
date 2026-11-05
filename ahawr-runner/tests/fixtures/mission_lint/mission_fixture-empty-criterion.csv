@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-empty-criterion,fixture-empty-criterion,working_dir,1,true,Empty criterion,Fix the bug in the node.,[],"[""""]"

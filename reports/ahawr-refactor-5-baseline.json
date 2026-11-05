@@ -1,0 +1,1093 @@
+{
+  "task": "T001",
+  "date": "2026-11-04",
+  "selection_rules": "rank field absent in ruff_hygiene entries; ordered by count (desc), ties broken by audit listing order; Codex paths (claude_runner/codex_*.py, tests/fake_codex.py, tests/test_codex_run.py) excluded from selection",
+  "t201_target": {
+    "file": "src/claude_runner/qa.py",
+    "count": 12,
+    "test_file": "tests/test_qa.py",
+    "live_ruff_select_T201_total_in_src_claude_runner": 23,
+    "runnerwide_audit_T201_total": 44,
+    "runnerwide_audit_T201_top_before_selection": "claude-runner/src/claude_runner/qa.py (12)",
+    "codex_note": "no T201 findings in any Codex file; codex_run.py hygiene findings are BLE001 only"
+  },
+  "ble001_target": {
+    "file": "src/claude_runner/board_ready.py",
+    "count": 4,
+    "test_file": "tests/test_board_ready.py",
+    "tie_note": "src/claude_runner/qa_capture.py also has BLE001=4 (audit and live); board_ready.py listed first in the audit findings, both have a test file",
+    "live_ruff_select_BLE001_total_in_src_claude_runner": 32
+  },
+  "dead_candidates": [
+    {
+      "file": "src/claude_runner/board_think.py",
+      "line": 320,
+      "name": "_beta_cdf",
+      "grep_command": "grep -rn '_beta_cdf' claude-runner/src claude-runner/tests data-tables/ops docs claude-runner/docs",
+      "matching_lines": [
+        "claude-runner/src/claude_runner/board_think.py:320:def _beta_cdf(",
+        "data-tables/ops/think_steps_archive.jsonl:634 (operator step-log record: a recorded tool-call key \"grep -n '_beta\\|_beta_cdf' .../board_think.py\" from a past run, not code)",
+        "data-tables/ops/_scratch/ahawr-qa-smoke/final/head/claude-runner/src/claude_runner/board_think.py:320:def _beta_cdf(",
+        "data-tables/ops/_scratch/ahawr-qa-smoke/scratch/a/claude-runner/src/claude_runner/board_think.py:320:def _beta_cdf(",
+        "data-tables/ops/_scratch/ahawr-qa-smoke/scratch/b/claude-runner/src/claude_runner/board_think.py:320:def _beta_cdf(",
+        "data-tables/ops/_scratch/ahawr-qa-smoke/scratch/c/claude-runner/src/claude_runner/board_think.py:320:def _beta_cdf("
+      ],
+      "verdict": "proven_unused",
+      "note": "Only the definition itself matches in live code. The data-tables/ops hits are operator step logs and scratch copies of the same file, not callers. The neighbouring helper _beta (board_think.py:310) is used by _variant_rate_draw (board_think.py:464): deleting _beta_cdf must not touch _beta."
+    },
+    {
+      "file": "src/claude_runner/hermes_run.py",
+      "line": 30,
+      "name": "RUNNING_STATUSES",
+      "grep_command": "grep -rn 'RUNNING_STATUSES' claude-runner/src claude-runner/tests data-tables/ops docs claude-runner/docs; grep -rn 'getattr.*RUNNING|\"RUNNING_STATUSES\"' claude-runner/src claude-runner/tests data-tables/ops claude-runner/docs docs",
+      "matching_lines": [
+        "claude-runner/src/claude_runner/hermes_run.py:30:RUNNING_STATUSES = frozenset({\"running\", \"started\", \"queued\", \"waiting_for_approval\"})",
+        "data-tables/ops/think_steps_archive.jsonl:2347 (operator step-log record of a past tool-call mentioning the name, not code)"
+      ],
+      "verdict": "proven_unused",
+      "note": "poll_run (hermes_run.py:149-170) tests only TERMINAL_STATUSES (line 162); non-terminal statuses fall through to the max_polls/deadline exit (line 158) and the timeout result (lines 168-170). No getattr or string-dispatch use found."
+    }
+  ],
+  "dead_candidate_characterization_tests": {
+    "board_think.py:_beta_cdf": "tests/test_board_think.py::test_the_uplift_interval_is_reproducible_from_the_bootstrap_seed (added, does not reference _beta_cdf)",
+    "hermes_run.py:RUNNING_STATUSES": "tests/test_hermes_run.py::test_poll_run_returns_on_the_first_terminal_status and tests/test_hermes_run.py::test_poll_run_keeps_polling_a_not_finished_status_until_max_polls (added, do not reference RUNNING_STATUSES)"
+  },
+  "mypy_src_before": {
+    "command": "python -m mypy src",
+    "total_error_count_line": "Found 126 errors in 18 files (checked 101 source files)",
+    "total_errors": 126,
+    "baseline_mypy_total_2026_11_03": 128,
+    "requested_line_dashboard_431": null,
+    "evidence": "grep -n 'dashboard.py:431' over the run returned no match; the only dashboard.py line is src/claude_runner/dashboard.py:452: error: Module \"claude_runner.board_api\" does not explicitly export attribute \"_unavailable\"  [attr-defined]",
+    "closest_dashboard_line": "src/claude_runner/dashboard.py:452: error: Module \"claude_runner.board_api\" does not explicitly export attribute \"_unavailable\"  [attr-defined]"
+  },
+  "counts_per_touched_file": {
+    "src/claude_runner/qa.py": {
+      "T201": 12,
+      "BLE001": 1,
+      "PERF401": 0,
+      "PERF403": 0,
+      "ERA001": 0,
+      "ARG001": 1,
+      "ARG002": 0,
+      "ARG004": 0,
+      "ARG005": 0,
+      "default_ruff_errors": 0,
+      "mypy_lines_in_mypy_src_output": 0
+    },
+    "src/claude_runner/board_ready.py": {
+      "T201": 0,
+      "BLE001": 4,
+      "PERF401": 0,
+      "PERF403": 0,
+      "ERA001": 0,
+      "ARG001": 1,
+      "ARG002": 0,
+      "ARG004": 0,
+      "ARG005": 0,
+      "default_ruff_errors": 2,
+      "default_ruff_breakdown": {
+        "SIM108": 1,
+        "E501": 1
+      },
+      "mypy_lines_in_mypy_src_output": 7
+    },
+    "live_named_rules_rule_totals_src_claude_runner": {
+      "T201": 23,
+      "BLE001": 32,
+      "PERF401": 10,
+      "PERF403": 4,
+      "ERA001": 0,
+      "ARG001": 27,
+      "ARG002": 122,
+      "ARG004": 1,
+      "ARG005": 0
+    },
+    "default_ruff_total_src_claude_runner": 98
+  },
+  "deferred": {
+    "ranking_rule": "no rank field in audit-python.json for these kinds; ordered by count (desc)",
+    "ruff_hygiene": [
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/board_pg.py",
+        "count": 78
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_search_cli.py",
+        "count": 29
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+        "count": 28
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_qa_cli.py",
+        "count": 24
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_providers_api.py",
+        "count": 16
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_cli.py",
+        "count": 16
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/tests/replay_guard_queue.py",
+        "count": 11
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/mcp_board.py",
+        "count": 9
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_search_cli.py",
+        "count": 9
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_board_ready.py",
+        "count": 9
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/sources.py",
+        "count": 8
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_qa_runner.py",
+        "count": 8
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_qa_cli.py",
+        "count": 7
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_dashboard_auth_config.py",
+        "count": 7
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_pg.py",
+        "count": 6
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_api.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_lessons_api.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_search.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_board_views_api.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/tests/fake_claude.py",
+        "count": 5
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_dashboard_auth.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_runner.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_board_ready.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_qa_smoke.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_qa_smoke.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/qa_capture.py",
+        "count": 4
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_dashboard.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_host_actions_api.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_api.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_stack.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_worker.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_search_hook.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_think_proxy.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/dashboard.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_search.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_board_views_api.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_qa_worker.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_search_hook.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/qa_runner.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/qa_complexity.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/search_cli.py",
+        "count": 3
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_ops_api.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/mcp_search.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_lessons_extract.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_views_api.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_claude_cli.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_config_cli.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_dashboard_host_actions.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_mission_stats.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_ops_legacy_reads.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_process_routes.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_provider_secrets.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_smoke.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_queue_watch_flag.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_remote_processes.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_board.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_board_api.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_qa_capture.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_run_summary_fields.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_qa.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_qa_runner.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_ops_api.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_stats.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/provider_registry.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/qa_smoke.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ERA001",
+        "file": "claude-runner/tests/test_board.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ERA001",
+        "file": "claude-runner/tests/test_dashboard_js.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF403",
+        "file": "claude-runner/src/claude_runner/board.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF403",
+        "file": "claude-runner/src/claude_runner/board_ops_livestate.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/dashboard.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/dashboard_auth_crypto.py",
+        "count": 2
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_ops_guard.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_ops_settings.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_pg.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_plan.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_providers_api.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/board_think.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/src/claude_runner/dashboard_auth.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_board_agent.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_dashboard_auth_crypto.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_guard_queue.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_guards_overrides.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_mission_lint.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_process_group_kill.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_provider_registry.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_qa_agent_run.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_queue_board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_queue_board_contract.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_remote_manager.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_run_process_cleanup.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_runs.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_thinking_config_patch.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/board_ops_store.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/guard_queue.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/guards.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/src/claude_runner/remote_manager.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/replay_guard_queue.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_board_agent.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_guard_queue.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_guards.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_qa_stack_inprocess.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_queue_board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG002",
+        "file": "claude-runner/tests/test_task_id_suffix.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG004",
+        "file": "claude-runner/src/claude_runner/board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_board_providers_api.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_config_cli.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_dashboard.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_ops_legacy_reads.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ARG005",
+        "file": "claude-runner/tests/test_provider_registry.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_api.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_ops_parsers.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_ops_store_pg.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/board_pg.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/context_probe.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/guards.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/mcp_board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/mem_guard.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/qa_worker.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/runs.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/search.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/tests/e2e/test_board_views2_e2e.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/tests/e2e/test_board_views_e2e.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/tests/test_dashboard_auth_config.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "BLE001",
+        "file": "claude-runner/tests/test_qa_integration.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ERA001",
+        "file": "claude-runner/tests/test_board_think.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "ERA001",
+        "file": "claude-runner/tests/test_dashboard.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/board_order.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/board_providers_api.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/dashboard.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/qa_capture.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/qa_contract.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/qa_run_record.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/src/claude_runner/roles_config.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/tests/fixtures/qa_complexity/new_function.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/tests/test_board_views_api.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/tests/test_qa_stack.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF401",
+        "file": "claude-runner/tests/test_risk_tiers.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "PERF403",
+        "file": "claude-runner/tests/test_board_ops_state.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/qa/contracts/ahawr-guards-detail/render_reference.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/mcp_board.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/mcp_search.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/qa_runner.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/src/claude_runner/search_hook.py",
+        "count": 1
+      },
+      {
+        "kind": "ruff_hygiene",
+        "rule": "T201",
+        "file": "claude-runner/tests/fixtures/qa_complexity/fake_ruff.py",
+        "count": 1
+      }
+    ],
+    "mypy_by_file": [
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_api.py",
+        "count": 35
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_pg.py",
+        "count": 30
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_order.py",
+        "count": 20
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_api.py",
+        "count": 12
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_store_pg.py",
+        "count": 7
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board.py",
+        "count": 5
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ready.py",
+        "count": 4
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_parsers.py",
+        "count": 3
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/api.py",
+        "count": 2
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_livestate.py",
+        "count": 2
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_stats.py",
+        "count": 2
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_guard.py",
+        "count": 1
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_redact.py",
+        "count": 1
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_ops_settings.py",
+        "count": 1
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_providers_api.py",
+        "count": 1
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/board_think.py",
+        "count": 1
+      },
+      {
+        "kind": "mypy_by_file",
+        "file": "src/claude_runner/runs.py",
+        "count": 1
+      }
+    ],
+    "excluded_codex_ruff_hygiene_entries": [
+      {
+        "rule": "BLE001",
+        "file": "claude-runner/src/claude_runner/codex_run.py",
+        "count": 1
+      },
+      {
+        "rule": "T201",
+        "file": "claude-runner/tests/fake_codex.py",
+        "count": 3
+      },
+      {
+        "rule": "ARG001",
+        "file": "claude-runner/tests/test_codex_run.py",
+        "count": 1
+      }
+    ]
+  }
+}

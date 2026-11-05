@@ -1,4 +1,4 @@
-# LiteLLM proxy for claude-runner: Anthropic Messages API (/v1/messages) in front of an
+# LiteLLM proxy for ahawr-runner: Anthropic Messages API (/v1/messages) in front of an
 # OpenAI-compatible local model server (llama.cpp llama-server).
 FROM python:3.12-slim
 

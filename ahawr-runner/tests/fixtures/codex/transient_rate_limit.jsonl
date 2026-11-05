@@ -1,0 +1,10 @@
+# Fake fixture for a transient failure: the provider rate-limits the turn (HTTP 429). Not captured from a real run.
+# CONFIRMED (docs/codex-executor.md): repeated error events while the CLI reconnects (R, network case); turn.failed
+#   with error.message (R); the class name rateLimitExceeded (S, CodexErrorInfo).
+# HYPOTHESIS: the error event's wording for a 429 (the text below is invented); the codexErrorInfo key in exec JSON;
+#   the message text of turn.failed; the exit code 1; that the CLI emits a retry notice before giving up.
+# exit_code: 1
+{"type":"thread.started","thread_id":"0195a1c2-7d3e-7c10-9a4b-2f6e1d8c0a11"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/5 (429 Too Many Requests: rate limit reached, retrying)"}
+{"type":"turn.failed","error":{"message":"Rate limit reached for this model. Please try again later.","codexErrorInfo":"rateLimitExceeded"}}

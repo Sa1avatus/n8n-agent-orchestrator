@@ -80,7 +80,7 @@ fully reproducible (a re-run on the same snapshot returned identical
 nDCG@5/MRR/ContextRecall, delta 0.000), so the difference is not run-to-run
 noise: it is the corpus. The 2026-09-28 run was measured on commit `35dee91`
 (this snapshot is `84ce89e`, which is newer and has since been edited — e.g.
-`retrieval-service`, `claude-runner`, `docs/retrieval`), so the indexed tree is
+`retrieval-service`, `ahawr-runner`, `docs/retrieval`), so the indexed tree is
 different and a few gold judgments resolve to different chunks. The gap
 (~0.04 on gold v1, ~0.025 on gold-ru) is the expected shift from the changed
 corpus, on top of the ~0.015 same-corpus run-to-run variation that the

@@ -1,0 +1,7 @@
+# Fake fixture for a permanent failure: the provider rejects the API key (HTTP 401). Not captured from a real run.
+# CONFIRMED (docs/codex-executor.md): turn.failed with error.message (R); the class name unauthorized (S, CodexErrorInfo).
+# HYPOTHESIS: the codexErrorInfo key in exec JSON; the message text (invented, contains no key); the exit code 1.
+# exit_code: 1
+{"type":"thread.started","thread_id":"0195a1c2-7d3e-7c10-9a4b-2f6e1d8c0a11"}
+{"type":"turn.started"}
+{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: invalid API key","codexErrorInfo":"unauthorized"}}

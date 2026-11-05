@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json,roles_json
+fixture-roles-known,fixture-roles-known,working_dir,1,true,Roles models known,Fix the node.,[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]","{""worker"": ""anthropic/claude-opus-5.5"", ""reviewer"": {""1"": ""anthropic/claude-sonnet-5.5"", ""2"": ""openrouter/deepseek/deepseek-chat""}, ""options"": {""temperature"": 0.2}}"

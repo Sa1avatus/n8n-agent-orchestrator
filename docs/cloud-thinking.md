@@ -1,7 +1,7 @@
 # Cloud thinking: what the CLI can switch, and how the runner maps it
 
 This document records the facts gathered in the T001–T005 notes
-(`claude-runner/docs/cloud-thinking-notes.md`) and the per-process mapping the runner
+(`ahawr-runner/docs/cloud-thinking-notes.md`) and the per-process mapping the runner
 uses for cloud (Anthropic) runs. It is a record of what is in the CLI and what the
 runner decided to do about it; it proposes no schema change.
 
@@ -227,19 +227,19 @@ the policy fields and the variant is derivable, and the statistics read the per-
 
 ## 10. Files of this change
 
-Code (`claude-runner/src/claude_runner/`):
+Code (`ahawr-runner/src/ahawr_runner/`):
 
 - `cloud_think.py`: the per-attempt mapping (policy parsing, variant choice, `CLOUD_THINK_ENV_VARS`, `CloudThinkSetting`).
 - `claude_cli.py`: `build_command` adds the mapping's args; `child_env` passes the per-attempt env vars into the child process.
 - `config.py`: the `CLAUDE_RUNNER_CLOUD_THINK` setting (default off).
 - `runs.py`: resolves the setting for runs whose provider is not `local` and passes it to `build_command` and `child_env`.
 
-Tests (`claude-runner/tests/`): `test_cloud_think.py`, `test_cloud_think_cli.py`, `test_cloud_think_runs.py`.
+Tests (`ahawr-runner/tests/`): `test_cloud_think.py`, `test_cloud_think_cli.py`, `test_cloud_think_runs.py`.
 
 Docs and config:
 
 - `docs/cloud-thinking.md`: this document.
-- `claude-runner/docs/cloud-thinking-notes.md`: working notes.
-- `claude-runner/docs/board-ops-notes.md`: the think-policy section links to this document.
+- `ahawr-runner/docs/cloud-thinking-notes.md`: working notes.
+- `ahawr-runner/docs/board-ops-notes.md`: the think-policy section links to this document.
 - `.env.example`: `CLAUDE_RUNNER_CLOUD_THINK` is listed as a commented line with no value.
 - `CHANGELOG.md`: the 0.8.0 entry.

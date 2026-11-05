@@ -1,0 +1,2 @@
+mission_id,state_namespace,working_directory,version,enabled,name,objective,rules_json,acceptance_criteria_json
+fixture-missing-workdir,fixture-missing-workdir,no_such_dir,1,true,Missing working directory,Fix the bug in the node.,[],"[""run python -m pytest tests/test_mission_lint.py -q --no-cov""]"

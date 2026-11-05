@@ -1,0 +1,9 @@
+# Fake fixture for `codex exec resume <id>`, one follow-up turn. Not captured from a real run.
+# CONFIRMED (docs/codex-executor.md): the resume syntax `codex exec resume [SESSION_ID] [PROMPT]`, and the same event names.
+# HYPOTHESIS: thread.started carries the resumed session id (the fake substitutes the id given on the command line);
+#   cached_input_tokens is large on a resumed turn; the item fields are as in success.jsonl.
+# exit_code: 0
+{"type":"thread.started","thread_id":"0195a1c2-7d3e-7c10-9a4b-2f6e1d8c0a11"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Added a test for sub() as well."}}
+{"type":"turn.completed","usage":{"input_tokens":1500,"cached_input_tokens":1200,"cache_write_input_tokens":0,"output_tokens":40,"reasoning_output_tokens":0}}

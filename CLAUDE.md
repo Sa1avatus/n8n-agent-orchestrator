@@ -5,11 +5,11 @@ Architect run. Keep your answers to the task: these rules say HOW to change code
 
 ## Where things are
 
-- `claude-runner/src/claude_runner/` - the runner API (`api.py`, `runs.py`, `claude_cli.py`), the dashboard
+- `ahawr-runner/src/ahawr_runner/` - the runner API (`api.py`, `runs.py`, `claude_cli.py`), the dashboard
   (`dashboard.py`, `dashboard.html`), the board (`board*.py` backend, `board*.js` and `board.css` frontend,
   served as `/static/<name>` by a fixed pattern), guards (`guards.py`). Version: `pyproject.toml` and `api.py`.
-- `claude-runner/tests/` - `test_*.py` (pytest) and `*.test.js` (node). One test file per module.
-- `claude-runner/docs/` and `docs/` - design notes; `CHANGELOG.md`, `README.md`, `ROADMAP.md` in the root.
+- `ahawr-runner/tests/` - `test_*.py` (pytest) and `*.test.js` (node). One test file per module.
+- `ahawr-runner/docs/` and `docs/` - design notes; `CHANGELOG.md`, `README.md`, `ROADMAP.md` in the root.
 - `data-tables/ops/` - operator scripts, NOT in git: queue, patches of the live n8n workflow. Read it, change it only
   when the task names a file there.
 - `AHAWR_v13_ClaudeCode.json` is NOT what runs: the live workflow is exported at launch and patched by
@@ -17,7 +17,7 @@ Architect run. Keep your answers to the task: these rules say HOW to change code
 
 ## Checks: run the narrow ones, quote the lines
 
-Run from `claude-runner/`. Use `--no-cov` for a targeted pytest run (the coverage gate fails otherwise):
+Run from `ahawr-runner/`. Use `--no-cov` for a targeted pytest run (the coverage gate fails otherwise):
 
 ```
 python -m pytest tests/test_x.py -q --no-cov

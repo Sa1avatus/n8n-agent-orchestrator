@@ -3,7 +3,69 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **0.13.100** (claude-runner `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **1.0.0** (ahawr-runner `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-05 (1.0.0)
+
+Release 1.0.0: the contracts are frozen (`/v1/runs`, the run event format, the provider block, the JSON settings). Three executors behind one API: Claude Code, Codex and Hermes. This release also holds the cleanup missions `ahawr-refactor-1..5`, the thinking profiles (flag OFF) and the event schema stamp (flag OFF).
+
+Step: the rename `claude-runner` -> `ahawr-runner`.
+
+- The directory is `ahawr-runner/`, the Python package `ahawr_runner` (`ahawr-runner` console script), the compose
+  service, container and image `ahawr-runner`. Paths in older entries below keep the old name.
+- Kept on purpose: the environment prefix `CLAUDE_RUNNER_*` and the volumes `claude-runner-home` and
+  `claude-runner-data` (a rename would lose the data and break every deployed `.env`). The service answers to the
+  network alias `claude-runner` too, so the live n8n `runner_url` (`http://claude-runner:8700`) keeps working.
+- `data-tables/ops/rename_runner.py` did the text rename (dry run by default); the QA baseline file is now
+  `ahawr-runner/qa/baselines/ahawr-runner.json`.
+- Also in this release, not yet listed: the Codex engine finish (workspace-write profile with `.env` denied, the
+  seccomp profile for bubblewrap, ChatGPT-subscription login), the Hermes gateway inside the runner image
+  (`INSTALL_HERMES`, `hermes_gateway.py`), the build flags `INSTALL_CLAUDE_CODE`/`INSTALL_CODEX_CLI`/`INSTALL_HERMES`,
+  and the dashboard source filter (`codex`, `claude-code`, `hermes`) that follows the engine.
+- Checks: 35 targeted tests pass (`test_hermes_gateway`, `test_codex_config`, `test_codex_cli`,
+  `test_dashboard_source_filter`, `test_run_summary_fields`); `ruff check` shows no import-order errors after the
+  rename (the 193 other findings are older E501/SIM). Live after the rename: a Codex run (CODEXLOCAL) and a Hermes run
+  (HERMESSTRATA) both answered "pong"; a Hermes-engine run was listed as `claude-code` in the dashboard, fixed in
+  `run_views.source_of` (the engine of the provider: `codex`, `hermes`, else `claude-code`).
+
+Feature behind a flag, off by default: the `schema_version` stamp on new run events (`event_schema_version`).
+
+- The shared event writer (`events.py`) prefixes each event it appends with `schema_version: 1` only when the
+  `event_schema_version` feature in `features_json` is on; the runner reads the flag from the board's
+  `features_json` at app start (`api.py`), default off. With the flag off the written line is byte-for-byte
+  what it was before: the same keys, the same order, the same separators. Events already on disk without the
+  stamp are still read and still count as version 0 (`docs/run-event-format.md`, `claude-runner/docs/features-config.md`).
+- The two schema documents the validator reads are `docs/run-event-format.md` (the envelope and the fields of
+  each event kind) and `docs/provider-block-schema.md` (one provider block), checked by
+  `claude-runner/src/claude_runner/contract_schema.py` (`validate_run_event`, `validate_provider_block`):
+  a field not in the table is ignored, a missing required field is an error naming the field
+  (`missing required field seq in run event`), and a wrong type names the field, the expected type and the
+  type it got.
+- Tests: `test_events.py` (the off path reproduces the old bytes, the on path stamps every event, the only
+  difference is the stamp, an unstamped event still reads), `test_features_config.py` (the flag is known, defaults
+  off, adds no flattened constant, a mission-only override works), `test_board_features_api.py` (the writer flag
+  follows the board's `features_json`, bad JSON falls back to off with a logged error).
+
+Feature behind a flag, off by default: the per-task thinking profiles (`think_profiles`).
+
+Note: the RULES and ACCEPTANCE CRITERIA of mission `ahawr-think-profiles` were copied from `ahawr-lessons-library` by mistake; the mission followed its OBJECTIVE and DESIGN. Lessons stay as released in 0.11.200 (flag OFF).
+
+- The runner flag `think_profiles` in `features_json` is OFF by default (`claude-runner/src/claude_runner/features_config.py`).
+  With it off the behaviour is byte-for-byte as in 0.13.100: the request field `think_profile` (`api.py`, `RunBody`)
+  stays empty and the task keeps the global policy. With it on, `think_profiles.py` resolves the profile the task
+  names against the catalog of the `thinking_json` settings, the `"profiles"` key: a profile name -> variants
+  parsed by `think_policy.parse` plus a `cap_steps`; a missing or unknown name resolves to None so the global
+  policy is kept, an invalid entry is skipped with the reason logged. The chosen name is stored on the run row
+  as `think_variant` (`runs.py`, `store.py`).
+- Tests: `test_think_profiles.py` (catalog parsing, unknown or missing name -> None, cap applied to the thinking
+  steps), `test_think_profiles_patch.py` (the field is added to the launch request exactly once).
+- The n8n side is the patch file `data-tables/ops/think_profiles_patch.py`: it adds `think_profile` to the node
+  "Build Worker Run Input" only when the task of the plan carries a `thinking` field. This entry is a proposal
+  only: nothing was applied — the patch is not imported into n8n, the live workflow is unchanged, and the flag
+  stays off.
+- Open point, not changed here: `board_stats.py` does not group the stats by `think_variant` (the column has
+  existed in the run store since T001, but a grep of `think_variant` in `board_stats.py` returns no matches);
+  grouping the QA figures by variant is a later task.
 
 ## 2026-11-03 (0.13.100)
 

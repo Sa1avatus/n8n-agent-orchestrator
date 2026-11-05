@@ -1,4 +1,4 @@
-"""Usage metrics: retrieval logs joined with claude-runner run activity.
+"""Usage metrics: retrieval logs joined with ahawr-runner run activity.
 
 The pure functions here compute the metrics from in-memory inputs (log rows and
 runner events). :func:`usage_report` orchestrates the real read path — pulling the
@@ -576,7 +576,7 @@ async def usage_report(
     api_key: str = "",
     with_breakdown: bool = False,
 ) -> dict[str, Any] | tuple[dict[str, Any], dict[str, Any]]:
-    """Read the retrieval log and the claude-runner API, then compute usage metrics.
+    """Read the retrieval log and the ahawr-runner API, then compute usage metrics.
 
     ``runner_url`` is the base URL (e.g. ``http://localhost:8899``); the runner API is
     called as ``GET {base}/v1/runs`` and ``GET {base}/v1/runs/{id}/events``. The log

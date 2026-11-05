@@ -53,6 +53,13 @@ docs/cold-prefill/partB-cache-trace-snapshot.jsonl
 docs/mission-reports/
 pydeps/
 
-# QA run artifacts (screenshots and verdicts of python -m claude_runner.qa)
-claude-runner/qa/runs/
-claude-runner/qa/nightly-verdict.json
+# QA run artifacts (screenshots and verdicts of python -m ahawr_runner.qa)
+ahawr-runner/qa/runs/
+ahawr-runner/qa/nightly-verdict.json
+
+# local virtual environments and process files
+.qa-venv/
+.test-venv/
+*.pid
+*.bak
+workspace/

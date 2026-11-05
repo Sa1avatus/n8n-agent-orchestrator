@@ -40,7 +40,7 @@ Each anchor below was checked with `grep -o -F -- "<anchor>" AHAWR_v13_ClaudeCod
 | Retry limit | `Retry Current Task` | `if (currentAttempt >= limit) {` | 1 |
 | Plan validation | `Parse Plan` | `Invalid task definition` | 1 |
 
-Stale anchors from `claude-runner/docs/report-pack.md` that no longer match this export:
+Stale anchors from `ahawr-runner/docs/report-pack.md` that no longer match this export:
 
 - `mission_roles_json: String(mission.roles_json ?? '').trim()` returns 0 occurrences. The `Constants` node has changed; use `  retry_delays: retryDelays,` above.
 - `"rightValue":"pass"` (no space after the colon) returns 0. The export uses `"rightValue": "pass"`.
@@ -49,7 +49,7 @@ Stale anchors from `claude-runner/docs/report-pack.md` that no longer match this
 
 The Architect output is `{"summary": "...", "tasks": [...]}`. `Persist Initial Task State` and every later state write store `plan_json` as `JSON.stringify({summary, tasks})`, not the raw Architect output.
 
-Fields that the parser requires (`Parse Plan`, line 131): `plan.tasks` must be a non-empty array; each task needs `id`, `title`, `objective` and `acceptance_criteria`. `verification`, `scope` and `dependencies` are optional. `dependencies` is parsed but never read by any node (`claude-runner/docs/board-data-model.md`).
+Fields that the parser requires (`Parse Plan`, line 131): `plan.tasks` must be a non-empty array; each task needs `id`, `title`, `objective` and `acceptance_criteria`. `verification`, `scope` and `dependencies` are optional. `dependencies` is parsed but never read by any node (`ahawr-runner/docs/board-data-model.md`).
 
 The parsed state carries `plan_summary`, `tasks`, `task_index`, `task_attempt`, `total_tasks`, `review_feedback`, `last_review_score`, `last_review_reason`, `reviewer_run_id`, `reviewer_status`, `reviewer_session_id`, `worker_run_id`, `worker_status`, `worker_session_id`, `architect_run_id`, `architect_status`, `architect_session_id`, `execution_route` (`run_task` or `all_tasks_completed`).
 
@@ -74,7 +74,7 @@ Run the script on a copy of the live export and check the result before any impo
 
 ## Versioning rule
 
-From `README.md` section "Versioning" (rule since 2026-10-15): the number is `X.Y.Z`. A new function raises the middle number by 1 and resets the last to 0. A bug-fix-only release raises the last number by 100. A small change raises it by 10; a tiny one (typo, link, one line) by 1. Every push adds a `CHANGELOG.md` entry. The number is set in `claude-runner/pyproject.toml` and `claude-runner/src/claude_runner/api.py` (`FastAPI(version=...)`). The current version is 0.11.0 (`CHANGELOG.md` line 6).
+From `README.md` section "Versioning" (rule since 2026-10-15): the number is `X.Y.Z`. A new function raises the middle number by 1 and resets the last to 0. A bug-fix-only release raises the last number by 100. A small change raises it by 10; a tiny one (typo, link, one line) by 1. Every push adds a `CHANGELOG.md` entry. The number is set in `ahawr-runner/pyproject.toml` and `ahawr-runner/src/ahawr_runner/api.py` (`FastAPI(version=...)`). The current version is 0.11.0 (`CHANGELOG.md` line 6).
 
 `CHANGELOG.md` has three entries dated 2026-10-15: `## 2026-10-15 (0.4.200)` (line 338), `## 2026-10-15 (0.4.100)` (line 346) and `## 2026-10-15` (line 352).
 
