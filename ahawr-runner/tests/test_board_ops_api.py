@@ -569,3 +569,25 @@ def test_pg_ops_snapshot_default_limit_is_100_rows() -> None:
     store, conn = _fake_pg_store()
     store.get_snapshot("host_snapshot")
     assert _limit_param(conn, "host_snapshot") == 100
+
+
+def test_ops_store_rebuilds_after_the_database_comes_up(monkeypatch: Any) -> None:
+    """The ops store that was unavailable at start is replaced by a connected one on a later request
+    (the database started after the dashboard), at most once per STORE_RETRY_SECONDS."""
+    calls: list[int] = []
+
+    def connected() -> InMemoryOpsStore:
+        calls.append(1)
+        return _fresh_store()
+
+    app = FastAPI()
+    app.state.board_ops_store = UnavailableOpsStore("the database is starting up")
+    app.state.board_ops_livestate = InMemoryLiveStateStore()
+    add_ops_routes(app)
+    app.state.board_ops_store = UnavailableOpsStore("the database is starting up")
+    app.state.board_ops_store_tried = float("-inf")
+    monkeypatch.setattr("ahawr_runner.board_ops_api.get_ops_store", connected)
+    client = TestClient(app)
+    assert client.get("/api/board/ops/commands").status_code == 200
+    assert len(calls) == 1
+    assert isinstance(app.state.board_ops_store, InMemoryOpsStore)

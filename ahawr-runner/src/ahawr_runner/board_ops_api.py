@@ -53,6 +53,7 @@ module-level ``router`` is the pre-built router, importable on its own.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -60,6 +61,7 @@ from fastapi.responses import JSONResponse
 
 from . import board_ops_actions, board_ops_parsers, board_ops_settings, board_ops_state
 from .board import ConflictError, now
+from .board_api import STORE_RETRY_SECONDS
 from .board_common import (
     _error,
     _on_conflict,
@@ -88,8 +90,17 @@ __all__ = ["router", "add_ops_routes"]
 
 def _store_guard(request: Request) -> OpsStore:
     """The ops store, raising ``RuntimeError`` (mapped to 503) when it is
-    unavailable, like ``board_api._store_guard``."""
-    store = request.app.state.board_ops_store
+    unavailable, like ``board_api._store_guard``.  An unavailable store is rebuilt at most
+    once per ``STORE_RETRY_SECONDS`` (like ``board_api.live_store``), so a database that
+    starts after the dashboard is picked up without a restart."""
+    app = request.app
+    store = app.state.board_ops_store
+    if isinstance(store, UnavailableOpsStore):
+        tried = time.monotonic()
+        last = getattr(app.state, "board_ops_store_tried", float("-inf"))
+        if tried - last >= STORE_RETRY_SECONDS:
+            app.state.board_ops_store_tried = tried
+            app.state.board_ops_store = store = get_ops_store()
     refuse = _unavailable(store)
     if refuse is not None:
         raise RuntimeError(refuse["reason"])

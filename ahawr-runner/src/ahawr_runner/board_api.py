@@ -93,6 +93,21 @@ def live_store(app: Any) -> BoardStore:
     return app.state.board_store  # type: ignore[no-any-return]
 
 
+class LiveProviderStore:
+    """The provider reads of the registry, through ``live_store``: a registry made while the
+    database was still down (the runner and Postgres start together after a reboot) loads the
+    database providers once the store is rebuilt, not only after a restart."""
+
+    def __init__(self, app: Any) -> None:
+        self._app = app
+
+    def providers_updated_at(self) -> str:
+        return live_store(self._app).providers_updated_at()
+
+    def list_providers(self) -> list[dict[str, Any]]:
+        return live_store(self._app).list_providers()
+
+
 def _store_guard(request: Request) -> BoardStore:
     """The board store, with a 503 when it is unavailable (the runner's
     error shape, so a client sees one consistent envelope)."""

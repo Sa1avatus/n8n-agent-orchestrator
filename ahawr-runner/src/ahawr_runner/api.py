@@ -20,7 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import qa_run_record
-from .board_api import add_board_routes
+from .board_api import LiveProviderStore, add_board_routes
 from .board_ops_redact import scrub
 from .claude_cli import child_env
 from .config import Settings
@@ -279,7 +279,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         registry = ProviderRegistry(
             settings.providers,
             providers_db=settings.providers_db,
-            store=app.state.board_store,
+            store=LiveProviderStore(app),
             secrets=secrets,
         )  # type: ignore[arg-type]
         app.state.provider_registry = registry
@@ -355,7 +355,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="ahawr-runner", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="ahawr-runner", version="1.0.100", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

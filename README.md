@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **1.0.0** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.0.100** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -75,7 +75,7 @@ Then import the workflows, create the Data Tables and run the first mission: [st
 
 ## About
 
-An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`ahawr-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.0.0** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
+An n8n-based orchestration system for running autonomous multi-agent development workflows. The roles run either through a Hermes Gateway or through Claude Code (`ahawr-runner`, with Anthropic models or a local llama.cpp model); see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner). Recent changes: [`CHANGELOG.md`](CHANGELOG.md). Current version: **1.0.100** (see [Versioning](#versioning)). Why the stack is built the way it is (English-first plans, short compactions, search hooks, operator acceptance): [Why it works this way](#why-it-works-this-way-constraints-and-workarounds).
 
 The system separates **workflow logic**, **runtime configuration**, **agent prompts**, **missions**, and **secrets** so that the workflow can be maintained and reused without editing the main orchestration graph every time a model or mission changes.
 

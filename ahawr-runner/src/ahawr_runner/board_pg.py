@@ -132,6 +132,10 @@ class UnavailableBoardStore(BoardStore):
     def _refuse(self) -> None:
         raise RuntimeError(f"board unavailable: {self._reason}")
 
+    def providers_updated_at(self) -> str:
+        self._refuse()
+        return ""
+
     def get_project_rules(self) -> tuple[list[dict[str, Any]], str]:
         self._refuse()
         return [], ""
