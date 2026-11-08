@@ -355,7 +355,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="ahawr-runner", version="1.0.100", lifespan=lifespan)
+    app = FastAPI(title="ahawr-runner", version="1.0.200", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

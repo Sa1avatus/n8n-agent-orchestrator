@@ -1346,3 +1346,19 @@ if __name__ == "__main__":
     import sys
 
     sys.exit(pytest.main([__file__, "--no-cov", "-q"]))
+
+
+def test_current_task_of_a_stopped_mission_is_waiting_not_running() -> None:
+    """A stopped mission runs nothing, so its current task is waiting (not in progress because of a
+    worker_status left over from the stop); an active mission still shows it running."""
+    from ahawr_runner.board import TaskStatuses
+
+    task = {"id": "T001"}
+    assert TaskStatuses.derive(task, "stopped", 0, 1, 0) == "waiting"
+    assert TaskStatuses.derive(task, "active", 0, 1, 0) == "running"
+    store = InMemoryBoardStore()
+    store._live["sk"] = LiveState(
+        state_key="sk", status="stopped", task_index=0, task_attempt=1, worker_status="running",
+        plan={"tasks": [{"id": "T001", "title": "t"}]},
+    )
+    assert [v.status for v in store.task_views("sk")] == ["waiting"]

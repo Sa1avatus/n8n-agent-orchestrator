@@ -38,9 +38,17 @@ function savePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify({ view: state.view, window: state.window })); } catch (e) { /* ignored */ }
 }
 
+const STATUS_ICON_PATHS = {
+  ok: '<circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/>',
+  warning: '<path d="M12 9v4m0 4h.01"/><path d="M10.36 3.86 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.64 3.86a2 2 0 0 0-3.28 0z"/>',
+  error: '<circle cx="12" cy="12" r="9"/><path d="m10 10 4 4m0-4-4 4"/>',
+  off: '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',
+};
+// the status as an icon; its name is the tooltip only
 function badge(status) {
   const cls = V.statusClass(status);
-  return `<span class="gt-st ${ctx.esc(cls)}"><span aria-hidden="true">${ctx.esc(V.statusShape(status))}</span> ${ctx.esc(ctx.t(status === "off" ? "tab.disabled" : status, status))}</span>`;
+  const name = ctx.esc(ctx.t(status === "off" ? "tab.disabled" : status, status));
+  return `<span class="gt-st ${ctx.esc(cls)}" role="img" aria-label="${name}" title="${name}"><svg viewBox="0 0 24 24">${STATUS_ICON_PATHS[cls]}</svg></span>`;
 }
 function dash(v) { return ctx.esc(v ? v : ctx.t("none", "—")); }
 function dryMark(entry) { return entry.dry_run ? ` <span class="gt-mark">${ctx.esc(ctx.t("dry", "dry run"))}</span>` : ""; }

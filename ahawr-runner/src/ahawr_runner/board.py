@@ -549,9 +549,11 @@ def _derive_status(
         return "failed"
     if index < current_index:  # the workflow already advanced past it
         return "accepted" if verdict == "pass" else "not_accepted"
-    # the current task, Live State status 'active'
     if verdict == "needs_changes":  # the review rejected the report
         return "not_accepted"
+    if live.status == "stopped":  # nothing runs; a leftover worker_status is stale
+        return "waiting"
+    # the current task, Live State status 'active'
     if latest_type == "worker_terminal":  # the worker run ended in error
         return "running"
     if latest_type == "worker_completed":  # worker done, review pending
@@ -595,10 +597,12 @@ class TaskStatuses:
         if task_index < current_index:
             status = _latest_review_status(events, task_id)
             return "accepted" if status == "pass" else "not_accepted"
-        # current task, live status 'active'
         status = _latest_review_status(events, task_id)
         if status == "needs_changes":
             return "not_accepted"
+        if live_status == "stopped":  # nothing runs in a stopped mission
+            return "waiting"
+        # current task, live status 'active'
         if latest_type == "worker_terminal":
             return "running"
         if latest_type == "worker_completed":

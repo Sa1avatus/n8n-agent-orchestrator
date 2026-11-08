@@ -1362,3 +1362,55 @@ def test_dashboard_main_bind_fallback_is_loopback_when_env_unset(
     monkeypatch.setenv("AHAWR_DASHBOARD_BIND", "")
     assert module.main([]) == 0
     assert binds == ["127.0.0.1", "10.1.2.3", "127.0.0.1"]
+
+
+def test_source_state_is_drawn_as_the_client_icon_grey_unless_ok() -> None:
+    """#srcstate shows a mark per client (Claude Code for the runner, Hermes, Codex, DeepSeek) in its brand colour when the
+    state is ok and grey otherwise; the state text stays in the tooltip and the aria label, the runner is shown as "Claude",
+    Codex follows the runner and DeepSeek stays grey until a source reports it; an unknown source keeps the text."""
+    import re
+    from importlib import resources
+
+    html = resources.files("ahawr_runner").joinpath("dashboard.html").read_text("utf-8")
+    assert 'sourceStates(data.sources || {})' in html
+    for name in ("ahawr-runner", "hermes", "codex", "deepseek"):
+        assert f'.srcicon.ok[data-src="{name}"]' in html
+    assert "#srcstate .srcicon.off { color: var(--src-off); }" in html
+    assert 'label: "Claude"' in html and 'label: "ahawr' not in html
+    function = html[html.index("function sourceBadge") : html.index("async function loadRuns()")]
+    assert 'ok ? "ok" : "off"' in function and "title=" in function and "aria-label=" in function
+    assert 'follows: "ahawr-runner"' in html and '"not connected"' in html
+    for brand in ("claude", "hermes", "codex", "deepseek"):
+        assert re.search(rf"--brand-{brand}: #[0-9a-f]{{6}}", html)
+    assert "function runSourceMark(" in html and "runSourceMark(r.source" in html
+    assert "SOURCE_LABEL" not in html
+
+
+def test_run_status_is_an_icon_with_the_name_as_tooltip_and_only_running_spins() -> None:
+    """A run's status is drawn as an 18 px icon (no dot, no status text); the name is the tooltip and aria label,
+    only "running" rotates (not "queued") and reduced motion stops it; the status filter stays on the icon."""
+    from importlib import resources
+
+    html = resources.files("ahawr_runner").joinpath("dashboard.html").read_text("utf-8")
+    assert 'class="dot' not in html and ".dot " not in html
+    assert ".stmark.running svg { animation: spin" in html and ".stmark.queued svg" not in html
+    assert "prefers-reduced-motion: reduce" in html
+    for status in ("running", "queued", "completed", "failed", "interrupted", "cancelled"):
+        assert f"  {status}: '<" in html
+    function = html[html.index("function statusMark") : html.index("function sourceBadge")]
+    assert 'title="${esc(name)}"' in function and 'aria-label="${esc(name)}"' in function
+    assert 'data-field="status"' in html and 'class="fv stmark' in html
+
+
+def test_roles_are_drawn_as_gear_icons_with_the_name_as_tooltip() -> None:
+    """Architect, Worker, Reviewer, QA and Retrieval are a gear in the role colour with a glyph; the name is the
+    tooltip and aria label, a role without a glyph keeps its text, and the role filter stays on the icon."""
+    from importlib import resources
+
+    html = resources.files("ahawr_runner").joinpath("dashboard.html").read_text("utf-8")
+    for role in ("architect", "worker", "reviewer", "qa", "retrieval"):
+        assert f".rolemark.{role}" in html
+    function = html[html.index("function roleMark") : html.index("function roleMark") + 900]
+    assert 'title="${esc(name)}"' in function and 'aria-label="${esc(name)}"' in function
+    assert "ROLE_GLYPHS.qa_agent = ROLE_GLYPHS.qa" in html
+    assert 'data-field="role"' in html and "roleMark(r.role" in html

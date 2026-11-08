@@ -245,6 +245,9 @@ per-task status is computed in this order:
    a corresponding event row, plus a branch in Advance Task that advances
    without running the Worker.
 
+Note: in a mission whose Live State `status = 'stopped'` the current task is **waiting**, not running (a worker_status left
+over from the stop is stale); it is running again when the mission is `active`.
+
 Note: the Live State `status` column is **not** `running` — that is a derived
 per-task state, not a stored column value. The only stored values are
 `active`, `completed`, and `failed`.
