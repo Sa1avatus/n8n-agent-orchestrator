@@ -247,7 +247,7 @@ The table has an auto-increment `id` primary key (created with the table).
 | `/commands` | `Page 1: /accept, /agents, /approve, /audit, /commands, /config, /deny, /errors, /help, /insights, /mission, /missions, /model, /pause, /profile, /progress, /queue, /restart, /resume, /retry` (20 per page; page 2: /set, /start, /status, /steer, /stop, /undo, /usage, /version, /whoami; Handle Help, 477) |
 | `/sethome` | **no reply** (not implemented; `Route Category` maps it to itself with no handler) |
 
-## Main-workflow behaviour (patched `AHAWR_v13_ClaudeCode.json`)
+## Main-workflow behaviour (patched `AHAWR_Workflow.json`)
 
 - **Pause**: `Pause Gate Flags` reads the fresh live row; when `paused = true` the next task is routed to `Hold Paused` (`execution_route = paused`, `final_status = paused_by_operator`, `workflow_status = paused`, owner cleared). `/pause off` clears the flag and the gate passes (`Clear Consumed Flags` path).
 - **Stop**: `Stop Check Worker` reads the fresh `stop_requested`; when true, `Stop Workflow` sets `workflow_status = stopped` and clears the owner (nothing left running without an owner). The reviewer stop check reads its own fresh pair.

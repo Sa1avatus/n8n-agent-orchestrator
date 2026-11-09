@@ -203,7 +203,7 @@ forwarded policy is stored on the run record but never applied. Enabling
 cloud runs instead of leaving them as the CLI default.
 
 Forwarding check (T014): already forwarded for anthropic, so no patch was written.
-Evidence in `Claude_Code_Run_Manager_v1.json` (read-only check): the POST-body
+Evidence in `Run_Manager_v1.json` (read-only check): the POST-body
 condition `nr.think_policy || Number(nr.think_policy_from_task) > 0 || ...` with
 `body.think_policy = nr.think_policy` appears in `Start / Resume Run`,
 `Resume Existing Session` and `Start New Session from Handoff`, with no provider test.

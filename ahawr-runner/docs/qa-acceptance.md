@@ -148,7 +148,7 @@ run against the exported JSON, in the fixed order above.
 
 ## 2. The call chain inside the workflow
 
-All node names below are nodes of `AHAWR_v13_ClaudeCode.json` (the Claude Code variant of
+All node names below are nodes of `AHAWR_Workflow.json` (the Claude Code variant of
 `AHAWR v13` / "Get Mission"); line numbers refer to the exported JSON file at the time of
 writing.
 

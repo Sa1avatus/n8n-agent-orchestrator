@@ -12,7 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PATCH_PATH = ROOT / "data-tables" / "ops" / "review_calibration_patch.py"
-EXPORT_PATH = ROOT / "AHAWR_v13_ClaudeCode.json"
+EXPORT_PATH = ROOT / "AHAWR_Workflow.json"
 
 pytestmark = pytest.mark.skipif(
     not (PATCH_PATH.is_file() and EXPORT_PATH.is_file()),

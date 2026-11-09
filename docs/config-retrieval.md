@@ -7,7 +7,7 @@ one `missions` column that carries retrieval corpora. Input for the plan in `doc
 
 - Workflow export used: `/d/n8n/scratchpad/live_workflow_export.json` (workflow "AHAWR v13 — Claude Code", 102 nodes),
   modification time `2026-10-31 15:14:13 UTC`. It is the only fresh export of the live workflow found in the workspace.
-- `AHAWR_v13_ClaudeCode.json` was NOT used (per the task rules). It is not the running workflow.
+- `AHAWR_Workflow.json` was NOT used (per the task rules). It is not the running workflow.
 - Ops patches: `data-tables/ops/*_patch.py` (read only).
 - Not used: `data-tables/ops/wf_before_ahawr-json-config-retrieval.json` (modified `2026-10-31 18:00:12 UTC`) is a
   pre-patch backup, not an export of the live workflow.

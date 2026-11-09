@@ -286,12 +286,12 @@ Design, freshness model, cache, ranking and evaluation: `docs/retrieval/ARCHITEC
 `docs/retrieval/EVALUATION.md`, `docs/retrieval/ROADMAP.md`.
 
 
-## 10. Claude Code Execution Variant (AHAWR v13 — Claude Code, ahawr-runner 0.1)
+## 10. Claude Code Execution Variant (AHAWR Workflow, ahawr-runner 0.1)
 
-`AHAWR_v13_ClaudeCode.json` differs from `AHAWR_v13.json` only in how it reaches the executor:
+`AHAWR_Workflow.json` differs from `AHAWR_v13.json` only in how it reaches the executor:
 
 - `Load Config`/`Constants` select the `claude-code` profile and expose `runner_url`.
-- `Architect/Worker/Reviewer Start` call `Claude Code Run Manager v1` (and pass `runner_url`).
+- `Architect/Worker/Reviewer Start` call `Run Manager v1` (and pass `runner_url`).
 - The resume prompts name the Claude Code session.
 
 Data Table schemas, identifiers (`run_id`, `session_id`, `state_key`) and all recovery paths are
@@ -319,7 +319,7 @@ the same.
   dashboard is not part of the run contract: AHAWR never reads it, and it holds no execution
   state.
 
-`Claude Code Run Manager v1` also corrects two state-selection issues present in
+`Run Manager v1` also corrects two state-selection issues present in
 `Hermes_Run_Manager_v5.json`:
 
 1. `Evaluate Status` now reads the in-flight state from `Poll Wait` instead of its own previous
@@ -336,7 +336,7 @@ n8n assigns new workflow ids when workflows are imported through the UI. Before 
 re-selecting the sub-workflow in an Execute Workflow node reset its input mapping. Both AHAWR
 variants and both Run Managers are therefore wired as follows:
 
-- `Hermes Run Manager v5` and `Claude Code Run Manager v1` take their input with the trigger
+- `Hermes Run Manager v5` and `Run Manager v1` take their input with the trigger
   set to *Accept all data* (`inputSource: passthrough`). `Normalize Request` validates the
   fields as before.
 - `Build Architect/Worker/Reviewer Run Input` (Code, one item in, one item out) computes exactly

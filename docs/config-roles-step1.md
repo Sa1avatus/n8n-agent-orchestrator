@@ -13,7 +13,7 @@ Scope of this step: list every reader of the 17 legacy `hermes_config` columns (
 | Workflow | "AHAWR v13 — Claude Code", id `7oMrsFqTiYMy0JJN`, 102 nodes |
 | Export timestamp | `updatedAt` 2026-10-23T14:17:41.716Z (8 days old on 2026-10-31) |
 | Newer candidates checked | `ls -t data-tables/ops/*.json data-tables/ops/_scratch/*.json` lists `queue_watch.state.json`, `rm_live.json`, `wf_next.json` first; `wf_next.json` is the same workflow (same id, `updatedAt`, 102 nodes; the 17 column reads are identical). No newer full export exists. |
-| Not used | `AHAWR_v13_ClaudeCode.json` (pre-launch template, not the live workflow) |
+| Not used | `AHAWR_Workflow.json` (pre-launch template, not the live workflow) |
 
 The export is 8 days old. If the operator stages a newer export, the node line numbers below must be re-checked.
 

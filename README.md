@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **1.0.200** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.0.210** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -130,6 +130,8 @@ It is designed for long-running tasks where a single LLM call is not enough. Ins
 The workflow therefore behaves more like a small autonomous engineering pipeline than a simple chatbot.
 
 ### Components
+
+> **2026-11-09:** the repository keeps ONE workflow for all engines, `AHAWR_Workflow.json` (formerly `AHAWR_v13_ClaudeCode.json`), with its `Run_Manager_v1.json`, the Telegram bot and the mission-results workflow. The older Hermes-gateway files `AHAWR_v13.json` and `Hermes_Run_Manager_v5.json` were removed from the repository; the sections below that describe them are history (last present in commit `9bf0266`).
 
 #### `AHAWR_v13.json`
 
@@ -383,10 +385,8 @@ The repository contains:
 
 ```text
 .
-├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
-├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (ahawr-runner)
-├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
-├── Claude_Code_Run_Manager_v1.json  # the same for ahawr-runner
+├── AHAWR_Workflow.json              # the one AHAWR workflow for every engine (Claude Code, Codex, Hermes via ahawr-runner)
+├── Run_Manager_v1.json              # run/poll/retry/compression sub-workflow of ahawr-runner
 ├── AHAWR_Mission_Results.json       # writes the mission_results table (time, cost, speed, cache per mission)
 ├── AHAWR_Status_Bot.json            # Telegram status/control bot (see docs/telegram-bot.md)
 ├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
@@ -527,7 +527,7 @@ Models and providers are configured through the `hermes_config` Data Table.
 
 In n8n:
 
-1. Import `Hermes_Run_Manager_v5.json` (Hermes variant) or `Claude_Code_Run_Manager_v1.json` (Claude Code variant, see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner)).
+1. Import `Run_Manager_v1.json` (see [AHAWR on Claude Code](#ahawr-on-claude-code-ahawr-runner)).
 2. Configure the required Hermes credentials.
 3. Run a simple test request.
 4. Confirm that Hermes can start a run and return a result.
@@ -552,8 +552,8 @@ the separator).
 
 | `profile_id` | Workflow | Roles |
 |---|---|---|
-| `default` | `AHAWR_v13.json` (Hermes) | OpenRouter Architect/Reviewer, local llama.cpp Worker |
-| `claude-code` (enabled) | `AHAWR_v13_ClaudeCode.json` | all roles on Anthropic |
+| `default` | (the old Hermes-gateway workflow, no longer in the repository) | OpenRouter Architect/Reviewer, local llama.cpp Worker |
+| `claude-code` (enabled) | `AHAWR_Workflow.json` | all roles on Anthropic |
 | `claude-code` (disabled) | same | Worker on the local model through LiteLLM (`worker_provider=local`) |
 | `claude-code` (disabled) | same | all roles on OpenAI (`provider=openai`); needs the Codex executor of mission `ahawr-codex-executor`, not in ahawr-runner yet |
 
@@ -586,13 +586,12 @@ state_namespace: test
 
 The namespace isolates persistent state between missions.
 
-#### 10. Import `AHAWR_v13.json` or `AHAWR_v13_ClaudeCode.json`
+#### 10. Import `AHAWR_Workflow.json`
 
-Import the workflow for your variant:
+Import the workflow (one workflow serves every engine; the engine follows the provider of each role):
 
 ```text
-AHAWR_v13.json               # Hermes
-AHAWR_v13_ClaudeCode.json    # Claude Code (ahawr-runner)
+AHAWR_Workflow.json
 ```
 
 After importing, open the imported Run Manager and copy its workflow id from the URL (`/workflow/<id>`). If it is not `nhjwX1G7FiVTO2Ah`, put it into the `run_manager_workflow_id` column of `hermes_config`. `Architect/Worker/Reviewer Start` take the id from there. Their inputs are built by the `Build … Run Input` Code nodes, so re-selecting or re-importing the Run Manager never resets them.
@@ -713,7 +712,7 @@ Keep runtime data, credentials, local model files, and temporary state outside G
 `AHAWR_v13.json` calls `POST http://ahawr-retrieval:8500/retrieve` before `Worker Start` and `Reviewer Start`. The call is fail-open, and retrieval is off unless `hermes_config.retrieval_enabled` is `true`. With retrieval off, v13 behaves like v12. Set `AHAWR_WORKSPACE_DIR` and the optional `RETRIEVAL_*` values in `.env` (see `.env.example`); the workspace is mounted read-only into the retrieval container at `/workspace`. See [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`retrieval-service/README.md`](retrieval-service/README.md) and [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
 **Turning retrieval on (checklist).**
-1. In the `hermes_config` row the workflow uses (`claude-code` for AHAWR v13 — Claude Code, the Hermes profile row for `AHAWR_v13.json`), set `retrieval_enabled = true`. It is `false` by default, and then no request is sent at all.
+1. In the `hermes_config` row the workflow uses (`claude-code` for AHAWR Workflow, the Hermes profile row for `AHAWR_v13.json`), set `retrieval_enabled = true`. It is `false` by default, and then no request is sent at all.
 2. Give the mission a `working_directory` (for example `D:\ClaudeProjects\app`). Its corpus is created from that folder on the first request. Without it, the `retrieval_corpora_json` corpora of `hermes_config` are used (`ahawr-workspace` = `/workspace`).
 3. Import the current workflow (older imports do not send `corpus_roots`).
 4. Check it:
@@ -725,10 +724,10 @@ The Architect gets no retrieved context; only the Worker and the Reviewer do.
 
 ### AHAWR on Claude Code (`ahawr-runner`)
 
-`AHAWR_v13_ClaudeCode.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `ahawr-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
+`AHAWR_Workflow.json` is AHAWR v13 with **Claude Code instead of Hermes** as the execution engine. Claude Code has no HTTP run API of its own. `ahawr-runner/` runs the Claude Code CLI headless behind the same `/v1/runs` contract as the Hermes gateway, so orchestration, Data Table state, retries and recovery stay the same.
 
 - Container `ahawr-runner` in the same compose stack: `docker compose up -d --build` builds and starts it together with n8n, `ahawr-retrieval` and `litellm`. n8n reaches it at `http://ahawr-runner:8700`; the run API has no host port.
-- `Claude_Code_Run_Manager_v1.json` is `Hermes_Run_Manager_v5.json` with the runner endpoints and a role field. The Hermes TUI/WebSocket compression is replaced by `POST /v1/sessions/{id}/compact`, which runs Claude Code `/compact` only above a context threshold.
+- `Run_Manager_v1.json` is `Hermes_Run_Manager_v5.json` with the runner endpoints and a role field. The Hermes TUI/WebSocket compression is replaced by `POST /v1/sessions/{id}/compact`, which runs Claude Code `/compact` only above a context threshold.
 - Sessions are resumable Claude Code sessions (`--resume`), kept in a volume. A run interrupted by a runner restart is reported as `run_not_found`, so the Run Manager continues the saved session.
 - Per-role permissions:
   - Worker: `bypassPermissions`, but it cannot read `.env` and cannot `git commit` or `git push`;
@@ -768,7 +767,7 @@ Not part of 1.0: the runner working with any client in every role (after 1.0), t
 
 ### Versioning
 
-The stack is versioned as a whole by the `ahawr-runner` package version (`ahawr-runner/pyproject.toml`, also reported by the runner API); the workflow files keep their own names (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial ahawr-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md). **0.4.0** (2026-10-14): the Telegram control bot actually works (webhook fed by `tg_relay.py`, command menu with descriptions), the retrieval index is in PostgreSQL with a memory limit, the slot cache is kept by a container (`slot_keeper.py` in `llama-cpp-dashboard`), the Reviewer can read the llama.cpp tree, the local run cost is computed as a Haiku/Sonnet equivalent, and the cold-prefill profile and mission report are in `docs/`. See `CHANGELOG.md`.
+The stack is versioned as a whole by the `ahawr-runner` package version (`ahawr-runner/pyproject.toml`, also reported by the runner API); the repository holds one AHAWR workflow for all engines (`AHAWR_Workflow.json`) and its Run Manager (`Run_Manager_v1.json`). **0.2.0** (2026-10-06) is the first release after 0.1.0 (the initial ahawr-runner): it adds the English-first working language with a mission report in the mission's language, compaction tuned to the local model's window, on-demand `ahawr-search` with a search-first hook, the read-only Reviewer shell, the fresh-session retry switch, verdict retry, attempt limits and operator closure of tasks, and shorter Telegram notices. Details are in [`CHANGELOG.md`](CHANGELOG.md). **0.4.0** (2026-10-14): the Telegram control bot actually works (webhook fed by `tg_relay.py`, command menu with descriptions), the retrieval index is in PostgreSQL with a memory limit, the slot cache is kept by a container (`slot_keeper.py` in `llama-cpp-dashboard`), the Reviewer can read the llama.cpp tree, the local run cost is computed as a Haiku/Sonnet equivalent, and the cold-prefill profile and mission report are in `docs/`. See `CHANGELOG.md`.
 
 **Version numbers (rule since 2026-10-15).** The number is `X.Y.Z`. A step with new functions raises the middle number by 1 (`0.4.0` → `0.5.0`, the last number goes back to 0). A release that only fixes bugs raises the last number by 100 (`0.5.0` → `0.5.100` → `0.5.200`). A small change (documentation, wording, a small fix) raises the last number by 10 (`0.5.100` → `0.5.110`), a tiny one (a typo, a link, one line) by 1 (`0.5.110` → `0.5.111`). Every push adds an entry to `CHANGELOG.md` with the version and the changes; for a bug-fix step the entry lists the fixed bugs. The number is changed in `ahawr-runner/pyproject.toml` and in `ahawr-runner/src/ahawr_runner/api.py` (`FastAPI(version=...)`), together with the changelog.
 
@@ -1276,10 +1275,8 @@ logs
 
 ```text
 .
-├── AHAWR_v13.json                   # AHAWR on Hermes (with the retrieval layer)
-├── AHAWR_v13_ClaudeCode.json        # AHAWR on Claude Code (ahawr-runner)
-├── Hermes_Run_Manager_v5.json       # run/poll/retry/compression sub-workflow for Hermes
-├── Claude_Code_Run_Manager_v1.json  # the same for ahawr-runner
+├── AHAWR_Workflow.json              # the one AHAWR workflow for every engine (Claude Code, Codex, Hermes via ahawr-runner)
+├── Run_Manager_v1.json              # run/poll/retry/compression sub-workflow of ahawr-runner
 ├── hermes_config.example.csv        # Data Table example: profiles for Hermes, Claude Code, local, OpenAI
 ├── agent_prompts.example.csv        # Data Table example: Architect / Worker / Reviewer prompts
 ├── missions.example.csv             # Data Table example: one mission
@@ -1391,7 +1388,7 @@ Hermes Gateway
 
 В n8n:
 
-1. Импортируйте `Hermes_Run_Manager_v5.json` (вариант с Hermes) или `Claude_Code_Run_Manager_v1.json` (вариант с Claude Code, см. [AHAWR на Claude Code](#ahawr-на-claude-code-ahawr-runner)).
+1. Импортируйте `Run_Manager_v1.json` ( см. [AHAWR на Claude Code](#ahawr-на-claude-code-ahawr-runner)).
 2. Настройте необходимые Hermes credentials.
 3. Выполните простой тестовый запрос.
 4. Убедитесь, что Hermes запускает run и возвращает результат.
@@ -1415,8 +1412,8 @@ missions
 
 | `profile_id` | Workflow | Роли |
 |---|---|---|
-| `default` | `AHAWR_v13.json` (Hermes) | Architect/Reviewer через OpenRouter, Worker — локальный llama.cpp |
-| `claude-code` (включена) | `AHAWR_v13_ClaudeCode.json` | все роли на Anthropic |
+| `default` | (старый workflow с Hermes Gateway, в репозитории его больше нет) | Architect/Reviewer через OpenRouter, Worker — локальный llama.cpp |
+| `claude-code` (включена) | `AHAWR_Workflow.json` | все роли на Anthropic |
 | `claude-code` (выключена) | тот же | Worker на локальной модели через LiteLLM (`worker_provider=local`) |
 | `claude-code` (выключена) | тот же | все роли на OpenAI (`provider=openai`); нужен исполнитель Codex из миссии `ahawr-codex-executor`, в ahawr-runner его пока нет |
 
@@ -1449,13 +1446,12 @@ state_namespace: test
 
 `state_namespace` разделяет сохранённое состояние разных missions.
 
-#### 10. Импортировать `AHAWR_v13.json` или `AHAWR_v13_ClaudeCode.json`
+#### 10. Импортировать `AHAWR_Workflow.json`
 
-Импортируйте workflow своего варианта:
+Импортируйте workflow (один workflow на все движки; движок определяется провайдером роли):
 
 ```text
-AHAWR_v13.json               # Hermes
-AHAWR_v13_ClaudeCode.json    # Claude Code (ahawr-runner)
+AHAWR_Workflow.json
 ```
 
 После импорта откройте импортированный Run Manager и скопируйте его ID из адреса (`/workflow/<id>`). Если ID не `nhjwX1G7FiVTO2Ah`, впишите его в колонку `run_manager_workflow_id` таблицы `hermes_config`. `Architect/Worker/Reviewer Start` берут ID оттуда. Входы для них собирают Code-узлы `Build … Run Input`, поэтому повторный выбор или переимпорт Run Manager их не сбрасывает.
@@ -1544,7 +1540,7 @@ worker_provider
 `AHAWR_v13.json` вызывает `POST http://ahawr-retrieval:8500/retrieve` перед `Worker Start` и `Reviewer Start`. Ошибка или таймаут не останавливают задачу. Путь к workspace и параметры `RETRIEVAL_*` задаются в `.env` (см. `.env.example`); workspace монтируется в контейнер retrieval только на чтение в `/workspace`. Retrieval выключен, пока в `hermes_config` не задано `retrieval_enabled = true`; в этом режиме v13 работает как v12. Подробности: [`docs/retrieval/`](docs/retrieval/ARCHITECTURE.md), [`docs/retrieval/INTEGRATION.md`](docs/retrieval/INTEGRATION.md).
 
 **Как включить retrieval (чек-лист).**
-1. В строке `hermes_config`, которую использует воркфлоу, поставь `retrieval_enabled = true`. Для AHAWR v13 — Claude Code это строка `claude-code`, для `AHAWR_v13.json` — строка профиля Hermes. По умолчанию там `false`, и тогда запросы в RAG вообще не отправляются.
+1. В строке `hermes_config`, которую использует воркфлоу, поставь `retrieval_enabled = true`. Для AHAWR Workflow это строка `claude-code`, для `AHAWR_v13.json` — строка профиля Hermes. По умолчанию там `false`, и тогда запросы в RAG вообще не отправляются.
 2. Заполни у миссии `working_directory` (например, `D:\ClaudeProjects\app`). Корпус создаётся из этой папки при первом запросе. Без неё используются корпуса из `retrieval_corpora_json` в `hermes_config` (`ahawr-workspace` = `/workspace`).
 3. Импортируй текущую версию воркфлоу: старые импорты не передают `corpus_roots`.
 4. Проверь:
@@ -1557,10 +1553,10 @@ Architect контекст из RAG не получает, только Worker �
 
 ### AHAWR на Claude Code (`ahawr-runner`)
 
-`AHAWR_v13_ClaudeCode.json` — это AHAWR v13, в котором вместо Hermes работает **Claude Code**. Своего HTTP API для запусков у Claude Code нет. `ahawr-runner/` запускает Claude Code CLI без интерактива и отдаёт тот же контракт `/v1/runs`, что и Hermes Gateway. Поэтому оркестрация, состояние в Data Tables, ретраи и восстановление не меняются.
+`AHAWR_Workflow.json` — это AHAWR v13, в котором вместо Hermes работает **Claude Code**. Своего HTTP API для запусков у Claude Code нет. `ahawr-runner/` запускает Claude Code CLI без интерактива и отдаёт тот же контракт `/v1/runs`, что и Hermes Gateway. Поэтому оркестрация, состояние в Data Tables, ретраи и восстановление не меняются.
 
 - Контейнер `ahawr-runner` входит в тот же compose-стек: `docker compose up -d --build` собирает и запускает его вместе с n8n, `ahawr-retrieval` и `litellm`. n8n обращается к нему по адресу `http://ahawr-runner:8700`.
-- `Claude_Code_Run_Manager_v1.json` — это `Hermes_Run_Manager_v5.json` с адресами runner. Компрессия через Hermes WebSocket заменена на `POST /v1/sessions/{id}/compact`: это `/compact` Claude Code, который запускается только при большом контексте.
+- `Run_Manager_v1.json` — это `Hermes_Run_Manager_v5.json` с адресами runner. Компрессия через Hermes WebSocket заменена на `POST /v1/sessions/{id}/compact`: это `/compact` Claude Code, который запускается только при большом контексте.
 - Сессии Claude Code продолжаются через `--resume` и хранятся в томе. Прогон, прерванный рестартом runner, возвращает `run_not_found`, и Run Manager продолжает сессию.
 - Права по ролям:
   - Worker: `bypassPermissions`, но без чтения `.env`, `git commit` и `git push`;
@@ -1599,7 +1595,7 @@ Architect контекст из RAG не получает, только Worker �
 
 ### Версии
 
-Стек версионируется по версии пакета `ahawr-runner` (`ahawr-runner/pyproject.toml`, её же отдаёт API runner'а); файлы воркфлоу сохраняют свои имена (`AHAWR_v13`, `Claude_Code_Run_Manager_v1`, `Hermes_Run_Manager_v5`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый ahawr-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
+Стек версионируется по версии пакета `ahawr-runner` (`ahawr-runner/pyproject.toml`, её же отдаёт API runner'а); в репозитории один workflow AHAWR на все движки (`AHAWR_Workflow.json`) и его Run Manager (`Run_Manager_v1.json`). **0.2.0** (2026-10-06) — первый релиз после 0.1.0 (первый ahawr-runner): рабочий язык «сначала английский» с отчётом по миссии на языке миссии, сжатие под окно локальной модели, поиск `ahawr-search` по требованию с хуком «сначала поиск», Reviewer с оболочкой только для чтения, переключатель ретрая в свежей сессии, повтор вердикта, лимит попыток с закрытием задач оператором и более короткие Telegram-уведомления. Подробности — в [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Почему всё устроено именно так: ограничения и обходные решения
 

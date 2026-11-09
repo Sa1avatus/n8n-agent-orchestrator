@@ -17,8 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 WORKFLOW_FILES = [
-    "AHAWR_v13_ClaudeCode.json",
-    "AHAWR_v13.json",
+    "AHAWR_Workflow.json",
     "AHAWR_Status_Bot.json",
 ]
 

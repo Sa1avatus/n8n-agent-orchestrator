@@ -16,7 +16,7 @@ RULES 1 and ACCEPTANCE CRITERIA in the mission text describe the lessons mission
   File date 2026-10-31 15:14. Patches changed after that date (`retrieval_config_patch.py` 18:13,
   `engine_config_patch.py` 18:56, `thinking_config_patch.py` 17:52): whether the live export at launch matches this copy is UNKNOWN.
 - Patches: `data-tables/ops/*_patch.py` (grep for the names above, then the context of each hit).
-- Not used: `AHAWR_v13_ClaudeCode.json` (not what runs, per `CLAUDE.md`).
+- Not used: `AHAWR_Workflow.json` (not what runs, per `CLAUDE.md`).
 
 Counts below are the number of mentions of the name in each node (parameters, whole node JSON).
 

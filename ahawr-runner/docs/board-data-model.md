@@ -133,7 +133,7 @@ created_at=…  createdAt=…  updatedAt=…
 ## plan_json
 
 The plan is produced by the Architect run and parsed by the **Parse Plan** node of
-`AHAWR_v13_ClaudeCode` (workflow `cLdAhawr13Cc9xKp`). The Architect output is a
+`AHAWR_Workflow` (workflow `cLdAhawr13Cc9xKp`). The Architect output is a
 JSON object:
 
 ```json
@@ -153,7 +153,7 @@ JSON object:
 }
 ```
 
-Parsing and validation (Parse Plan node, `AHAWR_v13_ClaudeCode.json`):
+Parsing and validation (Parse Plan node, `AHAWR_Workflow.json`):
 
 - `plan.tasks` must be a non-empty array; it is truncated to
   `hermes_config.max_tasks` (profile `claude-code` row id=5: `max_tasks=20`).
@@ -183,7 +183,7 @@ Task fields and where the workflow uses them:
 | `acceptance_criteria` | `ACCEPTANCE CRITERIA` prompt line (Worker, Reviewer, notice); resume text; fresh-retry input. |
 | `verification` | `VERIFICATION` prompt line (Worker, Reviewer, notice, retrieval queries). |
 | `scope` | `SCOPE` prompt line (Worker, Reviewer, notice, retrieval queries). |
-| `dependencies` | **Not used** by any code node of `AHAWR_v13_ClaudeCode` — parsed and stored, but never read. (See "Parameters not applied by the workflow".) |
+| `dependencies` | **Not used** by any code node of `AHAWR_Workflow` — parsed and stored, but never read. (See "Parameters not applied by the workflow".) |
 
 The per-task `dependencies` array is the only plan field that survives parsing
 but is never consumed: execution is strictly linear in `task_index` order.
@@ -375,9 +375,9 @@ n8n links its state rows to those run ids in three places:
    `architect_status`, `architect_session_id` hold the run ids (`run_` + uuid)
    and session ids of the current roles. The main workflow's
    **Save Worker Run Context** and **Save Reviewer Run Context** nodes
-   (`AHAWR_v13_ClaudeCode`) extract `result.run_id`, `result.session_id`,
+   (`AHAWR_Workflow`) extract `result.run_id`, `result.session_id`,
    `result.status` from the runner response; the Run Manager
-   (`Claude_Code_Run_Manager_v1`, workflow `cLdRunMgr1AhWr7q`) then persists
+   (`Run_Manager_v1`, workflow `cLdRunMgr1AhWr7q`) then persists
    them in its **Build Persist State — Run Context** code node (which also
    clears the stale ids on a `restart_session`/`start_new` route) and writes
    the row with its **Persist Agent State — Run Context** upsert. The main
@@ -403,7 +403,7 @@ which are not.
 
 Parameters that exist in `hermes_config` (row id=5, profile `claude-code`)
 or on the plan/state but are **not** applied per-task by
-`AHAWR_v13_ClaudeCode`. The workflow itself is not changed; each row below is
+`AHAWR_Workflow`. The workflow itself is not changed; each row below is
 the patch that would apply it.
 
 | Parameter | Current state | What is applied | What is not applied (per-task) | Workflow patch needed |

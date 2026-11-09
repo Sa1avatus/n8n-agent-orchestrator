@@ -1210,12 +1210,12 @@ for (const [verb, mission] of [["resume", "mission-b"], ["restart", "mission-a"]
 }
 
 // =============================================================================
-// 11. Main workflow control nodes (patched AHAWR_v13_ClaudeCode.json) —
+// 11. Main workflow control nodes (patched AHAWR_Workflow.json) —
 //     pause / stop / steer / accept / retry, run on stubs against the
 //     PATCHED nodes loaded by name; plus the Worker-input equality test
 //     (flags unset) and the patch-script idempotency / missing-anchor
 //     checks.  The pause and steer cases are ALSO run against the
-//     UNPATCHED file (git show HEAD:AHAWR_v13_ClaudeCode.json, temp path)
+//     UNPATCHED file (git show HEAD:AHAWR_Workflow.json, temp path)
 //     to capture the before-fix failing output for the log.
 // =============================================================================
 
@@ -1256,11 +1256,11 @@ function ifCondition(wf, nodeName, store, item) {
   return comb === "or" ? vals.some(Boolean) : vals.every(Boolean);
 }
 
-const MAIN_WF_PATCHED = path.join(__dirname, "..", "..", "AHAWR_v13_ClaudeCode.json");
-const MAIN_WF_UNPATCHED = path.join(__dirname, "..", "..", "AHAWR_v13_ClaudeCode.unpatched.json");
-// Unpatched version: git show HEAD:AHAWR_v13_ClaudeCode.json into a temp path.
+const MAIN_WF_PATCHED = path.join(__dirname, "..", "..", "AHAWR_Workflow.json");
+const MAIN_WF_UNPATCHED = path.join(__dirname, "..", "..", "AHAWR_Workflow.unpatched.json");
+// Unpatched version: git show HEAD:AHAWR_Workflow.json into a temp path.
 const { execSync } = require("child_process");
-execSync(`git -C ${JSON.stringify(path.join(__dirname, "..", ".."))} show HEAD:AHAWR_v13_ClaudeCode.json > ${JSON.stringify(MAIN_WF_UNPATCHED)}`, { stdio: "ignore" });
+execSync(`git -C ${JSON.stringify(path.join(__dirname, "..", ".."))} show HEAD:AHAWR_Workflow.json > ${JSON.stringify(MAIN_WF_UNPATCHED)}`, { stdio: "ignore" });
 
 // Stubs for the main-workflow nodes.
 const CONSTANTS_STUB = {
@@ -1515,7 +1515,7 @@ console.log("\n[Patch Script Checks]");
 
 // =============================================================================
 // 11d. Before-fix: same pause / steer tests against the UNPATCHED workflow
-//     (git show HEAD:AHAWR_v13_ClaudeCode.json into a temp path).  These
+//     (git show HEAD:AHAWR_Workflow.json into a temp path).  These
 //     MUST fail on the unpatched file — it has no pause gate / steer append
 //     — and the failing output is appended to docs/telegram/tests-before-fix.txt.
 // =============================================================================
@@ -1592,8 +1592,7 @@ fs.unlinkSync(MAIN_WF_UNPATCHED);
 // would reference a node that does not exist.
 
 const MAIN_WFS = [
-  path.join(__dirname, "..", "..", "AHAWR_v13_ClaudeCode.json"),
-  path.join(__dirname, "..", "..", "AHAWR_v13.json"),
+  path.join(__dirname, "..", "..", "AHAWR_Workflow.json"),
 ];
 
 for (const wfPath of MAIN_WFS) {

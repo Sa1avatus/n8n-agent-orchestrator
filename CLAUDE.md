@@ -12,7 +12,7 @@ Architect run. Keep your answers to the task: these rules say HOW to change code
 - `ahawr-runner/docs/` and `docs/` - design notes; `CHANGELOG.md`, `README.md`, `ROADMAP.md` in the root.
 - `data-tables/ops/` - operator scripts, NOT in git: queue, patches of the live n8n workflow. Read it, change it only
   when the task names a file there.
-- `AHAWR_v13_ClaudeCode.json` is NOT what runs: the live workflow is exported at launch and patched by
+- `AHAWR_Workflow.json` is NOT what runs: the live workflow is exported at launch and patched by
   `data-tables/ops/*_patch.py`. Facts about the workflow come from a fresh export, not from this file.
 
 ## Checks: run the narrow ones, quote the lines

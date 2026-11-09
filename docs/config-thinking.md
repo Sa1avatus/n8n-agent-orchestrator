@@ -8,7 +8,7 @@ Status: inventory only. No code, patch or test was changed. Step 2 of `docs/conf
   `updatedAt` 2026-10-23. Node names and line numbers below are from this file (the `jsCode` line numbers count from 1).
 - Run Manager: `scratchpad/live_run_manager_export.json` ("Claude Code Run Manager v1", 34 nodes). It has NO `worker_think_*`
   and NO `thinking_json` string.
-- `AHAWR_v13_ClaudeCode.json` was not used as a source.
+- `AHAWR_Workflow.json` was not used as a source.
 - Repository text read: `docs/config-columns-plan.md` (sections 2-5), `docs/naming.md`, `ahawr-runner/src/ahawr_runner/board_features.js`,
   `board_roles.js` (header), `data-tables/ops/features_config_patch.py`, `data-tables/ops/roles_config_patch.py`,
   `data-tables/ops/_make_json_config_thinking_mission.py`.

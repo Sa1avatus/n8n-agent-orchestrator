@@ -1,6 +1,6 @@
 # Review calibration
 
-Research for the Reviewer/Architect calibration work. Facts are taken from the workflow export `AHAWR_v13_ClaudeCode.json` (grep only, read-only), `data-tables/ops/*_patch.py`, `README.md` ("Versioning") and `CHANGELOG.md`. The export is the file in the repository root; the live workflow is exported at launch and may differ.
+Research for the Reviewer/Architect calibration work. Facts are taken from the workflow export `AHAWR_Workflow.json` (grep only, read-only), `data-tables/ops/*_patch.py`, `README.md` ("Versioning") and `CHANGELOG.md`. The export is the file in the repository root; the live workflow is exported at launch and may differ.
 
 ## Current flow
 
@@ -24,7 +24,7 @@ Other nodes that matter: `Reviewer Completed?` (name line 333, the branch before
 
 ### Anchors to patch
 
-Each anchor below was checked with `grep -o -F -- "<anchor>" AHAWR_v13_ClaudeCode.json | wc -l`. Every one occurs exactly once.
+Each anchor below was checked with `grep -o -F -- "<anchor>" AHAWR_Workflow.json | wc -l`. Every one occurs exactly once.
 
 | Hook point | Node | Anchor (verbatim) | Occurrences |
 |---|---|---|---|

@@ -166,7 +166,7 @@ Nothing here is run by the mission. The operator does this:
 
 ## What is not changed
 
-- The live workflow and `AHAWR_v13_ClaudeCode.json` are not edited by the design. The patches are files, applied at
+- The live workflow and `AHAWR_Workflow.json` are not edited by the design. The patches are files, applied at
   launch.
 - The design does not edit `data-tables/ops/launch_mission.sh` itself; that change is listed under Operator activation.
 - The legacy `max_tasks` column is kept until the removal step of `docs/config-columns-plan.md`. No column is
@@ -235,7 +235,7 @@ and T004. Only this mission gets adaptive split; the global `features_json` stay
 
 The notices are changed by `data-tables/ops/telegram_progress_patch.py` (launch line 44 of
 `launch_mission.sh.new`) and TASK STARTED also by `notice_split_patch.py` (several messages of at most 4096
-characters). The old texts below are quoted from `AHAWR_v13_ClaudeCode.json`, which is not the workflow that
+characters). The old texts below are quoted from `AHAWR_Workflow.json`, which is not the workflow that
 runs; the live export was not read for this table. "Plain" is a mission without a part count.
 
 | Message | Old text | New text, plain mission | New text, part of a split plan |

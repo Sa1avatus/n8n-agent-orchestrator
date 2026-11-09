@@ -25,8 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 FILES = [
-    ROOT / "AHAWR_v13_ClaudeCode.json",
-    ROOT / "AHAWR_v13.json",
+    ROOT / "AHAWR_Workflow.json",
 ]
 
 TARGET_NODE = "Send a text message"
@@ -161,7 +160,7 @@ def patch_file(path, label):
 
 
 def main():
-    for path, label in zip(FILES, ["AHAWR_v13_ClaudeCode.json", "AHAWR_v13.json"]):
+    for path, label in zip(FILES, ["AHAWR_Workflow.json"]):
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
         patch_file(path, label)
