@@ -161,10 +161,17 @@ function render(body, ctx) {
     return;
   }
   const groups = groupByProject(ctx.missions);
+  const cards = [];
   for (const project of projects) {
     const missions = groups.get(project.key) || [];
-    body.append(projectCard(ctx, project, missions));
+    const card = projectCard(ctx, project, missions);
+    body.append(card);
+    cards.push(card);
   }
+  if (typeof BoardStatsPopup === "undefined") return;
+  return Promise.all(cards.map((card) =>
+    BoardStatsPopup.attach(card, { kind: "project", project: card.dataset.project })
+  ));
 }
 
 function open(id) {

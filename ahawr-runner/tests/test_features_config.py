@@ -77,6 +77,38 @@ def test_features_constants_are_rejected_in_both_columns() -> None:
     ]
 
 
+def test_stats_popup_and_stats_engine_sampler_are_flags_default_off() -> None:
+    """Both new flags are known, default off, read like the other flags, and add
+    no legacy constant to flatten."""
+    features, errors = parse_features("", "")
+    assert errors == []
+    assert features is not None
+    assert features["stats_popup"] == {"enabled": False}
+    assert features["stats_engine_sampler"] == {"enabled": False}
+    assert flatten(features) == LEGACY
+    flipped, errors = parse_features(
+        '{"stats_popup": {"enabled": true}, "stats_engine_sampler": {"enabled": true}}',
+        "",
+    )
+    assert errors == []
+    assert flipped is not None
+    assert flipped["stats_popup"]["enabled"] is True
+    assert flipped["stats_engine_sampler"]["enabled"] is True
+    assert flatten(flipped) == LEGACY
+    mission_only, errors = parse_features("", '{"stats_popup": {"enabled": true}}')
+    assert errors == []
+    assert mission_only is not None
+    assert mission_only["stats_popup"]["enabled"] is True
+    bad, errors = parse_features('{"stats_popup": {"enabled": "yes"}}', "")
+    assert bad is None
+    assert errors == ['features_json: stats_popup.enabled must be true or false, got "yes"']
+    bad, errors = parse_features('{"stats_engine_sampler": {"max_tasks": 3}}', "")
+    assert bad is None
+    assert errors == [
+        'features_json: unknown parameter "max_tasks" in feature "stats_engine_sampler"'
+    ]
+
+
 def test_event_schema_version_is_a_flag_with_no_parameters() -> None:
     """The new feature is known, defaults off, and adds no legacy constant to flatten."""
     features, errors = parse_features('{"event_schema_version": {"enabled": true}}', "")

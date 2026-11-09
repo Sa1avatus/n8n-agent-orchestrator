@@ -1,0 +1,22 @@
+# The profile never sets GOOGLE_MAPS_API_KEY, so app.py:174-181 injects no Google loader and
+# makeMap (app.js:80-92) takes the vendored Leaflet branch at app.js:84-91 (README.md:77 "the
+# offline fallback map when GOOGLE_MAPS_API_KEY is not set").
+# blocker: the task asks for the note "Google Карты не подключены"; that text is not in the app.
+# The project asserts it is absent: tests/test_page.py:30 defines NOTE = "Google Карты не
+# подключены: задайте GOOGLE_MAPS_API_KEY" and tests/test_page.py:103 asserts
+# "the missing-key note was removed: no key is a normal setup", tests/test_tiles.py:57 likewise.
+# So the fallback is asserted here as: the local Leaflet bundle is served, the Google loader is
+# not in the page (request_2xx of /static/vendor/leaflet.js is the only map asset), and the note
+# is not shown. The operator must add the note in the app before it can be asserted as visible.
+name: without a Google key the page serves the local Leaflet bundle and shows no Google note
+tags: [ui, nightly]
+preconditions:
+  fixture: empty
+target: app
+steps:
+  - open: /
+    expect:
+      text_visible: ["Точки", "Точек за выбранный период нет."]
+      text_absent: ["Google Карты не подключены"]
+      request_2xx: [/static/vendor/leaflet.js, /static/vendor/leaflet.css]
+      no_console_error: true

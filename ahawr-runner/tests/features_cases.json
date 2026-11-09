@@ -90,6 +90,22 @@
       }
     },
     {
+      "name": "stats_flags_on_keep_legacy_flatten",
+      "features_json": "{\"stats_popup\":{\"enabled\":true},\"stats_engine_sampler\":{\"enabled\":true}}",
+      "mission_features_json": "",
+      "expect": { "errors": [], "flatten_equals": "legacy_constants" }
+    },
+    {
+      "name": "non_boolean_enabled_stats_popup",
+      "features_json": "{\"stats_popup\":{\"enabled\":\"yes\"}}",
+      "mission_features_json": "",
+      "expect": {
+        "errors_contain": [
+          "features_json: stats_popup.enabled must be true or false, got \"yes\""
+        ]
+      }
+    },
+    {
       "name": "golden",
       "features_json": "",
       "mission_features_json": "",

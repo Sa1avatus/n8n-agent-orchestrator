@@ -335,6 +335,9 @@ async function BoardMission(missionId) {
   if (box && typeof BoardMissionSave !== "undefined" && BoardMissionSave.attachToBox) {
     BoardMissionSave.attachToBox(box, data);
   }
+  if (box && typeof BoardStatsPopup !== "undefined") {
+    await BoardStatsPopup.attach(box, { kind: "mission", missionId: data.mission.mission_id });
+  }
 }
 
 // === task table: depends-on / needed-by chips, drag order, dependency select ===

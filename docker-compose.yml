@@ -415,6 +415,14 @@ services:
       - DASHBOARD_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - DASHBOARD_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       - QA_RUNS_DIR=/qa-runs
+      # engine-log sampler for the statistics popup (ahawr-runner/docs/stats-collector.md):
+      # the watcher starts only when the stats_engine_sampler flag is on; these settings
+      # bound its poll, its batch cap and its database retries.
+      - DASHBOARD_ENGINE_LOG_PATH=${DASHBOARD_ENGINE_LOG_PATH:-/strata-data/state/strata/launch/docker.engine.log}
+      - DASHBOARD_ENGINE_POLL_SECONDS=${DASHBOARD_ENGINE_POLL_SECONDS:-60}
+      - DASHBOARD_ENGINE_MAX_BATCH_LINES=${DASHBOARD_ENGINE_MAX_BATCH_LINES:-200}
+      - DASHBOARD_ENGINE_MAX_DB_RETRIES=${DASHBOARD_ENGINE_MAX_DB_RETRIES:-3}
+      - DASHBOARD_ENGINE_BACKOFF_SECONDS=${DASHBOARD_ENGINE_BACKOFF_SECONDS:-5}
 
     volumes:
       # the verdicts and captures of the QA agent (written by ahawr-qa), read-only: the board shows them
@@ -435,6 +443,8 @@ services:
       # seen-state of the queue notices and the Telegram relay offset
       - ahawr-guards-state:/guards/state
       - ahawr-provider-secrets:/secrets
+      # the Strata engine log, read-only: the collector samples it for the Engine tab
+      - docker-live_strata-data:/strata-data:ro
       # TLS (DASHBOARD_TLS_CERT / DASHBOARD_TLS_KEY), commented example, not active:
       # - type: bind
       #   source: D:\n8n\certs
@@ -505,3 +515,6 @@ volumes:
   ahawr-guards-state:
   ahawr-provider-secrets:
   qa-runs:
+  # the engine log volume of the running Strata container (created by the Strata compose project)
+  docker-live_strata-data:
+    external: true

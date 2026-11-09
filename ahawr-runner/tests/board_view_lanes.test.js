@@ -227,6 +227,30 @@ test("only the first six active missions are shown, completed ones are skipped",
   assert.equal(rows(body).length, 8);
 });
 
+test("running missions come first, then the queue order, the freshest first without a position", () => {
+  installIo();
+  const open = [task("T1", "waiting")];
+  const body = renderLanes([
+    mission("Q2", open, { state_group: "queued", position: 2 }),
+    mission("OLD", open, { state_group: "queued", position: null, last_at: "2026-10-01T00:00:00Z" }),
+    mission("NEW", open, { state_group: "queued", position: null, last_at: "2026-11-09T00:00:00Z" }),
+    mission("Q1", open, { state_group: "queued", position: 1 }),
+    mission("RUN", [task("T2", "running")], { state_group: "running", position: null }),
+  ]);
+  assert.deepEqual(rows(body).map((r) => r.attrs["data-lane"]), ["RUN", "Q1", "Q2", "NEW", "OLD"]);
+});
+
+test("missions that will not run stay off the lanes whatever their open tasks", () => {
+  installIo();
+  const open = [task("T1", "waiting")];
+  const body = renderLanes([
+    mission("STALE", open, { state_group: "not_completed", position: 1 }),
+    mission("OFF", open, { state_group: "disabled", position: 2 }),
+    mission("LIVE", open, { state_group: "queued", position: 3 }),
+  ]);
+  assert.deepEqual(rows(body).map((r) => r.attrs["data-lane"]), ["LIVE"]);
+});
+
 test("click selects by toggling classes without redrawing", () => {
   installIo();
   const body = renderLanes([TWO_WAITING]);

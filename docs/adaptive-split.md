@@ -134,3 +134,7 @@ The Python tests are `test_plan_gate.py`, `test_task_split.py` and `test_patch.p
 
 No real n8n run and no real Worker, Reviewer or Architect run has been made with these changes.
 The tests cover the pure functions and the patch script only.
+
+## Plan gate retry and Parse Plan (2026-11-09)
+
+On 2026-11-08 a 25-task plan was stored as its first 15 tasks: Evaluate Architect asked for a "too wide" retry (`architect_gate_retry`) that no node routes back to the Architect, so the plan went on without a `plan_decision`, Plan Gate returned nothing, no part mission was created, and Parse Plan cut the plan to `max_tasks`. `data-tables/ops/plan_gate_retry_patch.py` (applied by `launch_mission.sh`) sets `GATE_RETRY_ROUTED=false` in Evaluate Architect, so the gate always decides, and makes Parse Plan follow the decision when `plan_no_truncate` is on: a split keeps the tasks of part 1, a whole or refused plan keeps every task. With the flag off the old cut stays. Check: `node data-tables/ops/plan_gate_retry_check.js <patched workflow.json> <architect output>` replays both nodes on a real Architect output.

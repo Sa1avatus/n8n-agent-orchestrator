@@ -11,3 +11,39 @@ projects:
       - name: mypy
         command: mypy src
     baseline: qa/baselines/ahawr-runner.json
+
+  - name: mi-find-tracker
+    working_directory: /d/ClaudeProjects/mi-find-tracker
+    regression:
+      # README.md:30 "Tests run fully offline: python -m pytest -q"; README.md:75 lists ruff
+      # among the project's dev tools.
+      - name: pytest
+        command: python -m pytest -q
+      - name: ruff
+        command: python -m ruff check src tests
+    baseline: qa/baselines/mi-find-tracker.json
+    ui:
+      # README.md:28 the documented non-Docker start: PYTHONPATH=src python -m mifind.
+      # qa_app runs the command with cwd=working_directory, so PYTHONPATH keeps `mifind` importable.
+      start_command: ["python", "-m", "mifind"]
+      # Offline demo mode: no secret is set, the Google maps key stays unset (config.py:233 reads
+      # it as "" -> the vendored Leaflet fallback map), LOCATE_ENABLED=false never sends a locate,
+      # POLL_SECONDS is the documented 30 s floor (README.md:36-37, config.py:21 MIN_POLL_SECONDS).
+      # shortcut: the two curl dumps point at files that do not exist in {data_dir}; client.status()
+      # loads the dump before any request (client.py:109-111), the missing file raises CurlFileError
+      # and poller.py:88-92 records it as an Error outcome, so the poll thread never reaches Xiaomi.
+      # To poll a real device the operator must stage the two curl dumps and name their paths here.
+      env:
+        PYTHONPATH: src
+        XIAOMI_FIND_PAGE_URL: "https://us.i.mi.com/mobile/find"
+        DEVICE_ID: "qa-placeholder-device"
+        CURL_STATUS_FILE: "{data_dir}/no-status-dump.txt"
+        CURL_LOCATE_FILE: "{data_dir}/no-locate-dump.txt"
+        DB_PATH: "{data_dir}/mifind.db"
+        LOCATE_ENABLED: "false"
+        POLL_SECONDS: "30"
+        BIND_ADDRESS: "127.0.0.1"
+      port_env: HOST_PORT
+      health_path: /health
+      ready_timeout_seconds: 30
+      scenarios_dir: mi-find-tracker

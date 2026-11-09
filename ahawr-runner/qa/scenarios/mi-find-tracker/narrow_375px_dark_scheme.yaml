@@ -1,0 +1,25 @@
+# style.css:151 "@media (max-width: 375px)" is the project's own narrow breakpoint and
+# style.css:21 "@media (prefers-color-scheme: dark)" is the dark theme, reached through
+# page.emulate_media (qa_runner.py:660-674). No tile request is made here: the empty database
+# means app.js:199-201 returns before makeMap (app.js:80-92), so the narrow page renders from the
+# local bundle only (config.py:51 would point tiles at OpenStreetMap if a map were built).
+name: at 375 px the dark page has no horizontal scroll and still renders
+tags: [ui, nightly]
+preconditions:
+  fixture: empty
+target: app
+steps:
+  - open: /
+    expect:
+      text_visible: ["Последние координаты устройства"]
+      no_console_error: true
+  - viewport:
+      width: 375
+      height: 720
+    expect:
+      no_horizontal_scroll: true
+  - color_scheme: dark
+    expect:
+      text_visible: ["Точки"]
+      no_horizontal_scroll: true
+      no_console_error: true

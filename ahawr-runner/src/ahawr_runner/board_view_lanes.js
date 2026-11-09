@@ -67,15 +67,23 @@ function el(tag, attrs, children) {
   return node;
 }
 
+// groups of missions that are not going to run: their open tasks are leftovers and stay off the lanes
+const INERT_GROUPS = ["disabled", "not_completed", "completed"];
+
 function isActive(m) {
+  if (INERT_GROUPS.includes(m.state_group)) return false;
   return (m.tasks || []).some((t) => t.status === "running" || t.status === "waiting");
 }
 
+// the running missions first, then the queue order (no position goes last), the freshest of those on top
 function byPosition(a, b) {
+  const ra = a.state_group === "running" ? 0 : 1;
+  const rb = b.state_group === "running" ? 0 : 1;
+  if (ra !== rb) return ra - rb;
   const pa = a.position == null ? Infinity : a.position;
   const pb = b.position == null ? Infinity : b.position;
-  if (pa === pb) return 0;
-  return pa < pb ? -1 : 1;
+  if (pa !== pb) return pa < pb ? -1 : 1;
+  return String(b.last_at || b.created_at || "").localeCompare(String(a.last_at || a.created_at || ""));
 }
 
 function waitingTasks(m) {

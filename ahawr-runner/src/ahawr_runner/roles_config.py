@@ -14,7 +14,14 @@ MAX_ROLE_KEYS = 10
 MAX_DISTINCT_MODELS = 8
 KNOWN_ROLES = frozenset({"architect", "worker", "reviewer", "service", "qa", "qa_agent", "report"})
 COMMON_OPTION_KEYS = frozenset({"fresh", "think", "max_polls", "poll_seconds", "max_retries"})
-QA_OPTION_KEYS = COMMON_OPTION_KEYS | {"mode", "max_minutes", "max_cost_usd", "layers", "smoke"}
+QA_OPTION_KEYS = COMMON_OPTION_KEYS | {
+    "mode",
+    "max_minutes",
+    "max_cost_usd",
+    "layers",
+    "smoke",
+    "project_apps",
+}
 QA_MODES = ("off", "final", "ui_tasks", "nightly")
 QA_DEFAULT_OPTIONS: dict[str, Any] = {"mode": "off", "max_minutes": 20, "max_cost_usd": 1}
 QA_LIMIT_KEYS = ("max_minutes", "max_cost_usd")
@@ -185,6 +192,8 @@ def _check_qa_options(role: str, options: dict[str, Any]) -> list[str]:
             errors.append(f"role {role!r}: option {key!r} must be a positive number")
     if "smoke" in options and not isinstance(options["smoke"], bool):
         errors.append(f"role {role!r}: option 'smoke' must be true or false")
+    if "project_apps" in options and not isinstance(options["project_apps"], bool):
+        errors.append(f"role {role!r}: option 'project_apps' must be true or false")
     if "layers" in options:
         errors.extend(_check_layers(role, options["layers"]))
     return errors
@@ -226,6 +235,10 @@ def _check_layers(role: str, layers: Any) -> list[str]:
 
 def qa_layers(options: Mapping[str, Any]) -> list[str]:
     return list(options.get("layers") or QA_DEFAULT_LAYERS)
+
+
+def qa_project_apps(options: Mapping[str, Any]) -> bool:
+    return bool(options.get("project_apps", False))
 
 
 def _is_positive_number(value: Any) -> bool:

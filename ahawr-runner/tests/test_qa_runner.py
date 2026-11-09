@@ -115,7 +115,24 @@ def test_optional_fields_take_defaults() -> None:
     )
 
     assert scenario.reload_persistence is False
+    assert scenario.target == "dashboard"
     assert scenario.steps[0].expect == qa_runner.Expect()
+
+
+@pytest.mark.parametrize("target", ["dashboard", "app"])
+def test_target_accepts_dashboard_and_app(target: str) -> None:
+    scenario = parse_scenario(VALID + f"target: {target}\n")
+
+    assert scenario.target == target
+
+
+@pytest.mark.parametrize("target", ["api", "APP", "true", "1", ""])
+def test_unknown_target_is_rejected_with_the_allowed_values(target: str) -> None:
+    with pytest.raises(ScenarioError) as info:
+        parse_scenario(VALID + f"target: {target}\n")
+
+    assert "target" in str(info.value)
+    assert "dashboard" in str(info.value) and "app" in str(info.value)
 
 
 @pytest.mark.parametrize(
@@ -162,6 +179,41 @@ def test_optional_fields_take_defaults() -> None:
             "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
             "steps: [{open: /, expect: {bogus: 1}}]\n",
             "steps[0].expect",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{viewport: {width: 375}}]\n",
+            "steps[0].viewport.height",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{viewport: {width: 'abc', height: 800}}]\n",
+            "steps[0].viewport.width",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{viewport: {width: 10, height: 800}}]\n",
+            "steps[0].viewport.width",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{viewport: 375x800}]\n",
+            "steps[0].viewport",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{viewport: {width: 375, height: 800, zoom: 2}}]\n",
+            "steps[0].viewport",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{color_scheme: sepia}]\n",
+            "steps[0].color_scheme",
+        ),
+        (
+            "name: x\ntags: [ui]\npreconditions: {fixture: a}\n"
+            "steps: [{open: /, expect: {no_horizontal_scroll: yes_please}}]\n",
+            "steps[0].expect.no_horizontal_scroll",
         ),
         (
             "name: x\ntags: [ui]\npreconditions: {fixture: a}\nsteps: [{open: /}]\nextra: 1\n",
@@ -320,6 +372,23 @@ def test_type_replace_rejects_non_bool() -> None:
     )
     with pytest.raises(ScenarioError, match="expected true or false"):
         parse_scenario(text)
+
+
+def test_viewport_and_color_scheme_and_scroll_expectation_parse() -> None:
+    scenario = parse_scenario(
+        "name: tracker page\ntags: [ui]\npreconditions: {fixture: empty}\ntarget: app\n"
+        "steps:\n"
+        "  - viewport: {width: 375, height: 800}\n"
+        "  - color_scheme: dark\n"
+        "    expect:\n"
+        "      no_horizontal_scroll: true\n"
+    )
+
+    viewport_step, scheme_step = scenario.steps
+    assert viewport_step.action == "viewport"
+    assert viewport_step.value == (375, 800)
+    assert scheme_step.value == "dark"
+    assert scheme_step.expect.no_horizontal_scroll is True
 
 
 def test_api_post_sends_dashboard_header_to_the_stack_only() -> None:
@@ -540,6 +609,8 @@ class _FakePage:
         hidden_after_reload: set[str] | None = None,
         api_status: int = 200,
         json_payload: dict[str, Any] | None = None,
+        scroll_width: int = 1000,
+        client_width: int = 1000,
     ) -> None:
         self.hidden: set[str] = set()
         self.hidden_after_reload = set(hidden_after_reload or ())
@@ -553,6 +624,10 @@ class _FakePage:
         self.visited = ""
         self.typed: list[tuple[str, str]] = []
         self.select_all_calls = 0
+        self.scroll_width = scroll_width
+        self.client_width = client_width
+        self.viewport: tuple[int, int] | None = None
+        self.color_scheme = ""
 
     def on(self, event: str, handler: Any) -> None:
         self.handlers[event] = handler
@@ -583,6 +658,15 @@ class _FakePage:
     def screenshot(self, path: str) -> None:
         self.shots.append(path)
         Path(path).write_bytes(b"png")
+
+    def set_viewport_size(self, size: dict[str, int]) -> None:
+        self.viewport = (size["width"], size["height"])
+
+    def emulate_media(self, color_scheme: str = "light") -> None:
+        self.color_scheme = color_scheme
+
+    def evaluate(self, expression: str) -> dict[str, int]:
+        return {"scrollWidth": self.scroll_width, "clientWidth": self.client_width}
 
 
 def test_run_is_blocked_without_playwright_and_starts_no_stack(
@@ -649,6 +733,152 @@ def test_run_prints_the_stack_id_before_tearing_it_down(
     assert "stack id: 0a1b2c3d" in capfd.readouterr().err
     assert "postgresql://" not in capfd.readouterr().err
     assert verdict["verdict"] == "blocked"
+
+
+APP_BASE_URL = "http://127.0.0.1:9001"
+APP_SCENARIO_TEXT = (
+    "name: tracker app\ntags: [ui]\npreconditions: {fixture: empty}\ntarget: app\n"
+    "steps:\n  - open: /map\n  - api_get: {path: /api/status, extract: status}\n"
+)
+
+
+class _FakeBrowser:
+    def __init__(self, page: _FakePage) -> None:
+        self._page = page
+
+    def new_page(self) -> _FakePage:
+        return self._page
+
+    def close(self) -> None:
+        return None
+
+
+class _FakePlaywright:
+    """Stand-in for sync_playwright: launch returns a browser wrapping the fake page."""
+
+    def __init__(self, page: _FakePage) -> None:
+        self._page = page
+        self.chromium = SimpleNamespace(launch=self._launch)
+
+    def __enter__(self) -> _FakePlaywright:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def _launch(self, headless: bool) -> _FakeBrowser:
+        return _FakeBrowser(self._page)
+
+
+def _fake_playwright(monkeypatch: pytest.MonkeyPatch, page: _FakePage) -> None:
+    playwright = ModuleType("playwright")
+    sync_api = ModuleType("playwright.sync_api")
+    vars(sync_api)["sync_playwright"] = lambda: _FakePlaywright(page)
+    monkeypatch.setitem(sys.modules, "playwright", playwright)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", sync_api)
+
+
+def test_app_target_urls_resolve_against_the_app_handle_base_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _FakePage(json_payload={"status": "ok"})
+    _fake_playwright(monkeypatch, page)
+    monkeypatch.setattr(qa_stack, "stack_up", _stack_must_not_start)
+
+    verdict = qa_runner.run_browser_scenario(
+        parse_scenario(APP_SCENARIO_TEXT),
+        app=SimpleNamespace(base_url=APP_BASE_URL),
+        runs_dir=tmp_path,
+    )
+
+    assert verdict["verdict"] == "pass"
+    assert page.visited == APP_BASE_URL + "/map"
+    url, headers = page.request.gets[0]
+    assert url == APP_BASE_URL + "/api/status"
+    assert headers[qa_runner.DASHBOARD_HEADER] == "1"
+
+
+def test_app_target_without_an_app_handle_is_blocked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _fake_playwright(monkeypatch, _FakePage())
+    monkeypatch.setattr(qa_stack, "stack_up", _stack_must_not_start)
+
+    verdict = qa_runner.run_browser_scenario(parse_scenario(APP_SCENARIO_TEXT), runs_dir=tmp_path)
+
+    assert verdict["verdict"] == "blocked"
+    assert "no app handle" in verdict["blocked_reason"]
+
+
+def test_dashboard_target_with_an_app_handle_still_uses_the_stack(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    stack = qa_stack.QaStack(
+        run_id="0a1b2c3d",
+        host="qa-0a1b2c3d",
+        database="qa_0a1b2c3d",
+        dsn="",
+        dashboard_url="http://127.0.0.1:1",
+    )
+    monkeypatch.setattr(qa_stack, "stack_up", lambda fixture="default", mode="docker": stack)
+    monkeypatch.setattr(qa_stack, "stack_down", lambda _stack: None)
+    page = _FakePage()
+    _fake_playwright(monkeypatch, page)
+
+    verdict = qa_runner.run_browser_scenario(
+        parse_scenario(SCENARIO_TEXT),
+        app=SimpleNamespace(base_url=APP_BASE_URL),
+        runs_dir=tmp_path,
+    )
+
+    assert verdict["verdict"] == "pass"
+    assert page.visited == "http://127.0.0.1:1/board"
+
+
+SCROLL_SCENARIO_TEXT = (
+    "name: narrow page\ntags: [ui]\npreconditions: {fixture: empty}\ntarget: app\n"
+    "steps:\n"
+    "  - viewport: {width: 375, height: 800}\n"
+    "  - color_scheme: dark\n"
+    "    expect:\n"
+    "      no_horizontal_scroll: true\n"
+)
+
+
+def test_viewport_and_color_scheme_steps_execute_through_the_app_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _FakePage(scroll_width=375, client_width=375)
+    _fake_playwright(monkeypatch, page)
+    monkeypatch.setattr(qa_stack, "stack_up", _stack_must_not_start)
+
+    verdict = qa_runner.run_browser_scenario(
+        parse_scenario(SCROLL_SCENARIO_TEXT),
+        app=SimpleNamespace(base_url=APP_BASE_URL),
+        runs_dir=tmp_path,
+    )
+
+    assert verdict["verdict"] == "pass"
+    assert page.viewport == (375, 800)
+    assert page.color_scheme == "dark"
+
+
+def test_no_horizontal_scroll_fails_when_scroll_width_is_wider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    page = _FakePage(scroll_width=420, client_width=375)
+    _fake_playwright(monkeypatch, page)
+    monkeypatch.setattr(qa_stack, "stack_up", _stack_must_not_start)
+
+    verdict = qa_runner.run_browser_scenario(
+        parse_scenario(SCROLL_SCENARIO_TEXT),
+        app=SimpleNamespace(base_url=APP_BASE_URL),
+        runs_dir=tmp_path,
+    )
+
+    assert verdict["verdict"] == "fail"
+    assert verdict["failed_step"] == 1
+    assert "scrollWidth 420 > clientWidth 375" in verdict["failed_reason"]
 
 
 def test_reload_recheck_fails_when_text_is_gone_after_reload(tmp_path: Path) -> None:
@@ -779,6 +1009,39 @@ def test_every_shipped_scenario_parses_with_load_scenario() -> None:
     assert len(paths) >= 3
     for path in paths:
         assert qa_runner.load_scenario(path).steps, path.name
+
+
+def test_shipped_scenarios_parse_identically_with_the_default_target() -> None:
+    paths = sorted(qa_runner.SCENARIO_DIR.glob("*.yaml"))
+
+    assert len(paths) >= 3
+    for path in paths:
+        parsed = load_scenario(path)
+        assert parsed.target == "dashboard", path.name
+        with_target = path.read_text(encoding="utf-8") + "target: dashboard\n"
+        assert parse_scenario(with_target) == parsed, path.name
+
+
+def test_project_scenarios_are_read_only_from_the_project_folder(tmp_path: Path) -> None:
+    root = tmp_path / "scenarios"
+    project = root / "mi-find-tracker"
+    project.mkdir(parents=True)
+    (project / "status.yaml").write_text(
+        "name: tracker status\ntags: [ui]\npreconditions: {fixture: empty}\n"
+        "target: app\nsteps:\n  - open: /\n",
+        encoding="utf-8",
+    )
+    (root / "board.yaml").write_text(SCENARIO_TEXT, encoding="utf-8")
+
+    scenarios = qa_runner.load_project_scenarios("mi-find-tracker", base_dir=root)
+
+    assert [scenario.name for scenario in scenarios] == ["tracker status"]
+    assert scenarios[0].target == "app"
+
+
+def test_project_scenarios_of_a_project_without_files_are_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="no scenario files"):
+        qa_runner.load_project_scenarios("no-such-project", base_dir=tmp_path)
 
 
 def test_attached_page_accepts_confirm_dialogs() -> None:

@@ -3,7 +3,36 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **1.0.210** (ahawr-runner `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **1.1.0** (ahawr-runner `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-09 (1.1.0)
+
+Step with new functions: the statistics popup with an engine-log sampler, QA of other projects' apps, and a faster project
+statistics route. Both statistics flags are OFF by default; with them off the board behaves as in 1.0.210.
+
+- **Statistics popup** (flag `stats_popup`, `docs/stats-popup.md`, `board_stats_popup.js`, `stats_figures.py`): bench figures of a
+  mission, a task or a project (run-based metrics, per-task and per-attempt review rows) behind
+  `GET /api/board/missions/{id}/stats/detail`, `.../tasks/{key}/stats/detail` and `GET /api/board/projects/{key}/stats`.
+- **Engine-log sampler** (flag `stats_engine_sampler`, `docs/stats-collector.md`, `engine_log.py`, `engine_samples.py`,
+  `engine_collector.py`, `engine_backfill.py`): the dashboard reads the Strata engine log (volume `docker-live_strata-data`,
+  read-only, `docker-compose.yml`) and stores decode figures for the Engine tab. Poll, batch cap and database retries are
+  settings (`DASHBOARD_ENGINE_*`).
+- **Project statistics cache**: the first request of a project took 240-350 s; the result is now cached (30 minutes) and a
+  warm-up thread refreshes it every 5 minutes (`board_api.py`, started and stopped by the dashboard lifespan); a second request
+  takes 0.1 s. Test: `test_project_stats_are_computed_once_while_fresh`.
+- **QA of other projects' apps** (`qa_app.py`, `qa_regression.py`, `qa_runner.py`, `qa_worker.py`, `roles_config.py`): a
+  strict `ui` block in a project profile (start command, ready URL and timeout, environment with a scrubbed child environment),
+  the role option `project_apps`, and a first profile, `mi-find-tracker` (`qa/projects.yaml`, scenarios in
+  `qa/scenarios/mi-find-tracker/`). Report: `reports/ahawr-qa-project-targets-report-ru.md`.
+- **Board**: the Lanes view lists running missions first and keeps inert groups apart; new texts in both language files.
+- **Reports** (`reports/`): the audio-dubbing report, the KV bench series (`bench-kv-series-ru.md`, `bench-kv-series-tasks-ru.md`),
+  the statistics dashboard report and checks, and the table of 27B and Flash-Next quants (`quants-27b-vs-flash-next-table-ru.md`).
+
+Checks: statistics, engine collector, features, roles, QA regression, QA runner and board API tests pass except the host-only
+failures below; `node --test` for the popup, mission, task, Lanes and Projects views: 45 of 45; ruff clean on the new files
+and no new errors in the changed ones (28 + 7 + 2 E501 in `board_api.py`, `test_board_api.py`, `test_qa_runner.py` are older).
+Known on the Windows host: `test_qa_app.py` (3) and the `ui_layer` tests of `test_qa_worker.py` (5) fail there with WinError 10106
+(the scrubbed child environment has no SYSTEMROOT, so a Python child cannot open a socket); the runner container is Linux.
 
 ## 2026-11-09 (1.0.210)
 

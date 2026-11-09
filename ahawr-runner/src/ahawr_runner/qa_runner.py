@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
-from . import qa_stack
+from . import qa_app, qa_stack
 from .board_ops_redact import scrub
 
 TAGS = frozenset({"ui", "queue", "settings", "i18n", "nightly"})
@@ -32,6 +32,8 @@ ACTIONS = frozenset(
         "press",
         "wait_for_text",
         "switch_language",
+        "viewport",
+        "color_scheme",
         "api_post",
         "api_put",
         "api_delete",
@@ -47,13 +49,19 @@ EXPECTATIONS = frozenset(
         "request_2xx",
         "no_console_error",
         "no_mutation_without_header",
+        "no_horizontal_scroll",
     }
 )
 LANGUAGES = frozenset({"en", "ru"})
+COLOR_SCHEMES = frozenset({"dark", "light"})
+# the base URL a scenario drives against: the QA stack dashboard, or a project app from qa_app
+DASHBOARD_TARGET = "dashboard"
+APP_TARGET = "app"
+TARGETS = frozenset({DASHBOARD_TARGET, APP_TARGET})
 TOP_LEVEL_KEYS = frozenset(
     {
         "name", "tags", "preconditions", "steps", "reload_persistence",
-        "allow_http_status", "freeze_refresh",
+        "allow_http_status", "freeze_refresh", "target",
     }
 )
 # a scenario that provokes a conflict expects the browser to log the 409
@@ -62,6 +70,8 @@ FIXTURE_NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 DEFAULT_MAX_MINUTES = 20.0  # shortcut: roles max_minutes is not read by the DB-free CLI
 SECONDS_PER_MINUTE = 60
 STEP_TIMEOUT_MS = 15_000
+VIEWPORT_MIN_PX = 100  # bounds keep a viewport step from resizing the page to a nonsensical size
+VIEWPORT_MAX_PX = 4_000
 FREEZE_TIMERS_SCRIPT = "window.setInterval = () => 0;"
 VISIBLE_ONLY = "visible=true"  # a text also sits in hidden copies of a panel: skip those
 MS_PER_SECOND = 1000
@@ -98,13 +108,15 @@ class Expect:
     request_2xx: tuple[str, ...] = ()
     no_console_error: bool = False
     no_mutation_without_header: bool = False
+    no_horizontal_scroll: bool = False
 
 
 @dataclass(frozen=True)
 class Step:
     action: str
-    # A str for most actions; (from, onto) for drag and (into, text) for type.
-    value: str | tuple[str, str]
+    # A str for most actions; (from, onto) for drag, (into, text) for type,
+    # (width_px, height_px) for viewport.
+    value: str | tuple[str, str] | tuple[int, int]
     expect: Expect
     below: bool = False  # drag only: drop in the lower part of the target card
     replace: bool = False  # type only: clear + retype (otherwise press_sequentially appends)
@@ -121,6 +133,7 @@ class Scenario:
     reload_persistence: bool = False
     allow_http_status: tuple[int, ...] = ()
     freeze_refresh: bool = False  # no page timers: the board cannot refresh its versions on its own
+    target: str = DASHBOARD_TARGET  # dashboard: the QA stack; app: the handle passed to the runner
 
 
 def parse_scenario(text: str) -> Scenario:
@@ -138,9 +151,17 @@ def parse_scenario(text: str) -> Scenario:
     reload_persistence = _bool(root.get("reload_persistence", False), "reload_persistence")
     allow_http_status = _statuses(root.get("allow_http_status", []))
     freeze_refresh = _bool(root.get("freeze_refresh", False), "freeze_refresh")
+    target = _target(root.get("target", DASHBOARD_TARGET))
     return Scenario(
-        name, tags, fixture, steps, reload_persistence, allow_http_status, freeze_refresh
+        name, tags, fixture, steps, reload_persistence, allow_http_status, freeze_refresh, target
     )
+
+
+def _target(value: object) -> str:
+    if isinstance(value, str) and value in TARGETS:
+        return value
+    allowed = ", ".join(sorted(TARGETS))
+    raise ScenarioError(f"target must be one of: {allowed}, got {value!r}")
 
 
 def _statuses(value: object) -> tuple[int, ...]:
@@ -250,6 +271,8 @@ def _step(value: object, field: str) -> Step:
     detail = f"{field}.{action}"
     if action == "drag":
         return _drag_step(body[action], detail, expect)
+    if action == "viewport":
+        return _viewport_step(body[action], detail, expect)
     if action == "api_post" or action == "api_put":
         return _api_step(action, body[action], detail, expect)
     if action == "api_delete":
@@ -259,6 +282,23 @@ def _step(value: object, field: str) -> Step:
     if action == "type":
         return _type_step(body[action], detail, expect)
     return Step(action, _action_value(action, body[action], detail), expect)
+
+
+def _viewport_step(value: object, field: str, expect: Expect) -> Step:
+    body = _mapping(value, field, frozenset({"width", "height"}))
+    width_px = _px(body.get("width"), f"{field}.width")
+    height_px = _px(body.get("height"), f"{field}.height")
+    return Step("viewport", (width_px, height_px), expect)
+
+
+def _px(value: object, field: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ScenarioError(f"{field}: expected an integer pixel size")
+    if not VIEWPORT_MIN_PX <= value <= VIEWPORT_MAX_PX:
+        raise ScenarioError(
+            f"{field}: {value} px is outside {VIEWPORT_MIN_PX}..{VIEWPORT_MAX_PX} px"
+        )
+    return value
 
 
 def _drag_step(value: object, field: str, expect: Expect) -> Step:
@@ -314,6 +354,12 @@ def _action_value(action: str, value: object, field: str) -> str | tuple[str, st
         if language not in LANGUAGES:
             raise ScenarioError(f"{field}: unknown language {language!r}")
         return language
+    if action == "color_scheme":
+        scheme = _text(value, field)
+        if scheme not in COLOR_SCHEMES:
+            allowed = ", ".join(sorted(COLOR_SCHEMES))
+            raise ScenarioError(f"{field}: color scheme must be one of: {allowed}, got {scheme!r}")
+        return scheme
     return _text(value, field)
 
 
@@ -338,6 +384,9 @@ def _expect(value: object, field: str) -> Expect:
         no_console_error=_bool(body.get("no_console_error", False), f"{field}.no_console_error"),
         no_mutation_without_header=_bool(
             body.get("no_mutation_without_header", False), f"{field}.no_mutation_without_header"
+        ),
+        no_horizontal_scroll=_bool(
+            body.get("no_horizontal_scroll", False), f"{field}.no_horizontal_scroll"
         ),
     )
 
@@ -391,6 +440,11 @@ def load_scenarios(directory: Path = SCENARIO_DIR) -> list[Scenario]:
     return [load_scenario(path) for path in paths]
 
 
+def load_project_scenarios(scenarios_dir: str, base_dir: Path = SCENARIO_DIR) -> list[Scenario]:
+    """The scenarios of one project, read only from qa/scenarios/<scenarios_dir>/."""
+    return load_scenarios(base_dir / scenarios_dir)
+
+
 def select_scenarios(
     scenarios: Sequence[Scenario], *, tag: str | None = None, name: str | None = None
 ) -> list[Scenario]:
@@ -410,24 +464,39 @@ def run_browser_scenario(
     max_minutes: float = DEFAULT_MAX_MINUTES,
     runs_dir: Path = RUNS_DIR,
     stack_mode: str = "docker",
+    app: qa_app.AppHandle | None = None,
 ) -> dict[str, Any]:
+    """Drive a scenario against the QA stack dashboard (default) or against a project app.
+
+    The app handle is started by the caller (qa_app.app_up); this function only closes the
+    stack it opened itself, so a caller-managed app outlives the run.
+    """
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
         return build_verdict(scenario=scenario.name, blocked_reason=PLAYWRIGHT_HINT)
     started = time.monotonic()
     run_dir = _new_run_dir(runs_dir)
-    try:
-        stack = qa_stack.stack_up(scenario.fixture, mode=stack_mode)
-    except (qa_stack.QaStackError, ValueError) as error:
-        progress = _Progress(blocked_reason=f"QA stack did not start: {_reason(error)}")
-        return _settle(scenario, run_dir, started, progress, _Recorder())
-    print(f"stack id: {stack.run_id}", file=sys.stderr, flush=True)
+    stack: qa_stack.QaStack | None = None
+    if scenario.target == APP_TARGET:
+        if app is None:
+            progress = _Progress(blocked_reason="target app: no app handle was given")
+            return _settle(scenario, run_dir, started, progress, _Recorder())
+        base_url = app.base_url
+    else:
+        try:
+            stack = qa_stack.stack_up(scenario.fixture, mode=stack_mode)
+        except (qa_stack.QaStackError, ValueError) as error:
+            progress = _Progress(blocked_reason=f"QA stack did not start: {_reason(error)}")
+            return _settle(scenario, run_dir, started, progress, _Recorder())
+        print(f"stack id: {stack.run_id}", file=sys.stderr, flush=True)
+        base_url = stack.dashboard_url
     deadline = started + max_minutes * SECONDS_PER_MINUTE
     try:
-        progress, recorder = _drive(scenario, stack, sync_playwright, run_dir, deadline)
+        progress, recorder = _drive(scenario, base_url, sync_playwright, run_dir, deadline)
     finally:
-        _tear_down(stack)
+        if stack is not None:
+            _tear_down(stack)
     return _settle(scenario, run_dir, started, progress, recorder)
 
 
@@ -446,11 +515,13 @@ def _tear_down(stack: qa_stack.QaStack) -> None:
 
 def _drive(
     scenario: Scenario,
-    stack: qa_stack.QaStack,
+    base: qa_stack.QaStack | str,
     sync_playwright: Callable[[], Any],
     run_dir: Path,
     deadline: float,
 ) -> tuple[_Progress, _Recorder]:
+    """Run the scenario against the stack's dashboard URL or against an app base URL."""
+    base_url = base if isinstance(base, str) else base.dashboard_url
     recorder = _Recorder(allowed_statuses=scenario.allow_http_status)
     with sync_playwright() as playwright:
         try:
@@ -461,8 +532,8 @@ def _drive(
             page = browser.new_page()
             if scenario.freeze_refresh:
                 page.add_init_script(FREEZE_TIMERS_SCRIPT)
-            _attach(page, stack.dashboard_url, recorder)
-            progress = _execute(scenario, page, recorder, stack.dashboard_url, run_dir, deadline)
+            _attach(page, base_url, recorder)
+            progress = _execute(scenario, page, recorder, base_url, run_dir, deadline)
         finally:
             browser.close()
     return progress, recorder
@@ -596,6 +667,11 @@ def _perform(page: Any, step: Step, base_url: str, recorder: _Recorder) -> None:
         _delete_api(page, base_url, step, recorder)
     elif step.action == "api_get":
         _get_api(page, base_url, step, recorder)
+    elif step.action == "viewport":
+        width, height = _viewport_size(step.value)
+        page.set_viewport_size({"width": width, "height": height})
+    elif step.action == "color_scheme":
+        page.emulate_media(color_scheme=_as_text(step.value))
     elif step.action == "type":
         field_name, text = _as_pair(step.value)
         by_name = page.locator(f'[name="{field_name}"]')
@@ -684,16 +760,23 @@ def _get_api(page: Any, base_url: str, step: Step, recorder: _Recorder) -> None:
         recorder.vars[step.extract.split(".")[-1]] = str(data)
 
 
-def _as_text(value: str | tuple[str, str]) -> str:
+def _as_text(value: str | tuple[str, str] | tuple[int, int]) -> str:
     if not isinstance(value, str):
         raise StepFailed("step value is not text")
     return value
 
 
-def _as_pair(value: str | tuple[str, str]) -> tuple[str, str]:
+def _as_pair(value: str | tuple[str, str] | tuple[int, int]) -> tuple[str, str]:
     if not isinstance(value, tuple):
         raise StepFailed("step value is not a pair")
-    return value
+    return str(value[0]), str(value[1])
+
+
+def _viewport_size(value: str | tuple[str, str] | tuple[int, int]) -> tuple[int, int]:
+    if isinstance(value, str):
+        raise StepFailed("viewport step value is not a (width, height) pair")
+    width, height = value
+    return int(width), int(height)
 
 
 def _locate(page: Any, text: str) -> Any:
@@ -718,6 +801,8 @@ def _check(page: Any, expect: Expect, recorder: _Recorder, mark: _Mark) -> None:
         raise StepFailed(f"console error: {recorder.console_errors[mark.console]}")
     if expect.no_mutation_without_header and len(recorder.network_errors) > mark.network:
         raise StepFailed(recorder.network_errors[mark.network])
+    if expect.no_horizontal_scroll:
+        _check_no_horizontal_scroll(page)
 
 
 def _check_order(page: Any, texts: tuple[str, ...]) -> None:
@@ -751,6 +836,19 @@ def _check_placeholder(page: Any, value: str) -> None:
 
 def _placeholder_selector(value: str) -> str:
     return f'input[placeholder="{value}"], textarea[placeholder="{value}"]'
+
+
+def _check_no_horizontal_scroll(page: Any) -> None:
+    sizes = page.evaluate(
+        "({scrollWidth: document.documentElement.scrollWidth,"
+        " clientWidth: document.documentElement.clientWidth})"
+    )
+    scroll_width = int(sizes["scrollWidth"])
+    client_width = int(sizes["clientWidth"])
+    if scroll_width > client_width:
+        raise StepFailed(
+            f"horizontal scroll: scrollWidth {scroll_width} > clientWidth {client_width}"
+        )
 
 
 def _check_request_2xx(page: Any, path: str, recorder: _Recorder, mark: _Mark) -> None:

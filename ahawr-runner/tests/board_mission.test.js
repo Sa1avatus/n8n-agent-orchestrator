@@ -546,12 +546,66 @@ function s9() {
     formValue(badHtml, "worker_model") === legacy.worker_model);
 }
 
+// --- T011: the Statistics button on the mission card, gated by stats_popup ---
+async function s10stats() {
+  const popupPath = path.join(__dirname, "..", "src", "ahawr_runner", "board_stats_popup.js");
+  const loadFresh = () => {
+    // fresh module per call: the mission flag cache would otherwise carry the first features
+    delete require.cache[require.resolve(popupPath)];
+    return require(popupPath);
+  };
+  const makeBox = () => {
+    const box = { innerHTML: "", querySelectorAll: () => [], children: [], dataset: {} };
+    box.appendChild = (child) => box.children.push(child);
+    return box;
+  };
+  const docFor = (box) => ({
+    getElementById(id) {
+      if (id === "boardmission") return box;
+      if (id === "boardtasks") return chipStub;
+      if (id === "board") return { appendChild() {} };
+      if (id === "boardstate") return { textContent: "", className: "" };
+      return null;
+    },
+    createElement: () => ({ addEventListener() {} }),
+  });
+  const statsFetch = (featuresJson) => async (url, opts) => {
+    const u = String(url);
+    if (u === "/api/board/features") {
+      return { ok: true, json: async () => ({ features_json: featuresJson }) };
+    }
+    if (u === "/api/board/missions/m1/features") {
+      return { ok: true, json: async () => ({ mission_features_json: "" }) };
+    }
+    return missionFetch(planT)(url, opts);
+  };
+  try {
+    const offBox = makeBox();
+    globalThis.BoardStatsPopup = loadFresh();
+    await withStubs(docFor(offBox), statsFetch(""), () => BM.BoardMission("m1"));
+    check("no Statistics button on the mission card when stats_popup is off",
+      offBox.children.length === 0);
+
+    const onBox = makeBox();
+    globalThis.BoardStatsPopup = loadFresh();
+    await withStubs(docFor(onBox), statsFetch('{"stats_popup":{"enabled":true}}'),
+      () => BM.BoardMission("m1"));
+    check("the mission card gains exactly one Statistics button when stats_popup is on",
+      onBox.children.length === 1 &&
+      onBox.children[0].className === "sp-btn" &&
+      onBox.children[0].textContent === "Statistics");
+  } finally {
+    delete globalThis.BoardStatsPopup;
+  }
+}
+
 (async () => {
   await s8b();
   await s8c();
   await s7();
   await s8d();
   s9();
+  await s10stats();
   // lessonsStatsHtml: each figure sits after its own label, a missing one is a dash
   const lessonsHtml = BM.lessonsStatsHtml({
     with_lessons: { tasks: 5, first_attempt_pass_rate: 0.5 },

@@ -5,6 +5,8 @@ const FEATURE_DEFAULTS = {
   adaptive_split: { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 },
   run_hygiene: { enabled: false },
   event_schema_version: { enabled: false },
+  stats_popup: { enabled: false },
+  stats_engine_sampler: { enabled: false },
 };
 const PARAM_MINIMUMS = {
   max_tasks: 1,

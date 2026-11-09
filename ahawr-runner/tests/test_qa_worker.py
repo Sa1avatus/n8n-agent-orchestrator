@@ -18,7 +18,7 @@ from typing import Any, cast
 
 import pytest
 
-from ahawr_runner import qa_agent_run, qa_worker
+from ahawr_runner import qa_agent_run, qa_app, qa_regression, qa_runner, qa_smoke, qa_worker
 from ahawr_runner.guard_heartbeat import TIME_FORMAT
 from ahawr_runner.qa_requests import QA_UI_FILE_PATTERN
 from ahawr_runner.qa_stack import QaStack, QaStackError
@@ -251,12 +251,16 @@ sys.exit(3)
 
 
 def _fake_qa_run(monkeypatch: pytest.MonkeyPatch, folder: Path, body: str) -> None:
+    # only the qa child is replaced: git calls in the same test still run for real
     script = folder / "fake_qa.py"
     script.write_text(body, encoding="utf-8")
     real_popen = subprocess.Popen
 
-    def popen(_args: Any, **kwargs: Any) -> subprocess.Popen[str]:
-        return real_popen([sys.executable, str(script)], cwd=folder, **kwargs)
+    def popen(args: Any, **kwargs: Any) -> subprocess.Popen[str]:
+        command = " ".join(str(arg) for arg in args)
+        if "ahawr_runner.qa" in command:
+            return real_popen([sys.executable, str(script)], cwd=folder, **kwargs)
+        return real_popen(args, **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", popen)
 
@@ -337,6 +341,386 @@ def test_ui_layer_skips_and_tears_down_no_stack_when_no_ui_file_changed(
 
     assert len(verdicts) == 1 and verdicts[0]["verdict"] == "skipped"
     assert torn_down == []
+
+
+# --- the ui layer driven by the project app (options.project_apps) ---
+
+APP_PORT_ENV = "QA_APP_PORT"
+APP_HEALTH_PATH = "/healthz"
+APP_READY_SECONDS = 15
+APP_NEVER_READY_SECONDS = 2
+UI_PROJECT = "fake-project"
+MISSING_APP_BINARY = "no-such-project-app-xyz"
+
+APP_SERVER_BODY = """\
+import os
+import subprocess
+import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+port = int(os.environ[sys.argv[1]])
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"])
+with open("app_child.pid", "w", encoding="utf-8") as handle:
+    handle.write(str(child.pid))
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"app ok")
+
+    def log_message(self, format, *args):
+        pass
+
+HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+"""
+
+NEVER_READY_BODY = (
+    "import os, time; open('app_pid.txt', 'w').write(str(os.getpid())); time.sleep(600)"
+)
+
+UI_CHILD_BODY = """\
+import json
+import sys
+
+print("stack id: 1b2c3d4e", file=sys.stderr, flush=True)
+print(json.dumps([
+    {"scenario": "board-qa", "verdict": "pass", "screenshots": ["qa-run/Screen.png"]},
+    {"scenario": "board-ru", "verdict": "skipped", "reason": "ru language not seeded"},
+]))
+"""
+
+# the ui verdicts of the qa child path, recorded from the fake child before the project-app
+# wiring existed; the flag-off path must post exactly these bytes
+UI_CHILD_BYTES = (
+    b'[{"scenario": "board-qa", "verdict": "pass", "screenshots": ["qa-run/Screen.png"]}, '
+    b'{"scenario": "board-ru", "verdict": "skipped", "reason": "ru language not seeded"}]'
+)
+
+
+def _ui_repo(tmp_path: Path) -> str:
+    """A git repo in tmp_path with a changed html file, as the request working directory."""
+    _repo_with_commit(tmp_path, {"index.html": "a"})
+    (tmp_path / "index.html").write_text("b", encoding="utf-8")
+    return str(tmp_path)
+
+
+def _patch_projects(
+    monkeypatch: pytest.MonkeyPatch,
+    working_directory: str,
+    start_command: list[str] | None,
+    *,
+    ready_seconds: int = APP_READY_SECONDS,
+) -> None:
+    """The project profile matched for working_directory, with or without its ui block."""
+    ui = (
+        qa_regression.UiConfig(
+            start_command=tuple(start_command),
+            env={},
+            port_env=APP_PORT_ENV,
+            health_path=APP_HEALTH_PATH,
+            ready_timeout_seconds=ready_seconds,
+            scenarios_dir=UI_PROJECT,
+        )
+        if start_command is not None
+        else None
+    )
+    profile = qa_regression.Profile(
+        name=UI_PROJECT,
+        working_directory=working_directory,
+        regression=(),
+        baseline="qa/baselines/fake-project.json",
+        ui=ui,
+    )
+    # shortcut: qa/projects.yaml is read with PyYAML, which is not installed on this host,
+    # so the loader is stubbed with the Profile object the YAML of the same block would build.
+    monkeypatch.setattr(qa_regression, "load_profiles", lambda _path: [profile])
+
+
+def _patch_scenarios(monkeypatch: pytest.MonkeyPatch, names: list[str]) -> None:
+    """The scenarios of qa/scenarios/<project>/, targeted at the app handle."""
+    scenarios = [
+        qa_runner.Scenario(
+            name=name, tags=("ui",), fixture="default", steps=(), target=qa_runner.APP_TARGET
+        )
+        for name in names
+    ]
+
+    def loader(scenarios_dir: str) -> list[qa_runner.Scenario]:
+        if scenarios_dir != UI_PROJECT:
+            raise ValueError(f"scenarios dir {scenarios_dir!r} is not {UI_PROJECT!r}")
+        if not scenarios:
+            raise ValueError("no scenario files (*.yaml) in qa/scenarios/")
+        return scenarios
+
+    # shortcut: the Scenario objects stand in for the YAML files, unparseable without PyYAML
+    monkeypatch.setattr(qa_runner, "load_project_scenarios", loader)
+
+
+def _record_app_down(monkeypatch: pytest.MonkeyPatch) -> list[qa_app.AppHandle]:
+    downs: list[qa_app.AppHandle] = []
+    real_down = qa_app.app_down
+
+    def down(handle: qa_app.AppHandle) -> None:
+        downs.append(handle)
+        real_down(handle)
+
+    monkeypatch.setattr(qa_app, "app_down", down)
+    return downs
+
+
+def _record_scenario_runs(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(scenario: qa_runner.Scenario, **kwargs: Any) -> dict[str, Any]:
+        calls.append(
+            {"name": scenario.name, "max_minutes": kwargs["max_minutes"], "app": kwargs["app"]}
+        )
+        return qa_runner.build_verdict(scenario=scenario.name)
+
+    monkeypatch.setattr(qa_runner, "run_browser_scenario", fake_run)
+    return calls
+
+
+def _record_smoke_crawl(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    base_urls: list[str] = []
+
+    def fake_smoke(seeds: Any, *, base_url: str, max_minutes: float) -> dict[str, Any]:
+        base_urls.append(base_url)
+        return {"scenario": "smoke", "verdict": "pass"}
+
+    monkeypatch.setattr(qa_smoke, "run_smoke", fake_smoke)
+    # shortcut: the crawl itself is stubbed here, so the seed file (PyYAML, not installed
+    # on this host) is never parsed; the recorded call is only the base_url.
+    monkeypatch.setattr(qa_smoke, "load_seeds", lambda: ())
+    return base_urls
+
+
+def _ui_layer_runner(working_directory: str, **options: Any) -> qa_worker.LayerRunner:
+    """The ui layer runner of a request with the given options."""
+    return qa_worker._layer_runners(
+        {"working_directory": working_directory, "options": options}
+    )["ui"]
+
+
+def test_ui_layer_flag_off_posts_the_verdict_bytes_recorded_before_the_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    torn_down: list[str] = []
+    monkeypatch.setattr(qa_worker, "stack_from_id", lambda stack_id: stack_id)
+    monkeypatch.setattr(qa_worker, "stack_down", torn_down.append)
+    working_directory = _ui_repo(tmp_path)
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(tmp_path / "fake_app.py"), APP_PORT_ENV],
+    )
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=False, smoke=True)(30)
+
+    assert json.dumps(verdicts).encode("utf-8") == UI_CHILD_BYTES
+    assert torn_down == ["1b2c3d4e"]
+    assert app_downs == []
+
+
+def test_ui_layer_app_path_runs_the_project_scenarios_and_stops_the_app(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    torn_down: list[str] = []
+    monkeypatch.setattr(qa_worker, "stack_from_id", lambda stack_id: stack_id)
+    monkeypatch.setattr(qa_worker, "stack_down", torn_down.append)
+    working_directory = _ui_repo(tmp_path)
+    server = tmp_path / "fake_app.py"
+    server.write_text(APP_SERVER_BODY, encoding="utf-8")
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(server), APP_PORT_ENV],
+    )
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+    runs = _record_scenario_runs(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert [run["name"] for run in runs] == ["app-page"]
+    assert len(app_downs) == 1
+    assert runs[0]["app"] is app_downs[0]
+    assert 0.0 < runs[0]["max_minutes"] <= qa_worker.UI_TIMEOUT_MINUTES
+    assert all(verdict["verdict"] == "pass" for verdict in verdicts)
+    assert app_downs[0].process.returncode is not None
+    assert not app_downs[0].data_dir.exists()
+    assert torn_down == []
+    if os.name != "nt":
+        # the app child the fake server spawned dies with the app process tree
+        child_pid = int((tmp_path / "app_child.pid").read_text(encoding="utf-8"))
+        assert _wait_gone(child_pid), "the app child survived app_down"
+
+
+def test_ui_layer_smoke_crawls_the_app_base_url_only_when_smoke_is_on(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    server = tmp_path / "fake_app.py"
+    server.write_text(APP_SERVER_BODY, encoding="utf-8")
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(server), APP_PORT_ENV],
+    )
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+    _record_scenario_runs(monkeypatch)
+    crawled = _record_smoke_crawl(monkeypatch)
+
+    without_smoke = _ui_layer_runner(working_directory, project_apps=True)(30)
+    with_smoke = _ui_layer_runner(working_directory, project_apps=True, smoke=True)(30)
+
+    assert crawled == [app_downs[-1].base_url]
+    assert [verdict["scenario"] for verdict in without_smoke] == ["app-page"]
+    assert [verdict["scenario"] for verdict in with_smoke] == [
+        "app-page",
+        "smoke",
+    ]
+
+
+def test_ui_layer_profile_without_ui_block_keeps_the_qa_child_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    torn_down: list[str] = []
+    monkeypatch.setattr(qa_worker, "stack_from_id", lambda stack_id: stack_id)
+    monkeypatch.setattr(qa_worker, "stack_down", torn_down.append)
+    working_directory = _ui_repo(tmp_path)
+    _patch_projects(monkeypatch, working_directory, None)
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True, smoke=True)(30)
+
+    assert json.dumps(verdicts).encode("utf-8") == UI_CHILD_BYTES
+    assert torn_down == ["1b2c3d4e"]
+    assert app_downs == []
+
+
+def test_ui_layer_missing_app_binary_is_blocked_and_runs_no_scenarios(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    _patch_projects(monkeypatch, working_directory, [MISSING_APP_BINARY])
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+    runs = _record_scenario_runs(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert len(verdicts) == 1 and verdicts[0]["verdict"] == "blocked"
+    assert MISSING_APP_BINARY in verdicts[0]["blocked_reason"]
+    assert runs == []
+    assert app_downs == []
+
+
+def test_ui_layer_app_never_healthy_is_blocked_and_leaves_no_app_up(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, "-c", NEVER_READY_BODY],
+        ready_seconds=APP_NEVER_READY_SECONDS,
+    )
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+    runs = _record_scenario_runs(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert len(verdicts) == 1 and verdicts[0]["verdict"] == "blocked"
+    assert "not healthy after" in verdicts[0]["blocked_reason"]
+    assert runs == []
+    # app_up cleaned up the process it started before raising
+    assert len(app_downs) == 1
+    assert not app_downs[0].data_dir.exists()
+
+
+def test_ui_layer_scenario_without_playwright_is_blocked_with_the_hint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    server = tmp_path / "fake_app.py"
+    server.write_text(APP_SERVER_BODY, encoding="utf-8")
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(server), APP_PORT_ENV],
+    )
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    monkeypatch.setitem(sys.modules, "playwright", None)
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", None)
+    app_downs = _record_app_down(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert len(verdicts) == 1 and verdicts[0]["verdict"] == "blocked"
+    assert verdicts[0]["blocked_reason"] == qa_runner.PLAYWRIGHT_HINT
+    assert len(app_downs) == 1
+
+
+def test_ui_layer_without_project_scenario_files_is_blocked_and_stops_the_app(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    server = tmp_path / "fake_app.py"
+    server.write_text(APP_SERVER_BODY, encoding="utf-8")
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(server), APP_PORT_ENV],
+    )
+    _patch_scenarios(monkeypatch, [])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+
+    verdicts = _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert len(verdicts) == 1 and verdicts[0]["verdict"] == "blocked"
+    assert "no scenario files" in verdicts[0]["blocked_reason"]
+    assert len(app_downs) == 1
+    assert app_downs[0].process.returncode is not None
+
+
+def test_ui_layer_stops_the_app_when_a_scenario_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working_directory = _ui_repo(tmp_path)
+    server = tmp_path / "fake_app.py"
+    server.write_text(APP_SERVER_BODY, encoding="utf-8")
+    _patch_projects(
+        monkeypatch,
+        working_directory,
+        [sys.executable, str(server), APP_PORT_ENV],
+    )
+    _patch_scenarios(monkeypatch, ["app-page"])
+    _fake_qa_run(monkeypatch, tmp_path, UI_CHILD_BODY)
+    app_downs = _record_app_down(monkeypatch)
+
+    def crash(scenario: qa_runner.Scenario, **kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("the app scenario crashed")
+
+    monkeypatch.setattr(qa_runner, "run_browser_scenario", crash)
+
+    with pytest.raises(RuntimeError, match="the app scenario crashed"):
+        _ui_layer_runner(working_directory, project_apps=True)(30)
+
+    assert len(app_downs) == 1
+    assert app_downs[0].process.returncode is not None
 
 
 def test_two_concurrent_claims_run_one_at_a_time(

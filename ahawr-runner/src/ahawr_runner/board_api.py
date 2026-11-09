@@ -20,11 +20,13 @@ reports ``status()`` and its reason carries no host/port.
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import logging
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,10 +40,13 @@ from . import (
     board_ready,
     board_stats,
     board_think,
+    engine_collector,
+    engine_samples,
     features_config,
     overrides_config,
     retrieval_config,
     roles_config,
+    stats_figures,
     thinking_config,
 )
 from .board import (
@@ -49,6 +54,7 @@ from .board import (
     ConflictError,
     GuardError,
     InMemoryBoardStore,
+    Mission,
     QueueEntry,
     get_board_store,
     now,
@@ -63,8 +69,9 @@ from .board_ready import MissionIdError, create_mission, rollback, save_template
 from .board_stats import lesson_block_shown, lessons_stats, lessons_stats_overall
 from .qa import NIGHTLY_VERDICT_PATH
 from .qa_runner import RUN_DIR_PREFIX, RUNS_DIR
+from .runs import RunManager
 
-__all__ = ["router", "add_board_routes"]
+__all__ = ["router", "add_board_routes", "start_engine_collector"]
 
 logger = logging.getLogger(__name__)
 _QA_SCREENSHOT_RE = re.compile(r"^qa-[0-9a-f]+/[A-Za-z0-9_.-]+\.png$")
@@ -73,6 +80,97 @@ _QA_SCREENSHOT_RE = re.compile(r"^qa-[0-9a-f]+/[A-Za-z0-9_.-]+\.png$")
 _STATS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 STATS_TTL_FINISHED = 600.0
 STATS_TTL_LIVE = 15.0
+
+
+def _feature_enabled(store: BoardStore, mission_id: str | None, feature: str) -> bool:
+    """The state of one feature flag for a mission (the board's own when no mission
+    is given): the stored JSON parsed by ``features_config``; an invalid stored JSON
+    leaves every flag off."""
+    mission_features = (
+        (store.mission_config(mission_id) or {}).get("mission_features_json")
+        if mission_id
+        else None
+    )
+    features, errors = features_config.parse_features(
+        (store.hermes_config() or {}).get("features_json"), mission_features
+    )
+    if errors:
+        logger.warning(
+            "feature flags for %s are invalid, every flag stays off: %s",
+            mission_id or "the board",
+            "; ".join(errors),
+        )
+    return bool(features and features[feature]["enabled"])
+
+
+def _run_window(manager: RunManager, run_ids: list[str]) -> tuple[str, str] | None:
+    """The time window the given runs cover: the earliest start and the latest
+    finish (a run still going finishes now); None when no run has a start time."""
+    moment = datetime.now(UTC).isoformat()
+    starts: list[str] = []
+    ends: list[str] = []
+    for run_id in run_ids:
+        run = manager.store.get_run(run_id)
+        if not run or not run.get("started_at"):
+            continue
+        starts.append(run["started_at"])
+        ends.append(run.get("finished_at") or moment)
+    if not starts:
+        return None
+    return min(starts), max(ends)
+
+
+def _store_connection(store: Any) -> Any | None:
+    """The database connection of a board store; an in-memory store has none.
+    shortcut: the private ``_conn`` attribute; upgrade when a store exposes a
+    connection accessor."""
+    return getattr(store, "_conn", None)
+
+
+def _engine_block(store: BoardStore, manager: RunManager, run_ids: list[str]) -> dict[str, Any]:
+    """The engine figures of the window the runs cover (``engine_window_figures``);
+    null with ``NO_SAMPLES_REASON`` when the window holds no samples, never zeros."""
+    window = _run_window(manager, run_ids)
+    conn = _store_connection(store)
+    if window is None or conn is None:
+        return {"engine": None, "engine_reason": engine_samples.NO_SAMPLES_REASON}
+    figures = engine_samples.engine_window_figures(
+        engine_samples.engine_window(conn, window[0], window[1])
+    )
+    if figures is None:
+        return {"engine": None, "engine_reason": engine_samples.NO_SAMPLES_REASON}
+    return {"engine": figures}
+
+
+def _project_missions(store: BoardStore, project_key: str) -> list[Mission]:
+    """The missions the stored project rules put under ``project_key``."""
+    rules, _ = store.get_project_rules()
+    return [
+        mission
+        for mission in store.list_missions()
+        if board_stats._mission_project(mission.working_directory, rules)["key"] == project_key
+    ]
+
+
+def _project_exists(store: BoardStore, project_key: str) -> bool:
+    """A project is known when a rule names it or a mission falls under its key."""
+    rules, _ = store.get_project_rules()
+    return (
+        any(str(rule.get("name", "")) == project_key for rule in rules)
+        or bool(_project_missions(store, project_key))
+    )
+
+
+def _project_run_ids(store: BoardStore, project_key: str) -> list[str]:
+    """The run ids of every mission of the project (the window the project's engine
+    block is sampled over)."""
+    return sorted(
+        {
+            run_id
+            for mission in _project_missions(store, project_key)
+            for run_id in board_stats._mission_run_ids(store, mission.state_namespace)
+        }
+    )
 
 
 STORE_RETRY_SECONDS = 5.0
@@ -387,6 +485,146 @@ def _check_plan(plan: Any) -> None:
         _check_plan_qa(plan["qa"], needed)
 
 
+PROJECT_STATS_MAX_AGE_SECONDS = 1800.0
+PROJECT_STATS_WARM_SECONDS = 300.0
+_PROJECT_STATS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+_PROJECT_STATS_LOCK = threading.Lock()
+
+
+def _project_stats_payload(store: BoardStore, manager: Any, project: str) -> dict[str, Any]:
+    figures = stats_figures.project_figures(manager, store, project)
+    if _feature_enabled(store, None, "stats_engine_sampler"):
+        figures.update(_engine_block(store, manager, _project_run_ids(store, project)))
+    return figures
+
+
+def _cached_project_stats(store: BoardStore, manager: Any, project: str) -> dict[str, Any]:
+    """The project figures kept for ``PROJECT_STATS_MAX_AGE_SECONDS``: the full computation took
+    240 s on the n8n project (2026-11-09), so the warm-up thread refreshes it and a request only
+    computes when nothing fresh is stored (the lock keeps two requests from computing at once)."""
+    with _PROJECT_STATS_LOCK:
+        hit = _PROJECT_STATS_CACHE.get(project)
+        if hit is not None and time.monotonic() - hit[0] < PROJECT_STATS_MAX_AGE_SECONDS:
+            return hit[1]
+        payload = _project_stats_payload(store, manager, project)
+        _PROJECT_STATS_CACHE[project] = (time.monotonic(), payload)
+        return payload
+
+
+def _warm_project_stats(app: Any, stop: threading.Event) -> None:
+    """Recomputes the figures of every project that has missions, every
+    ``PROJECT_STATS_WARM_SECONDS``, while ``stats_popup`` is on."""
+    while not stop.is_set():
+        store = live_store(app)
+        if _unavailable(store) is None and _feature_enabled(store, None, "stats_popup"):
+            try:
+                rules, _ = store.get_project_rules()
+                keys = sorted(
+                    {
+                        board_stats._mission_project(m.working_directory, rules)["key"]
+                        for m in store.list_missions()
+                    }
+                )
+                for key in keys:
+                    if stop.is_set():
+                        break
+                    payload = _project_stats_payload(store, app.state.manager, key)
+                    with _PROJECT_STATS_LOCK:
+                        _PROJECT_STATS_CACHE[key] = (time.monotonic(), payload)
+            except Exception:
+                logger.exception(
+                    "project stats warm-up failed, retrying in %s s", PROJECT_STATS_WARM_SECONDS
+                )
+        stop.wait(PROJECT_STATS_WARM_SECONDS)
+
+
+def start_project_stats_warm(app: Any) -> threading.Event:
+    """Starts the project stats warm-up thread; setting the returned event stops it."""
+    stop = threading.Event()
+    threading.Thread(
+        target=_warm_project_stats, args=(app, stop), name="project-stats-warm", daemon=True
+    ).start()
+    return stop
+
+
+WARM_INTERVAL_SECONDS = 60.0
+
+
+def _warm_summary(app: Any, stop: threading.Event) -> None:
+    """Keeps the summary caches filled, so a board opened after a restart or a quiet hour does not
+    wait for them: the task lists first (seconds), then the figures (they read the runner)."""
+    while not stop.is_set():
+        store = live_store(app)
+        if _unavailable(store) is None:
+            try:
+                for mission in store.list_missions():
+                    _cached_task_list(store, mission.state_namespace)
+                    board_stats.cached_mission_figures(
+                        app.state.manager, store, mission.state_namespace, mission.mission_id
+                    )
+            except Exception:
+                logger.exception("summary warm-up failed, retrying in %s s", WARM_INTERVAL_SECONDS)
+        stop.wait(WARM_INTERVAL_SECONDS)
+
+
+def start_summary_warm(app: Any) -> threading.Event:
+    """Starts the warm-up thread; setting the returned event stops it."""
+    stop = threading.Event()
+    worker = threading.Thread(
+        target=_warm_summary, args=(app, stop), name="summary-warm", daemon=True
+    )
+    worker.start()
+    return stop
+
+
+def _run_engine_collector(collector: engine_collector.EngineCollector) -> None:
+    """The collector loop in its own thread: it exits on the stop event or when
+    the bounded database retries are spent; anything else is logged with reason."""
+    try:
+        collector.run()
+    except Exception as exc:
+        logger.error("engine collector stopped early: %s", exc)
+
+
+def start_engine_collector(app: Any) -> threading.Event:
+    """Starts the engine log snapshot collector when the stats_engine_sampler
+    feature flag is on; setting the returned event stops it.
+
+    With the flag off, no board store, no database behind it or a store whose
+    connection is gone, nothing starts and the dashboard keeps serving."""
+    stop = threading.Event()
+    store = getattr(app.state, "board_store", None)
+    if store is None or _unavailable(store) is not None:
+        logger.info("engine collector not started: the board store is unavailable")
+        return stop
+    try:
+        flag_on = _feature_enabled(store, None, "stats_engine_sampler")
+    except Exception as exc:
+        logger.warning("engine collector not started: feature flags unread: %s", exc)
+        return stop
+    if not flag_on:
+        return stop
+    conn = _store_connection(store)
+    if conn is None:
+        logger.info("engine collector not started: the board store has no database connection")
+        return stop
+    settings = engine_collector.CollectorSettings.from_env()
+    collector = engine_collector.EngineCollector(settings, conn, stop_event=stop)
+    worker = threading.Thread(
+        target=_run_engine_collector,
+        args=(collector,),
+        name="engine-collector",
+        daemon=True,
+    )
+    worker.start()
+    logger.info(
+        "engine collector started: polling %s every %s s",
+        settings.log_path,
+        settings.poll_seconds,
+    )
+    return stop
+
+
 def add_board_routes(app: Any, settings: Any) -> None:
     """Attach the board routes to a runner app (``create_app``).
 
@@ -424,6 +662,9 @@ def _on_mission_id(_: Request, exc: MissionIdError) -> JSONResponse:
 
 
 _TASK_ID_RE = re.compile(r"^T[0-9]+[A-Z]*$")
+#: A project key is a rule name or the last folder of a working directory: one
+#: segment (no slash), no control characters, never empty.
+_PROJECT_KEY_RE = re.compile(r"^[^/\x00-\x1f\x7f]+$")
 
 #: The mission card's task status mapped to the summary's vocabulary.
 _TASK_STATUS_MAP = {
@@ -437,37 +678,15 @@ _TASK_STATUS_MAP = {
 }
 
 
-def _mission_project(
-    working_directory: str | None, rules: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """The mission's project: the working directory matched against the stored
-    project rules (glob with ``*``, ordered by position); the first matching
-    rule wins. Otherwise the default rule: the working directory, shown by its
-    last folder name."""
-    normalized = (working_directory or "").replace("\\", "/").rstrip("/")
-    for rule in sorted(rules, key=lambda r: r.get("position", 0)):
-        pattern = str(rule.get("pattern", "")).replace("\\", "/").rstrip("/")
-        if normalized and pattern and fnmatch.fnmatch(normalized, pattern):
-            name = str(rule.get("name", ""))
-            return {"key": name, "name": name, "rule": rule["pattern"]}
-    last = normalized.rsplit("/", 1)[-1] if normalized else ""
-    return {"key": last, "name": last, "rule": None}
-
-
 def _task_attempts(store: BoardStore, state_key: str) -> dict[str, int]:
     """The per-task attempt counts (the distinct ``task_attempt`` values of each
     task's event rows)."""
-    attempts: dict[str, int] = {}
-    for view in store.task_views(state_key):
-        attempts[view.task_id] = len(
-            {
-                int(float(e["task_attempt"]))
-                for e in store.events(state_key)
-                if e.get("task_id") == view.task_id
-                and e.get("task_attempt") is not None
-            }
-        )
-    return attempts
+    seen: dict[str, set[int]] = {}
+    for event in store.events(state_key):  # one read: the rows carry the whole run outputs
+        if event.get("task_attempt") is not None:
+            attempt = int(float(event["task_attempt"]))
+            seen.setdefault(str(event.get("task_id")), set()).add(attempt)
+    return {view.task_id: len(seen.get(view.task_id, ())) for view in store.task_views(state_key)}
 
 
 # The hermes_config row (profile claude-code) holds the values a mission uses when its own config is empty;
@@ -551,20 +770,47 @@ def _mission_task_list(
 _TASKLIST_CACHE: dict[str, tuple[float, list[dict[str, Any]], Any]] = {}
 
 
+TASKLIST_FINISHED_SECONDS = 21600.0  # a finished mission's tasks do not change
+TASKLIST_PENDING_SECONDS = 30.0
+TASKLIST_LIVE_SECONDS = 5.0
+_TASKLIST_REFRESHING: set[str] = set()
+_TASKLIST_LOCK = threading.Lock()
+_TASKLIST_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="tasklist")
+
+
+def _refresh_task_list(store: BoardStore, state_key: str) -> list[dict[str, Any]]:
+    try:
+        tasks = _mission_task_list(store, state_key)
+        _TASKLIST_CACHE[state_key] = (time.monotonic(), tasks, store)
+        return tasks
+    finally:
+        with _TASKLIST_LOCK:
+            _TASKLIST_REFRESHING.discard(state_key)
+
+
 def _cached_task_list(store: BoardStore, state_key: str) -> list[dict[str, Any]]:
-    """_mission_task_list for the summary, kept 600 s for a finished mission and 5 s
-    for the others: reading the tasks of ~90 missions took 8 s on every refresh."""
+    """_mission_task_list for the summary: kept 6 h for a finished mission and 5 s for the
+    others. An expired entry is answered at once and recomputed in the background, so only the
+    very first read of a mission waits (reading the tasks of 176 missions took 24 s)."""
     live = store.get_live_state(state_key)
-    if live is None or live.status in ("completed", "failed"):
-        ttl = 600.0 if live is not None else 30.0
+    if live is None:
+        ttl = TASKLIST_PENDING_SECONDS
+    elif live.status in ("completed", "failed"):
+        ttl = TASKLIST_FINISHED_SECONDS
     else:
-        ttl = 5.0
+        ttl = TASKLIST_LIVE_SECONDS
     hit = _TASKLIST_CACHE.get(state_key)
-    if hit is not None and hit[2] is store and time.monotonic() - hit[0] < ttl:
-        return hit[1]
-    tasks = _mission_task_list(store, state_key)
-    _TASKLIST_CACHE[state_key] = (time.monotonic(), tasks, store)
-    return tasks
+    if hit is None or hit[2] is not store:
+        with _TASKLIST_LOCK:
+            _TASKLIST_REFRESHING.add(state_key)
+        return _refresh_task_list(store, state_key)
+    if time.monotonic() - hit[0] >= ttl:
+        with _TASKLIST_LOCK:
+            start = state_key not in _TASKLIST_REFRESHING
+            _TASKLIST_REFRESHING.add(state_key)
+        if start:
+            _TASKLIST_POOL.submit(_refresh_task_list, store, state_key)
+    return hit[1]
 
 
 def _summary_projects(
@@ -1471,6 +1717,73 @@ def _build_router() -> APIRouter:
             raise KeyError(f"task {task_key!r} not found")
         return board_stats.task_stats(request.app.state.manager, store, mission.state_namespace, task_key)
 
+    # the stats detail behind the stats_popup flag: the bench figures of a mission
+    # (per-task rows), of a task (per-attempt rows) and of a project
+    @router.get("/missions/{mission_id}/stats/detail")
+    def mission_stats_detail(request: Request, mission_id: str) -> dict[str, Any]:
+        """The bench figures of one mission (``stats_popup``): the run figures plus a
+        row per reviewed task; the engine block only when ``stats_engine_sampler``
+        is on."""
+        store = _store_guard(request)
+        mission = store.get_mission(mission_id)
+        if mission is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        if not _feature_enabled(store, mission_id, "stats_popup"):
+            raise KeyError(f"mission {mission_id!r} stats detail is not enabled (stats_popup off)")
+        manager = request.app.state.manager
+        figures = stats_figures.mission_figures(manager, store, mission.state_namespace)
+        if _feature_enabled(store, mission_id, "stats_engine_sampler"):
+            figures.update(
+                _engine_block(
+                    store, manager, board_stats._mission_run_ids(store, mission.state_namespace)
+                )
+            )
+        return figures
+
+    @router.get("/missions/{mission_id}/tasks/{task_key}/stats/detail")
+    def task_stats_detail(request: Request, mission_id: str, task_key: str) -> dict[str, Any]:
+        """The bench figures of one task (``stats_popup``): the run figures plus a row
+        per attempt; the engine block only when ``stats_engine_sampler`` is on."""
+        store = _store_guard(request)
+        mission = store.get_mission(mission_id)
+        if mission is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        if not _TASK_ID_RE.match(task_key):
+            raise ValueError(f"task key {task_key!r} is not a valid task id")
+        views = store.task_views(mission.state_namespace)
+        if not any(view.task_id == task_key for view in views):
+            raise KeyError(f"task {task_key!r} not found")
+        if not _feature_enabled(store, mission_id, "stats_popup"):
+            raise KeyError(f"task {task_key!r} stats detail is not enabled (stats_popup off)")
+        manager = request.app.state.manager
+        figures = stats_figures.task_figures(manager, store, mission.state_namespace, task_key)
+        if _feature_enabled(store, mission_id, "stats_engine_sampler"):
+            figures.update(
+                _engine_block(
+                    store, manager,
+                    board_stats._task_run_ids(store, mission.state_namespace, task_key),
+                )
+            )
+        return figures
+
+    @router.get("/projects/{project}/stats")
+    def project_stats(request: Request, project: str) -> dict[str, Any]:
+        """The bench figures of one project (``stats_popup``): the run figures over
+        every run of every mission of the project, with the per-mission breakdown;
+        the engine block only when ``stats_engine_sampler`` is on. The flags read are
+        the board's own (a project spans several missions). A project a rule names but
+        with no missions yet is a valid empty scope."""
+        store = _store_guard(request)
+        if not _PROJECT_KEY_RE.match(project):
+            raise ValueError(f"project {project!r} is not a valid project key")
+        if not _feature_enabled(store, None, "stats_popup"):
+            raise KeyError(f"project {project!r} stats detail is not enabled (stats_popup off)")
+        if not _project_exists(store, project):
+            raise KeyError(
+                f"project {project!r} not found (no project rule or mission uses that key)"
+            )
+        return _cached_project_stats(store, request.app.state.manager, project)
+
     @router.get("/missions/{mission_id}/timeline")
     def mission_timeline(request: Request, mission_id: str) -> dict[str, Any]:
         store = _store_guard(request)
@@ -1515,7 +1828,7 @@ def _build_router() -> APIRouter:
                     "created_at": mission.created_at,
                     "started_at": (times.get(state_key) or {}).get("first"),
                     "last_at": (times.get(state_key) or {}).get("last"),
-                    "project": _mission_project(mission.working_directory, rules),
+                    "project": board_stats._mission_project(mission.working_directory, rules),
                     "tasks": _cached_task_list(store, state_key),
                     "attempts": figures["attempts"],
                     "hours": figures["hours"],

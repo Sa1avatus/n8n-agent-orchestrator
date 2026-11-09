@@ -187,8 +187,22 @@ def regression_verdict(
 
 PROFILE_FILE_KEYS = frozenset({"projects"})
 PROFILE_KEYS = frozenset({"name", "working_directory", "regression", "baseline"})
+OPTIONAL_PROFILE_KEYS = frozenset({"ui"})
+UI_KEYS = frozenset({
+    "start_command",
+    "env",
+    "port_env",
+    "health_path",
+    "ready_timeout_seconds",
+    "scenarios_dir",
+})
 COMMAND_KEYS = frozenset({"name", "command"})
 DRIVE = re.compile(r"^(?:/([A-Za-z])(?=/|$)|([A-Za-z]):(?=/|$))")
+READY_TIMEOUT_MIN_SECONDS = 1
+READY_TIMEOUT_MAX_SECONDS = 300
+VARIABLE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
+UI_PLACEHOLDERS = frozenset({"port", "data_dir"})
 
 
 class ProfileError(ValueError):
@@ -202,11 +216,22 @@ class RegressionCommand:
 
 
 @dataclass(frozen=True)
+class UiConfig:
+    start_command: tuple[str, ...]
+    env: dict[str, str]
+    port_env: str
+    health_path: str
+    ready_timeout_seconds: float
+    scenarios_dir: str
+
+
+@dataclass(frozen=True)
 class Profile:
     name: str
     working_directory: str
     regression: tuple[RegressionCommand, ...]
     baseline: str
+    ui: UiConfig | None = None
 
 
 def load_profiles(path: Path) -> list[Profile]:
@@ -227,15 +252,110 @@ def load_profiles(path: Path) -> list[Profile]:
 
 
 def _profile(entry: object) -> Profile:
-    data = _mapping(entry, "project", PROFILE_KEYS)
-    name = _text(data["name"], "project name")
+    if not isinstance(entry, dict):
+        raise ProfileError("project must be a mapping")
+    keys = set(entry)
+    allowed = PROFILE_KEYS | OPTIONAL_PROFILE_KEYS
+    if not keys <= allowed:
+        raise ProfileError(
+            f"project has unknown keys {sorted(keys - allowed)}, "
+            f"allowed are {sorted(PROFILE_KEYS)} plus optional {sorted(OPTIONAL_PROFILE_KEYS)}"
+        )
+    if PROFILE_KEYS - keys:
+        raise ProfileError(f"project is missing the keys {sorted(PROFILE_KEYS - keys)}")
+    name = _text(entry["name"], "project name")
     where = f"project {name}"
     return Profile(
         name=name,
-        working_directory=_text(data["working_directory"], f"{where} working_directory"),
-        regression=_commands(data["regression"], where),
-        baseline=_text(data["baseline"], f"{where} baseline"),
+        working_directory=_text(entry["working_directory"], f"{where} working_directory"),
+        regression=_commands(entry["regression"], where),
+        baseline=_text(entry["baseline"], f"{where} baseline"),
+        ui=_ui(entry["ui"], where) if "ui" in entry else None,
     )
+
+
+def _ui(value: object, where: str) -> UiConfig:
+    if not isinstance(value, dict):
+        raise ProfileError(f"{where} ui must be a mapping with the keys {sorted(UI_KEYS)}")
+    keys = set(value)
+    if not keys <= UI_KEYS:
+        raise ProfileError(
+            f"{where} ui has unknown keys {sorted(keys - UI_KEYS)}, allowed are {sorted(UI_KEYS)}"
+        )
+    if UI_KEYS - keys:
+        raise ProfileError(f"{where} ui is missing the keys {sorted(UI_KEYS - keys)}")
+    return UiConfig(
+        start_command=_start_command(value["start_command"], where),
+        env=_env(value["env"], where),
+        port_env=_variable_name(value["port_env"], where),
+        health_path=_health_path(value["health_path"], where),
+        ready_timeout_seconds=_ready_timeout(value["ready_timeout_seconds"], where),
+        scenarios_dir=_scenarios_dir(value["scenarios_dir"], where),
+    )
+
+
+def _start_command(value: object, where: str) -> tuple[str, ...]:
+    if isinstance(value, str):
+        raise ProfileError(
+            f"{where} ui start_command must be a non-empty list of arguments, not a shell string"
+        )
+    if not isinstance(value, list) or not value:
+        raise ProfileError(f"{where} ui start_command must be a non-empty list of arguments")
+    return tuple(_text(part, f"{where} ui start_command argument") for part in value)
+
+
+def _env(value: object, where: str) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ProfileError(f"{where} ui env must be a map of string to string")
+    env: dict[str, str] = {}
+    for key, raw in value.items():
+        if not isinstance(key, str) or not isinstance(raw, str):
+            raise ProfileError(f"{where} ui env must map a string name to a string value")
+        bad = sorted(
+            {found for found in PLACEHOLDER.findall(raw) if found not in UI_PLACEHOLDERS}
+        )
+        if bad:
+            raise ProfileError(
+                f"{where} ui env {key} uses unknown placeholder(s) {bad}, "
+                f"allowed are {sorted(UI_PLACEHOLDERS)}"
+            )
+        env[key] = raw
+    return env
+
+
+def _variable_name(value: object, where: str) -> str:
+    name = _text(value, f"{where} ui port_env")
+    if VARIABLE_NAME.fullmatch(name) is None:
+        raise ProfileError(f"{where} ui port_env must be a variable name, got {name}")
+    return name
+
+
+def _health_path(value: object, where: str) -> str:
+    path = _text(value, f"{where} ui health_path")
+    if not path.startswith("/"):
+        raise ProfileError(f"{where} ui health_path must start with '/': {path}")
+    return path
+
+
+def _ready_timeout(value: object, where: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ProfileError(f"{where} ui ready_timeout_seconds must be a number, got {value!r}")
+    if not READY_TIMEOUT_MIN_SECONDS <= value <= READY_TIMEOUT_MAX_SECONDS:
+        raise ProfileError(
+            f"{where} ui ready_timeout_seconds must be between {READY_TIMEOUT_MIN_SECONDS} "
+            f"and {READY_TIMEOUT_MAX_SECONDS} seconds, got {value}"
+        )
+    return float(value)
+
+
+def _scenarios_dir(value: object, where: str) -> str:
+    relative = _text(value, f"{where} ui scenarios_dir")
+    parts = relative.replace("\\", "/").split("/")
+    if relative.startswith("/") or DRIVE.match(relative) or ".." in parts:
+        raise ProfileError(
+            f"{where} ui scenarios_dir must be relative and contain no '..': {relative}"
+        )
+    return relative
 
 
 def _commands(value: object, where: str) -> tuple[RegressionCommand, ...]:

@@ -2085,6 +2085,9 @@ _BOARD_ROUTE_ORDER: list[tuple[str, str]] = [
     ("GET", "/api/board/changelog"),
     ("GET", "/api/board/missions/{mission_id}/stats"),
     ("GET", "/api/board/missions/{mission_id}/tasks/{task_key}/stats"),
+    ("GET", "/api/board/missions/{mission_id}/stats/detail"),
+    ("GET", "/api/board/missions/{mission_id}/tasks/{task_key}/stats/detail"),
+    ("GET", "/api/board/projects/{project}/stats"),
     ("GET", "/api/board/missions/{mission_id}/timeline"),
     ("GET", "/api/board/summary"),
     ("POST", "/api/board/thinking/policy"),
@@ -2298,3 +2301,29 @@ class TestFirstRouteGroup:
         r = await board_client.delete("/api/board/missions/m1", params={"confirm": "true"})
         assert r.status_code == 200
         assert r.json() == {"deleted": "m1"}
+
+
+def test_task_attempts_reads_the_event_log_once() -> None:
+    """The event rows carry whole run outputs: the attempts come from one read, not one per task."""
+    from ahawr_runner import board_api
+    from ahawr_runner.board import InMemoryBoardStore, LiveState
+
+    class Counting(InMemoryBoardStore):
+        reads = 0
+
+        def events(self, state_key):  # type: ignore[no-untyped-def]
+            Counting.reads += 1
+            return super().events(state_key)
+
+    store = Counting()
+    store._live["sk"] = LiveState(
+        state_key="sk", status="active", task_index=1, task_attempt=1,
+        plan={"tasks": [{"id": "T001"}, {"id": "T002"}, {"id": "T003"}]},
+    )
+    store._events["sk"] = [
+        {"task_id": "T001", "task_attempt": 1}, {"task_id": "T001", "task_attempt": 2},
+        {"task_id": "T002", "task_attempt": 1},
+    ]
+    Counting.reads = 0
+    assert board_api._task_attempts(store, "sk") == {"T001": 2, "T002": 1, "T003": 0}
+    assert Counting.reads == 2  # one for the attempts, one inside task_views

@@ -253,7 +253,7 @@ def _profiles(tmp_path: Path, text: str = PROFILE_YAML) -> list[Profile]:
 
 def test_repository_profile_has_the_ahawr_runner_commands() -> None:
     profiles = load_profiles(PROJECTS_FILE)
-    assert [profile.name for profile in profiles] == ["ahawr-runner"]
+    assert [profile.name for profile in profiles] == ["ahawr-runner", "mi-find-tracker"]
     profile = profiles[0]
     assert [(command.name, command.command) for command in profile.regression] == [
         ("pytest", "python -m pytest -q --no-cov -p no:cacheprovider -rf"),

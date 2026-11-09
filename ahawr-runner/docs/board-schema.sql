@@ -159,3 +159,36 @@ CREATE TABLE IF NOT EXISTS board.provider_models (
     updated_at               timestamptz NOT NULL DEFAULT now(),
     UNIQUE (provider, model)
 );
+
+-- Engine-log samples for the engine window figures: every snapshot of a
+-- segment of the engine log, plus the rows written by a backfill of engine
+-- log segments.  source is 'sampled', 'backfill-segment' or 'backfill-matched'.
+-- sample_key makes the insert idempotent: a repeated sample is a no-op.
+CREATE TABLE IF NOT EXISTS board.engine_samples (
+    sampled_at       timestamptz NOT NULL DEFAULT now(),
+    engine_run       integer,
+    generated_tokens integer,
+    tok_per_s        double precision,
+    drafts_accepted  integer,
+    drafts_total     integer,
+    expert_slots     integer,
+    vram_free_mib    integer,
+    low_vram         boolean NOT NULL DEFAULT false,
+    source           text NOT NULL DEFAULT 'sampled',
+    sample_key       text
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS engine_samples_sample_key_idx
+    ON board.engine_samples (sample_key);
+
+CREATE INDEX IF NOT EXISTS engine_samples_sampled_at_idx
+    ON board.engine_samples (sampled_at);
+
+-- The dashboard connects as board_operator: without this the collector fails with "permission denied for table engine_samples".
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'board_operator') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON board.engine_samples TO board_operator;
+    END IF;
+END
+$$;

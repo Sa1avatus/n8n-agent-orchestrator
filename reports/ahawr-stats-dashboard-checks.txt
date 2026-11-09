@@ -1,0 +1,189 @@
+AHAWR stats dashboard - final checks (T014A, attempt 2), 2026-11-09
+Plain results of the commands run. Working dir: /d/n8n (git commands), /d/n8n/ahawr-runner (tool commands).
+"before" = the content of the file at HEAD (commit 9bf0266e, before this mission's uncommitted changes), "after" = the working tree.
+Attempt 2 changes only four test files (the strict-mypy errors listed in CHECK 4 of attempt 1); every other section below is unchanged from attempt 1.
+
+====================================================================
+FIX APPLIED IN ATTEMPT 2 (test-only annotations, no behaviour change, no "# type: ignore", no check loosened)
+1. ahawr-runner/tests/test_board_stats.py:555-557, 570-572, 594-596 - the three test functions added by this mission got precise annotations:
+     def test_failed_figures_read_keeps_the_last_good_figures(
+         run_manager: RunManager, monkeypatch: pytest.MonkeyPatch
+     ) -> None:
+     def test_failed_figures_read_is_retried_soon_not_after_the_ttl(
+         run_manager: RunManager, monkeypatch: pytest.MonkeyPatch
+     ) -> None:
+     def test_expired_task_list_is_answered_from_the_cache_and_recomputed_in_background(
+         monkeypatch: pytest.MonkeyPatch,
+     ) -> None:
+2. ahawr-runner/tests/test_board_stats.py:564, 565, 586 - the three calls that passed `None` as the first argument of
+   `board_stats.mission_figures` now pass the existing `run_manager` fixture instead:
+     first = board_stats.mission_figures(run_manager, board, "m1", force=True)
+     second = board_stats.mission_figures(run_manager, board, "m1", force=True)
+     board_stats.mission_figures(run_manager, board, "m2")
+   The manager is never used inside those tests because the figure read is monkeypatched in the two lines above the call:
+     test_board_stats.py:563  monkeypatch.setattr(board_stats, "_mission_figures", lambda *_: next(reads))
+     test_board_stats.py:585  monkeypatch.setattr(board_stats, "_mission_figures", read)
+   so the assertions still check the same cache behaviour; the RunManager is a real object, not None.
+3. ahawr-runner/tests/test_engine_samples.py:79, 96, 101, 123, 142, 158, 185 - `-> None` on each test function;
+   ahawr-runner/tests/test_engine_samples.py:144 - `args: dict[str, Any] = dict(...)` (the untyped `dict(...)` literal
+   inferred `dict[str, object]`, which mypy rejected against the typed keyword parameters of `insert_sample`).
+4. ahawr-runner/tests/test_engine_log.py:15 (`Sample` added to the existing import list) and :62 -
+   `def test_parse_line_table(line: str, expected: list[Sample]) -> None:` (matches `parse_line -> list[Sample]`,
+   ahawr_runner/engine_log.py:75).
+5. ahawr-runner/tests/test_board_stats_detail.py:165 - `assert features is not None` before the two index lines
+   (`parse_features` returns `dict[str, dict[str, Any]] | None`, ahawr_runner/features_config.py:121-131), so the
+   indexing at :166-167 is no longer "not indexable".
+
+====================================================================
+CHECK 1  targeted pytest (background, output to a file)
+command: cd /d/n8n/ahawr-runner && python -m pytest tests/test_stats_figures.py tests/test_engine_log.py tests/test_engine_samples.py tests/test_engine_collector.py tests/test_engine_collector_wiring.py tests/test_engine_backfill.py tests/test_board_stats_detail.py tests/test_board_stats.py tests/test_mission_stats.py -q --no-cov > /tmp/final_pytest.txt 2>&1
+exit code: 0 (appended line in the output file: "EXIT_CODE=0")
+key lines of /tmp/final_pytest.txt (18 lines total):
+  "........................................................................ [ 65%]"   (72 dots)
+  "......................................                                   [100%]" (38 dots) -> 110 tests collected, no "F" markers
+  "EXIT_CODE=0"
+  grep -c "FAILED" /tmp/final_pytest.txt = 0
+  warning line: "StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated" (from /opt/ahawr-runner/venv, installed dependency, not project code)
+  extra stderr at teardown (not a test failure):
+    "summary warm-up failed, retrying in 60.0 s"
+    "File \"/d/n8n/ahawr-runner/src/ahawr_runner/board_api.py\", line 500, in _warm_summary"
+    "RuntimeError: cannot schedule new futures after interpreter shutdown"
+note: the -q run did not print a "N passed in Xs" summary line in the captured file; the dot count (110) plus exit code 0 plus zero "FAILED" lines is the evidence of a green run.
+
+====================================================================
+CHECK 2  node popup test
+command: cd /d/n8n/ahawr-runner && node --test tests/board_stats_popup.test.js
+exit code: 0 (appended line: "EXIT_CODE=0")
+key lines:
+  "1..17"
+  "# tests 17"
+  "# suites 0"
+  "# pass 17"
+  "# fail 0"
+  "# cancelled 0"
+  "# skipped 0"
+  "# todo 0"
+  "# duration_ms 555.968483"
+  last subtests: "ok 15 - the popup issues no POST, PUT or DELETE", "ok 16 - every translated key of the popup is in the English, Russian and bundled tables", "ok 17 - the popup reuses the shared esc and fetchJson instead of defining its own"
+
+====================================================================
+CHECK 3  ruff per changed file (before vs after)
+commands per file:
+  before: git show "HEAD:ahawr-runner/<path>" | python -m ruff check --output-format=concise - | grep -Ec ':[0-9]+:[0-9]+: [A-Z][0-9]+'
+  after:  python -m ruff check --output-format=concise <path> | grep -Ec ':[0-9]+:[0-9]+: [A-Z][0-9]+'
+per-file counts (before / after / new):
+  src/ahawr_runner/stats_figures.py        new file (not in HEAD) / 0 / 0
+  src/ahawr_runner/engine_log.py           new file (not in HEAD) / 0 / 0
+  src/ahawr_runner/engine_samples.py       new file (not in HEAD) / 0 / 0
+  src/ahawr_runner/engine_collector.py     new file (not in HEAD) / 0 / 0
+  src/ahawr_runner/engine_backfill.py      new file (not in HEAD) / 0 / 0
+  src/ahawr_runner/board_stats.py          0 / 0 / unchanged
+  src/ahawr_runner/board_api.py            28 / 28 / unchanged
+  src/ahawr_runner/dashboard.py            0 / 0 / unchanged
+  src/ahawr_runner/features_config.py      0 / 0 / unchanged
+  tests/test_stats_figures.py              new file (not in HEAD) / 0 / 0
+  tests/test_engine_log.py                 new file (not in HEAD) / 0 / 0
+  tests/test_engine_samples.py             new file (not in HEAD) / 0 / 0
+  tests/test_engine_collector.py           new file (not in HEAD) / 0 / 0
+  tests/test_engine_collector_wiring.py    new file (not in HEAD) / 0 / 0
+  tests/test_engine_backfill.py            new file (not in HEAD) / 0 / 0
+  tests/test_board_stats_detail.py         new file (not in HEAD) / 0 / 0
+  tests/test_board_stats.py                0 / 0 / unchanged
+  tests/test_mission_stats.py              4 / 4 / unchanged
+combined command:
+  cd /d/n8n/ahawr-runner && python -m ruff check <the 18 files above>
+  exit code: 1
+  key line: "Found 32 errors."  -> 28 x E501 in src/ahawr_runner/board_api.py (all present at HEAD, e.g. "board_api.py:330:101: E501 Line too long (102 > 100)") and 4 x F401 in tests/test_mission_stats.py ("tests/test_mission_stats.py:6:8: F401 [*] `os` imported but unused", ":7:8: F401 `time`", ":13:61: F401 `ahawr_runner.board.QueueEntry`", ":17:40: F401 `ahawr_runner.local_pricing.LocalPricing`). 32 before, 32 after: no new ruff errors.
+  cross-check with the QA baseline file ahawr-runner/qa/baselines/ahawr-runner.json, line 85: "src/ahawr_runner/board_api.py:E501" (known old failure).
+
+====================================================================
+CHECK 4  mypy per changed file (before vs after) - counts after the attempt-2 annotations
+after command (the same 18 files): cd /d/n8n/ahawr-runner && python -m mypy src/ahawr_runner/stats_figures.py src/ahawr_runner/engine_log.py src/ahawr_runner/engine_samples.py src/ahawr_runner/engine_collector.py src/ahawr_runner/engine_backfill.py src/ahawr_runner/board_stats.py src/ahawr_runner/board_api.py src/ahawr_runner/dashboard.py src/ahawr_runner/features_config.py tests/test_stats_figures.py tests/test_engine_log.py tests/test_engine_samples.py tests/test_engine_collector.py tests/test_engine_collector_wiring.py tests/test_engine_backfill.py tests/test_board_stats_detail.py tests/test_board_stats.py tests/test_mission_stats.py
+exit code: 1 (appended line "EXIT_CODE=1"); key line: "Found 112 errors in 14 files (checked 18 source files)"
+  - attempt 1 (before the annotations) said "Found 143 errors in 17 files (checked 18 source files)"; the 31 removed errors are exactly the 6 + 22 + 2 + 1 listed below.
+  - the difference to the HEAD baseline (111) is one error: src/ahawr_runner/api.py:284: error: Unused "type: ignore" comment  [unused-ignore]. api.py is not modified by this mission (`git status --short -- ahawr-runner/src/ahawr_runner/api.py` -> empty, and its line 284 is identical to "git show HEAD:ahawr-runner/src/ahawr_runner/api.py"), and it enters the check only because the new test file imports it (tests/test_board_stats_detail.py:23: `from ahawr_runner.api import create_app`).
+per-file mypy errors for the 18 files of the mission (before / after):
+  src/ahawr_runner/board_api.py        16 / 16 (unchanged)
+  src/ahawr_runner/board_stats.py      2 / 2  (unchanged)
+  src/ahawr_runner/dashboard.py        0 / 0
+  src/ahawr_runner/features_config.py  0 / 0
+  tests/test_board_stats.py            22 / 22 (unchanged; the 6 errors attempt 1 added are gone)
+  tests/test_mission_stats.py          3 / 3  (unchanged)
+  new files, no HEAD baseline -> errors after:
+    src/ahawr_runner/stats_figures.py 0; engine_log.py 0; engine_samples.py 0; engine_collector.py 0; engine_backfill.py 0
+    tests/test_stats_figures.py 0; test_engine_collector.py 0; test_engine_collector_wiring.py 0; test_engine_backfill.py 0
+    tests/test_engine_log.py 0; tests/test_engine_samples.py 0; tests/test_board_stats_detail.py 0
+the remaining 22 errors in tests/test_board_stats.py are all at or before line 547, i.e. inside content that is unchanged from HEAD (the mission's diff is one hunk "@@ -544,3 +545,86 @@"), and are identical to the baseline list:
+  tests/test_board_stats.py:38, 43: Function is missing a type annotation for one or more parameters  [no-untyped-def]
+  tests/test_board_stats.py:69, 78, 93: Missing type arguments for generic type "dict"  [type-arg]
+  tests/test_board_stats.py:163, 228, 280, 328, 430, 453, 465, 497, 510, 518: Function is missing a type annotation  [no-untyped-def]
+  tests/test_board_stats.py:538, 545: Function is missing a return type annotation  [no-untyped-def]
+  tests/test_board_stats.py:539, 541, 542, 546, 547: Argument 1 to "_max_attempts" has incompatible type "_ConfigBoard"; expected "BoardStore"  [arg-type]
+The errors of the other 10 files in the 112 (board_pg.py, board_order.py, board_ready.py, board_ops_store_pg.py, board.py, runs.py, board_think.py, board_providers_api.py, board_ops_redact.py, api.py) come from modules mypy checks transitively because the mission's files import them; none of those files is modified by this mission (`git status --short` shows no entry for them except board_api.py/board_stats.py already counted above). CLAUDE.md names them as known old mypy failures.
+The 31 errors removed by the attempt-2 annotations, as they appeared in the attempt-1 combined run:
+  tests/test_board_stats.py:555, 568, 590: Function is missing a type annotation  [no-untyped-def]
+  tests/test_board_stats.py:562, 563, 582: Argument 1 to "mission_figures" has incompatible type "None"; expected "RunManager"  [arg-type]
+  tests/test_engine_log.py:61: Missing type arguments for generic type "list"  [type-arg]
+  tests/test_engine_samples.py:79, 96, 101, 123, 142, 158, 185: Function is missing a return type annotation  [no-untyped-def]
+  tests/test_engine_samples.py:149, 150, 151: Argument 2 to "insert_sample" has incompatible type "**dict[str, object]"; expected "str | datetime" / "int | None" / "float | None" / "bool" / "str"  [arg-type]  (5 per line = 15 errors)
+  tests/test_board_stats_detail.py:165, 166: Value of type "dict[str, dict[str, Any]] | None" is not indexable  [index]
+Note: the QA gate (ahawr-runner/qa/projects.yaml line 12) runs "mypy src" only, so the test-file errors above are outside the QA baseline file.
+
+====================================================================
+CHECK 5  git diff --check
+command: cd /d/n8n && git diff --check
+exit code: 0
+key lines: no trailing-whitespace or EOF-blank-line findings; only 22 warnings of the form
+  "warning: in the working copy of 'ahawr-runner/src/ahawr_runner/board_api.py', LF will be replaced by CRLF the next time Git touches it"
+(Windows host line-ending warnings, present for both this mission's files and the files of other missions).
+re-run after the attempt-2 edits: exit code 0, 22 CRLF warnings, no findings.
+
+====================================================================
+CHECK 6  git status --short
+command: cd /d/n8n && git status --short
+exit code: 0; 67 entries (re-counted with `git status --short | wc -l` = 67).
+modified (M):
+  ahawr-runner/docs/board-schema.sql, ahawr-runner/docs/qa-gate.md, ahawr-runner/docs/qa-layers.md, ahawr-runner/qa/projects.yaml,
+  ahawr-runner/src/ahawr_runner/{board.css, board.html, board_api.py, board_features.js, board_i18n.js, board_i18n_en.json, board_i18n_ru.json, board_mission.js, board_stats.py, board_task.js, board_view_projects.js, dashboard.py, features_config.py, qa_regression.py, qa_runner.py, qa_stack.py, qa_worker.py, roles_config.py},
+  ahawr-runner/tests/{board_mission.test.js, board_task.test.js, board_view_projects.test.js, features_cases.json, test_board_api.py, test_board_stats.py, test_features_config.py, test_qa_regression.py, test_qa_runner.py, test_qa_worker.py, test_roles_config.py}
+untracked (??):
+  .claude/, ahawr-runner/docs/stats-collector-compose.patch, ahawr-runner/docs/stats-collector.md, ahawr-runner/docs/stats-compose.patch, ahawr-runner/docs/stats-popup.md,
+  ahawr-runner/qa/scenarios/mi-find-tracker/,
+  ahawr-runner/src/ahawr_runner/{board_stats_popup.js, engine_backfill.py, engine_collector.py, engine_log.py, engine_samples.py, qa_app.py, stats_figures.py},
+  ahawr-runner/tests/{board_stats_popup.test.js, test_board_stats_detail.py, test_char_scratch.py, test_engine_backfill.py, test_engine_collector.py, test_engine_collector_wiring.py, test_engine_log.py, test_engine_samples.py, test_qa_app.py, test_qa_profile_ui.py, test_stats_figures.py},
+  reports/ahawr-qa-project-targets-report-ru.md, reports/audio-dub-report-ru.md, reports/bench-kv-series-ru.md, reports/bench-kv-series-tasks-ru.md, reports/mission-*-draft.md, reports/ahawr-stats-dashboard-checks.txt
+outside the allowed paths (not created by this mission - they belong to the qa-project-targets and mi-find-tracker missions already in the working tree before T014A started, and to the runner-side tooling):
+  ahawr-runner/qa/projects.yaml, ahawr-runner/qa/scenarios/mi-find-tracker/, ahawr-runner/src/ahawr_runner/qa_app.py,
+  ahawr-runner/src/ahawr_runner/qa_{regression,runner,stack,worker}.py, ahawr-runner/src/ahawr_runner/roles_config.py,
+  ahawr-runner/docs/qa-gate.md, ahawr-runner/docs/qa-layers.md,
+  ahawr-runner/tests/test_qa_{regression,runner,worker,app,profile_ui}.py, ahawr-runner/tests/test_char_scratch.py,
+  .claude/
+docker-compose.yml and data-tables/ops: unchanged
+  command: cd /d/n8n && git status --short -- docker-compose.yml data-tables/ops
+  exit code: 0; output: empty (no entries).
+
+====================================================================
+CHECK 7  re-run of the affected checks after the attempt-2 annotations
+- pytest (background, bounded): cd /d/n8n/ahawr-runner && python -m pytest tests/test_stats_figures.py tests/test_engine_log.py tests/test_engine_samples.py tests/test_engine_collector.py tests/test_engine_collector_wiring.py tests/test_engine_backfill.py tests/test_board_stats_detail.py tests/test_board_stats.py tests/test_mission_stats.py -q --no-cov > /tmp/final_pytest2.txt 2>&1
+  exit code: 0 ("EXIT_CODE=0"); dot count of the two progress lines = 110 (same 72 + 38 as CHECK 1); grep -c "FAILED|ERROR" = 0.
+- mypy (CHECK 4 command, 18 files): exit code 1, "Found 112 errors in 14 files (checked 18 source files)" - tests/test_board_stats.py 22, tests/test_engine_samples.py 0, tests/test_engine_log.py 0, tests/test_board_stats_detail.py 0.
+  the four annotated test files, counted alone: `grep -c "^tests/test_board_stats.py:[0-9]*: error:" = 22`, the other three = 0.
+- ruff on the four edited test files: cd /d/n8n/ahawr-runner && python -m ruff check tests/test_board_stats.py tests/test_engine_samples.py tests/test_engine_log.py tests/test_board_stats_detail.py
+  exit code: 0; key line: "All checks passed!"
+- node --test tests/board_stats_popup.test.js: not re-run in attempt 2 (no JS or i18n file was touched by the annotations), result stands from CHECK 2.
+- git diff --check: re-run, exit 0 (see CHECK 5).
+
+====================================================================
+CHECKS NOT RUN
+- pytest without --no-cov / the full suite: not run, T014A names only the 9 listed test files and CLAUDE.md requires --no-cov for targeted runs.
+- node tests of board_mission/board_task/board_view_projects: not run, not named in T014A (those files were changed by other tasks of the mission; T014A names only board_stats_popup.test.js).
+- The collector was not executed against a real database or a real engine log: the container inputs are not readable by a Worker (prerequisite of the mission); only the pytest files that exercise it on temporary files were run.
+- No container, database or n8n data table was touched; nothing was applied.
+- mypy/ruff were not run on board_stats_popup.js or the i18n JSON files (ruff/mypy are Python-only tools; the JS check is the node test above).
+- `mypy src` alone (the QA gate command) was not run: the 18-file command of CHECK 4 is a superset of src/ for the mission's files.
+
+REMAINING PROBLEMS (as found, not fixed - T014A allows writing only this file)
+1. No new strict-mypy errors remain in the test files this mission added or changed: tests/test_board_stats.py is back at the HEAD count 22 (all at or before line 547, unchanged content), tests/test_engine_samples.py 0, tests/test_engine_log.py 0, tests/test_board_stats_detail.py 0, and the five new source modules report 0. Source files changed by the mission have no new ruff or mypy errors.
+2. The 22 old strict-mypy errors in tests/test_board_stats.py (lines 38-547) and the 16 in src/ahawr_runner/board_api.py, the 2 in board_stats.py, the 3 in tests/test_mission_stats.py, and the errors in the transitively-checked board_pg.py / board_order.py / board_ready.py / board_ops_store_pg.py / board.py / runs.py / board_think.py / board_providers_api.py / board_ops_redact.py / api.py pre-date this mission. They are not touched: CLAUDE.md says not to fix old errors in files outside the task and not to weaken a check.
+3. One `# type: ignore[arg-type]` on tests/test_board_stats.py:634 (`board_stats.mission_figures(object(), Board(), "ns-x", force=True, mission_id="m-x")`) was added by this mission and was not needed by strict mypy in the attempt-2 run (the call then reported no error). It is left as it is: removing it is not part of T014A and no check flags it.
+4. git status still contains qa/ and .claude/ entries from other missions, so criterion 3 ("only src/ahawr_runner, docs, tests and reports") is not satisfied by the working tree as a whole; this task changed nothing outside reports/ahawr-stats-dashboard-checks.txt and the four test files named in FIX APPLIED (all inside ahawr-runner/tests). docker-compose.yml and data-tables/ops are untouched (CHECK 6).

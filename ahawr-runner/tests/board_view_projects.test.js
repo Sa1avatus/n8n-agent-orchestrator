@@ -32,6 +32,7 @@ function makeNode(tag) {
     },
     getAttribute: (k) => (k in node.attrs ? node.attrs[k] : null),
     append: (...nodes) => node.children.push(...nodes),
+    appendChild: (child) => { node.children.push(child); return node; },
     addEventListener(type, fn) {
       (node.listeners[type] = node.listeners[type] || []).push(fn);
     },
@@ -227,4 +228,49 @@ test("state and task helpers map the summary fields", () => {
   assert.deepEqual(views.taskCounts(MISSIONS[0]), { done: 2, total: 3 });
   assert.equal(views.formatTokens(1500000), "1.5M");
   assert.equal(views.formatTokens(2000), "2.0k");
+});
+
+// --- T011: the Statistics button on the project card, gated by stats_popup ---
+const POPUP_PATH = path.join(__dirname, "..", "src", "ahawr_runner", "board_stats_popup.js");
+
+async function renderWithStats(featuresJson) {
+  const saved = {
+    fetch: globalThis.fetch,
+    document: globalThis.document,
+    BoardStatsPopup: globalThis.BoardStatsPopup,
+  };
+  // fresh module per call: the flag cache would otherwise carry the first features
+  delete require.cache[require.resolve(POPUP_PATH)];
+  globalThis.BoardStatsPopup = require(POPUP_PATH);
+  globalThis.document = { createElement: makeNode };
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ features_json: featuresJson }) });
+  try {
+    const { ctx } = ctxFor({ data: {}, missions: MISSIONS, projects: PROJECTS });
+    const body = makeNode("div");
+    await views.render(body, ctx);
+    return body;
+  } finally {
+    for (const key of Object.keys(saved)) {
+      if (saved[key] === undefined) delete globalThis[key];
+      else globalThis[key] = saved[key];
+    }
+  }
+}
+
+test("no Statistics button on project cards when stats_popup is off (default)", async () => {
+  const body = await renderWithStats("");
+  assert.equal(byClass(body, "pr").length, 2, "the existing cards are still rendered");
+  assert.equal(walk(body, (n) => n.className === "sp-btn").length, 0,
+    "the flag is off by default: no button is added anywhere");
+});
+
+test("one Statistics button per project card when stats_popup is on", async () => {
+  const body = await renderWithStats('{"stats_popup":{"enabled":true}}');
+  const buttons = walk(body, (n) => n.className === "sp-btn");
+  assert.equal(buttons.length, 2, "exactly one button per project card");
+  assert.equal(byClass(body, "pr").length, 2, "the existing cards are unchanged");
+  assert.equal(buttons[0].textContent, "Statistics", "the button reads Statistics");
+  assert.equal(buttons[0].listeners.click.length, 1, "the button carries a click handler");
+  assert.equal(walk(body, (n) => n.classes.has("kc")).length, 3,
+    "the mission rows of the cards are untouched by the button");
 });

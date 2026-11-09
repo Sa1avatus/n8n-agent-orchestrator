@@ -1,0 +1,23 @@
+# README.md:21-22: "/health is the liveness probe, /api/status the poller state" (app.py:193-195,
+# app.py:215-216). With BIND_ADDRESS=127.0.0.1 the token middleware is skipped (app.py:150-164),
+# so no ACCESS_TOKEN is needed for these routes.
+# shortcut: api_get answers through page.request (qa_runner.py:718-733) and that response is not
+# in the recorded page responses, so the request_2xx proof of /api/status comes from the page's
+# own fetch (app.js:178); upgrade if api_get responses should also be recorded.
+name: health and api status both answer 2xx and the poller state is readable
+tags: [ui, nightly]
+preconditions:
+  fixture: empty
+target: app
+steps:
+  - open: /health
+    expect:
+      request_2xx: [/health]
+  - open: /
+    expect:
+      request_2xx: [/api/status]
+  - api_get:
+      path: /api/status
+      extract: last_outcome
+    expect:
+      no_console_error: true

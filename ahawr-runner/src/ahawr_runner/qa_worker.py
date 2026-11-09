@@ -28,6 +28,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
+from ahawr_runner import qa_app, qa_regression, qa_runner, qa_smoke
 from ahawr_runner.config import Settings, map_host_path
 from ahawr_runner.guard_heartbeat import TIME_FORMAT
 from ahawr_runner.qa_agent_prompt import build_qa_agent_prompt
@@ -41,7 +42,7 @@ from ahawr_runner.qa_contract import (
     load_contract,
 )
 from ahawr_runner.qa_requests import QA_AGENT_LAYER, QA_UI_FILE_PATTERN, qa_agent_enabled
-from ahawr_runner.qa_runner import build_verdict
+from ahawr_runner.qa_runner import SCENARIO_DIR, SECONDS_PER_MINUTE, build_verdict
 from ahawr_runner.qa_stack import (
     QaStackError,
     mode_from_env,
@@ -49,6 +50,7 @@ from ahawr_runner.qa_stack import (
     stack_from_id,
     stack_up,
 )
+from ahawr_runner.roles_config import qa_project_apps
 
 logger = logging.getLogger("ahawr_runner.qa_worker")
 
@@ -82,6 +84,8 @@ GIT_FAILED_REASON = (
     "git could not list the changed files: not a git repository or no commit yet"
 )
 QA_SCENARIO = "qa"
+# qa/projects.yaml, the same profiles file the qa child reads (qa.py PROFILES_PATH)
+PROJECTS_PATH = SCENARIO_DIR.parent / "projects.yaml"
 UI_FILE_RE = re.compile(QA_UI_FILE_PATTERN)
 STACK_ID_RE = re.compile(r"stack id: ([0-9a-f]{8})")
 ANSWER_SCHEMA = (
@@ -353,10 +357,92 @@ def _layer_command(layer: str, args: list[str], working_directory: str = "") -> 
     return run
 
 
+def _ui_app_target(
+    working_directory: str, options: Mapping[str, Any]
+) -> tuple[qa_regression.Profile, qa_regression.UiConfig] | None:
+    if not qa_project_apps(options) or not working_directory:
+        return None
+    try:
+        profiles = qa_regression.load_profiles(PROJECTS_PATH)
+    except OSError as exc:
+        logger.warning(
+            "qa projects file %s cannot be read: %s; the ui layer runs the qa child path",
+            PROJECTS_PATH,
+            exc,
+        )
+        return None
+    profile = qa_regression.find_profile(profiles, working_directory)
+    if profile is None:
+        logger.info(
+            "no project profile matches %r; the ui layer runs the qa child path", working_directory
+        )
+        return None
+    ui = profile.ui
+    if ui is None:
+        return None
+    return profile, ui
+
+
+def _app_ui_runner(
+    profile: qa_regression.Profile,
+    ui: qa_regression.UiConfig,
+    options: Mapping[str, Any],
+    working_directory: str,
+) -> LayerRunner:
+    def run(timeout_seconds: float) -> list[dict[str, Any]]:
+        early = early_verdict(QA_SCENARIO, working_directory)
+        if early is not None:
+            return [early]
+        try:
+            handle = qa_app.app_up(profile)
+        except (QaStackError, ValueError) as exc:
+            logger.error("qa app of project %s did not start: %s", profile.name, exc)
+            return [blocked_verdict(QA_SCENARIO, str(exc))]
+        try:
+            return _app_layer_verdicts(ui, handle, options, timeout_seconds)
+        finally:
+            # the app started here is torn down on every path, blocked and raised alike
+            qa_app.app_down(handle)
+
+    return run
+
+
+def _app_layer_verdicts(
+    ui: qa_regression.UiConfig,
+    handle: qa_app.AppHandle,
+    options: Mapping[str, Any],
+    timeout_seconds: float,
+) -> list[dict[str, Any]]:
+    max_minutes = timeout_seconds / SECONDS_PER_MINUTE
+    try:
+        scenarios = qa_runner.load_project_scenarios(ui.scenarios_dir)
+    except ValueError as exc:
+        return [blocked_verdict(QA_SCENARIO, str(exc))]
+    verdicts = [
+        qa_runner.run_browser_scenario(
+            scenario, max_minutes=max_minutes, stack_mode=mode_from_env(), app=handle
+        )
+        for scenario in scenarios
+    ]
+    if smoke_enabled(options):
+        verdicts.append(
+            qa_smoke.run_smoke(
+                qa_smoke.load_seeds(), base_url=handle.base_url, max_minutes=max_minutes
+            )
+        )
+    return verdicts
+
+
 def _layer_runners(request_row: dict[str, Any]) -> dict[str, LayerRunner]:
     working_directory = str(request_row.get("working_directory", ""))
+    options: Mapping[str, Any] = request_row.get("options") or {}
+    ui_target = _ui_app_target(working_directory, options)
+    if ui_target is None:
+        ui_runner = _layer_command("ui", ["run"], working_directory)
+    else:
+        ui_runner = _app_ui_runner(ui_target[0], ui_target[1], options, working_directory)
     return {
-        "ui": _layer_command("ui", ["run"], working_directory),
+        "ui": ui_runner,
         "regression": _layer_command(
             "regression", ["regression", "--workdir", working_directory], working_directory
         ),

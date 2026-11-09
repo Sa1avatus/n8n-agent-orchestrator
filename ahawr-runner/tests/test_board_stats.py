@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from ahawr_runner import board_stats
 from ahawr_runner.board import InMemoryBoardStore, Mission
 from ahawr_runner.board_stats import _max_attempts, mission_card_stats, task_stats
 from ahawr_runner.config import Settings
@@ -544,3 +545,92 @@ def test_max_attempts_legacy_column_and_engine_json_wins():
 def test_max_attempts_invalid_engine_json_or_legacy_value_gives_none():
     assert _max_attempts(_ConfigBoard({"engine_json": '{"bogus": 1}'}), "m1") is None
     assert _max_attempts(_ConfigBoard({"max_attempts_per_task": "abc"}), "m1") is None
+
+
+def _good_figures() -> dict[str, Any]:
+    return {"attempts": 3, "hours": 1.5, "tokens": 10, "cache_ratio": 1.0, "cost": 2.0,
+            "tok_s": 50.0, "thinking_share": 0.5}
+
+
+def test_failed_figures_read_keeps_the_last_good_figures(
+    run_manager: RunManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from ahawr_runner import board_stats
+
+    board_stats._SUMMARY_CACHE.clear()
+    board = InMemoryBoardStore()
+    reads = iter([_good_figures(), dict(board_stats._NULL_FIGURES)])
+    monkeypatch.setattr(board_stats, "_mission_figures", lambda *_: next(reads))
+    first = board_stats.mission_figures(run_manager, board, "m1", force=True)
+    second = board_stats.mission_figures(run_manager, board, "m1", force=True)
+    assert first["hours"] == 1.5
+    assert second["hours"] == 1.5
+
+
+def test_failed_figures_read_is_retried_soon_not_after_the_ttl(
+    run_manager: RunManager, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    from ahawr_runner import board_stats
+
+    board_stats._SUMMARY_CACHE.clear()
+    board = InMemoryBoardStore()
+    calls = []
+
+    def read(*_: Any) -> dict[str, Any]:
+        calls.append(1)
+        return dict(board_stats._NULL_FIGURES)
+
+    monkeypatch.setattr(board_stats, "_mission_figures", read)
+    board_stats.mission_figures(run_manager, board, "m2")
+    stored_at, _ = board_stats._SUMMARY_CACHE["m2"]
+    age_when_expired = board_stats.SUMMARY_TTL_LIVE - board_stats.RETRY_FAILED_SECONDS
+    assert board_stats.RETRY_FAILED_SECONDS < board_stats.SUMMARY_TTL_FINISHED
+    assert stored_at < time.monotonic() - age_when_expired + 1
+    assert len(calls) == 1
+
+
+def test_expired_task_list_is_answered_from_the_cache_and_recomputed_in_background(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from ahawr_runner import board_api
+
+    store = InMemoryBoardStore()
+    board_api._TASKLIST_CACHE.clear()
+    stale = [{"id": "T001", "title": "old", "status": "accepted", "attempts": 1, "deps": []}]
+    board_api._TASKLIST_CACHE["m3"] = (0.0, stale, store)  # monotonic time 0: long expired
+    submitted = []
+    monkeypatch.setattr(board_api._TASKLIST_POOL, "submit", lambda *a: submitted.append(a))
+    monkeypatch.setattr(
+        board_api, "_mission_task_list", lambda *_: pytest.fail("computed in the request")
+    )
+    assert board_api._cached_task_list(store, "m3") == stale
+    assert len(submitted) == 1
+    board_api._TASKLIST_REFRESHING.discard("m3")
+
+
+def test_refreshing_figures_does_not_list_all_missions_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The figures take the mission id from the caller: a summary of N missions must not read
+    the whole mission list N more times (0.1 s each on the live database)."""
+
+    class Board:
+        def list_missions(self) -> list[Any]:
+            raise AssertionError("list_missions called")
+
+        def get_live_state(self, state_key: str) -> None:
+            return None
+
+    seen: list[str | None] = []
+
+    def fake_card(_m: Any, _b: Any, _k: str, mission_id: str | None = None) -> dict[str, Any]:
+        seen.append(mission_id)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(board_stats, "mission_card_stats", fake_card)
+    board_stats._SUMMARY_CACHE.pop("m-x", None)
+    board_stats.mission_figures(object(), Board(), "ns-x", force=True, mission_id="m-x")  # type: ignore[arg-type]
+    assert seen == ["m-x"]
+    board_stats._SUMMARY_CACHE.pop("m-x", None)

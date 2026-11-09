@@ -6,7 +6,10 @@ Links a mission's runs to its tasks through the event log's
 adds the mission's status, per-task attempt count against the configured
 ``max_attempts_per_task`` and the last Reviewer score and reason;
 ``task_stats`` gives the same figures for one task and its attempts —
-including the per-attempt time.  Run ids are collected the way the AHAWR
+including the per-attempt time.  ``_mission_project`` is the project grouping
+the Projects view and the project stats route use (the stored rule whose glob
+matches the working directory, otherwise its last folder).  Run ids are
+collected the way the AHAWR
 workflow's "Compute Mission Row" does: every ``_run_id`` field of the Live
 State row and of the event log rows.  Nothing in ``mission_stats.py`` is
 rewritten: it is only reused.
@@ -14,6 +17,7 @@ rewritten: it is only reused.
 
 from __future__ import annotations
 
+import fnmatch
 import threading
 import time
 from collections import Counter
@@ -48,6 +52,23 @@ def _mission_run_ids(board: BoardStore, state_key: str) -> list[str]:
             if key.endswith("_run_id") and isinstance(value, str) and value.startswith("run_"):
                 ids.add(value)
     return sorted(ids)
+
+
+def _mission_project(
+    working_directory: str | None, rules: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """The mission's project: the working directory matched against the stored
+    project rules (glob with ``*``, ordered by position); the first matching
+    rule wins. Otherwise the default rule: the working directory, shown by its
+    last folder name."""
+    normalized = (working_directory or "").replace("\\", "/").rstrip("/")
+    for rule in sorted(rules, key=lambda r: r.get("position", 0)):
+        pattern = str(rule.get("pattern", "")).replace("\\", "/").rstrip("/")
+        if normalized and pattern and fnmatch.fnmatch(normalized, pattern):
+            name = str(rule.get("name", ""))
+            return {"key": name, "name": name, "rule": rule["pattern"]}
+    last = normalized.rsplit("/", 1)[-1] if normalized else ""
+    return {"key": last, "name": last, "rule": None}
 
 
 def _run_seconds(manager: RunManager, run_ids: list[str]) -> float:
@@ -238,15 +259,18 @@ def _role_rows(
     return rows
 
 
-def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -> dict[str, Any]:
+def mission_card_stats(
+    manager: RunManager, board: BoardStore, state_key: str, mission_id: str | None = None
+) -> dict[str, Any]:
     """The mission card: the mission's runs aggregated (``stats_for_runs``), its
     status, the attempts per task against the configured maximum and the last
     Reviewer score and reason."""
     live = board.get_live_state(state_key)
-    mission = next(
-        (m for m in board.list_missions() if m.state_namespace == state_key), None
-    )
-    mission_id = mission.mission_id if mission is not None else state_key
+    if mission_id is None:
+        mission = next(
+            (m for m in board.list_missions() if m.state_namespace == state_key), None
+        )
+        mission_id = mission.mission_id if mission is not None else state_key
     run_ids = _mission_run_ids(board, state_key)
     stats = stats_for_runs(manager, run_ids)
     tokens = token_totals(manager, run_ids)
@@ -316,15 +340,19 @@ def mission_card_stats(manager: RunManager, board: BoardStore, state_key: str) -
 
 
 _SUMMARY_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-SUMMARY_TTL_FINISHED = 600.0
+SUMMARY_TTL_FINISHED = 21600.0  # 6 h: a finished mission's runs do not change
 SUMMARY_TTL_LIVE = 15.0
+RETRY_FAILED_SECONDS = 30.0
+FIGURES_WORKERS = 3  # more workers fill a cold cache sooner; the runner reads runs in parallel
 
 
-def _mission_figures(manager: RunManager, board: BoardStore, state_key: str) -> dict[str, Any]:
+def _mission_figures(
+    manager: RunManager, board: BoardStore, state_key: str, mission_id: str | None = None
+) -> dict[str, Any]:
     """The mission's figures (attempts, hours, tokens, cache_ratio, cost, tok_s,
     thinking_share), or nulls when the manager is unreachable or raises."""
     try:
-        card = mission_card_stats(manager, board, state_key)
+        card = mission_card_stats(manager, board, state_key, mission_id)
         tasks = card["tasks"]
         thinking_steps = card["thinking_steps"]
         return {
@@ -355,16 +383,21 @@ def _mission_figures(manager: RunManager, board: BoardStore, state_key: str) -> 
 
 
 def mission_figures(
-    manager: RunManager, board: BoardStore, state_key: str, force: bool = False
+    manager: RunManager,
+    board: BoardStore,
+    state_key: str,
+    force: bool = False,
+    mission_id: str | None = None,
 ) -> dict[str, Any]:
     """The mission's figures, cached per mission: a finished mission's figures are
-    kept for 600 s, a running one for 15 s (so a board with many cards does not
+    kept for 6 h, a running one for 15 s (so a board with many cards does not
     re-read the runner for each refresh). When the manager is unreachable or
     raises, the figures are nulls (never an error)."""
-    mission = next(
-        (m for m in board.list_missions() if m.state_namespace == state_key), None
-    )
-    mission_id = mission.mission_id if mission is not None else state_key
+    if mission_id is None:
+        mission = next(
+            (m for m in board.list_missions() if m.state_namespace == state_key), None
+        )
+        mission_id = mission.mission_id if mission is not None else state_key
     live = board.get_live_state(state_key)
     status = live.status if live is not None else None
     ttl = SUMMARY_TTL_FINISHED if status in ("completed", "failed") else SUMMARY_TTL_LIVE
@@ -373,8 +406,14 @@ def mission_figures(
         age = time.monotonic() - hit[0]
         if age < ttl:
             return hit[1]
-    figures = _mission_figures(manager, board, state_key)
-    _SUMMARY_CACHE[mission_id] = (time.monotonic(), figures)
+    figures = _mission_figures(manager, board, state_key, mission_id)
+    stored_at = time.monotonic()
+    if figures["hours"] is None:
+        # a failed read (runner busy) keeps the last good figures, not 0 h, and is retried soon
+        if hit is not None and hit[1]["hours"] is not None:
+            figures = hit[1]
+        stored_at -= ttl - RETRY_FAILED_SECONDS
+    _SUMMARY_CACHE[mission_id] = (stored_at, figures)
     return figures
 
 
@@ -384,12 +423,14 @@ _NULL_FIGURES: dict[str, Any] = {
 }
 _REFRESHING: set[str] = set()
 _REFRESH_LOCK = threading.Lock()
-_REFRESH_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="figures")
+_REFRESH_POOL = ThreadPoolExecutor(max_workers=FIGURES_WORKERS, thread_name_prefix="figures")
 
 
-def _refresh_figures(manager: RunManager, board: BoardStore, state_key: str) -> None:
+def _refresh_figures(
+    manager: RunManager, board: BoardStore, state_key: str, mission_id: str
+) -> None:
     try:
-        mission_figures(manager, board, state_key, force=True)
+        mission_figures(manager, board, state_key, force=True, mission_id=mission_id)
     finally:
         with _REFRESH_LOCK:
             _REFRESHING.discard(state_key)
@@ -416,7 +457,7 @@ def cached_mission_figures(
     with _REFRESH_LOCK:
         if state_key not in _REFRESHING:
             _REFRESHING.add(state_key)
-            _REFRESH_POOL.submit(_refresh_figures, manager, board, state_key)
+            _REFRESH_POOL.submit(_refresh_figures, manager, board, state_key, mission_id)
     return hit[1] if hit is not None else dict(_NULL_FIGURES)
 
 

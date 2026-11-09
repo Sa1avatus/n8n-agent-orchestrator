@@ -1,7 +1,7 @@
 # QA gate design
 
 Status: implemented, not switched on. The runner queue (`qa_requests.py`, `/v1/qa/requests` routes) is in the repository; the host worker 
-(`data-tables/ops/qa_worker.py`) and the workflow patch (`data-tables/ops/qa_workflow_patch.py`, applied by `launch_mission.sh` for the `roles_json` QA mode) are operator scripts outside git. QA is OFF until the operator sets the mode and starts the worker.
+(`ahawr_runner.qa_worker`, started by `data-tables/ops/_start_qa_worker.ps1`; `data-tables/ops/qa_worker.py` is a retired stub that prints and exits 2) and the workflow patch (`data-tables/ops/qa_workflow_patch.py`, applied by `launch_mission.sh` for the `roles_json` QA mode) are operator scripts outside git. QA is OFF until the operator sets the mode and starts the worker.
 
 ## Architecture
 
@@ -13,15 +13,19 @@ The gate is split in three parts so that QA never runs inside n8n.
 - **Runner (`ahawr-runner`)**: keeps a small QA request queue in `ahawr_runner/qa_requests.py`
   (pure state machine and store, no network). The routes are in `ahawr_runner/api.py`. The queue holds
   requests until the host worker claims and finishes them, or until they expire.
-- **Host worker (`data-tables/ops/qa_worker.py`, operator script, outside git)**: claims one request at a
-  time, finds the changed files with git in the mission working directory, runs
-  `python -m ahawr_runner.qa run` only when UI files changed, and posts the verdict. It runs on the host
-  because it needs the host git checkout and the throwaway QA stack.
+- **Host worker (`ahawr_runner.qa_worker`, started by `data-tables/ops/_start_qa_worker.ps1`)**: claims
+  one request at a time, finds the changed files with git in the mission working directory, runs the
+  layers the request asks for (`python -m ahawr_runner.qa <layer>`, `qa_worker.py:326-357`), and posts
+  the verdict. When `options.project_apps` is true and the mission matches a profile with a `ui` block,
+  the `ui` layer starts the project's own app on `127.0.0.1` instead of the qa child
+  (`qa_worker.py:360-383`, `386-405`; see [qa-layers.md](qa-layers.md)). It runs on the host because it
+  needs the host git checkout, the throwaway QA stack and, for a project app, the host checkout of the
+  project.
 
 ## Sequence
 
 ```
-n8n                      ahawr-runner (API + queue)              host worker (qa_worker.py)
+n8n                      ahawr-runner (API + queue)              host worker (ahawr_runner.qa_worker)
  |  POST /v1/qa/requests        |                                          |
  |----------------------------->| create: status=queued                    |
  |  <-- id                      |                                          |
@@ -34,7 +38,8 @@ n8n                      ahawr-runner (API + queue)              host worker (qa
  |                              |                                          | git ls-files --others --exclude-standard
  |                              |                                          | UI files changed?
  |                              |                                          |   no  -> verdict skipped
- |                              |                                          |   yes -> python -m ahawr_runner.qa run
+ |                              |                                          |   yes -> python -m ahawr_runner.qa <layer>
+ |                              |                                          |        (ui: the project app on 127.0.0.1 when project_apps is true)
  |                              |<---------- POST /{id}/result ------------|
  |                              |   status: running -> done (verdict) or error
  |  GET /v1/qa/requests/{id}    |                                          |
@@ -88,7 +93,7 @@ Retry counter: `retries` is the number of times this mission was already sent ba
 | 2 | verdict `fail`, `retries < QA_MAX_RETRIES` | verdict | needs_changes review; `next_task` names the failed step and the reason | +1 | `QA failed (ui 3 of 20 scenarios):` then the first three scenarios with their reason and `(+N more)` |
 | 3 | verdict `fail`, `retries = QA_MAX_RETRIES` | verdict | accept | unchanged | `QA still failing after 2 retries.` followed by the same summary |
 | 4 | verdict `skipped` (no UI files changed) | verdict | accept | unchanged | none (silent) |
-| 5 | verdict `blocked` (missing folder or not a git repository) | verdict | accept | unchanged | `QA could not run` with the reason |
+| 5 | verdict `blocked` (missing folder, not a git repository, Playwright missing, or the project app that did not start or never became healthy) | verdict | accept | unchanged | `QA could not run` with the reason |
 | 6 | state `error` (QA run crashed or the worker reported an error) | infrastructure | accept | unchanged | `QA could not run` with the reason |
 | 7 | state `timeout` after claim (worker run timeout reached) | infrastructure | accept | unchanged | `QA could not run` (timed out) |
 | 8 | no claim within `QA_CLAIM_WAIT_MINUTES` (state `timeout` while `queued`) | infrastructure | accept | unchanged | `QA could not run` (no worker claimed the request) |
@@ -103,7 +108,7 @@ A mission with no changed UI files gets verdict `skipped` (row 4): it is accepte
 | --- | --- | --- | --- | --- |
 | `QA_MAX_RETRIES` | 2 | send-backs per mission | named constant in the `QA Review` Code node, written by `data-tables/ops/qa_workflow_patch.py` | implemented |
 | `QA_CLAIM_WAIT_MINUTES` | 5 (default) | minutes a request may stay `queued` | `ahawr_runner/qa_requests.py` (expiry of `queued` requests) and the `QA Wait` bound in `qa_workflow_patch.py` | implemented |
-| worker run timeout | 20 | minutes per QA run | named constant in `data-tables/ops/qa_worker.py`; kills the QA child process tree; the runner's `running` expiry uses the same bound | implemented |
+| worker run timeout | 20 | minutes per QA run | `QA_RUN_TIMEOUT_MINUTES = 20` in `ahawr_runner/qa_worker.py:65`; kills the QA child process tree; the runner's `running` expiry uses the same bound | implemented |
 | `QA_WAIT_MAX_POLLS` | 50 (set in the patch) | polls | `QA Wait` node, written by `data-tables/ops/qa_workflow_patch.py` | implemented |
 | poll interval | 30 (set in the patch) | seconds between polls | `QA Wait` node, written by `data-tables/ops/qa_workflow_patch.py` | implemented |
 | stored request bound | 200 | requests kept | `ahawr_runner/qa_requests.py` | implemented |
@@ -119,14 +124,15 @@ limits the Playwright QA run inside the runner; the worker timeout above is a se
 
 ## Not in this part
 
-Operator start and stop steps, the `roles_json` switch, the watcher line for `_start_watchers_hidden.ps1`,
-per-task UI checks and parallel QA are described in the later parts of this design.
+Operator start and stop steps, the `roles_json` switch, the worker start line in
+`data-tables/ops/_start_qa_worker.ps1`, per-task UI checks and parallel QA are described in the later
+parts of this design.
 
 ## Operator
 
-The host worker (`data-tables/ops/qa_worker.py`) is the only process that runs QA. It is started and
-stopped on the host by the operator; n8n and the runner never start it. The worker script is not in the
-repository yet, so the steps below apply once it lands.
+The host worker (`ahawr_runner.qa_worker`) is the only process that runs QA. It is started and
+stopped on the host by the operator; n8n and the runner never start it. `data-tables/ops/qa_worker.py`
+is a retired stub that prints and exits 2; `data-tables/ops/_start_qa_worker.ps1` is the launcher.
 
 ### Turn QA on
 
@@ -136,19 +142,17 @@ repository yet, so the steps below apply once it lands.
    {"qa": {"1": "anthropic/sonnet", "options": {"mode": "final", "max_minutes": 20, "max_cost_usd": 1}}}
    ```
 
-2. Start the host worker in a hidden window. Proposed line for `data-tables/ops/_start_watchers_hidden.ps1`,
-   inserted after the `gpu_power_governor.py` line and before the `docker_watchdog.ps1` line
-   (PROPOSAL ONLY: the file is not edited by this design):
+   Add `"project_apps": true` only for the projects whose own app should run the `ui` layer; the key is
+   absent by default, which keeps the qa child path (see [qa-layers.md](qa-layers.md)).
 
-   ```powershell
-   Start-Hidden $py "-X utf8 `"$ops\qa_worker.py`""
-   ```
+2. Start the host worker in a hidden window with `data-tables/ops/_start_qa_worker.ps1`, which runs
+   `python -X utf8 -m ahawr_runner.qa_worker` with `QA_STACK_MODE=docker` (its lines 9 and 11).
 
 ### Turn QA off
 
 1. Set `"mode": "off"` in the `qa` options of `roles_json`. From then on no new mission sends a QA request.
-2. Stop the worker process: find the process whose command line contains `qa_worker.py` and stop it, the same
-   way `retire_host_watchers.sh` stops the other watchers.
+2. Stop the worker process: find the process whose command line contains `ahawr_runner.qa_worker` and stop
+   it, the same way `retire_host_watchers.sh` stops the other watchers.
 
 Requests still queued when the worker stops expire after `QA_CLAIM_WAIT_MINUTES`; those missions are accepted
 with the notice `QA could not run` (table row 8). Stop the worker only after the mode is `off`, so that no

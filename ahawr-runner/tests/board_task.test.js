@@ -165,6 +165,66 @@ globalThis.getJSON = async (url) => {
   check("a failed plan load renders the error state",
     has(errorContainer.innerHTML, '<div class="terror">board offline</div>') &&
     stateStub.textContent === "board offline" && stateStub.className === "error");
+
+  // --- 5. T011: the Statistics button on the task view, gated by stats_popup ---
+  const popupPath = path.join(__dirname, "..", "src", "ahawr_runner", "board_stats_popup.js");
+  const loadFresh = () => {
+    // fresh module per call: the mission flag cache would otherwise carry the first features
+    delete require.cache[require.resolve(popupPath)];
+    return require(popupPath);
+  };
+  const attachableContainer = () => {
+    // the .trow stub mirrors the browser: the task title and status live in the row
+    const el = { innerHTML: "", children: [], dataset: {} };
+    el.appendChild = (child) => el.children.push(child);
+    const row = { className: "trow", children: [] };
+    row.appendChild = (child) => row.children.push(child);
+    el.querySelector = (sel) => (sel === ".trow" ? row : null);
+    el.row = row;
+    return el;
+  };
+  const savedFetch = globalThis.fetch;
+  globalThis.document = {
+    getElementById: (id) => (id === "boardstate" ? { textContent: "", className: "" } : null),
+    createElement: () => ({ addEventListener() {} }),
+  };
+  globalThis.getJSON = async (url) => {
+    if (String(url).endsWith("/plan")) return plan;
+    if (String(url).endsWith("/stats")) return stats;
+    if (String(url).endsWith("/lessons")) return { lessons: [] };
+    throw new Error("unexpected url: " + url);
+  };
+  try {
+    globalThis.BoardStatsPopup = loadFresh();
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({ features_json: "", mission_features_json: "" }),
+    });
+    const offContainer = attachableContainer();
+    await BT.renderBoardTask(offContainer, "m_running", "T001");
+    check("no Statistics button on the task view when stats_popup is off",
+      offContainer.children.length === 0 && offContainer.row.children.length === 0);
+
+    globalThis.BoardStatsPopup = loadFresh();
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        features_json: '{"stats_popup":{"enabled":true}}',
+        mission_features_json: "",
+      }),
+    });
+    const onContainer = attachableContainer();
+    await BT.renderBoardTask(onContainer, "m_running", "T001");
+    check("the Statistics button lands on the task row, not the view container",
+      onContainer.row.children.length === 1 &&
+      onContainer.row.children[0].className === "sp-btn" &&
+      onContainer.row.children[0].textContent === "Statistics" &&
+      onContainer.children.length === 0);
+  } finally {
+    globalThis.fetch = savedFetch;
+    delete globalThis.BoardStatsPopup;
+  }
+
   delete globalThis.document;
   delete globalThis.getJSON;
   console.log("all ok");

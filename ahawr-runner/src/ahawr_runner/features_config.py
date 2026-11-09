@@ -15,6 +15,8 @@ FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
     "run_hygiene": {"enabled": False},
     "event_schema_version": {"enabled": False},
     "think_profiles": {"enabled": False},
+    "stats_popup": {"enabled": False},
+    "stats_engine_sampler": {"enabled": False},
 }
 PARAM_MINIMUMS: dict[str, int] = {
     "max_tasks": 1,

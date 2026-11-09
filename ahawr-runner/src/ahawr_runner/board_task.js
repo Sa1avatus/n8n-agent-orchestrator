@@ -101,6 +101,7 @@ function renderTask(missionId, taskId, view, stats, lessons) {
 
   return (
     `<div class="crumbs"><a class="back" href="#board/` + esc(missionId) + `">` + esc(L("tk.back", "← back to mission")) + `</a></div>` +
+    `<div class="trow">` +
     `<h2>` + esc(title) + `</h2>` +
     `<div class="meta">` +
     `<span class="tid">id: ` + esc(t.task_id) + `</span>` +
@@ -108,6 +109,7 @@ function renderTask(missionId, taskId, view, stats, lessons) {
     `<span>` + esc(L("tk.attempts", "attempts")) + `: ` + attemptsUsed + `</span>` +
     `<span>` + esc(L("tk.score", "reviewer score")) + `: ` + score + `</span>` +
     `<span>` + esc(L("tk.reason", "reviewer reason")) + `: ` + reason + `</span>` +
+    `</div>` +
     `</div>` +
     (objective ? `<div class="tobj">` + esc(objective) + `</div>` : "") +
     `<h3>` + esc(L("tk.attempts.h", "Attempts")) + `</h3>` +
@@ -193,6 +195,12 @@ async function renderBoardTask(container, missionId, taskId, lessons) {
     }
   }
   render(container, missionId, taskId, view, stats, given);
+  if (typeof BoardStatsPopup !== "undefined") {
+    const viewEl = resolveInto(container);
+    // shortcut: the empty/error states render no .trow, so the button stays on the view
+    const row = typeof viewEl.querySelector === "function" ? viewEl.querySelector(".trow") : null;
+    await BoardStatsPopup.attach(row || viewEl, { kind: "task", missionId, taskId });
+  }
 }
 
 // BoardTask(missionId, taskId): the entry point the shell's route() calls

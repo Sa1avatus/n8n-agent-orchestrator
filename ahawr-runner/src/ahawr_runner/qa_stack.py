@@ -504,12 +504,13 @@ def _assert_qa_name(name: str) -> None:
         raise QaTargetError(f"object {name!r} does not carry the {QA_PREFIX!r} prefix")
 
 
-def _wait_until(ready: Callable[[], bool], what: str) -> None:
-    for _poll in range(HEALTH_MAX_POLLS):
+def _wait_until(ready: Callable[[], bool], what: str, max_polls: int | None = None) -> None:
+    polls = HEALTH_MAX_POLLS if max_polls is None else max_polls
+    for _poll in range(polls):
         if ready():
             return
         time.sleep(HEALTH_POLL_SECONDS)
-    raise QaStackError(f"{what} is not healthy after {HEALTH_MAX_POLLS} polls")
+    raise QaStackError(f"{what} is not healthy after {polls} polls")
 
 
 def _probe(args: list[str]) -> bool:

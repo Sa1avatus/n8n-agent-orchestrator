@@ -15,6 +15,7 @@ from ahawr_runner.roles_config import (
     legacy_role,
     merge,
     qa_layers,
+    qa_project_apps,
     resolve,
     split_model,
     validate_roles,
@@ -210,6 +211,30 @@ def test_qa_smoke_non_bool_is_rejected_with_reason(smoke: Any) -> None:
     roles = {"qa": {"1": "anthropic/haiku", "options": {"smoke": smoke}}}
     report = validate_roles(roles, PROVIDERS)
     assert report.errors == ("role 'qa': option 'smoke' must be true or false",)
+
+
+def test_qa_project_apps_missing_reads_false() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final"}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert "project_apps" not in resolve(roles, "qa", 1, {}).options
+    assert qa_project_apps(resolve(roles, "qa", 1, {}).options) is False
+    assert qa_project_apps(resolve({"qa": "anthropic/haiku"}, "qa", 1, {}).options) is False
+
+
+def test_qa_project_apps_true_and_false_validate_and_read_back() -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"mode": "final", "project_apps": True}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert qa_project_apps(resolve(roles, "qa", 1, {}).options) is True
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"project_apps": False}}}
+    assert validate_roles(roles, PROVIDERS).errors == ()
+    assert qa_project_apps(resolve(roles, "qa", 1, {}).options) is False
+
+
+@pytest.mark.parametrize("project_apps", ["yes", "true", 1, 0, None])
+def test_qa_project_apps_non_bool_is_rejected_with_reason(project_apps: Any) -> None:
+    roles = {"qa": {"1": "anthropic/haiku", "options": {"project_apps": project_apps}}}
+    report = validate_roles(roles, PROVIDERS)
+    assert report.errors == ("role 'qa': option 'project_apps' must be true or false",)
 
 
 def test_qa_only_options_are_unknown_for_other_roles() -> None:

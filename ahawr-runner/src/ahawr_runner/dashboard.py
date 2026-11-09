@@ -213,9 +213,17 @@ def create_dashboard_app(
                 history,
             )
             await app.state.guards.start()
+            warm_stop = board_api.start_summary_warm(app)
+            # the engine snapshot collector is a guard-style watcher: it starts only
+            # when stats_engine_sampler is on, and the stop event ends its bounded loop
+            engine_stop = board_api.start_engine_collector(app)
+            project_stats_stop = board_api.start_project_stats_warm(app)
             try:
                 yield
             finally:
+                engine_stop.set()
+                project_stats_stop.set()
+                warm_stop.set()
                 await app.state.guards.stop()
 
     app = FastAPI(

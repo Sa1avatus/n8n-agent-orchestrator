@@ -511,6 +511,21 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 .ew-foot { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); }
 .ew-hintline { font-size: 12px; color: var(--faint); }
 .ew-err { color: var(--bad); font-size: 12.5px; }
+/* the statistics popup (stats_popup flag): the modal shell of the settings
+   window, plus the tab bar, the figure table and the loading note */
+.sp-btn { background: var(--panel2); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 12px; font: inherit; color: var(--ink); cursor: pointer; }
+.sp-btn:hover { background: var(--accbg); color: var(--acc); border-color: var(--acc); }
+.sp-win { width: min(920px, 100%); }
+.sp-tabs { display: flex; gap: 8px; padding: 0 18px; flex-wrap: wrap; }
+.sp-tab { background: transparent; border: 1px solid var(--line2); border-radius: 8px; padding: 6px 12px; font: inherit; color: var(--mut); cursor: pointer; }
+.sp-tab.on { background: var(--panel2); color: var(--ink); border-color: var(--acc); }
+.sp-note { font-size: 12.5px; color: var(--mut); margin: 8px 0; overflow-wrap: anywhere; }
+.sp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sp-table th, .sp-table td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.sp-table th { font-size: 11.5px; color: var(--mut); }
+.sp-row td { font-variant-numeric: tabular-nums; }
+.sp-retry { background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px 12px; font: inherit; color: var(--ink); cursor: pointer; }
+.sp-retry:hover { background: var(--accbg); color: var(--acc); border-color: var(--acc); }
 @media (max-width: 640px) {
   .ew-role { grid-template-columns: 1fr; } .ew-row2 { grid-template-columns: 1fr; }
   .ew-scrim { padding: 0; } .ew-win, .ew-win.max { width: 100%; height: 100vh; max-height: 100vh; border-radius: 0; }

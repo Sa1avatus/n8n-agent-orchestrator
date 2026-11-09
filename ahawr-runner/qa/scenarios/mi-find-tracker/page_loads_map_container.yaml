@@ -1,0 +1,17 @@
+# target: app: qa_app starts the tracker from the ui block of qa/projects.yaml with a throwaway
+# DB in {data_dir}, so the point list is empty and app.js:196-197 writes the empty-state line.
+# shortcut: index.html:34 gives #map no text of its own and app.js:199-201 returns before
+# makeMap (app.js:80-92) when the point list is empty, so the map container is evidenced by the
+# vendored fallback bundle the page loads (index.html:8,45); upgrade when a point-seeding
+# precondition is available.
+name: the tracker page loads with the vendored map bundle and no console error
+tags: [ui, nightly]
+preconditions:
+  fixture: empty
+target: app
+steps:
+  - open: /
+    expect:
+      text_visible: ["Последние координаты устройства", "Точки"]
+      request_2xx: [/static/vendor/leaflet.js, /static/vendor/leaflet.css]
+      no_console_error: true
