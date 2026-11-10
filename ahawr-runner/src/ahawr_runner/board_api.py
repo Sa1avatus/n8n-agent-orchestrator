@@ -955,6 +955,9 @@ def qa_screenshot(run_name: str, file_name: str) -> FileResponse:
     return FileResponse(path, media_type="image/png")
 
 
+_CREATE_FIELD_KEYS = ("name", "rules", "acceptance_criteria", "retrieval_corpora", "working_directory")
+
+
 def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     store = _store_guard(request)
     _check_plan(body.get("plan"))
@@ -968,6 +971,7 @@ def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
         position=body.get("position"),
         queue_note=body.get("queue_note"),
         who=body.get("who", ""),
+        fields={k: body[k] for k in _CREATE_FIELD_KEYS if k in body},
     )
 
 

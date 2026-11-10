@@ -628,6 +628,18 @@ def _copy_fields(
     }
 
 
+def _fields_content(fields: dict[str, Any]) -> dict[str, Any]:
+    """The starting rows from fields sent with the request (no source mission, no template)."""
+    return {
+        "name": str(fields.get("name") or ""),
+        "rules": list(fields.get("rules") or []),
+        "acceptance_criteria": list(fields.get("acceptance_criteria") or []),
+        "retrieval_corpora": list(fields.get("retrieval_corpora") or []),
+        "working_directory": fields.get("working_directory") or None,
+        "config": {},
+    }
+
+
 def _clean_plan(plan: dict[str, Any] | None) -> dict[str, Any] | None:
     """A copied plan keeps only the task definitions: never a task's status or
     attempt (those belong to a live run, not to a template)."""
@@ -687,6 +699,7 @@ def create_mission(
     position: int | None = None,
     queue_note: str | None = None,
     who: str = "",
+    fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create a mission: one atomic write of the missions row, its Live State
     row and its queue entry — all three rows or none.
@@ -710,6 +723,9 @@ def create_mission(
                 break
         if template is None:
             raise KeyError(f"template {template_name!r} not found")
+    elif not source_mission_id and fields:
+        # a running mission splits itself into parts: its own fields ride the request, no source row
+        template = None
     else:
         source = store.get_mission(source_mission_id or "")
         if source is None:
@@ -718,7 +734,10 @@ def create_mission(
         if live is not None and live.status == "active":
             raise ValueError(f"mission {source_mission_id!r} is running; copy it when it stops")
 
-    rows = _copy_fields(store, source_mission_id or "", template)
+    if not source_mission_id and fields and template is None:
+        rows = _fields_content(fields)
+    else:
+        rows = _copy_fields(store, source_mission_id or "", template)
     config = dict(rows.pop("config") or {})
     clean = _clean_plan(plan)
     # the diff is taken from the mission's final values (including the

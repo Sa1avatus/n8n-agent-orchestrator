@@ -607,6 +607,25 @@ class TestCreateMission:
         # (the mission keeps the template's display name: no diff there)
         assert result["diff"] == {}
 
+    def test_create_from_request_fields_without_a_source(self, board: InMemoryBoardStore):
+        # a running mission splits itself: its fields ride the request, no source row exists
+        result = create_mission(
+            board, "m2-p2", objective="part two", plan={"tasks": [{"id": "T1"}]}, who="split",
+            fields={"name": "M (part 2 of 2)", "rules": ["r"], "acceptance_criteria": ["c"],
+                    "retrieval_corpora": ["corpus"], "working_directory": "/tmp/x"},
+        )
+        mission = result["mission"]
+        assert mission["name"] == "M (part 2 of 2)"
+        assert mission["rules"] == ["r"]
+        assert mission["acceptance_criteria"] == ["c"]
+        assert mission["retrieval_corpora"] == ["corpus"]
+        assert mission["working_directory"] == "/tmp/x"
+        assert [e["mission_id"] for e in result["queue"]] == ["m2-p2"]
+
+    def test_create_without_a_source_or_fields_is_refused(self, board: InMemoryBoardStore):
+        with pytest.raises(KeyError, match="not found"):
+            create_mission(board, "m3", objective="x")
+
     def test_create_rejects_an_invalid_id(self, board: InMemoryBoardStore):
         with pytest.raises(MissionIdError):
             create_mission(board, "Bad Id")
