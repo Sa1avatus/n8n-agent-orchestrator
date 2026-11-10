@@ -68,9 +68,9 @@ NEVER_DONE_SCRIPT: list[dict[str, Any]] = [
 CANCEL_SCRIPT = NEVER_DONE_SCRIPT + [
     {
         "method": "POST",
-        "path": "/v1/runs/RUN_1/cancel",
+        "path": "/v1/runs/RUN_1/stop",
         "status": 200,
-        "body": {"run_id": "RUN_1", "status": "cancelled"},
+        "body": {"run_id": "RUN_1", "status": "stopping"},
     },
 ]
 # The fake serves 401 to the first start and 403 to the second one (entries per path in order).
@@ -151,7 +151,11 @@ def post_bodies(server: FakeHermesServer) -> list[dict[str, Any]]:
 
 
 def poll_paths(server: FakeHermesServer) -> list[str]:
-    return [r["path"] for r in server.requests if r["method"] == "GET"]
+    return [
+        r["path"]
+        for r in server.requests
+        if r["method"] == "GET" and not r["path"].endswith("/events")  # the live stream is no poll
+    ]
 
 
 def test_hermes_normal_run_maps_result_to_entries(
@@ -246,7 +250,7 @@ def test_hermes_cancel_calls_the_stop_endpoint_and_ends_cancelled(
         done = wait_for(client, str(run["run_id"]))
     assert done["status"] == "cancelled", done
     stop_calls = [
-        r for r in hermes_server.requests if r["path"] == "/v1/runs/RUN_1/cancel"
+        r for r in hermes_server.requests if r["path"] == "/v1/runs/RUN_1/stop"
     ]
     assert stop_calls, "the stop endpoint was called on the gateway"
     assert stop_calls[0]["method"] == "POST"

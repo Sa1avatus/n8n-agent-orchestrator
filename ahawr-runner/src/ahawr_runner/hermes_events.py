@@ -136,6 +136,55 @@ def result_entries(payload: dict[str, Any], run_id: str, poll_count: int) -> lis
     return [{"kind": kind, "text": text}]
 
 
+def usage_step(
+    usage: dict[str, Any], model: str, generation_ms: int = 0
+) -> dict[str, Any] | None:
+    """One ``step`` entry with the gateway's token totals of the run (it reports no per-request
+    usage), or None when the gateway sent no tokens. ``generation_ms`` is the run's time
+    outside tools: the speed is end to end (prompt processing included)."""
+    input_tokens = _count(usage.get("input_tokens"))
+    output_tokens = _count(usage.get("output_tokens"))
+    if not (input_tokens or output_tokens):
+        return None
+    step: dict[str, Any] = {
+        "kind": "step",
+        "step": 1,
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }
+    if generation_ms > 0 and output_tokens:
+        step["generation_ms"] = generation_ms
+        step["tokens_per_s"] = round(output_tokens / (generation_ms / 1000), 1)
+    return step
+
+
+def live_entry(event: dict[str, Any], tool_count: int) -> dict[str, Any] | None:
+    """The runner entry of a gateway tool event (``tool.started`` / ``tool.completed``);
+    other events have none. ``tool_count`` pairs a result with its call."""
+    name = event.get("event")
+    if name == "tool.started":
+        return {
+            "kind": "tool_use",
+            "id": f"hermes-{tool_count}",
+            "name": str(event.get("tool") or ""),
+            "input": {"preview": _text_of(event.get("preview"))},
+        }
+    if name == "tool.completed":
+        return {
+            "kind": "tool_result",
+            "id": f"hermes-{tool_count}",
+            "is_error": bool(event.get("error")),
+            "text": "",
+        }
+    if name == "reasoning.available":
+        text = _text_of(event.get("text"))
+        return {"kind": "thinking", "text": text} if text else None
+    return None
+
+
 def continue_fields(session_id: str, route: str, input_text: str) -> dict[str, Any]:
     """The body fields of the follow-up start, per the continue fields of docs/hermes-engine.md.
 

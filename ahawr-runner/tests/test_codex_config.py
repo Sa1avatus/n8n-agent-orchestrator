@@ -134,3 +134,11 @@ def test_write_codex_home_creates_directory(tmp_path: Path) -> None:
 
     assert home == tmp_path / "run-1" / CODEX_HOME_DIR_NAME
     assert (home / "config.toml").read_text(encoding="utf-8") == text
+
+
+def test_trim_tools_disables_web_search_and_unused_features() -> None:
+    text = render_config_toml(_openai(), "worker", "m", "/w", None, trim_tools=True)
+    assert text.index('web_search = "disabled"') < text.index("[permissions.")
+    assert "[features]\nmulti_agent = false" in text
+    tomllib.loads(text)
+    assert "[features]" not in render_config_toml(_openai(), "worker", "m", "/w", None)

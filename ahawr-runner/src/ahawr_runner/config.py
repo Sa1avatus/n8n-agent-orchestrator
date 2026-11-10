@@ -779,6 +779,18 @@ class Settings:
     # Hermes engine (docs/hermes-engine.md): off by default; with the flag off the accepted
     # ENGINE values and their error messages stay as today until the engine module lands.
     hermes_engine_enabled: bool = False
+    # Codex runs through `codex app-server` (codex_appserver.py): reasoning, per-request tokens and
+    # cache straight from the client. Off by default: the runs use `codex exec --json` as before.
+    codex_app_server: bool = False
+    # Hermes runs read reasoning, tool calls and per-request tokens from the gateway's session API
+    # (hermes_session.py) instead of the run events plus Strata telemetry. Off by default.
+    hermes_session_stats: bool = False
+    # Codex without the tools a mission never uses (codex_config.TRIMMED_FEATURES), as Claude gets
+    # --tools. Off by default: the config.toml is unchanged.
+    codex_trim_tools: bool = False
+    # Hermes toolsets of the api_server platform, comma separated (e.g. terminal,file,web).
+    # Empty = Hermes' own default (about 38 tools).
+    hermes_toolsets: str = ""
     # The Hermes gateway as a child process of the runner (hermes_gateway.py): off by default;
     # needs the image built with INSTALL_HERMES=true and CLAUDE_RUNNER_HERMES_GATEWAY_KEY set.
     hermes_gateway_enabled: bool = False
@@ -843,6 +855,10 @@ class Settings:
         hermes_engine_enabled = _bool(env, "CLAUDE_RUNNER_HERMES_ENGINE_ENABLED", False)
         hermes_gateway_enabled = _bool(env, "CLAUDE_RUNNER_HERMES_GATEWAY", False)
         return cls(
+            codex_app_server=_bool(env, "CLAUDE_RUNNER_CODEX_APP_SERVER", False),
+            hermes_session_stats=_bool(env, "CLAUDE_RUNNER_HERMES_SESSION_STATS", False),
+            codex_trim_tools=_bool(env, "CLAUDE_RUNNER_CODEX_TRIM_TOOLS", False),
+            hermes_toolsets=env.get("CLAUDE_RUNNER_HERMES_TOOLSETS", "").strip(),
             data_dir=Path(env.get("CLAUDE_RUNNER_DATA_DIR", "/data")),
             claude_bin=env.get("CLAUDE_RUNNER_CLAUDE_BIN", "claude").strip() or "claude",
             workspace=workspace,

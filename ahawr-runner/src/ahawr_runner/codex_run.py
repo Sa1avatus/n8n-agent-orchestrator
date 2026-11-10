@@ -11,18 +11,22 @@ import asyncio
 import contextlib
 import hashlib
 import shutil
+import threading
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .claude_cli import Outcome
+from .codex_appserver import AppServerMapper, AppServerSession
 from .codex_auth import stage_auth, sync_auth_back
-from .codex_cli import build_command, build_resume_command, child_env
+from .codex_cli import build_app_server_command, build_command, build_resume_command, child_env
 from .codex_config import render_config_toml, write_codex_home
 from .codex_cost import estimate_cost_usd
 from .codex_events import OTHER, CodexEventMapper, classify_failure
 from .config import ProviderProfile
+from .context_probe import MIN_TRIGGER_TOKENS, autocompact_trigger, probe_context
 from .store import Store
 
 if TYPE_CHECKING:
@@ -58,6 +62,34 @@ def session_dir(data_dir: Path, session_id: str) -> Path:
     return data_dir / SESSION_DIR_NAME / digest
 
 
+async def _probe_window(
+    manager: RunManager, run_id: str, provider: ProviderProfile, model: str
+) -> int | None:
+    """The engine's real window, so Codex compacts by the same rules as Claude (a trigger below the
+    window, see context_probe.autocompact_trigger). None for ChatGPT login or an engine that does
+    not list it: Codex keeps its own limits."""
+    if provider.codex_auth == "chatgpt" or not provider.codex_base_url:
+        return None
+    key = provider.env.get(provider.codex_api_key_var, "") if provider.codex_api_key_var else ""
+    window = await asyncio.to_thread(probe_context, _engine_url(provider), key, model)
+    if window is None or autocompact_trigger(window, provider) < MIN_TRIGGER_TOKENS:
+        window = None
+    manager.events.add(
+        run_id,
+        {
+            "kind": "context_window",
+            "source": "probe" if window else "static",
+            "probed": window,
+            "window": window,
+            "compact_window": window,
+            "compact_pct": f"{autocompact_trigger(window, provider) * 100 / window:.2f}"
+            if window
+            else None,
+        },
+    )
+    return window
+
+
 async def execute(
     manager: RunManager,
     run_id: str,
@@ -74,7 +106,11 @@ async def execute(
     # CODEX_HOME is kept across the session's runs: Codex keeps the resumable session under it
     home_root = session_dir(manager.settings.data_dir, session_id)
     last_path = home_root / f"{run_id}.last.txt"
-    home = write_codex_home(home_root, render_config_toml(provider, role, model, cwd, None))
+    window = await _probe_window(manager, run_id, provider, model)
+    config = render_config_toml(
+        provider, role, model, cwd, window, trim_tools=manager.settings.codex_trim_tools
+    )
+    home = write_codex_home(home_root, config)
     if provider.codex_auth == "chatgpt" and not stage_auth(provider.codex_login_home, home):
         manager._finish(
             run_id,
@@ -88,7 +124,10 @@ async def execute(
             None,
         )
         return
-    if resume:
+    use_server = manager.settings.codex_app_server
+    if use_server:
+        cmd = build_app_server_command(CODEX_BIN)
+    elif resume:
         cmd = build_resume_command(
             CODEX_BIN,
             session_id=thread_id,
@@ -108,7 +147,7 @@ async def execute(
     if role == "qa":
         manager._qa_runs.add(run_id)
     try:
-        proc = await _spawn(manager, cmd, cwd, env)
+        proc = await _spawn(manager, cmd, cwd, env, interactive=use_server)
     except OSError as exc:
         manager._finish(
             run_id,
@@ -123,19 +162,58 @@ async def execute(
         return
     manager._procs[run_id] = proc
     manager._proc_started_at[proc] = time.monotonic()
-    mapper = CodexEventMapper()
+    mapper: CodexEventMapper = AppServerMapper(model) if use_server else CodexEventMapper()
     stderr_chunks: list[bytes] = []
     timed_out = False
+    session: AppServerSession | None = None
     pump_error: Exception | None = None
+    stop_telemetry = threading.Event()
+    telemetry = None
+    exact = None
     try:
-        timed_out = await _read_to_end(manager, run_id, proc, mapper, stderr_chunks)
+        session = _server_session(mapper, proc, cwd, prompt, thread_id, resume)
+        if session is not None:
+            # exact decode speed from the engine when it has telemetry; else the "~" figures stay
+            exact = await manager._start_exact_steps(
+                _engine_url(provider),
+                provider.env.get(provider.codex_api_key_var, ""),
+                lambda entry: _add_entry(manager, run_id, entry),
+                stop_telemetry,
+            )
+        if session is None:
+            # the engine's own request rows (speed, cache) replace the one per-turn step of Codex
+            telemetry = await manager._start_telemetry(
+                _engine_url(provider),
+                provider.env.get(provider.codex_api_key_var, ""),
+                model,
+                lambda entry: _add_entry(manager, run_id, entry),
+                stop_telemetry,
+            )
+        timed_out = await _read_to_end(
+            manager,
+            run_id,
+            proc,
+            mapper,
+            stderr_chunks,
+            drop_steps=telemetry is not None,
+            session=session,
+            on_step=exact[0].offer if exact else None,
+        )
     except Exception as exc:  # stream failure must still finish the run record
         pump_error = exc
         await manager._terminate_proc(run_id)
     finally:
+        stop_telemetry.set()
+        if telemetry:
+            await telemetry[1]
+        if exact:
+            await exact[1]
+            exact[0].settle(final=True)
         await asyncio.shield(manager._terminate_proc(run_id))
     if provider.codex_auth == "chatgpt":
         sync_auth_back(provider.codex_login_home, home)
+    if session is not None:
+        session.server_ended()
     stderr = b"".join(stderr_chunks).decode("utf-8", "replace")[-STDERR_TAIL_CHARS:]
     outcome = _outcome(
         manager,
@@ -144,7 +222,7 @@ async def execute(
         last_path,
         model,
         provider,
-        proc.returncode,
+        0 if session is not None and not session.failed else proc.returncode,
         stderr,
         timed_out=timed_out,
         pump_error=pump_error,
@@ -154,8 +232,42 @@ async def execute(
     manager._finish(run_id, outcome, None)
 
 
+def _server_session(
+    mapper: CodexEventMapper,
+    proc: asyncio.subprocess.Process,
+    cwd: str,
+    prompt: str,
+    thread_id: str,
+    resume: bool,
+) -> AppServerSession | None:
+    """The app-server conversation of a run, started; None when the run uses ``codex exec``."""
+    if not isinstance(mapper, AppServerMapper):
+        return None
+    assert proc.stdin
+    stdin = proc.stdin
+    session = AppServerSession(
+        mapper,
+        lambda text: stdin.write(text.encode("utf-8")),
+        cwd=cwd,
+        prompt=prompt,
+        thread_id=thread_id,
+        resume=resume,
+    )
+    session.start()
+    return session
+
+
+def _engine_url(provider: ProviderProfile) -> str:
+    return provider.codex_base_url.removesuffix("/").removesuffix("/v1")
+
+
+def _add_entry(manager: RunManager, run_id: str, entry: dict[str, Any]) -> None:
+    manager._last_event_at[run_id] = time.monotonic()
+    manager.events.add(run_id, entry)
+
+
 async def _spawn(
-    manager: RunManager, cmd: list[str], cwd: str, env: dict[str, str]
+    manager: RunManager, cmd: list[str], cwd: str, env: dict[str, str], *, interactive: bool = False
 ) -> asyncio.subprocess.Process:
     cmd_to_exec = manager._limited(cmd)
     # with prlimit in front, a missing binary would fail inside prlimit (exit 127) instead of here
@@ -165,7 +277,7 @@ async def _spawn(
         *cmd_to_exec,
         cwd=cwd,
         env=env,
-        stdin=asyncio.subprocess.DEVNULL,
+        stdin=asyncio.subprocess.PIPE if interactive else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         limit=STREAM_LIMIT_BYTES,
@@ -179,17 +291,40 @@ async def _read_to_end(
     proc: asyncio.subprocess.Process,
     mapper: CodexEventMapper,
     stderr_chunks: list[bytes],
+    drop_steps: bool = False,
+    session: AppServerSession | None = None,
+    on_step: Callable[[dict[str, Any]], None] | None = None,
 ) -> bool:
-    """Read the process to its end; True when the run timeout stopped it."""
+    """Read the process to its end; True when the run timeout stopped it. ``drop_steps``: the
+    per-turn step entries are not stored, the engine telemetry supplies the steps."""
 
     async def pump_stdout() -> None:
         assert proc.stdout
         async for raw in proc.stdout:
-            entries = mapper.feed(raw.decode("utf-8", "replace"))
+            text = raw.decode("utf-8", "replace")
+            entries = session.feed(text) if session else mapper.feed(text)
+            if drop_steps:
+                # no step numbers either: the dashboard groups the rows by the telemetry steps
+                entries = [
+                    {k: v for k, v in e.items() if k != "step"}
+                    for e in entries
+                    if e.get("kind") != "step"
+                ]
             if entries:
                 manager._last_event_at[run_id] = time.monotonic()
             for entry in entries:
-                manager.events.add(run_id, entry)
+                if on_step is not None and entry.get("kind") == "step":
+                    on_step(entry)
+                else:
+                    manager.events.add(run_id, entry)
+            if session:
+                for event in session.mapper.live_events:
+                    manager.events.feed_live(run_id, event)
+                session.mapper.live_events.clear()
+            if session and session.done:
+                # the server stays up for more turns: the run ends with its turn
+                await manager._terminate_proc(run_id)
+                break
 
     async def pump_stderr() -> None:
         assert proc.stderr

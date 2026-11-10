@@ -48,7 +48,10 @@ def ctx_from_models(payload: dict[str, Any], model: str) -> int | None:
             continue
         args = [str(a) for a in ((item.get("status") or {}).get("args") or [])]
         raw = _arg(args, "--ctx-size", "-c")
-        if raw is None or not raw.strip().lstrip("-").isdigit():
+        if raw is None:
+            meta_ctx = (item.get("meta") or {}).get("n_ctx")  # engines without router arguments
+            return meta_ctx if isinstance(meta_ctx, int) and meta_ctx > 0 else None
+        if not raw.strip().lstrip("-").isdigit():
             return None
         ctx = int(raw)
         if ctx <= 0:  # 0 = the model's training context, not known from the arguments

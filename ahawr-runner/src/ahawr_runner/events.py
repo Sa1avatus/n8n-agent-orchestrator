@@ -367,6 +367,12 @@ class EventLog:
         for entry in [*finished, *entries]:
             self.add(run_id, entry)
 
+    def feed_live(self, run_id: str, event: dict[str, Any]) -> None:
+        """A stream event for the live view only: the block being generated, nothing is stored."""
+        live = self._live.get(run_id)
+        if live is not None:
+            live.feed(event)
+
     def close(self, run_id: str) -> None:
         with self._lock:
             handle = self._files.pop(run_id, None)

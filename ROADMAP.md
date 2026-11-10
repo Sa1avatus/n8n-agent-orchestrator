@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.1.0** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.1.100** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -174,6 +174,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] Code review and refactoring mission, the cleanup part, together with the Codex code (the audit and the baseline are done in 0.13.0; the refactoring steps wait for the approval of the ranked findings; before 1.0, after the 0.x feature and JSON configuration missions, before the Codex executor: 1.0 freezes the formats): dead code, duplicate functions, hard-coded values that should be settings, names brought to docs/naming.md, import and run-time cycles, a measured performance pass, old stop-gaps, mypy and ruff debt, scripts outside git (plan: docs/review-refactor-plan.md)
 - [x] Stable provider-block configuration and event format
 - [x] 1.0.0 release: changelog, README “What 1.0 means”, roadmap
+- [x] 1.1.100: live view of Codex and Hermes like Claude (reasoning, per-step cache and speed), the same context rules and a smaller tool list for both
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 

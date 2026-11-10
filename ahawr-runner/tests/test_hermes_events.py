@@ -7,7 +7,9 @@ from ahawr_runner.hermes_events import (
     FALLBACK_KIND,
     classify_failure,
     continue_fields,
+    live_entry,
     result_entries,
+    usage_step,
 )
 
 
@@ -82,3 +84,27 @@ def test_followup_start_sends_the_stored_session_only_on_resume() -> None:
         "session_id": "sess_1",
     }
     assert continue_fields("sess_1", "start_new", "next prompt") == {"input": "next prompt"}
+
+
+def test_usage_step_carries_the_gateway_token_totals() -> None:
+    step = usage_step({"input_tokens": 12, "output_tokens": 3}, "m")
+    assert step is not None
+    assert (step["kind"], step["model"], step["input_tokens"], step["output_tokens"]) == (
+        "step", "m", 12, 3,
+    )
+    assert usage_step({}, "m") is None
+
+
+def test_usage_step_speed_comes_from_the_time_outside_tools() -> None:
+    step = usage_step({"input_tokens": 10, "output_tokens": 100}, "m", 4000)
+    assert step is not None
+    assert (step["generation_ms"], step["tokens_per_s"]) == (4000, 25.0)
+
+
+def test_live_entry_pairs_a_tool_call_with_its_result() -> None:
+    call = live_entry({"event": "tool.started", "tool": "bash", "preview": "ls"}, 2)
+    done = live_entry({"event": "tool.completed", "tool": "bash", "error": True}, 2)
+    assert call is not None and done is not None
+    assert (call["kind"], call["name"], call["id"]) == ("tool_use", "bash", "hermes-2")
+    assert (done["kind"], done["id"], done["is_error"]) == ("tool_result", "hermes-2", True)
+    assert live_entry({"event": "message.delta"}, 2) is None

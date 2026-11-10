@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import signal
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -16,7 +17,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import cloud_think, codex_run, hermes_events, hermes_run, store, think_proxy
+from . import (
+    cloud_think,
+    codex_appserver,
+    codex_run,
+    hermes_events,
+    hermes_run,
+    hermes_session,
+    store,
+    strata_telemetry,
+    think_proxy,
+)
 from .claude_cli import (
     UUID_RE,
     Outcome,
@@ -101,6 +112,7 @@ WATCHDOG_MESSAGES = {
 # between scans and stops when this many scans have run. 10_000 scans is about 7 days at
 # the default 60 s interval; a runner expected to stay up longer needs a larger bound.
 WATCHDOG_MAX_SCANS = 10_000  # scans
+SESSION_CLOCK_SKEW_SECONDS = 2.0  # gateway and runner clocks: older messages are history
 
 
 @dataclass(frozen=True)
@@ -194,6 +206,57 @@ class StartRequest:
     think_profile: str = ""
     features_json: str = ""
     thinking_json: str = ""
+
+
+class _HermesLive:
+    """The live side of one Hermes run: tool events from the gateway stream go to the run's
+    entries as they arrive; the time outside tools is the run's generation time."""
+
+    def __init__(self, manager: RunManager, run_id: str) -> None:
+        self.manager = manager
+        self.run_id = run_id
+        self.started = time.monotonic()
+        self.tool_count = 0
+        self.tool_seconds = 0.0
+        self._open = False  # a block of the live view is being written
+
+    def on_event(self, event: dict[str, Any]) -> None:
+        if event.get("event") == "tool.started":
+            self.tool_count += 1
+        elif event.get("event") == "tool.completed":
+            self.tool_seconds += float(event.get("duration") or 0)
+        entry = hermes_events.live_entry(event, self.tool_count)
+        if entry:
+            self.add_entry(entry)
+
+    def _live(self, kind: str, **fields: Any) -> None:
+        self.manager.events.feed_live(self.run_id, codex_appserver.stream_event(kind, **fields))
+
+    def on_stream(self, event: dict[str, Any]) -> None:
+        """Gateway stream events for the live view only (the stored entries come from the
+        session API): the answer text as it is written, the tool being called."""
+        name = event.get("event")
+        if name == "message.delta":
+            if not self._open:
+                self._live("content_block_start", content_block={"type": "text"})
+                self._open = True
+            delta = {"text": str(event.get("delta") or event.get("text") or "")}
+            self._live("content_block_delta", delta=delta)
+            return
+        if self._open:
+            self._live("content_block_stop")
+            self._open = False
+        if name == "tool.started":
+            block = {"type": "tool_use", "name": str(event.get("tool") or "")}
+            self._live("content_block_start", content_block=block)
+            self._open = True
+
+    def add_entry(self, entry: dict[str, Any]) -> None:
+        self.manager._last_event_at[self.run_id] = time.monotonic()
+        self.manager.events.add(self.run_id, entry)
+
+    def generation_ms(self) -> int:
+        return max(0, round((time.monotonic() - self.started - self.tool_seconds) * 1000))
 
 
 class RunManager:
@@ -710,6 +773,48 @@ class RunManager:
                 outcome.details["compact_result"] = state.compact_result
             self._finish(run_id, outcome, state)
 
+    async def _start_telemetry(
+        self,
+        base_url: str,
+        key: str,
+        model: str,
+        on_entry: Callable[[dict[str, Any]], None],
+        stop: threading.Event,
+    ) -> tuple[strata_telemetry.TelemetryTail, asyncio.Future[None]] | None:
+        """Watch the Strata engine at ``base_url`` while a Hermes or Codex run lives; None when
+        there is no engine address or the engine has no telemetry."""
+        snapshot = (
+            await asyncio.to_thread(strata_telemetry.fetch_snapshot, base_url, key)
+            if base_url
+            else {}
+        )
+        if not snapshot.get("sampled_at"):
+            return None
+        tail = strata_telemetry.TelemetryTail(float(snapshot["sampled_at"]), model)
+        watcher = asyncio.ensure_future(
+            asyncio.to_thread(strata_telemetry.watch, base_url, key, tail, on_entry, stop)
+        )
+        return tail, watcher
+
+    async def _start_exact_steps(
+        self,
+        base_url: str,
+        key: str,
+        emit: Callable[[dict[str, Any]], None],
+        stop: threading.Event,
+    ) -> tuple[strata_telemetry.ExactSteps, asyncio.Future[None]] | None:
+        """Exact decode speed for the client-side step entries of a run, when the engine at
+        ``base_url`` answers ``/v1/telemetry``; None otherwise (the "≈" figures stay)."""
+        snapshot = (
+            await asyncio.to_thread(strata_telemetry.fetch_snapshot, base_url, key)
+            if base_url
+            else {}
+        )
+        if not snapshot.get("sampled_at"):
+            return None
+        exact = strata_telemetry.ExactSteps(base_url, key, emit)
+        return exact, asyncio.ensure_future(asyncio.to_thread(exact.run, stop))
+
     async def _execute_hermes(
         self,
         run_id: str,
@@ -727,22 +832,102 @@ class RunManager:
         session_id = str((self.store.get_run(run_id) or {}).get("session_id", ""))
         if role == "qa":
             self._qa_runs.add(run_id)
+        live = _HermesLive(self, run_id)
+        stop_stream = threading.Event()
+        telemetry = None
+        exact = None
+        use_session = self.settings.hermes_session_stats
+        tail = hermes_session.SessionTail(model, since=time.time() - SESSION_CLOCK_SKEW_SECONDS)
         try:
+            # before the gateway starts: the engine clock at this moment bounds the run's requests
+            if not use_session:
+                telemetry = await self._start_telemetry(
+                    provider.env.get("ANTHROPIC_BASE_URL", ""),
+                    provider.env.get("ANTHROPIC_AUTH_TOKEN", ""),
+                    model,
+                    live.add_entry,
+                    stop_stream,
+                )
+            if use_session:
+                exact = await self._start_exact_steps(
+                    provider.env.get("ANTHROPIC_BASE_URL", ""),
+                    provider.env.get("ANTHROPIC_AUTH_TOKEN", ""),
+                    live.add_entry,
+                    stop_stream,
+                )
             gateway_run_id, response_session = await asyncio.to_thread(
                 hermes_run.start_run, provider, prompt, model, gateway_session, cwd
             )
             self._hermes_runs[run_id] = gateway_run_id
             if response_session:
                 self.store.bind_session(session_id, response_session, cwd, role)
-            result = await asyncio.to_thread(hermes_run.poll_run, provider, gateway_run_id)
+            watch: Callable[[], None]
+            if use_session:
+                # the gateway's session API: reasoning, tool calls, per-request tokens and cache
+                def watch() -> None:
+                    hermes_session.watch(
+                        provider,
+                        gateway_run_id,
+                        response_session or gateway_session,
+                        tail,
+                        exact[0].offer if exact else live.add_entry,
+                        stop_stream,
+                    )
+            else:
+
+                def watch() -> None:
+                    hermes_run.stream_events(provider, gateway_run_id, live.on_event, stop_stream)
+
+            stream = asyncio.create_task(asyncio.to_thread(watch))
+            live_stream = (
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        hermes_run.stream_events,
+                        provider,
+                        gateway_run_id,
+                        live.on_stream,
+                        stop_stream,
+                    )
+                )
+                if use_session
+                else None
+            )
+            try:
+                result = await asyncio.to_thread(hermes_run.poll_run, provider, gateway_run_id)
+            finally:
+                stop_stream.set()
+                await stream
+                if live_stream:
+                    await live_stream
+                if exact:
+                    await exact[1]
+                    exact[0].settle(final=True)  # steps offered after the poller's last pass
+                if telemetry:
+                    await telemetry[1]
             output = str(result.get("output") or "")
             poll_count = int(result.get("poll_count") or 0)
             entries = hermes_events.result_entries(result, run_id, poll_count)
+            if tail.emitted_text:  # the session's last message already shows the answer
+                entries = [e for e in entries if e.get("kind") != "text"]
+            # the engine's own request rows are exact; the gateway total is the fallback
+            step = None
+            if not (telemetry and telemetry[0].steps) and not tail.steps:
+                step = hermes_events.usage_step(
+                    result.get("usage") or {}, model, live.generation_ms()
+                )
+            if step:
+                entries.insert(0, step)
             if entries:
                 self._last_event_at[run_id] = time.monotonic()
             for entry in entries:
                 self.events.add(run_id, entry)
             details: dict[str, Any] = {"poll_count": poll_count}
+            if step:
+                details["num_turns"] = 1
+            elif tail.steps:
+                details["num_turns"] = tail.steps
+            elif telemetry and telemetry[0].steps:
+                details["num_turns"] = telemetry[0].steps
             if run_id in self._cancelled:
                 outcome = Outcome(
                     "cancelled", output, "cancelled", "Run was cancelled.", None, details
@@ -769,6 +954,7 @@ class RunManager:
                 None,
             )
         finally:
+            stop_stream.set()  # also ends the telemetry watcher when the start call failed
             # unconditional: the cancel route must never look at a finished run's gateway id,
             # including the HermesError path that returned before this line used to
             self._hermes_runs.pop(run_id, None)

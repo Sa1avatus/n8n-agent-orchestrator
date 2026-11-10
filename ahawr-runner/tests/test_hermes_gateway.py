@@ -184,3 +184,13 @@ def test_the_config_names_a_default_provider_preferring_the_hermes_engine() -> N
     text = hermes_gateway.render_config(catalog, "H")
     assert json.loads(text)["model"] == {"provider": "H"}
     assert "model" not in json.loads(hermes_gateway.render_config(catalog))
+
+
+def test_render_config_limits_toolsets_and_sets_the_compression_trigger() -> None:
+    text = hermes_gateway.render_config({}, "local", ("terminal", "file"), 131072, 90000)
+    config = json.loads(text)
+    assert config["platform_toolsets"] == {"api_server": ["terminal", "file"]}
+    assert config["model"] == {"provider": "local", "context_length": 131072}
+    assert config["compression"] == {"threshold_tokens": 90000}
+    plain = json.loads(hermes_gateway.render_config({}, "local"))
+    assert "platform_toolsets" not in plain and "compression" not in plain

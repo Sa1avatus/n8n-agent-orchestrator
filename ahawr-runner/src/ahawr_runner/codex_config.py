@@ -22,6 +22,18 @@ SHELL_EXCLUDE = ("*KEY*", "*TOKEN*", "*SECRET*", "*PASSWORD*")
 # A glob key can only deny (Codex 0.159): .env.example stays readable by not being listed.
 DENY_ENV_FILES = ("**/.env", "**/.env.local", "**/.env.*.local")
 GLOB_SCAN_MAX_DEPTH = 8  # directory levels Linux expands the deny globs to (Codex warns without it)
+# Tools a mission never uses; each one costs prompt tokens on every request (measured with a
+# capture server: 9 tools / 17.8K chars -> 3 tools / 3.9K chars). Like Claude's --tools list.
+TRIMMED_FEATURES = (
+    "multi_agent",
+    "goals",
+    "view_image",
+    "apps",
+    "plugins",
+    "tool_suggest",
+    "skill_search",
+    "image_generation",
+)
 COMPACT_PROMPT = (
     "Summarize the session in under 2000 tokens: the task and its acceptance criteria, the "
     "findings as file:line references, the changed files, and the checks done or not done. "
@@ -105,10 +117,20 @@ def _table_lines(provider: ProviderProfile, workspace: str, role: str) -> list[s
 
 
 def render_config_toml(
-    provider: ProviderProfile, role: str, model: str, workspace: str, window: int | None
+    provider: ProviderProfile,
+    role: str,
+    model: str,
+    workspace: str,
+    window: int | None,
+    trim_tools: bool = False,
 ) -> str:
     lines = _top_level_lines(provider, role, model, window)
+    if trim_tools and provider.codex_auth != "chatgpt":
+        # OpenAI's hosted search: a local engine cannot run it, ChatGPT can (it stays on there)
+        lines.append(f"web_search = {_str('disabled')}")
     lines += _table_lines(provider, workspace, role)
+    if trim_tools:
+        lines += ["", "[features]", *(f"{name} = false" for name in TRIMMED_FEATURES)]
     return "\n".join(lines) + "\n"
 
 

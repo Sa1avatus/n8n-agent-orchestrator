@@ -189,6 +189,10 @@ services:
       # the gateway listens on loopback only; the key and the URL are read by the runner through the two variables named below,
       # which the Worker's environment does not get (CLAUDE_RUNNER_*)
       - CLAUDE_RUNNER_HERMES_ENGINE_ENABLED=${AHAWR_HERMES_GATEWAY:-0}
+      - CLAUDE_RUNNER_CODEX_APP_SERVER=${AHAWR_CODEX_APP_SERVER:-1}
+      - CLAUDE_RUNNER_HERMES_SESSION_STATS=${AHAWR_HERMES_SESSION_STATS:-1}
+      - CLAUDE_RUNNER_CODEX_TRIM_TOOLS=${AHAWR_CODEX_TRIM_TOOLS:-1}
+      - CLAUDE_RUNNER_HERMES_TOOLSETS=${AHAWR_HERMES_TOOLSETS:-terminal,file,web}
       - CLAUDE_RUNNER_HERMES_GATEWAY=${AHAWR_HERMES_GATEWAY:-0}
       - CLAUDE_RUNNER_HERMES_GATEWAY_KEY=${AHAWR_HERMES_GATEWAY_KEY:-}
       - CLAUDE_RUNNER_HERMES_GATEWAY_URL=http://127.0.0.1:8642

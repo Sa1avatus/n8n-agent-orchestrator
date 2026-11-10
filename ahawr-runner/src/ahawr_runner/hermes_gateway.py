@@ -22,6 +22,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .config import ProviderProfile
+from .context_probe import autocompact_trigger
 
 log = logging.getLogger(__name__)
 
@@ -75,12 +76,38 @@ def default_provider(
     return next((name for name in hermes if name in catalog), next(iter(catalog), ""))
 
 
-def render_config(catalog: Mapping[str, dict[str, str]], default: str = "") -> str:
+def render_config(
+    catalog: Mapping[str, dict[str, str]],
+    default: str = "",
+    toolsets: tuple[str, ...] = (),
+    window: int | None = None,
+    trigger: int | None = None,
+) -> str:
+    """``toolsets`` limit the api_server platform's tools (empty = Hermes' default, about 38
+    tools); ``window`` and ``trigger`` give the context length and the absolute compression
+    trigger, the same numbers Claude Code gets (context_probe.autocompact_trigger)."""
     # JSON is valid YAML, so the file needs no YAML writer.
     config: dict[str, object] = {"providers": dict(catalog)}
-    if default:
-        config["model"] = {"provider": default}
+    model: dict[str, object] = {"provider": default} if default else {}
+    if window:
+        model["context_length"] = window
+        config["compression"] = {"threshold_tokens": trigger}
+    if model:
+        config["model"] = model
+    if toolsets:
+        config["platform_toolsets"] = {"api_server": list(toolsets)}
     return json.dumps(config, indent=2, sort_keys=True) + "\n"
+
+
+def default_window(
+    profiles: Mapping[str, ProviderProfile], default: str
+) -> tuple[int, int] | None:
+    """(window, compression trigger) of the default provider when its settings carry a window."""
+    profile = profiles.get(default)
+    raw = profile.env.get("CLAUDE_CODE_MAX_CONTEXT_TOKENS", "") if profile else ""
+    if profile is None or not raw.isdigit() or int(raw) <= 0:
+        return None
+    return int(raw), autocompact_trigger(int(raw), profile)
 
 
 def gateway_env(
@@ -124,7 +151,9 @@ class GatewaySupervisor:
         binary: str,
         port: int,
         api_key: str,
+        toolsets: tuple[str, ...] = (),
     ) -> None:
+        self._toolsets = toolsets
         self._profiles = profiles
         self._home = home
         self._binary = binary
@@ -136,7 +165,15 @@ class GatewaySupervisor:
         """Write config.yaml and return the process environment with the fingerprint of both."""
         profiles = self._profiles()
         catalog = provider_catalog(profiles)
-        text = render_config(catalog, default_provider(profiles, catalog))
+        default = default_provider(profiles, catalog)
+        sized = default_window(profiles, default)
+        text = render_config(
+            catalog,
+            default,
+            self._toolsets,
+            sized[0] if sized else None,
+            sized[1] if sized else None,
+        )
         self._home.mkdir(parents=True, exist_ok=True)
         (self._home / CONFIG_FILE_NAME).write_text(text, encoding="utf-8")
         env = gateway_env(profiles, self._home, self._port, self._api_key)

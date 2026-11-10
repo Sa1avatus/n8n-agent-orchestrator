@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **1.1.0** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.1.100** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -838,6 +838,19 @@ Only the fields in the allow-list in `docs/telegram-bot.md` (model/provider, pol
 - *Why steps and score, and why after the task.* Stopping a run in the middle throws away work, and stopping a runaway run is the job of the adaptive split. The step count and the score are known only when a run has ended, so the choice is made for the next attempt or the next task. A first plain version, a score condition inside a chain value, was dropped: a chain stays a plain list of models and the exceptions live in one separate block.
 - *Cost.* Missing data (the runner does not answer, no previous run) counts as unknown and the block does nothing; the chain then decides alone.
 
+**12. One mission can use different clients, one per role.**
+- *What.* The role in `roles_json` is written as `provider/model`, and the provider decides the client that runs it: Claude Code (`anthropic/...`), Codex (`codexsub/...` on a ChatGPT subscription, `codexlocal/...` on a local engine) or Hermes (`hermesstrata/...`). Each role, and each attempt of a role, picks its own. Example, the Worker in Codex and the Reviewer in Claude Code:
+
+```json
+{
+  "worker":   {"1": "codexsub/gpt-5.6-terra"},
+  "reviewer": {"1": "anthropic/sonnet"}
+}
+```
+
+- *Why.* Both clients sign in with a subscription, so the runs are paid from its limits and not per API request. The workflow needs no change: it only calls the runner, and the runner starts the client of the role's provider.
+- *Limits.* A Codex run on a ChatGPT subscription accepts only the models of that account (today `gpt-6-luna`, `gpt-5.6-terra`, `gpt-5.6-luna`), and every subscription has its own usage limit. Checked with one short run per client; a whole mission in such a mix has not been run yet. Fields and per-mission override: [`ahawr-runner/docs/roles-config.md`](ahawr-runner/docs/roles-config.md).
+
 **Known open problems.**
 - The llama-server prompt cache is not reused when Claude Code sends a compaction request, so each compaction re-prefills the whole prefix (about 7 minutes at 78K tokens; seven of them in one task). The cause (server build, Claude Code version or cache settings) is not established.
 - The retrieval usage metric reports 0 opened files on live data, because runner run summaries carry no mission or task id to join them with retrieval requests.
@@ -1648,6 +1661,19 @@ Claude Code сообщает стоимость каждого прогона. �
 - *Зачем.* Локальный 2-битный Worker дёшев и быстр и решает большинство задач, но на трудной задаче тратит 150 шагов и целую попытку впустую. Облачная модель на первой попытке тратит деньги на лёгких задачах, поэтому сначала идёт дешёвая, а дорогая подключается только по признакам: много шагов и плохой скор или сплит.
 - *Почему шаги и скор и почему после задачи.* Остановка запуска посередине выбрасывает работу, а останавливать убежавший запуск должен адаптивный сплит. Число шагов и скор известны только после конца запуска, поэтому выбор делается для следующей попытки или следующей задачи. Первый простой вариант, условие по скору внутри значения цепочки, отвергнут: цепочка остаётся простым списком моделей, а исключения лежат в одном отдельном блоке.
 - *Цена.* Нет данных (runner не ответил, нет предыдущего запуска) считается неизвестным, блок ничего не делает, решает одна цепочка.
+
+**11. В одной миссии можно использовать разные клиенты, по одному на роль.**
+- *Что.* Роль в `roles_json` записывается как `провайдер/модель`, и провайдер определяет клиента, который её выполняет: Claude Code (`anthropic/...`), Codex (`codexsub/...` по подписке ChatGPT, `codexlocal/...` на локальном движке) или Hermes (`hermesstrata/...`). Каждая роль и каждая попытка роли выбирают своего. Пример, Worker в Codex, а Reviewer в Claude Code:
+
+```json
+{
+  "worker":   {"1": "codexsub/gpt-5.6-terra"},
+  "reviewer": {"1": "anthropic/sonnet"}
+}
+```
+
+- *Зачем.* Оба клиента входят по подписке, поэтому запуски оплачиваются из её лимитов, а не за каждый запрос к API. Воркфлоу менять не нужно: он только вызывает runner, а runner запускает клиента провайдера роли.
+- *Ограничения.* Запуск Codex по подписке ChatGPT принимает только модели этого аккаунта (сейчас `gpt-6-luna`, `gpt-5.6-terra`, `gpt-5.6-luna`), и у каждой подписки свой лимит использования. Проверено одним коротким запуском на клиента; целая миссия в такой связке ещё не запускалась. Поля и переопределение для миссии: [`ahawr-runner/docs/roles-config.md`](ahawr-runner/docs/roles-config.md).
 
 **Известные открытые проблемы.**
 - Кэш промпта llama-server не используется, когда Claude Code присылает запрос сжатия, поэтому каждое сжатие заново обрабатывает весь префикс (около 7 минут на 78K токенов; семь таких сжатий в одной задаче). Причина (сборка сервера, версия Claude Code или настройки кэша) не установлена.

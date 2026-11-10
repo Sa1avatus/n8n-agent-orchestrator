@@ -336,6 +336,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         binary=settings.hermes_gateway_bin,
                         port=GATEWAY_PORT,
                         api_key=gateway_key,
+                        toolsets=tuple(
+                            t.strip() for t in settings.hermes_toolsets.split(",") if t.strip()
+                        ),
                     ).run()
                 )
             else:
@@ -355,7 +358,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="ahawr-runner", version="1.1.0", lifespan=lifespan)
+    app = FastAPI(title="ahawr-runner", version="1.1.100", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

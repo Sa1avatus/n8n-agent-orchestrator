@@ -37,6 +37,11 @@ def build_command(
     ]
 
 
+def build_app_server_command(codex_bin: str) -> list[str]:
+    """The JSON-RPC server over stdio; the session, prompt and workspace go in as requests."""
+    return [codex_bin, "app-server", "--stdio"]
+
+
 def build_resume_command(
     codex_bin: str,
     *,

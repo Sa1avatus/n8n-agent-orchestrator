@@ -949,10 +949,14 @@ function build(entries) {
     } else if (e.kind === "tool_use") (tools[e.id] ||= {}).use = e;
     else if (e.kind === "tool_result") (tools[e.id] ||= {}).result = e;
   }
+  // engines that stream no step number (Hermes, Codex): an entry belongs to the last request that had ended
+  const ends = Object.values(steps).filter((s) => s.started).map((s) => [s.started + (s.duration_ms || 0) / 1000, s.step]).sort((x, y) => x[0] - y[0]);
+  const stepAt = (t) => { let n = 0; for (const [end, step] of ends) { if (end <= t + 0.5) n = step; else break; } return n; };
   const q = S.q.trim().toLowerCase();
   for (const e of entries) {
     if (e.kind === "prompt") turn++;
     e._turn = turn;
+    if (!e.step && ends.length && ["tool_use", "text", "thinking"].includes(e.kind) && e.t) e.step = stepAt(e.t) || e.step;
     if (e.kind === "step" || (e.kind === "tool_result" && tools[e.id] && tools[e.id].use)) continue;
     if (e.kind === "thinking" && !S.show.thinking) continue;
     if ((e.kind === "init" || e.kind === "end") && !S.show.system) continue;
@@ -988,7 +992,7 @@ function totals(m) {
   const sumUsage = (key) => results.reduce((n, e) => n + ((e.usage && e.usage[key]) || 0), 0);
   if (results.length) { t.input = sumUsage("input_tokens"); t.cacheRead = sumUsage("cache_read_input_tokens"); t.cacheWrite = sumUsage("cache_creation_input_tokens"); t.output = sumUsage("output_tokens") || t.output; }
   const rt = S.run && S.run.tokens;
-  if (rt && S.run.source === "hermes") { t.input = rt.input || t.input; t.output = rt.output || t.output; t.cacheRead = rt.cache_read || 0; t.cacheWrite = rt.cache_write || 0; t.reasoning = rt.reasoning; }
+  if (rt && S.run.source === "hermes" && !t.cacheRead && !t.steps) { t.input = rt.input || t.input; t.output = rt.output || t.output; t.cacheRead = rt.cache_read || 0; t.cacheWrite = rt.cache_write || 0; t.reasoning = rt.reasoning; }
   // Claude Code reports the session's cumulative cost and API time (restored on --resume);
   // the runner stores this run's share, so prefer it
   t.cost = S.run && S.run.cost_usd != null ? S.run.cost_usd : result && result.cost_usd;
@@ -1137,7 +1141,7 @@ function renderLedger(m) {
         s.generation_ms != null ? `<span>gen <b>${ms(s.generation_ms)}</b></span>` : "",
         s.input_tokens || s.cache_read_tokens ? `<span>in <b>${tok((s.input_tokens || 0) + (s.cache_read_tokens || 0) + (s.cache_write_tokens || 0))}</b>${s.cache_read_tokens ? ` (cache ${tok(s.cache_read_tokens)})` : ""}</span>` : "",
         s.output_tokens ? `<span>out <b>${tok(s.output_tokens)}</b></span>` : "",
-        s.tokens_per_s ? `<span><b>${s.tokens_per_s}</b> tok/s</span>` : "",
+        s.tokens_per_s ? `<span title="${s.approximate ? "end to end for the request: prompt processing included" : ""}">${s.approximate ? "≈" : ""}<b>${s.tokens_per_s}</b> tok/s</span>` : "",
         s.finish_reason ? `<span>${esc(s.finish_reason)}</span>` : "",
         s.step == null ? `<span class="t-acc">generating…</span>` : "",
       ].filter(Boolean).join("");

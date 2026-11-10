@@ -202,3 +202,8 @@ def test_resume_compaction_uses_the_probed_window(
     if status == "skipped":
         assert done["reason"] == "below_threshold"
         assert done["min_tokens"] == 2250 and done["window"] == 98304
+
+
+def test_window_falls_back_to_meta_n_ctx() -> None:
+    payload = {"data": [{"id": "m", "meta": {"n_ctx": 131072}}]}
+    assert ctx_from_models(payload, "m") == 131072

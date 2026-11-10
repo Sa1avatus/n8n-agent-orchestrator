@@ -16,10 +16,13 @@ their values are read at call time and never logged nor put in an exception mess
 from __future__ import annotations
 
 import json
+import logging
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from typing import Any
 
 from .config import ProviderProfile
@@ -27,6 +30,7 @@ from .hermes_events import continue_fields, route_for
 from .sources import SourceError, _iso
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "canceled"})
+log = logging.getLogger(__name__)
 ERROR_TEXT_CHARS = 200  # same clip as sources.py _check
 
 
@@ -142,6 +146,7 @@ def _result_fields(body: dict[str, Any], run_id: str, poll_count: int) -> dict[s
         "error": str(error) if error else "",
         "poll_count": poll_count,
         "finished_at": _iso(body.get("finished_at") or body.get("ended_at")),
+        "usage": body.get("usage") if isinstance(body.get("usage"), dict) else {},
     }
 
 
@@ -169,13 +174,45 @@ def poll_run(profile: ProviderProfile, run_id: str) -> dict[str, Any]:
     return result
 
 
-def cancel_run(profile: ProviderProfile, run_id: str) -> dict[str, Any]:
-    """Stop a run on the gateway. The stop endpoint is UNKNOWN (the repo copy has no stop node);
-    the runner's cancel route shape is followed until a live export names the gateway one.
+def stream_events(
+    profile: ProviderProfile,
+    run_id: str,
+    on_event: Callable[[dict[str, Any]], None],
+    stop: threading.Event,
+) -> None:
+    """GET /v1/runs/{run_id}/events (SSE): every ``data:`` object goes to ``on_event`` until a
+    ``run.*`` event, the end of the stream, ``stop`` or the run deadline. Failures end the
+    stream quietly: the poll in poll_run owns the result, this only adds live detail."""
+    request = urllib.request.Request(
+        f"{_env_value(profile.hermes_base_url_var).rstrip('/')}/v1/runs/{run_id}/events",
+        headers=_auth_headers(profile),
+    )
+    deadline = time.monotonic() + profile.hermes_run_timeout_ms / 1000
+    try:
+        read_timeout_s = profile.hermes_run_timeout_ms / 1000
+        with urllib.request.urlopen(request, timeout=read_timeout_s) as resp:
+            for raw in resp:
+                if stop.is_set() or time.monotonic() > deadline:
+                    return
+                line = raw.decode("utf-8", "replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:])
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict):
+                    on_event(event)
+                    if str(event.get("event", "")).startswith("run."):
+                        return
+    except (OSError, urllib.error.URLError) as exc:
+        log.debug("Hermes event stream of %s ended: %r", run_id, exc)
 
-    shortcut: endpoint is the runner route, upgrade when the Hermes stop path is verified.
-    """
-    parsed = _send(profile, "POST", f"/v1/runs/{run_id}/cancel", None, _auth_headers(profile))
+
+def cancel_run(profile: ProviderProfile, run_id: str) -> dict[str, Any]:
+    """POST /v1/runs/{run_id}/stop: the gateway answers {"run_id", "status": "stopping"} and the
+    run reaches a terminal status on a later poll."""
+    parsed = _send(profile, "POST", f"/v1/runs/{run_id}/stop", None, _auth_headers(profile))
     if not parsed.get("run_id"):
-        raise HermesError("Hermes cancel returned no run_id")
+        raise HermesError("Hermes stop returned no run_id")
     return parsed
