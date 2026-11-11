@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **1.1.110** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.1.120** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
 <!-- stats:end -->
 
 ## How a mission runs

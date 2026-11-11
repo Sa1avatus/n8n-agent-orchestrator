@@ -33,6 +33,11 @@ let queueFailed = false;
 let refreshHandler = null;
 let newButton = null;
 
+// Newest first: the Completed column lists the latest finished mission on top.
+function newestFirst(a, b) {
+  return String(b.last_at || b.created_at || "").localeCompare(String(a.last_at || a.created_at || ""));
+}
+
 function stateOf(mission) {
   return STATE_OF_GROUP[mission.state_group] || "off";
 }
@@ -283,7 +288,9 @@ function render(body, ctx) {
   body.append(el("div", { class: "kb" }, COLUMNS.map((key) => column(
     ctx,
     key,
-    key === "q" ? byQueue(missions.filter((mission) => stateOf(mission) === key)) : missions.filter((mission) => stateOf(mission) === key),
+    key === "q" ? byQueue(missions.filter((mission) => stateOf(mission) === key))
+      : key === "ok" ? missions.filter((mission) => stateOf(mission) === key).sort(newestFirst)
+        : missions.filter((mission) => stateOf(mission) === key),
     key === "q" ? queued : null,
     controls,
   ))));

@@ -308,6 +308,17 @@ test("render draws four state columns in order with their cards", () => {
   assert.equal(walk(body, (n) => n.dataset && n.dataset.id === "d1").length, 0, "disabled missions are not shown");
 });
 
+test("the completed column lists the newest finished mission first", () => {
+  resetDom();
+  stubFetch(queueHandler);
+  const views = freshKanban();
+  const done = (id, last_at) => ({ mission_id: id, name: id, state_group: "completed", last_at, tasks: [] });
+  const missions = [done("old", "2026-11-01T10:00:00"), done("new", "2026-11-10T10:00:00"), done("mid", "2026-11-05T10:00:00")];
+  const { body } = renderWith(views, { data: {}, missions });
+  const column = byClass(body, "kcol").find((c) => c.dataset.col === "ok");
+  assert.deepEqual(byClass(column, "kcard").map((c) => c.dataset.id), ["new", "mid", "old"]);
+});
+
 test("each card carries its project chip and mission data attributes", () => {
   resetDom();
   stubFetch(queueHandler);
