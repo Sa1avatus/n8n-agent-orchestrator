@@ -1,12 +1,11 @@
 (function () {
 // === pure engine core (no DOM, no fetch, no globals) ===
 const ENGINE_COLUMN = "engine_json";
+// The defaults live in settings_defaults.json; board_defaults.js is generated from it.
+const SHARED_DEFAULTS = (typeof BoardDefaults !== "undefined" ? BoardDefaults : require("./board_defaults.js"));
 const ENGINE_DEFAULTS = {
-  max_attempts_per_task: 5,
-  retry_delays: [15, 30, 60, 120, 300],
-  runner_url: "http://ahawr-runner:8700",
-  run_manager_workflow_id: "nhjwX1G7FiVTO2Ah",
-  telegram_chat_id: "",
+  ...SHARED_DEFAULTS.engine,
+  runner_url: SHARED_DEFAULTS.runner.url,
 };
 const LEGACY_COLUMNS = {
   max_attempts_per_task: "max_attempts_per_task",
@@ -72,6 +71,8 @@ const LEGACY_ERROR_RULES = [
         "no longer available",
         "no provider serves",
         "model not found",
+        "cloudflare",
+        "attention required",
       ],
     },
     action: "retry",

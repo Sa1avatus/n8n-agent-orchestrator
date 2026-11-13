@@ -13,14 +13,16 @@ const RETRIEVAL_NAMES = {
   reviewer_max_tokens: "retrieval_reviewer_max_tokens",
   label: "retrieval_label",
 };
+// The defaults live in settings_defaults.json; board_defaults.js is generated from it.
+const SHARED_RETRIEVAL = (typeof BoardDefaults !== "undefined" ? BoardDefaults : require("./board_defaults.js")).retrieval;
 const DEFAULTS = {
-  retrieval_enabled: false,
-  retrieval_url: "http://ahawr-retrieval:8500",
-  retrieval_corpora: [],
-  retrieval_timeout_ms: 120000,
-  retrieval_worker_max_tokens: 6000,
-  retrieval_reviewer_max_tokens: 5000,
-  retrieval_label: "",
+  retrieval_enabled: SHARED_RETRIEVAL.enabled,
+  retrieval_url: SHARED_RETRIEVAL.url,
+  retrieval_corpora: SHARED_RETRIEVAL.corpora,
+  retrieval_timeout_ms: SHARED_RETRIEVAL.timeout_ms,
+  retrieval_worker_max_tokens: SHARED_RETRIEVAL.worker_max_tokens,
+  retrieval_reviewer_max_tokens: SHARED_RETRIEVAL.reviewer_max_tokens,
+  retrieval_label: SHARED_RETRIEVAL.label,
 };
 const LEGACY_COLUMN_OVERRIDES = { [CORPORA_NAME]: "retrieval_corpora_json" };
 const INTEGER_MINIMUMS = {

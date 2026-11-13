@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 from typing import IO, Any
 
+from ahawr_runner.config import DEFAULT_EVENT_RETENTION_DAYS
 from ahawr_runner.contract_schema import validate_run_event
 
 MAX_TEXT = 20_000
@@ -299,7 +300,7 @@ class EventLog:
     def __init__(
         self,
         directory: Path,
-        retention_days: int = 14,
+        retention_days: int = DEFAULT_EVENT_RETENTION_DAYS,
         event_schema_version: bool = False,
     ) -> None:
         self.directory = directory

@@ -18,6 +18,8 @@ _RAG_START = re.compile(
     re.MULTILINE,
 )
 _RAG_END = "=== END RETRIEVED CONTEXT ==="
+FILENAME_SLUG_CHARS = 48
+FILENAME_RUN_ID_CHARS = 12
 
 
 def rag_blocks(text: str) -> list[dict[str, Any]]:
@@ -246,6 +248,8 @@ def session_markdown(session_id: str, runs: list[dict[str, Any]]) -> str:
 
 
 def filename(run: dict[str, Any], suffix: str, prefix: str = "") -> str:
-    slug = re.sub(r"[^A-Za-z0-9]+", "-", str(run.get("title") or "")).strip("-")[:48]
-    rid = str(run.get("run_id") or run.get("session_id") or "run").replace(":", "-")[-12:]
+    title = re.sub(r"[^A-Za-z0-9]+", "-", str(run.get("title") or ""))
+    slug = title.strip("-")[:FILENAME_SLUG_CHARS]
+    raw_id = str(run.get("run_id") or run.get("session_id") or "run")
+    rid = raw_id.replace(":", "-")[-FILENAME_RUN_ID_CHARS:]
     return f"ahawr-{prefix}{run.get('role') or 'run'}-{slug or 'untitled'}-{rid}.{suffix}"

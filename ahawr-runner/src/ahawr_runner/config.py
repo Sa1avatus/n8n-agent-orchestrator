@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from ahawr_runner import settings_defaults
 from ahawr_runner.local_pricing import parse_rates
 
 # The fallback profile role used when a requested role has no profile (Settings.profile).
@@ -224,7 +225,12 @@ DEFAULT_RETRY_INPUT_CHARS = 32_000
 # in seconds, and the loopback URL of the think proxy inside the runner container.
 DEFAULT_COMPACT_TIMEOUT_SECONDS = 600
 DEFAULT_WATCHDOG_INTERVAL_SECONDS = 60
-DEFAULT_THINK_PROXY_URL = "http://127.0.0.1:8700"
+DEFAULT_EVENT_RETENTION_DAYS = 14
+DEFAULT_MEM_GUARD_PROC_MB = 5000
+DEFAULT_MEM_GUARD_CGROUP_PERCENT = 85
+DEFAULT_THINK_LOOP_HOLD_STEPS = 12
+DEFAULT_THINK_STUCK_NOEDIT_STEPS = 12
+DEFAULT_THINK_PROXY_URL = settings_defaults.runner_loopback_url()
 
 # Context-window limits the local provider's compaction settings must stay inside. The local
 # model's window is 65536 tokens; the autocompact threshold must leave room for one large
@@ -707,8 +713,8 @@ class Settings:
     think_off_after_seconds: int = 0
     think_off_after_steps: int = 0
     think_loop_repeats: int = 4
-    think_loop_hold_steps: int = 12
-    think_stuck_noedit_steps: int = 12
+    think_loop_hold_steps: int = DEFAULT_THINK_LOOP_HOLD_STEPS
+    think_stuck_noedit_steps: int = DEFAULT_THINK_STUCK_NOEDIT_STEPS
     think_stuck_errors: int = 3
     think_flag_file: str = ""
     # a run whose provider endpoint reports an engine that ignores the client's thinking settings
@@ -724,7 +730,7 @@ class Settings:
     # memory guard (mem_guard.py): kill a process that holds more than this many MB of
     # anonymous memory (0 = off) or the biggest one when the container passes this share
     # of its limit
-    mem_guard_proc_mb: int = 5000
+    mem_guard_proc_mb: int = DEFAULT_MEM_GUARD_PROC_MB
     # data-segment limit (RLIMIT_DATA) of the claude process and everything the Worker
     # starts: a script that allocates more gets MemoryError with a traceback (it can fix
     # itself) instead of an OOM kill; a memory-mapped file is not counted. 0 = off
@@ -733,7 +739,7 @@ class Settings:
     # git_snapshot_keep are kept; off by default (docker-compose.yml turns it on)
     worker_git_snapshot: bool = False
     git_snapshot_keep: int = 100
-    mem_guard_cgroup_percent: int = 85
+    mem_guard_cgroup_percent: int = DEFAULT_MEM_GUARD_CGROUP_PERCENT
     # watchdog (runs.py): every interval, a run's CLI process that used more than
     # cpu_seconds of CPU since the run's last event is killed as child_hung, and one
     # with no live parent as orphan
@@ -756,7 +762,7 @@ class Settings:
     providers: dict[str, ProviderProfile] = field(default_factory=dict)
     # Activity log for the dashboard: token deltas, retention.
     live_tokens: bool = True
-    event_retention_days: int = 14
+    event_retention_days: int = DEFAULT_EVENT_RETENTION_DAYS
     # Steer runs to ``ahawr-search`` with a PreToolUse hook (search_hook.py): exploratory greps are
     # refused until the session has used it, then once per ``search_first_every`` (0 = never again).
     search_first: bool = False
@@ -885,8 +891,12 @@ class Settings:
             think_off_after_seconds=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_SECONDS", 0),
             think_off_after_steps=_int(env, "CLAUDE_RUNNER_THINK_OFF_AFTER_STEPS", 0),
             think_loop_repeats=_int(env, "CLAUDE_RUNNER_THINK_LOOP_REPEATS", 4),
-            think_loop_hold_steps=_int(env, "CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS", 12),
-            think_stuck_noedit_steps=_int(env, "CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", 12),
+            think_loop_hold_steps=_int(
+                env, "CLAUDE_RUNNER_THINK_LOOP_HOLD_STEPS", DEFAULT_THINK_LOOP_HOLD_STEPS
+            ),
+            think_stuck_noedit_steps=_int(
+                env, "CLAUDE_RUNNER_THINK_STUCK_NOEDIT_STEPS", DEFAULT_THINK_STUCK_NOEDIT_STEPS
+            ),
             think_stuck_errors=_int(env, "CLAUDE_RUNNER_THINK_STUCK_ERRORS", 3),
             think_flag_file=env.get("CLAUDE_RUNNER_THINK_FLAG_FILE", "").strip(),
             think_proxy=_bool(env, "CLAUDE_RUNNER_THINK_PROXY", False),
@@ -898,11 +908,15 @@ class Settings:
             think_proxy_url=(
                 env.get("CLAUDE_RUNNER_THINK_PROXY_URL", DEFAULT_THINK_PROXY_URL).strip()
             ),
-            mem_guard_proc_mb=_int(env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", 5000),
+            mem_guard_proc_mb=_int(
+                env, "CLAUDE_RUNNER_MEM_GUARD_PROC_MB", DEFAULT_MEM_GUARD_PROC_MB
+            ),
             proc_data_limit_mb=_int(env, "CLAUDE_RUNNER_PROC_DATA_LIMIT_MB", 4096),
             worker_git_snapshot=_bool(env, "CLAUDE_RUNNER_WORKER_GIT_SNAPSHOT", False),
             git_snapshot_keep=_int(env, "CLAUDE_RUNNER_GIT_SNAPSHOT_KEEP", 100, 1),
-            mem_guard_cgroup_percent=_int(env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", 85),
+            mem_guard_cgroup_percent=_int(
+                env, "CLAUDE_RUNNER_MEM_GUARD_CGROUP_PERCENT", DEFAULT_MEM_GUARD_CGROUP_PERCENT
+            ),
             watchdog_interval_seconds=_int(
                 env, "CLAUDE_RUNNER_WATCHDOG_INTERVAL_SECONDS", DEFAULT_WATCHDOG_INTERVAL_SECONDS, 1
             ),
@@ -918,7 +932,9 @@ class Settings:
             tools=env.get("CLAUDE_RUNNER_TOOLS", "").strip(),
             providers=_providers(env, hermes_engine_enabled),
             live_tokens=_bool(env, "CLAUDE_RUNNER_LIVE_TOKENS", True),
-            event_retention_days=_int(env, "CLAUDE_RUNNER_EVENT_RETENTION_DAYS", 14),
+            event_retention_days=_int(
+                env, "CLAUDE_RUNNER_EVENT_RETENTION_DAYS", DEFAULT_EVENT_RETENTION_DAYS
+            ),
             search_first=_bool(env, "CLAUDE_RUNNER_SEARCH_FIRST", False),
             search_first_roles=tuple(
                 _list(env.get("CLAUDE_RUNNER_SEARCH_FIRST_ROLES")) or ["worker"]

@@ -58,6 +58,7 @@ QaStatus = Literal["queued", "running", "done", "error", "timeout"]
 QaVerdict = Literal["pass", "fail", "skipped", "blocked"]
 QA_VERDICT_TEXT_MAX_CHARS = 2000
 QA_VERDICTS_MAX = 100
+CLI_VERSION_TIMEOUT_SECONDS = 30  # the claude --version probe
 
 
 QaLayer = Literal["regression", "api", "ui", "agent"]
@@ -198,7 +199,7 @@ async def _cli_version(settings: Settings) -> str:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        out, _ = await asyncio.wait_for(proc.communicate(), 30)
+        out, _ = await asyncio.wait_for(proc.communicate(), CLI_VERSION_TIMEOUT_SECONDS)
         return out.decode("utf-8", "replace").strip() or f"exit {proc.returncode}"
     except (OSError, TimeoutError) as exc:
         return f"unavailable: {exc}"
@@ -358,7 +359,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="ahawr-runner", version="1.1.120", lifespan=lifespan)
+    app = FastAPI(title="ahawr-runner", version="1.1.130", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:

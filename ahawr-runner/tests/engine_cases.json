@@ -288,6 +288,12 @@
       "expect": { "rule_id": "legacy-transient-words", "action": "retry", "retries": 3 }
     },
     {
+      "name": "legacy_cloudflare_403_is_transient",
+      "rules": [],
+      "error": { "http": 403, "code": "", "text": "Failed to authenticate. API Error: 403 Attention Required! | Cloudflare" },
+      "expect": { "rule_id": "legacy-transient-words", "action": "retry", "retries": 3 }
+    },
+    {
       "name": "legacy_no_match_is_permanent",
       "rules": [],
       "error": { "http": 418, "code": "", "text": "teapot" },

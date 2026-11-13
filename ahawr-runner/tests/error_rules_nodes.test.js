@@ -11,7 +11,7 @@ const BoardEngine = require(path.join(__dirname, "..", "src", "ahawr_runner", "b
 
 const ROOT = path.join(__dirname, "..", "..");
 const STAGED_EXPORT = path.join(ROOT, "scratchpad", "live_run_manager_export.json");
-const PATCHES = ["failover_patch.py", "transient_400_patch.py", "error_rules_patch.py"];
+const PATCHES = ["failover_patch.py", "transient_400_patch.py", "cloudflare_403_patch.py", "error_rules_patch.py"];
 const NODES = ["Evaluate Status", "Retry Controller"];
 // The Retry Controller default for max_retries; the legacy rules carry retries null and leave the count to it.
 const ROLE_MAX_RETRIES = 3;

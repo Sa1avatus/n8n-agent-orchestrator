@@ -129,6 +129,24 @@ def is_stale_active(live: LiveState, now: datetime | None = None) -> bool:
     return age_hours > RUNNING_STALE_HOURS
 
 
+def never_ran(live: LiveState) -> bool:
+    """True for an ``active`` row that was seeded but never ran: no write time, no run, no session.
+
+    The plan gate seeds the rows of part missions, and an old bench row can stay like that; both
+    are waiting, not running. A mission that runs has written ``updated_at`` and a session or run id.
+    """
+    return live.status == "active" and not live.updated_at and not any(
+        (
+            live.worker_session_id,
+            live.worker_run_id,
+            live.architect_run_id,
+            live.architect_session_id,
+            live.reviewer_run_id,
+            live.reviewer_session_id,
+        )
+    )
+
+
 class TaskView(BaseModel):
     """Per-task status derived from the Live State row and the event log.
 
@@ -259,6 +277,7 @@ class BoardStore(ABC):
             if (live := self.get_live_state(mission.state_namespace)) is not None
             and live.status == "active"
             and not is_stale_active(live)
+            and not never_ran(live)
         ]
 
     def mission_groups(self) -> dict[str, list[str]]:
@@ -286,8 +305,11 @@ class BoardStore(ABC):
                 continue
             live = self.get_live_state(mission.state_namespace)
             status = live.status if live is not None else None
-            if status == "active" and live is not None and not is_stale_active(live):
+            running = live is not None and not is_stale_active(live) and not never_ran(live)
+            if status == "active" and running:
                 groups["running"].append(mission.mission_id)
+            elif status == "active" and live is not None and never_ran(live):
+                groups["queued"].append(mission.mission_id)  # seeded by the plan gate, not started
             elif status == "active" and mission.mission_id in queued_ids:
                 # interrupted but still in the queue: the queue resumes it, so it waits
                 groups["queued"].append(mission.mission_id)

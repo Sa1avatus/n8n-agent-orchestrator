@@ -89,7 +89,7 @@ class TestBoardReads:
     def test_running_missions_selects_only_active(self, board: InMemoryBoardStore):
         board._missions["m1"] = _mission("m1", "sk1")
         board._missions["m2"] = _mission("m2", "sk2")
-        board._live["sk1"] = LiveState(state_key="sk1", status="active")
+        board._live["sk1"] = LiveState(state_key="sk1", status="active", worker_run_id="run_1")
         board._live["sk2"] = LiveState(state_key="sk2", status="completed")
         assert [m.mission_id for m in board.running_missions()] == ["m1"]
 
@@ -99,7 +99,7 @@ class TestMissionGroups:
                                                                        board: InMemoryBoardStore):
         # running: enabled + Live State active
         board._missions["m1"] = _mission("m1", "sk1")
-        board._live["sk1"] = LiveState(state_key="sk1", status="active")
+        board._live["sk1"] = LiveState(state_key="sk1", status="active", worker_run_id="run_1")
         # completed: enabled + completed
         board._missions["m2"] = _mission("m2", "sk2")
         board._live["sk2"] = LiveState(state_key="sk2", status="completed")
@@ -137,6 +137,21 @@ class TestMissionGroups:
         assert groups["running"] == ["m1", "m3"]
         assert groups["not_completed"] == ["m2"]
         assert [m.mission_id for m in board.running_missions()] == ["m1", "m3"]
+
+    def test_seeded_active_row_without_a_run_is_queued_not_running(
+        self, board: InMemoryBoardStore
+    ):
+        board._missions["m1"] = _mission("m1", "sk1")
+        board._live["sk1"] = LiveState(state_key="sk1", status="active", task_index=0)
+        board._missions["m2"] = _mission("m2", "sk2")
+        board._live["sk2"] = LiveState(
+            state_key="sk2", status="active", updated_at=datetime.now(UTC).isoformat(),
+            worker_run_id="run_1",
+        )
+        groups = board.mission_groups()
+        assert groups["queued"] == ["m1"]
+        assert groups["running"] == ["m2"]
+        assert [m.mission_id for m in board.running_missions()] == ["m2"]
 
     def test_interrupted_mission_in_the_queue_waits_instead_of_being_not_completed(
         self, board: InMemoryBoardStore
@@ -229,7 +244,7 @@ class TestQueue:
 class TestRunningGuard:
     def _make_running(self, board: InMemoryBoardStore, mission_id: str) -> None:
         board._missions[mission_id] = _mission(mission_id, mission_id)
-        board._live[mission_id] = LiveState(state_key=mission_id, status="active")
+        board._live[mission_id] = LiveState(state_key=mission_id, status="active", worker_run_id="run_1")
 
     def test_move_queue_refuses_a_running_mission(self, board: InMemoryBoardStore):
         self._make_running(board, "m1")

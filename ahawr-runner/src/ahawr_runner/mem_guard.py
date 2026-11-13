@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ahawr_runner.config import DEFAULT_MEM_GUARD_CGROUP_PERCENT, DEFAULT_MEM_GUARD_PROC_MB
+
 log = logging.getLogger("ahawr_runner.mem_guard")
 
 PROTECTED_NAMES = ("claude", "ahawr-runner")
@@ -143,8 +145,8 @@ class MemGuard:
         self,
         store: Any,
         events: Any | None,
-        proc_limit_mb: int = 3072,
-        cgroup_percent: int = 85,
+        proc_limit_mb: int = DEFAULT_MEM_GUARD_PROC_MB,
+        cgroup_percent: int = DEFAULT_MEM_GUARD_CGROUP_PERCENT,
         interval: float = 1.0,
         proc_root: Path = Path("/proc"),
         cgroup_root: Path = Path("/sys/fs/cgroup"),

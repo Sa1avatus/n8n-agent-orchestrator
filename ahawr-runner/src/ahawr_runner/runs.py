@@ -52,6 +52,10 @@ from .think_profiles import parse_profiles, resolve_profile
 log = logging.getLogger("ahawr_runner.runs")
 
 STDERR_TAIL = 8000
+STDERR_DETAIL_CHARS = 2000  # the end of stderr kept in a run's details
+PROCESS_STREAM_LIMIT_BYTES = 64 * 1024 * 1024  # the biggest single stdout line of a CLI run
+GROUP_POLL_SECONDS = 0.05  # how often a killed process group is checked for its exit
+TASK_FINISH_WAIT_SECONDS = 30  # how long a cancelled run's task may take to wind down
 
 # A fresh-session retry input carries the task, the review findings, the previous report
 # and the previous session's digest (newest last). Cut only the digest if it alone would
@@ -692,7 +696,7 @@ class RunManager:
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    limit=64 * 1024 * 1024,
+                    limit=PROCESS_STREAM_LIMIT_BYTES,
                     start_new_session=True,
                 )
             except OSError as exc:
@@ -768,7 +772,7 @@ class RunManager:
                 outcome.error_code = watchdog_code
                 outcome.error_message = WATCHDOG_MESSAGES[watchdog_code]
             if stderr.strip():
-                outcome.details["stderr_tail"] = stderr[-2000:]
+                outcome.details["stderr_tail"] = stderr[-STDERR_DETAIL_CHARS:]
             if state.compact_result:
                 outcome.details["compact_result"] = state.compact_result
             self._finish(run_id, outcome, state)
@@ -1033,7 +1037,7 @@ class RunManager:
                 "status": outcome.status,
                 "error_code": outcome.error_code,
                 "error": outcome.error_message,
-                "stderr_tail": str(details.get("stderr_tail") or "")[-2000:],
+                "stderr_tail": str(details.get("stderr_tail") or "")[-STDERR_DETAIL_CHARS:],
             },
         )
         self.events.close(run_id)
@@ -1060,7 +1064,7 @@ class RunManager:
                 os.killpg(proc.pid, sig)
             deadline = time.monotonic() + grace
             while _group_alive(proc.pid) and time.monotonic() < deadline:
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(GROUP_POLL_SECONDS)
 
     async def _terminate_proc(self, run_id: str) -> None:
         """Terminate the run's CLI process tree (SIGINT -> SIGTERM -> SIGKILL with grace)
@@ -1191,7 +1195,7 @@ class RunManager:
             task = self._tasks.get(run_id)
             if task is not None:
                 with contextlib.suppress(Exception):
-                    await asyncio.wait_for(asyncio.shield(task), 30)
+                    await asyncio.wait_for(asyncio.shield(task), TASK_FINISH_WAIT_SECONDS)
         run = self.store.get_run(run_id)
         assert run is not None
         return self.public(run)

@@ -18,7 +18,9 @@ from typing import Any
 
 import httpx
 
-DEFAULT_URL = "http://ahawr-retrieval:8500"
+from ahawr_runner import settings_defaults
+
+DEFAULT_URL = settings_defaults.retrieval_url()
 # A search takes 0.2-0.5 s, but the first search of a folder indexes it inside the request:
 # measured 8-9 s for 30 small files on an idle service, so 10 s timed out for every new folder
 # and each retry hit the same wall. A refused connection still fails at once.

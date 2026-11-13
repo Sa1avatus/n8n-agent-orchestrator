@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from . import think_policy
+from .config import DEFAULT_THINK_LOOP_HOLD_STEPS
 from .store import Store
 
 log = logging.getLogger("ahawr_runner.think_switch")
@@ -45,6 +46,7 @@ RUN_MAX_TICKS = 4_320
 NOEDIT_WARMUP_STEPS = 6  # the reading and planning steps of a run, before the no-edit count applies
 EDIT_TOOLS = ("Edit", "Write", "NotebookEdit")
 ERROR_SIGNATURE_MAX_CHARS = 160  # the start of an error output that tells two errors apart
+LOG_TAIL_BYTES = 262_144  # the end of a run's event log that the no-edit count reads
 RECENT_ERRORS_KEPT = 16  # error signatures kept per run; the oldest is forgotten first
 
 
@@ -121,7 +123,7 @@ class ThinkSwitch:
         after_steps: int = 0,
         default_policy: str = "",
         loop_repeats: int = 0,
-        loop_hold_steps: int = 12,
+        loop_hold_steps: int = DEFAULT_THINK_LOOP_HOLD_STEPS,
         noedit_steps: int = 0,
         error_repeats: int = 0,
     ) -> None:
@@ -330,7 +332,7 @@ class ThinkSwitch:
             with (self.events.directory / f"{run_id}.jsonl").open("rb") as handle:
                 handle.seek(0, 2)
                 size = handle.tell()
-                handle.seek(max(0, size - 262144))
+                handle.seek(max(0, size - LOG_TAIL_BYTES))
                 data = handle.read()
         except OSError:
             return [], 0, 0
@@ -339,7 +341,7 @@ class ThinkSwitch:
         # shortcut: only the last 256 KB of the log is read, so an edit older than that is not seen
         # and a long run looks unedited; keep a per-run offset like _steps to upgrade
         edit_step = 0
-        for line in data.splitlines()[1:] if size > 262144 else data.splitlines():
+        for line in data.splitlines()[1:] if size > LOG_TAIL_BYTES else data.splitlines():
             if b'"tool_use"' not in line:
                 continue
             try:

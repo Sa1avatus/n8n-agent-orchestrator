@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 
+from . import settings_defaults
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ahawr-runner")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8700)
+    parser.add_argument("--port", type=int, default=settings_defaults.runner_port())
     args = parser.parse_args(argv)
 
     import uvicorn

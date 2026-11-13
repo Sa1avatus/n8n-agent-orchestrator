@@ -37,6 +37,11 @@ BOOTSTRAP_SEED = 1
 MC_SAMPLES = 10_000
 MC_SEED = 7
 PROPOSED_SLOTS = 8
+THINK_MODE_MIN_SHARE = 0.3  # share of thinking steps from which a run counts as 'think'
+NOTHINK_MODE_MAX_SHARE = 0.05  # share up to which a run counts as 'nothink'
+INTERVAL_LOW_QUANTILE = 0.05
+INTERVAL_HIGH_QUANTILE = 0.95
+MIN_HOURS = 1e-9  # keeps a per-hour rate finite when the sampled time is zero
 
 #: Built-in policy templates.
 TEMPLATES: dict[str, dict[str, Any]] = {
@@ -245,7 +250,11 @@ def _think_share(steps: list[dict[str, Any]]) -> float:
 def _mode_bucket(share: float) -> str:
     """The mode of a run: "think" / "nothink" / "mixed" from the share of
     thinking steps."""
-    return "think" if share >= 0.3 else ("nothink" if share <= 0.05 else "mixed")
+    return (
+        "think"
+        if share >= THINK_MODE_MIN_SHARE
+        else ("nothink" if share <= NOTHINK_MODE_MAX_SHARE else "mixed")
+    )
 
 
 def _passed(attempt: Attempt) -> bool:
@@ -303,7 +312,10 @@ def _bootstrap_interval(
         ys = [rng.choice(y_values) for _ in range(len(y_values))]
         values.append(_mean(xs) - _mean(ys))
     values.sort()
-    return (_percentile(values, 0.05), _percentile(values, 0.95))
+    return (
+        _percentile(values, INTERVAL_LOW_QUANTILE),
+        _percentile(values, INTERVAL_HIGH_QUANTILE),
+    )
 
 
 def _beta(
@@ -444,7 +456,7 @@ def _variant_rate_draw(
         draws = max(5, len(seconds))
     hours = _mean([rng.choice(seconds) for _ in range(draws)]) / 3600.0
     if hours <= 0.0:
-        hours = 1e-9
+        hours = MIN_HOURS
     return p / hours
 
 

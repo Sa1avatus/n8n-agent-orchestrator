@@ -45,6 +45,7 @@ from .sources import RunnerSource, SourceError, _check
 logger = logging.getLogger(__name__)
 
 HOST_CHECK_NOTE = "checked on the host"
+PROBE_TIMEOUT_SECONDS = 5.0  # one readiness probe of a service
 
 # A mission id is a slug: lower-case letters, digits and separator characters
 # (hyphen, underscore, dot); it must not start with a separator.
@@ -132,7 +133,7 @@ def check_required_files(
 
 
 async def check_runner_health(
-    runner_url: str, api_key: str = "", timeout: float = 5.0
+    runner_url: str, api_key: str = "", timeout: float = PROBE_TIMEOUT_SECONDS
 ) -> dict[str, Any]:
     """The ahawr-runner service: ``GET {url}/health`` must answer ``ok``."""
     if not runner_url:
@@ -153,7 +154,7 @@ async def check_runner_health(
 
 
 async def check_litellm_health(
-    litellm_url: str, master_key: str = "", timeout: float = 5.0
+    litellm_url: str, master_key: str = "", timeout: float = PROBE_TIMEOUT_SECONDS
 ) -> dict[str, Any]:
     """LiteLLM: ``GET {url}/health/liveliness`` must answer 200."""
     if not litellm_url:
@@ -172,7 +173,7 @@ async def check_litellm_health(
 
 
 def check_llama_model(
-    probe_url: str, api_key: str, worker_model: str, timeout: float = 5.0
+    probe_url: str, api_key: str, worker_model: str, timeout: float = PROBE_TIMEOUT_SECONDS
 ) -> dict[str, Any]:
     """The local Worker model: it must be listed by llama-server (``/v1/models``).
 

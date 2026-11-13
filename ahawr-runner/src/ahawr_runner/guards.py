@@ -33,6 +33,7 @@ logger = logging.getLogger("ahawr_runner.guards")
 # are ever logged; their values are never put in logs, state, or results.
 TELEGRAM_TOKEN_VAR = "DASHBOARD_TELEGRAM_BOT_TOKEN"
 TELEGRAM_CHAT_VAR = "DASHBOARD_TELEGRAM_CHAT_ID"
+TELEGRAM_SEND_TIMEOUT_SECONDS = 30
 
 # Backoff between failed checks of one guard: 60 s doubling per consecutive
 # error, capped at one hour.  One failed check never delays another guard.
@@ -491,7 +492,7 @@ class Notifier:
         )
 
         def _do_urlopen() -> int:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=TELEGRAM_SEND_TIMEOUT_SECONDS) as resp:
                 return int(getattr(resp, "status", 0) or 0)
 
         try:

@@ -5,6 +5,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from ahawr_runner import settings_defaults
 from ahawr_runner.features_config import _is_integer, _reject_constant
 
 PREFIX = "overrides_json"
@@ -20,15 +21,7 @@ RETRIEVAL_NAMES: dict[str, str] = {
     "reviewer_max_tokens": "retrieval_reviewer_max_tokens",
     "label": "retrieval_label",
 }
-DEFAULTS: dict[str, Any] = {
-    "retrieval_enabled": False,
-    "retrieval_url": "http://ahawr-retrieval:8500",
-    "retrieval_corpora": [],
-    "retrieval_timeout_ms": 120000,
-    "retrieval_worker_max_tokens": 6000,
-    "retrieval_reviewer_max_tokens": 5000,
-    "retrieval_label": "",
-}
+DEFAULTS: dict[str, Any] = settings_defaults.retrieval_defaults("retrieval_corpora")
 LEGACY_COLUMNS: dict[str, str] = {name: name for name in DEFAULTS} | {
     CORPORA_NAME: "retrieval_corpora_json",
 }

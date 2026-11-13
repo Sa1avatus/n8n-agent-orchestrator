@@ -6,13 +6,12 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+from . import settings_defaults
+
 ENGINE_COLUMN = "engine_json"
 ENGINE_DEFAULTS: dict[str, Any] = {
-    "max_attempts_per_task": 5,
-    "retry_delays": [15, 30, 60, 120, 300],
-    "runner_url": "http://ahawr-runner:8700",
-    "run_manager_workflow_id": "nhjwX1G7FiVTO2Ah",
-    "telegram_chat_id": "",
+    **settings_defaults.section("engine"),
+    "runner_url": settings_defaults.runner_url(),
 }
 LEGACY_COLUMNS: dict[str, str] = {
     "max_attempts_per_task": "max_attempts_per_task",
@@ -79,6 +78,8 @@ LEGACY_ERROR_RULES: list[dict[str, Any]] = [
                 "no longer available",
                 "no provider serves",
                 "model not found",
+                "cloudflare",
+                "attention required",
             ]
         },
         "action": "retry",

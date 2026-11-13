@@ -28,7 +28,7 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-from ahawr_runner import qa_app, qa_regression, qa_runner, qa_smoke
+from ahawr_runner import qa_app, qa_regression, qa_runner, qa_smoke, settings_defaults
 from ahawr_runner.config import Settings, map_host_path
 from ahawr_runner.guard_heartbeat import TIME_FORMAT
 from ahawr_runner.qa_agent_prompt import build_qa_agent_prompt
@@ -55,7 +55,7 @@ from ahawr_runner.roles_config import qa_project_apps
 logger = logging.getLogger("ahawr_runner.qa_worker")
 
 RUNNER_URL_ENV = "CLAUDE_RUNNER_URL"
-DEFAULT_RUNNER_URL = "http://ahawr-runner:8700"
+DEFAULT_RUNNER_URL = settings_defaults.runner_url()
 BEARER_ENV = "CLAUDE_RUNNER_API_KEY"
 HTTP_TIMEOUT_SECONDS = 15
 POLL_SECONDS = 60

@@ -63,7 +63,9 @@
           "too many requests",
           "no longer available",
           "no provider serves",
-          "model not found"
+          "model not found",
+          "cloudflare",
+          "attention required"
         ]
       },
       "action": "retry",

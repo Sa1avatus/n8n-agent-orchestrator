@@ -5,17 +5,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from ahawr_runner import settings_defaults
 from ahawr_runner.features_config import _is_integer, _reject_constant
 
-DEFAULTS: dict[str, Any] = {
-    "retrieval_enabled": False,
-    "retrieval_url": "http://ahawr-retrieval:8500",
-    "retrieval_corpora_json": [],
-    "retrieval_timeout_ms": 120000,
-    "retrieval_worker_max_tokens": 6000,
-    "retrieval_reviewer_max_tokens": 5000,
-    "retrieval_label": "",
-}
+DEFAULTS: dict[str, Any] = settings_defaults.retrieval_defaults("retrieval_corpora_json")
 JSON_KEYS: dict[str, str] = {
     "enabled": "retrieval_enabled",
     "url": "retrieval_url",

@@ -35,7 +35,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
-from . import board_api, export
+from . import board_api, export, settings_defaults
 from .board_common import _unavailable
 from .board_ops_store import InMemoryOpsStore
 from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
@@ -86,7 +86,7 @@ LOOPBACK_BIND_HOST = "127.0.0.1"
 
 @dataclass(frozen=True)
 class DashboardSettings:
-    runner_url: str = "http://ahawr-runner:8700"
+    runner_url: str = settings_defaults.runner_url()
     runner_api_key: str = ""
     host_actions_operator_key: str = ""
     hermes_url: str = ""
