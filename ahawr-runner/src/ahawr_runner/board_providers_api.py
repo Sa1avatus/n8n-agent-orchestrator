@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import APIRouter, FastAPI, Query, Request
 
+from ahawr_runner import settings_defaults
 from ahawr_runner.board import ConflictError, Mission
 from ahawr_runner.board_api import _require_dashboard_header, _store_guard
 from ahawr_runner.config import ProviderProfile
@@ -43,7 +44,8 @@ PostFn = Callable[[str, dict[str, str], dict[str, Any], float], int]
 GetFn = Callable[[str, dict[str, str], float], tuple[int, Any]]
 PROVIDER_CALL_TIMEOUT_SECONDS = 30.0
 ANTHROPIC_VERSION = "2023-06-01"
-KEY_MAX_CHARS = 4096
+LIMITS = settings_defaults.section("provider_limits")
+KEY_MAX_CHARS = int(LIMITS["key_max_chars"])
 MODELS_PATHS = {"anthropic": "/v1/models"}  # every other API type lists at /models
 ANTHROPIC_HOST = "api.anthropic.com"
 MODELS_PAGE_SIZE = 1000  # the Anthropic list is paged (20 by default); 1000 is its largest page
@@ -127,26 +129,26 @@ def _capabilities(key: str, value: Any) -> None:
 
 
 PROVIDER_CHECKS: dict[str, Validator] = {
-    "label": _text(100),
+    "label": _text(LIMITS["label_max_chars"]),
     "api_type": _api_type,
     "base_url": _base_url,
     "enabled": _flag,
-    "context_tokens": _number(1, 10_000_000, whole=True),
-    "compact_pct": _number(1, 100, whole=False),
-    "compact_min_pct": _number(1, 100, whole=False),
-    "max_output_tokens": _number(1, 1_000_000, whole=True),
-    "tools": _text(500),
+    "context_tokens": _number(*LIMITS["context_tokens"], whole=True),
+    "compact_pct": _number(*LIMITS["compact_pct"], whole=False),
+    "compact_min_pct": _number(*LIMITS["compact_min_pct"], whole=False),
+    "max_output_tokens": _number(*LIMITS["max_output_tokens"], whole=True),
+    "tools": _text(LIMITS["tools_max_chars"]),
     "search_first": _flag,
     "retry_fresh_session": _flag,
-    "notes": _text(2000),
+    "notes": _text(LIMITS["notes_max_chars"]),
 }
 PROVIDER_NON_NULL = frozenset({"enabled", "api_type", "base_url"})
 PROVIDER_REQUIRED = frozenset({"api_type", "base_url"})
 
 MODEL_CHECKS: dict[str, Validator] = {
-    "alias": _text(100),
-    "price_input_per_mtok_usd": _number(0, 1000, whole=False),
-    "price_output_per_mtok_usd": _number(0, 1000, whole=False),
+    "alias": _text(LIMITS["alias_max_chars"]),
+    "price_input_per_mtok_usd": _number(*LIMITS["price_per_mtok_usd"], whole=False),
+    "price_output_per_mtok_usd": _number(*LIMITS["price_per_mtok_usd"], whole=False),
     "supports_thinking": _flag,
     "api_type": _api_type,
     "capability_overrides": _capabilities,

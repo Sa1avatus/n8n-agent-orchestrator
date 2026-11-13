@@ -1,7 +1,7 @@
 # Engine-log snapshot collector (board.engine_samples)
 
-Prepared, NOT applied: nothing here was run. The operator applies the table, the compose
-mount and the container restart; the code is already in the runner (`src/ahawr_runner/engine_collector.py`,
+Applied: the table, the compose mount and the container restart are done, and `stats_engine_sampler`
+is enabled in `features_json` (the sampler runs and `board.engine_samples` fills). The code is in the runner (`src/ahawr_runner/engine_collector.py`,
 `src/ahawr_runner/engine_samples.py`, wired in `src/ahawr_runner/board_api.py:527`
 `start_engine_collector` and `src/ahawr_runner/dashboard.py:219`, stopped by the same lifespan's
 `finally` at `dashboard.py:223`; the start-up wiring is tested in `tests/test_engine_collector_wiring.py`
@@ -44,7 +44,7 @@ docker exec -i ahawr-postgres psql -U n8n -d n8n -c "DROP TABLE IF EXISTS board.
 The QA stack applies `docs/board-schema.sql` to its own temporary database automatically
 (`src/ahawr_runner/qa_stack.py:53,144`), so the QA gate needs no extra step.
 
-## Compose mount (operator step, patch not applied)
+## Compose mount (operator step, done)
 
 `docs/stats-collector-compose.patch` is a unified diff against the live `docker-compose.yml` (the
 ahawr-dashboard service). It adds the collector settings to the environment, one read-only volume

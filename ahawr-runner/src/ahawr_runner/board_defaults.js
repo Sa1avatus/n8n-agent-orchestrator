@@ -27,6 +27,34 @@ const DEFAULTS = {
     "worker_max_tokens": 6000,
     "reviewer_max_tokens": 5000,
     "label": ""
+  },
+  "provider_limits": {
+    "label_max_chars": 100,
+    "tools_max_chars": 500,
+    "notes_max_chars": 2000,
+    "alias_max_chars": 100,
+    "base_url_max_chars": 2048,
+    "key_max_chars": 4096,
+    "context_tokens": [
+      1,
+      10000000
+    ],
+    "compact_pct": [
+      1,
+      100
+    ],
+    "compact_min_pct": [
+      1,
+      100
+    ],
+    "max_output_tokens": [
+      1,
+      1000000
+    ],
+    "price_per_mtok_usd": [
+      0,
+      1000
+    ]
   }
 };
 if (typeof module !== "undefined" && module.exports) {

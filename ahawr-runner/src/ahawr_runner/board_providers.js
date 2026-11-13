@@ -84,7 +84,8 @@ const NO_TOOLS_WARNING = "no_tools";
 const PROVIDER_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const PROVIDER_NON_NULL = ["enabled", "api_type", "base_url"];
 const PROVIDER_REQUIRED = ["api_type", "base_url"];
-const BASE_URL_MAX_CHARS = 2048;
+const LIMITS = (typeof BoardDefaults !== "undefined" ? BoardDefaults : require("./board_defaults.js")).provider_limits;
+const BASE_URL_MAX_CHARS = LIMITS.base_url_max_chars;
 
 function getApiType(apiType) {
   const row = API_TYPES.find((candidate) => candidate.id === apiType);
@@ -167,18 +168,18 @@ function baseUrlCheck(key, value) {
 }
 
 const PROVIDER_CHECKS = {
-  label: textCheck(100),
+  label: textCheck(LIMITS.label_max_chars),
   api_type: apiTypeCheck,
   base_url: baseUrlCheck,
   enabled: flagCheck,
-  context_tokens: numberCheck(1, 10000000, true),
-  compact_pct: numberCheck(1, 100, false),
-  compact_min_pct: numberCheck(1, 100, false),
-  max_output_tokens: numberCheck(1, 1000000, true),
-  tools: textCheck(500),
+  context_tokens: numberCheck(...LIMITS.context_tokens, true),
+  compact_pct: numberCheck(...LIMITS.compact_pct, false),
+  compact_min_pct: numberCheck(...LIMITS.compact_min_pct, false),
+  max_output_tokens: numberCheck(...LIMITS.max_output_tokens, true),
+  tools: textCheck(LIMITS.tools_max_chars),
   search_first: flagCheck,
   retry_fresh_session: flagCheck,
-  notes: textCheck(2000),
+  notes: textCheck(LIMITS.notes_max_chars),
 };
 
 function checkFields(fields, checks, nonNull, required = []) {
