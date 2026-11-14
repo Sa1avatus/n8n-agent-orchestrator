@@ -9,11 +9,17 @@ from typing import Any
 
 from ahawr_runner import overrides_config
 from ahawr_runner.board import InMemoryBoardStore, LiveState, Mission, QueueEntry
-from ahawr_runner.board_pg import _LIVE_STATE_TABLE, _MISSIONS_TABLE, _QUEUE_TABLE
+from ahawr_runner.board_pg import (
+    _EVENT_LOG_TABLE,
+    _LIVE_STATE_TABLE,
+    _MISSIONS_TABLE,
+    _QUEUE_TABLE,
+)
 
 MISSIONS_TABLE = _MISSIONS_TABLE.strip('"')
 LIVE_STATE_TABLE = _LIVE_STATE_TABLE.strip('"')
 QUEUE_TABLE = _QUEUE_TABLE.strip('"')
+EVENT_LOG_TABLE = _EVENT_LOG_TABLE.strip('"')
 REQUIRED_TABLES = (MISSIONS_TABLE, LIVE_STATE_TABLE, QUEUE_TABLE)
 
 
@@ -22,6 +28,7 @@ class FixtureRows:
     missions: list[dict[str, Any]]
     live_state: list[dict[str, Any]]
     queue: list[dict[str, Any]]
+    events: list[dict[str, Any]]
     providers: list[dict[str, Any]]
 
 
@@ -44,8 +51,18 @@ def load_fixture(source: Path | dict[str, Any]) -> FixtureRows:
         missions=tables[MISSIONS_TABLE],
         live_state=tables[LIVE_STATE_TABLE],
         queue=tables[QUEUE_TABLE],
+        events=_rows(tables.get(EVENT_LOG_TABLE), EVENT_LOG_TABLE),
         providers=_providers(fixture.get("providers")),
     )
+
+
+def _rows(value: Any, table: str) -> list[dict[str, Any]]:
+    """An optional table: absent is empty, anything but a list of objects is an error."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise ValueError(f"table {table!r} is not a list of objects")
+    return value
 
 
 def _providers(value: Any) -> list[dict[str, Any]]:
@@ -88,6 +105,9 @@ def board_store_from_rows(rows: FixtureRows) -> InMemoryBoardStore:
             status=row.get("status") or None,
         )
         store._live[live.state_key] = live
+    # the task statuses (accepted, rejected, ...) are derived from the event log, as in Postgres
+    for row in rows.events:
+        store._events.setdefault(row["state_key"], []).append(dict(row))
     for position, row in enumerate(sorted(rows.queue, key=lambda r: int(r["position"]))):
         entry = QueueEntry(
             position=position,

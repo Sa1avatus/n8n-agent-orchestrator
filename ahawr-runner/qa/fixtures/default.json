@@ -187,6 +187,7 @@
       {
         "state_key": "sk_m01",
         "status": "active",
+        "worker_session_id": "session_fixture_m01",
         "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Map the parser\", \"objective\": \"List the entry points\", \"dependencies\": []}, {\"id\": \"T002\", \"title\": \"Rewrite the tokenizer\", \"objective\": \"Split the scanner\", \"dependencies\": [\"T001\"]}, {\"id\": \"T003\", \"title\": \"Write the tests\", \"objective\": \"Cover the tokenizer\", \"dependencies\": [\"T002\"]}, {\"id\": \"T004\", \"title\": \"Write the docs\", \"objective\": \"Describe the parser\", \"dependencies\": [\"T003\"]}], \"qa\": {\"needed\": true, \"reasons\": [\"ui regression and api coverage are checked on each run\"], \"scenarios\": [\"qa panel regression fail and skipped verdicts\"]}}",
         "task_index": 1,
         "task_attempt": 2
@@ -194,6 +195,7 @@
       {
         "state_key": "sk_m02",
         "status": "active",
+        "worker_session_id": "session_fixture_m02",
         "plan_json": "{\"tasks\": [{\"id\": \"T001\", \"title\": \"Pick the cache key\", \"objective\": \"Hash the request\", \"dependencies\": []}]}",
         "task_index": 0,
         "task_attempt": 1

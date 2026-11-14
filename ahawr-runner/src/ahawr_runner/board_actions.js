@@ -214,6 +214,15 @@ function confirmActions(missionId, action) {
 // (the flags route is the only board route that stores a pause marker;
 // there is no dedicated pause endpoint).
 async function doAction(action, missionId) {
+  if ((action === "first" || action === "last") && typeof BoardDnd !== "undefined") {
+    // a waiting mission without a queue row gets one before it is moved
+    try {
+      boardData = await BoardDnd.ensureQueued(missionId);
+    } catch (e) {
+      showState(e.message || t("action.failed", { action }));
+      return;
+    }
+  }
   const version = boardData ? boardData.version : null;
   let body = { mission_id: missionId };
   let url;

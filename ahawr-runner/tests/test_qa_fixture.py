@@ -63,6 +63,15 @@ def test_board_store_from_rows_seeds_missions_queue_and_live_state() -> None:
     assert mission is not None and mission.enabled is True and mission.version == 3.0
 
 
+def test_default_fixture_seeds_the_event_log_so_task_statuses_match_postgres() -> None:
+    store = board_store_from_rows(load_fixture(FIXTURES / "default.json"))
+    statuses = [task.status for task in store.task_views("sk_m01")]
+    # T001 passed review on its second attempt; without the event log it showed as rejected
+    assert statuses[0] == "accepted"
+    # m01 and m02 carry a worker session, so the board shows them running, not waiting
+    assert set(store.mission_groups()["running"]) == {"m01", "m02"}
+
+
 def test_default_fixture_seeds_a_provider_with_models_and_no_secret_in_the_view() -> None:
     store = board_store_from_rows(load_fixture(FIXTURES / "default.json"))
     provider = store.get_provider("qa-cloud")

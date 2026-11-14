@@ -497,6 +497,8 @@ def test_drag_below_drops_on_the_lower_part_of_the_target_card() -> None:
     assert position is not None
     assert position["x"] == pytest.approx(100.0)
     assert position["y"] == pytest.approx(85.0)
+    # the target card is scrolled to the middle first, so the drop point is inside the viewport
+    assert page.scripts == [("Metrics", qa_runner.CARD_ANCESTOR, qa_runner.SCROLL_TO_CENTER_JS)]
 
 
 def test_drag_below_fails_when_the_target_card_is_not_on_the_page() -> None:
@@ -545,6 +547,9 @@ class _Locator:
 
     def click(self) -> None:
         self._page.clicks.append(self._text)
+
+    def evaluate(self, script: str) -> None:
+        self._page.scripts.append((self._text, self._scope, script))
 
     def drag_to(self, target: _Locator, target_position: dict[str, float] | None = None) -> None:
         self._page.drags.append((self._text, target._text, target._scope, target_position))
@@ -616,6 +621,7 @@ class _FakePage:
         self.hidden_after_reload = set(hidden_after_reload or ())
         self.clicks: list[str] = []
         self.drags: list[tuple[str, str, str, dict[str, float] | None]] = []
+        self.scripts: list[tuple[str, str, str]] = []
         self.handlers: dict[str, Any] = {}
         self.placeholders: set[str] = set()
         self.request = _FakeRequestContext(api_status, json_payload)

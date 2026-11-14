@@ -110,6 +110,17 @@ const BA = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_acti
     disableCall.options.headers &&
     disableCall.options.headers["X-AHAWR-Dashboard"] === "1");
 
+  // a waiting mission without a queue row gets one before "to the end" moves it
+  const ensured = [];
+  globalThis.BoardDnd.ensureQueued = async (id) => { ensured.push(id); return { version: "v2", queue: [] }; };
+  calls.length = 0;
+  await BA.doAction("last", "m9");
+  const lastCall = calls.find((c) => c.url === "/api/board/queue/last");
+  check("last asks ensureQueued first", ensured.length === 1 && ensured[0] === "m9");
+  check("last uses the fresh queue version",
+    lastCall && JSON.parse(lastCall.options.body).expected_version === "v2");
+  delete globalThis.BoardDnd.ensureQueued;
+
   // stop takes the same confirm style
   calls.length = 0;
   await BA.doAction("stop", "m1");

@@ -85,6 +85,7 @@ MUTATING_METHODS = frozenset({"POST", "PUT", "DELETE"})
 API_PREFIX = "/api/"
 CARD_ANCESTOR = "xpath=ancestor::div[contains(@class,'kcard')][1]"
 BELOW_DROP_RATIO = 0.85
+SCROLL_TO_CENTER_JS = "el => el.scrollIntoView({block: 'center'})"
 SCENARIO_DIR = qa_stack.CLAUDE_RUNNER_DIR / "qa" / "scenarios"
 RUNS_DIR = qa_stack.QA_RUNS_DIR
 RUN_DIR_PREFIX = "qa-"
@@ -698,6 +699,11 @@ def _drag(page: Any, source: str, target: str, below: bool) -> None:
         _locate(page, source).drag_to(_locate(page, target))
         return
     card = _locate(page, target).locator(CARD_ANCESTOR)
+    if card.bounding_box() is None:
+        raise StepFailed(f"{target!r} has no position on the page")
+    # the drop point near the card's bottom must be inside the viewport: a partly visible card is
+    # not scrolled by drag_to, and a drop outside the viewport never fires
+    card.evaluate(SCROLL_TO_CENTER_JS)
     box = card.bounding_box()
     if box is None:
         raise StepFailed(f"{target!r} has no position on the page")

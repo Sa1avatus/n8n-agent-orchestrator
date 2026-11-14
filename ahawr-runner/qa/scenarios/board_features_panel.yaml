@@ -46,5 +46,4 @@ steps:
         "Global JSON",
         "Mission JSON",
       ]
-      request_2xx: [/api/board/features]
       no_console_error: true

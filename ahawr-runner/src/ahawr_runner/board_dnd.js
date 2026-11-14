@@ -202,6 +202,17 @@ function clearDropMarks() {
   }
 }
 
+// A waiting mission without a queue row (never queued, or taken out by a cleanup) gets a row at the
+// end before it is moved; returns the fresh board data.
+async function ensureQueued(missionId) {
+  const data = await loadBoardData();
+  if ((data.queue || []).some((e) => e.mission_id === missionId)) return data;
+  await postQueueJson("/api/board/queue/add", {
+    mission_id: missionId, enabled: true, expected_version: data.version,
+  });
+  return loadBoardData();
+}
+
 // Move a card by one slot within the queue.  "выше" = -1 (toward the front),
 // "ниже" = +1 (toward the back).  The target is the adjacent card in the
 // queue order.
@@ -209,7 +220,10 @@ function moveByStep(missionId, dir) {
   if (!DndState.data) return;
   const queue = DndState.data.queue || [];
   const idx = queue.findIndex((e) => e.mission_id === missionId);
-  if (idx === -1) return;
+  if (idx === -1) {
+    ensureQueued(missionId).then(refreshBoard, (e) => showState(e.message || t("move.failed")));
+    return;
+  }
   if (idx + dir < 0 || idx + dir >= queue.length) return;
   const targetId = dir === -1 ? queue[idx - 1].mission_id : queue[idx + 1].mission_id;
   const side = dir === -1 ? "before" : "after";
@@ -225,6 +239,14 @@ async function applyMove(missionId, targetId, side) {
   if ((groups.not_completed || []).includes(missionId)) {
     await requeueMission(missionId, targetId, side);
     return;
+  }
+  if (!(DndState.data.queue || []).some((e) => e.mission_id === missionId)) {
+    try {
+      DndState.data = await ensureQueued(missionId);
+    } catch (e) {
+      showState(e.status === 409 ? t("conflict.plan_changed") : (e.message || t("move.failed")));
+      return;
+    }
   }
   const queue = DndState.data.queue || [];
   let newQueue;
@@ -406,6 +428,7 @@ const BoardDnd = {
   attachDnd,
   applyMove,
   requeueMission,
+  ensureQueued,
   moveByStep,
   moveInData,
   postMoveQueue,
