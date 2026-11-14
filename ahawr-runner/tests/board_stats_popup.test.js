@@ -6,6 +6,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("node:path");
+const { FEATURE_ROUTE_DEFAULTS } = require("./features_route_defaults.js");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 require("./i18n_stub.js"); // t() reads the English table, so L() returns real texts
@@ -64,7 +65,7 @@ function popupEnv(payload, pending = false) {
   globalThis.fetch = async (url, options) => {
     calls.push({ url: String(url), options: options || {} });
     if (pending) return new Promise(() => {});
-    return { ok: true, status: 200, json: async () => payload };
+    return { ok: true, status: 200, json: async () => ({ ...FEATURE_ROUTE_DEFAULTS, ...payload }) };
   };
   return { board, timers, cleared, calls, restore: () => restoreEnv(saved) };
 }

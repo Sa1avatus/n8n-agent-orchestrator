@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.1.140** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.1.200** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -179,6 +179,8 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.1.120: the Completed column of the kanban lists the newest finished mission first
 - [x] 1.1.130: shared defaults (runner address, retry settings, retrieval limits) in one JSON; Cloudflare 403 of the reviewer is retried
 - [x] 1.1.140: provider form limits in one JSON for the dashboard and the API
+- [x] 1.1.150: feature defaults and minimums in one JSON for the runner, the dashboard and the Constants patch
+- [x] 1.1.200: bug fixes: the Features panel and the Statistics button read the defaults from the features route
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 

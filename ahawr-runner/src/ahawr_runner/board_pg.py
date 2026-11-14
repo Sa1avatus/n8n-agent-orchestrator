@@ -36,6 +36,7 @@ from .board import (
     now,
 )
 from .board_common import _iso
+from .board_dependencies import build_dependencies
 
 __all__ = [
     "DSN_ENV",
@@ -92,7 +93,8 @@ _DDL = [
     "CREATE TABLE IF NOT EXISTS board.queue ("
     "position integer PRIMARY KEY, mission_id text NOT NULL UNIQUE, "
     "enabled boolean NOT NULL DEFAULT true, attempts_per_task double precision, "
-    "retry_failed boolean NOT NULL DEFAULT false, note text)",
+    "retry_failed boolean NOT NULL DEFAULT false, note text, "
+    "depends_on jsonb NOT NULL DEFAULT '[]')",
     "CREATE TABLE IF NOT EXISTS board.mission_config ("
     "mission_id text PRIMARY KEY, config_json text NOT NULL, "
     "updated_at timestamptz NOT NULL DEFAULT now(), updated_by text)",
@@ -268,6 +270,16 @@ class UnavailableBoardStore(BoardStore):
         self._refuse()
         raise AssertionError("unreachable")
 
+    def list_dependencies(self, mission_id: str) -> list[str]:
+        self._refuse()
+        return []
+
+    def set_dependencies(
+        self, mission_id: str, depends_on: Any, expected_version: str | None
+    ) -> list[QueueEntry]:
+        self._refuse()
+        raise AssertionError("unreachable")
+
     def create_mission_rows(
         self, mission: Mission, live: LiveState, config: dict[str, Any] | None,
         position: int | None = None, note: str | None = None, who: str = "",
@@ -399,10 +411,23 @@ class PgBoardStore(BoardStore):
         )  # no server-side prepared statements: a changed table schema must not break cached plans
         # Reads: board schema + public schema both on the search path.
         self._conn.execute("SET search_path TO board, public")
+        # Additive migration: a column the store needs may be missing on old schemas.
+        self._ensure_queue_columns()
         # Version stamps for tables without a per-row version column.
         self._READ_VERSION = self._queue_version()
         self._LIVE_STATE_VERSION = self._row_version(_LIVE_STATE_TABLE, "updatedAt")
         self._HERMES_VERSION = self._row_version(_HERMES_TABLE, "updatedAt")
+
+    def _ensure_queue_columns(self) -> None:
+        """Create missing columns of ``board.queue`` (additive, safe to repeat).
+
+        The store's own migration: ``ALTER ... IF NOT EXISTS`` is a no-op when
+        the column is already there, so the old rows keep the default empty list.
+        """
+        self._conn.execute(
+            f"ALTER TABLE {_QUEUE_TABLE} ADD COLUMN IF NOT EXISTS "
+            "depends_on jsonb NOT NULL DEFAULT '[]'"
+        )
 
     # ---- internals ----------------------------------------------------------
     def status(self) -> tuple[str, str]:
@@ -585,6 +610,20 @@ class PgBoardStore(BoardStore):
             )
             for r in rows
         ]
+
+    def list_dependencies(self, mission_id: str) -> list[str]:
+        """The ``depends_on`` ids of one queue entry: [] when it has none.
+
+        A row without the stored value (a mission not in the queue, or one
+        written before the migration) reads as the empty list.
+        """
+        row = self._conn.execute(
+            f"SELECT depends_on FROM {_QUEUE_TABLE} WHERE mission_id = %s",
+            (mission_id,),
+        ).fetchone()
+        if row is None:
+            return []
+        return build_dependencies(row.get("depends_on"))
 
     def mission_config(self, mission_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
@@ -1041,6 +1080,35 @@ class PgBoardStore(BoardStore):
                 )
                 self._READ_VERSION = now()
                 return self._queue_audit("queue move", before)
+
+    def set_dependencies(
+        self, mission_id: str, depends_on: Any, expected_version: str | None
+    ) -> list[QueueEntry]:
+        """Store the ``depends_on`` ids of one queue entry.
+
+        Same audit order as ``set_queue``: lock the queue, compare the version,
+        write the changelog row, then update the row; the raw value is
+        normalized and rejected if it is not a list of mission id strings.
+        """
+        value = build_dependencies(depends_on)
+        with self._lock, self._conn.transaction():
+            self._lock_queue()
+            stored = self._queue_version()
+            if expected_version is not None and expected_version != stored:
+                self._conflict("queue", "queue", expected_version, stored)
+            row = self._conn.execute(
+                f"SELECT mission_id FROM {_QUEUE_TABLE} WHERE mission_id = %s",
+                (mission_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"mission {mission_id!r} is not in the queue")
+            before = self._queue_snapshot()
+            self._conn.execute(
+                f"UPDATE {_QUEUE_TABLE} SET depends_on = %s WHERE mission_id = %s",
+                (json.dumps(value), mission_id),
+            )
+            self._READ_VERSION = now()
+            return self._queue_audit("dependencies set", before)
 
     def create_mission_rows(
         self, mission: Mission, live: LiveState, config: dict[str, Any] | None,

@@ -501,6 +501,14 @@ async function loadFeatures() {
   }
   try {
     const profile = await s.fetchJson("/api/board/features");
+    // board_features.js keeps no copy of the defaults: the route answer is its only source.
+    const defaultErrors = lib.setFeatureDefaults(profile);
+    if (defaultErrors.length) {
+      feat = null;
+      note.textContent = tr("ew.feat.invalid", { msg: defaultErrors.join("; ") });
+      setFeatEnabled(false);
+      return;
+    }
     const mission = id ? await s.fetchJson("/api/board/missions/" + encodeURIComponent(id) + "/features") : null;
     feat = { state: s.featuresState(profile, mission) };
     featFill(feat.state);

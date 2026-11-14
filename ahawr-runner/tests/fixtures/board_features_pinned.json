@@ -1,0 +1,1274 @@
+{
+  "adaptive_split": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"adaptive_split\":{\"split_steps\":100}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 100,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 100,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"adaptive_split\":{\"enabled\":true,\"split_steps\":200,\"max_splits\":2,\"max_total_tasks\":50}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": true,
+          "split_steps": 200,
+          "max_splits": 2,
+          "max_total_tasks": 50
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 1,
+        "split_steps": 200,
+        "max_splits": 2,
+        "max_total_tasks": 50,
+        "run_hygiene": 0
+      }
+    }
+  },
+  "event_schema_version": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"event_schema_version\":{\"enabled\":true}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": true
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"event_schema_version\":{\"enabled\":true}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": true
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    }
+  },
+  "plan_no_truncate": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"plan_no_truncate\":{\"enabled\":true}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": true,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 1,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"plan_no_truncate\":{\"enabled\":true,\"max_tasks\":20,\"max_tasks_hard\":50}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": true,
+          "max_tasks": 20,
+          "max_tasks_hard": 50
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 1,
+        "max_tasks": 20,
+        "max_tasks_hard": 50,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    }
+  },
+  "run_hygiene": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"run_hygiene\":{\"enabled\":true}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": true
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 1
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"run_hygiene\":{\"enabled\":true}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": true
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 1
+      }
+    }
+  },
+  "stats_engine_sampler": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"stats_engine_sampler\":{\"enabled\":true}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": true
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"stats_engine_sampler\":{\"enabled\":true}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": true
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    }
+  },
+  "stats_popup": {
+    "empty_value": {
+      "inputs": [
+        "",
+        ""
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "empty_object": {
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "absent_column": {
+      "inputs": [
+        null,
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "partial_object": {
+      "inputs": [
+        "{\"stats_popup\":{\"enabled\":true}}",
+        null
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": true
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    },
+    "mission_override": {
+      "inputs": [
+        null,
+        "{\"stats_popup\":{\"enabled\":true}}"
+      ],
+      "errors": [],
+      "resolved": {
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "adaptive_split": {
+          "enabled": false,
+          "split_steps": 150,
+          "max_splits": 6,
+          "max_total_tasks": 40
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": true
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        }
+      },
+      "flatten": {
+        "plan_no_truncate": 0,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "adaptive_split": 0,
+        "split_steps": 150,
+        "max_splits": 6,
+        "max_total_tasks": 40,
+        "run_hygiene": 0
+      }
+    }
+  }
+}

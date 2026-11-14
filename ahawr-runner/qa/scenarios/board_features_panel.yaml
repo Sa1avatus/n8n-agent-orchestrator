@@ -1,0 +1,50 @@
+# Features panel of the board: the "Features" section of the launch settings window
+# (board_edit_win.js). The mission adds no new page or popup, so no contract file is
+# needed under qa/contracts/ for this scenario.
+# The panel hands the defaults of every feature to the core module after its own GET of
+# /api/board/features (board_api.py:1938); the rows are the fixed FEATURE_ROWS
+# (board_edit_win.js:62): plan_no_truncate, adaptive_split, run_hygiene. think_profiles
+# is a feature of the route defaults (features_defaults.json:20) but the panel does not
+# list features from the defaults, so its name is not asserted here.
+# A feature shows its OFF state as the unchecked "enabled" checkbox of its row
+# (board_edit_win.js:428-430; "enabled": false for every feature in features_defaults.json).
+# shortcut: the scenario vocabulary has no checkbox-state assertion, so the OFF rows are
+# pinned by the texts the row renders; upgrade when qa_runner can read a checked attribute.
+name: features panel loads from the features route and shows every row off by default
+tags: [ui, settings]
+preconditions:
+  fixture: default
+target: dashboard
+steps:
+  - open: /static/board.html#board/m01
+    expect:
+      text_visible: ["Edit launch settings"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission"]
+      request_2xx: [/api/board/features]
+      text_absent: ["Could not load the features settings."]
+      no_console_error: true
+  # The Features section lives on the Execution page: one row per feature with its
+  # "enabled" switch label and the parameter labels that the row renders.
+  - click: "Next ›"
+    expect:
+      text_visible: [
+        "Features",
+        "Execution",
+        "Plan without truncation",
+        "Adaptive split",
+        "Run hygiene",
+        "enabled",
+        "max tasks",
+        "max tasks (hard)",
+        "split steps",
+        "max splits",
+        "max total tasks",
+        "Global JSON",
+        "Mission JSON",
+      ]
+      request_2xx: [/api/board/features]
+      no_console_error: true

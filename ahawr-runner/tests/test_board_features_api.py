@@ -5,6 +5,7 @@ The in-memory store only, no database."""
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from ahawr_runner import features_config
 from ahawr_runner.api import create_app
 from ahawr_runner.board import InMemoryBoardStore, Mission
 from ahawr_runner.config import ProviderProfile, Settings
@@ -22,6 +24,12 @@ UNKNOWN_FEATURE = '{"nope": {"enabled": true}}'
 NOT_BOOLEAN = '{"run_hygiene": {"enabled": "yes"}}'
 HARD_BELOW_SOFT = '{"plan_no_truncate": {"max_tasks_hard": 5}}'
 STALE = "2000-01-01T00:00:00+00:00"
+
+
+def _shipped_defaults() -> dict[str, Any]:
+    """features_defaults.json as it ships next to features_config."""
+    data: dict[str, Any] = json.loads(features_config.DEFAULTS_PATH.read_text(encoding="utf-8"))
+    return data
 
 
 @pytest.fixture
@@ -51,6 +59,47 @@ async def test_get_global_features_starts_empty(features_client: AsyncClient) ->
     r = await features_client.get("/api/board/features")
     assert r.status_code == 200
     assert r.json()["features_json"] == ""
+
+
+async def test_get_global_features_carries_defaults_and_minimums(
+    features_client: AsyncClient,
+) -> None:
+    r = await features_client.get("/api/board/features")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["feature_defaults"] == features_config.FEATURE_DEFAULTS
+    assert body["param_minimums"] == features_config.PARAM_MINIMUMS
+    assert "think_profiles" in body["feature_defaults"]
+
+
+async def test_features_defaults_answer_equals_shipped_json(
+    features_client: AsyncClient,
+) -> None:
+    """The new fields carry exactly the content of features_defaults.json."""
+    r = await features_client.get("/api/board/features")
+    assert r.status_code == 200
+    body = r.json()
+    shipped = _shipped_defaults()
+    assert "features" in shipped and "param_minimums" in shipped
+    assert body["feature_defaults"] == shipped["features"]
+    assert body["param_minimums"] == shipped["param_minimums"]
+    assert "think_profiles" in body["feature_defaults"]
+    assert body["param_minimums"], "param_minimums must not be empty"
+    assert all(isinstance(minimum, int) for minimum in body["param_minimums"].values())
+
+
+async def test_features_defaults_answer_keeps_previous_keys_with_same_values(
+    features_client: AsyncClient,
+) -> None:
+    """The keys the route returned before the defaults fields keep their values
+    for the same stored data: features_json and version."""
+    await features_client.put("/api/board/features", headers=HEADER,
+                              json={"features_json": VALID})
+    version = await _version(features_client, "/features")
+    body = (await features_client.get("/api/board/features")).json()
+    assert {"features_json", "version", "feature_defaults", "param_minimums"} <= set(body)
+    assert body["features_json"] == VALID
+    assert body["version"] == version
 
 
 async def test_get_mission_features_starts_empty(features_client: AsyncClient) -> None:

@@ -93,6 +93,8 @@ function load() {
     confirms,
   };
   sandbox.globalThis = sandbox;
+  // the browser gets BoardDefaults from board_defaults.js; the sandbox gets the same object
+  sandbox.BoardDefaults = require(path.join(SRC, "board_defaults.js"));
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(PROVIDERS_JS, "utf8"), sandbox, { filename: PROVIDERS_JS });
   vm.runInContext(fs.readFileSync(FORM_JS, "utf8"), sandbox, { filename: FORM_JS });

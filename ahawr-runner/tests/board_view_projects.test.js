@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const path = require("node:path");
+const { FEATURE_ROUTE_DEFAULTS } = require("./features_route_defaults.js");
 
 const views = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_view_projects.js"));
 
@@ -243,7 +244,7 @@ async function renderWithStats(featuresJson) {
   delete require.cache[require.resolve(POPUP_PATH)];
   globalThis.BoardStatsPopup = require(POPUP_PATH);
   globalThis.document = { createElement: makeNode };
-  globalThis.fetch = async () => ({ ok: true, json: async () => ({ features_json: featuresJson }) });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ ...FEATURE_ROUTE_DEFAULTS, features_json: featuresJson }) });
   try {
     const { ctx } = ctxFor({ data: {}, missions: MISSIONS, projects: PROJECTS });
     const body = makeNode("div");

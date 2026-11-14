@@ -112,12 +112,19 @@ function freshBox() {
 // A recording fetch stub is installed for the duration of the build and
 // removed afterwards, so each test is self-contained.
 const win = require(path.join(SRC, "board_edit_win.js"));
+// The features route answers with the shipped defaults file (features_config.py serves the same JSON).
+const SHIPPED_DEFAULTS = JSON.parse(fs.readFileSync(path.join(SRC, "features_defaults.json"), "utf8"));
+const FEATURES_ANSWER = {
+  feature_defaults: SHIPPED_DEFAULTS.features,
+  param_minimums: SHIPPED_DEFAULTS.param_minimums,
+};
 async function buildWindow() {
   const fetchCalls = [];
   const savedFetch = globalThis.fetch;
   globalThis.fetch = (url) => {
     fetchCalls.push(url);
-    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+    const answer = url === "/api/board/features" ? FEATURES_ANSWER : {};
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(answer) });
   };
   try {
     globalThis.location = { hash: "" };
@@ -722,4 +729,23 @@ test("the review page shows the rule change in the diff before saving", async ()
   assert.ok(engineElem("ew-diff"), "the review page builds the diff table");
   const after = all.filter((n) => n.className === "ew-new").map((n) => n.textContent).join("\n");
   assert.match(after, /failover/);
+});
+
+// --- 8. the features route answer reaches the core module ---------------------------
+test("loadFeatures hands the answer of /api/board/features to setFeatureDefaults", async () => {
+  const seen = [];
+  const original = BoardFeatures.setFeatureDefaults;
+  BoardFeatures.setFeatureDefaults = (answer) => {
+    seen.push(answer);
+    return original(answer);
+  };
+  try {
+    await buildWindow();
+    await new Promise((resolve) => setTimeout(resolve, 20)); // the route answer arrives after the window is built
+  } finally {
+    BoardFeatures.setFeatureDefaults = original;
+  }
+  assert.ok(seen.length >= 1, "setFeatureDefaults is called when the section loads");
+  assert.deepEqual(seen[0].feature_defaults, SHIPPED_DEFAULTS.features);
+  assert.deepEqual(seen[0].param_minimums, SHIPPED_DEFAULTS.param_minimums);
 });

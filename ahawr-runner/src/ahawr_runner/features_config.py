@@ -2,29 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
-FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
-    "plan_no_truncate": {"enabled": False, "max_tasks": 15, "max_tasks_hard": 30},
-    "adaptive_split": {
-        "enabled": False,
-        "split_steps": 150,
-        "max_splits": 6,
-        "max_total_tasks": 40,
-    },
-    "run_hygiene": {"enabled": False},
-    "event_schema_version": {"enabled": False},
-    "think_profiles": {"enabled": False},
-    "stats_popup": {"enabled": False},
-    "stats_engine_sampler": {"enabled": False},
-}
-PARAM_MINIMUMS: dict[str, int] = {
-    "max_tasks": 1,
-    "max_tasks_hard": 1,
-    "split_steps": 1,
-    "max_splits": 0,
-    "max_total_tasks": 1,
-}
+DEFAULTS_PATH = Path(__file__).with_name("features_defaults.json")
 
 
 def _reject_constant(name: str) -> Any:
@@ -35,6 +16,47 @@ def _is_integer(value: Any) -> bool:
     if isinstance(value, bool):
         return False
     return isinstance(value, int) or (isinstance(value, float) and value.is_integer())
+
+
+def _load_defaults() -> tuple[dict[str, dict[str, Any]], dict[str, int]]:
+    """The feature defaults and their minimums, read from the JSON shipped next to this module.
+
+    A missing or malformed file raises with the reason: there is no literal fallback."""
+    try:
+        text = DEFAULTS_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"{DEFAULTS_PATH}: cannot be read ({exc})") from exc
+    try:
+        data: dict[str, Any] = json.loads(text, parse_constant=_reject_constant)
+    except ValueError as exc:
+        raise ValueError(f"{DEFAULTS_PATH}: not valid JSON ({exc})") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{DEFAULTS_PATH}: must hold a JSON object")
+    minimums_raw = data.get("param_minimums")
+    features_raw = data.get("features")
+    if not isinstance(minimums_raw, dict) or not isinstance(features_raw, dict):
+        raise ValueError(f"{DEFAULTS_PATH}: features and param_minimums must be objects")
+    minimums: dict[str, int] = {}
+    for param, value in minimums_raw.items():
+        if not _is_integer(value):
+            raise ValueError(
+                f'feature defaults: minimum "{param}" must be an integer, got {json.dumps(value)}'
+            )
+        minimums[param] = int(value)
+    for feature, body in features_raw.items():
+        if not isinstance(body, dict):
+            raise ValueError(
+                f'feature defaults: feature "{feature}" must be an object, got {json.dumps(body)}'
+            )
+        for param in body:
+            if param != "enabled" and param not in minimums:
+                raise ValueError(
+                    f'feature defaults: "{feature}.{param}" has no entry in param_minimums'
+                )
+    return features_raw, minimums
+
+
+FEATURE_DEFAULTS, PARAM_MINIMUMS = _load_defaults()
 
 
 def _check_parameter(

@@ -59,3 +59,11 @@
 - Layout: the same page with the light tokens
 - Reference image: new-job-desktop-light.png
 - C20: every text is readable against its background (contrast AA), the cards are separated from the page background by a border, and the selected segment and the primary button are clearly marked.
+
+## Conformance to the mockup (every screen, both viewports)
+- Open: route /, each tab, viewport 1440x900 and 390x844, language Russian (localStorage key `dd-language` = `ru`), dark theme
+- Tooling: in the project folder run `python scripts/check_ui_against_mockup.py <dashboard url> --out <folder>`; it compares the live page with `docs/ui-mockup/mockup.html`, writes `<screen>-<viewport>-mockup.png` and `-live.png`, and prints the findings as JSON. Exit code 1 fails C20. Look at the picture pairs too: the script cannot see colours, spacing or alignment.
+- C20: the script finds nothing: no label of the mockup is missing, no label outside the mockup and outside `scripts/ui_mockup_allow.json` appears, no `{placeholder}` is left unfilled, no native file input or old quick-add form is visible, every field sits under its label, nothing scrolls sideways.
+- C21: on each screen the live picture has the same card order, the same card headings and the same control order as the mockup picture; a difference is a failure even when every single label exists. A raw setting name (for example `tts_streams`) or an English text on the Russian page is a failure.
+- C22: the checker is run against the built image, not against source files: the dashboard container was rebuilt after the last change of `services/dub-dashboard/app/static` (compare the image creation time with the newest file time).
+

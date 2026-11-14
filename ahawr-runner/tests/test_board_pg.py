@@ -6,10 +6,11 @@ import json
 import sys
 import types
 from datetime import UTC, datetime, timezone
+from typing import Any
 
 import pytest
 
-from ahawr_runner.board import ConflictError
+from ahawr_runner.board import ConflictError, QueueEntry
 from ahawr_runner.board_pg import (
     _EVENT_LOG_TABLE,
     _LIVE_STATE_TABLE,
@@ -39,18 +40,18 @@ def _install_driver(monkeypatch) -> None:
 class FakeCursor:
     """Mimics a psycopg cursor with fetchone/fetchall returning row dicts."""
 
-    def __init__(self, rows):
+    def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
         self._pos = 0
 
-    def fetchone(self):
+    def fetchone(self) -> Any:
         if self._pos < len(self._rows):
             row = self._rows[self._pos]
             self._pos += 1
             return row
         return None
 
-    def fetchall(self):
+    def fetchall(self) -> list[Any]:
         out = self._rows[self._pos:]
         self._pos = len(self._rows)
         return out
@@ -59,19 +60,22 @@ class FakeCursor:
 class FakeConnection:
     """Records every execute() call; returns canned results per query signature."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.executed: list[tuple[str, tuple]] = []
         self._responses: dict[str, list] = {}
 
     def set_response(self, marker: str, rows: list) -> None:
         self._responses[marker] = rows
 
-    def execute(self, sql: str, params=None):
-        self.executed.append((sql, tuple(params or ())))
+    def _canned(self, sql: str) -> FakeCursor:
         for marker, rows in self._responses.items():
             if marker in sql:
                 return FakeCursor(rows)
         return FakeCursor([])
+
+    def execute(self, sql: str, params=None):
+        self.executed.append((sql, tuple(params or ())))
+        return self._canned(sql)
 
     def transaction(self):
         class _Txn:
@@ -82,9 +86,97 @@ class FakeConnection:
         return _Txn()
 
 
-def _make_store(monkeypatch) -> tuple[PgBoardStore, FakeConnection]:
+def _substitute(text: str, values: tuple[Any, ...]) -> str:
+    """Put the parameters back into a SQL expression, one %s at a time (SQL AND/OR -> Python)."""
+    out = text.replace(" AND ", " and ").replace(" OR ", " or ")
+    for value in values:
+        out = out.replace("%s", repr(value), 1)
+    return out
+
+
+class QueueTableConnection(FakeConnection):
+    """A fake board.queue that really stores rows: a write, a move and a re-read round-trip.
+
+    shortcut: only the statements board_pg.py issues for the queue are understood (the
+    migration, the INSERT, the position and depends_on updates, the count and the selects);
+    the CTE renumber of remove_queue is not modelled. Upgrade when a queue write touches
+    another column or renumbers through a subquery.
+    """
+
+    def __init__(self, rows: list[dict[str, Any]] | None = None) -> None:
+        super().__init__()
+        self.rows: list[dict[str, Any]] = [dict(row) for row in (rows or [])]
+
+    def execute(self, sql: str, params: Any = None) -> FakeCursor:
+        args = tuple(params or ())
+        self.executed.append((sql, args))
+        if "ADD COLUMN IF NOT EXISTS" in sql:
+            for row in self.rows:
+                row.setdefault("depends_on", [])
+            return FakeCursor([])
+        if "INSERT INTO queue " in sql:
+            columns = sql.split("(", 1)[1].split(")")[0].split(", ")
+            row = dict(zip(columns, args, strict=True))
+            row.setdefault("depends_on", [])
+            self.rows.append(row)
+            return FakeCursor([])
+        if "DELETE FROM queue WHERE" in sql:
+            self.rows = [row for row in self.rows if row["mission_id"] != args[0]]
+            return FakeCursor([])
+        if "DELETE FROM queue" in sql:
+            self.rows = []
+            return FakeCursor([])
+        if "UPDATE queue SET depends_on" in sql:
+            for row in self.rows:
+                if row["mission_id"] == args[1]:
+                    row["depends_on"] = json.loads(args[0])
+            return FakeCursor([])
+        if "UPDATE queue SET position" in sql:
+            body = sql.split(" SET ", 1)[1]
+            set_part, where_part = (body.split(" WHERE ", 1) + ["1=1"])[:2]
+            column, _, set_expr = set_part.partition(" = ")
+            set_values = args[: set_part.count("%s")]
+            where_values = args[len(set_values):]
+            for row in self.rows:
+                scope = dict(row)
+                where_python = _substitute(where_part, where_values).replace(" = ", " == ")
+                set_python = _substitute(set_expr, set_values)
+                if eval(where_python, {"__builtins__": {}}, scope):
+                    row[column] = eval(set_python, {"__builtins__": {}}, scope)
+            return FakeCursor([])
+        if "SELECT count(*) FROM queue" in sql:
+            return FakeCursor([{"count": len(self.rows)}])
+        if "SELECT depends_on FROM queue" in sql:
+            return FakeCursor([r for r in self.rows if r["mission_id"] == args[0]])
+        if "FROM queue WHERE mission_id = %s" in sql:
+            return FakeCursor([r for r in self.rows if r["mission_id"] == args[0]])
+        if "FROM queue ORDER BY position" in sql:
+            return FakeCursor(sorted(self.rows, key=lambda r: r["position"]))
+        return self._canned(sql)
+
+
+def _queue_row(
+    position: int, mission_id: str, depends_on: list[str] | None = None
+) -> dict[str, Any]:
+    """One board.queue row as the fake table stores it; no depends_on key = pre-migration row."""
+    row: dict[str, Any] = {
+        "position": position,
+        "mission_id": mission_id,
+        "enabled": True,
+        "attempts_per_task": None,
+        "retry_failed": False,
+        "note": None,
+    }
+    if depends_on is not None:
+        row["depends_on"] = depends_on
+    return row
+
+
+def _make_store(
+    monkeypatch: pytest.MonkeyPatch, conn: FakeConnection | None = None
+) -> tuple[PgBoardStore, FakeConnection]:
     """Construct a PgBoardStore with a fake psycopg connection."""
-    conn = FakeConnection()
+    conn = conn if conn is not None else FakeConnection()
     # Default responses used during __init__:
     conn.set_response("SELECT max(at)", [{"max": None}])
     conn.set_response("updatedAt", [{"updatedAt": None}])
@@ -232,6 +324,125 @@ def test_iso_formats_a_timestamp_column_and_passes_text_through() -> None:
 
 RULES = [{"name": "a", "pattern": "*.py", "position": 1}]
 SEED = {"languages": [{"code": "de", "name": "Deutsch"}], "strings": {"en": {"k": "v"}}}
+
+
+class TestQueueDependencies:
+    """The depends_on column of board.queue: the migration, the read, the write."""
+
+    def test_migration_adds_depends_on_and_can_run_again(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        alters = [sql for sql, _ in conn.executed if "ADD COLUMN" in sql and "queue" in sql]
+        assert len(alters) == 1
+        assert "IF NOT EXISTS depends_on jsonb NOT NULL DEFAULT '[]'" in alters[0]
+        # Running the migration again must not error (IF NOT EXISTS).
+        store._ensure_queue_columns()
+
+    def test_list_dependencies_reads_the_stored_ids(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT depends_on", [{"depends_on": ["m2", "m3"]}])
+        assert store.list_dependencies("m1") == ["m2", "m3"]
+
+    def test_row_without_depends_on_reads_empty_list(self, monkeypatch):
+        """A row written before the migration has no value in the read: empty list."""
+        store, conn = _make_store(monkeypatch)
+        conn.set_response("SELECT depends_on", [{"mission_id": "m1"}])
+        assert store.list_dependencies("m1") == []
+        # No queue row for the mission at all: also empty.
+        assert store.list_dependencies("zz") == []
+
+    def test_set_dependencies_writes_normalized_ids_and_audits(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        conn.set_response(
+            "SELECT mission_id FROM queue WHERE mission_id", [{"mission_id": "m1"}]
+        )
+        store.set_dependencies("m1", ["m2", "", "m2", "m3"], store._READ_VERSION)
+        updates = [params for sql, params in conn.executed if "UPDATE queue SET depends_on" in sql]
+        assert len(updates) == 1
+        assert json.loads(updates[0][0]) == ["m2", "m3"]
+        audits = [
+            params
+            for sql, params in conn.executed
+            if sql.startswith("INSERT INTO changelog")
+        ]
+        assert any("dependencies set" in params[1] for params in audits)
+
+    def test_set_dependencies_stale_version_refuses_without_update(self, monkeypatch):
+        store, conn = _make_store(monkeypatch)
+        with pytest.raises(ConflictError):
+            store.set_dependencies("m1", ["m2"], "stale")
+        assert not any("UPDATE queue SET depends_on" in sql for sql, _ in conn.executed)
+
+    def test_set_dependencies_rejects_a_string(self, monkeypatch):
+        store, _ = _make_store(monkeypatch)
+        with pytest.raises(ValueError, match="not a string"):
+            store.set_dependencies("m1", "m2", None)
+
+    def test_queue_row_written_before_the_migration_reads_depends_on_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The ALTER adds the column with the '[]' default: old rows read as the empty list."""
+        table = QueueTableConnection([_queue_row(0, "m1")])
+        store, _ = _make_store(monkeypatch, table)
+        assert table.rows[0]["depends_on"] == []
+        assert store.list_dependencies("m1") == []
+
+    def test_new_queue_entry_has_depends_on_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """add_queue does not name the column, so the new entry starts with the default []."""
+        table = QueueTableConnection([_queue_row(0, "m1")])
+        store, _ = _make_store(monkeypatch, table)
+        store.add_queue("m9", None, position=1)
+        assert store.list_dependencies("m9") == []
+
+    def test_write_then_read_depends_on_returns_the_ids_in_order(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        table = QueueTableConnection(
+            [_queue_row(0, "m1"), _queue_row(1, "m2"), _queue_row(2, "m3")]
+        )
+        store, _ = _make_store(monkeypatch, table)
+        store.set_dependencies("m1", ["m3", "m2"], None)
+        assert store.list_dependencies("m1") == ["m3", "m2"]
+        assert table.rows[0]["depends_on"] == ["m3", "m2"]
+
+    def test_move_queue_keeps_depends_on_of_the_moved_and_shifted_rows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        table = QueueTableConnection(
+            [_queue_row(0, "m1", ["m2"]), _queue_row(1, "m2", ["m3"]), _queue_row(2, "m3")]
+        )
+        store, _ = _make_store(monkeypatch, table)
+        moved = store.move_queue("m1", 2, None)
+        assert [entry.mission_id for entry in moved] == ["m2", "m3", "m1"]
+        assert [entry.position for entry in moved] == [0, 1, 2]
+        assert store.list_dependencies("m1") == ["m2"]
+        assert store.list_dependencies("m2") == ["m3"]
+        assert store.list_dependencies("m3") == []
+
+    def test_add_queue_at_a_position_keeps_depends_on_of_the_shifted_rows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        table = QueueTableConnection([_queue_row(0, "m1", ["m2"]), _queue_row(1, "m2", ["m1"])])
+        store, _ = _make_store(monkeypatch, table)
+        updated = store.add_queue("m9", None, position=1)
+        assert [entry.position for entry in updated] == [0, 1, 2]
+        assert store.list_dependencies("m1") == ["m2"]
+        assert store.list_dependencies("m2") == ["m1"]
+        assert store.list_dependencies("m9") == []
+
+    def test_set_queue_keeps_depends_on_of_the_entries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Replacing the whole queue keeps each entry's stored depends_on value."""
+        table = QueueTableConnection([_queue_row(0, "m1", ["m2"]), _queue_row(1, "m2", [])])
+        store, _ = _make_store(monkeypatch, table)
+        store.set_queue(
+            [QueueEntry(position=0, mission_id="m1"), QueueEntry(position=1, mission_id="m2")],
+            None,
+        )
+        assert store.list_dependencies("m1") == ["m2"]
+        assert store.list_dependencies("m2") == []
 
 
 class TestProjectRulesAndI18n:

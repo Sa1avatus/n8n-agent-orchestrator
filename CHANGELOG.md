@@ -3,7 +3,35 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **1.1.140** (ahawr-runner `1.1.130` → `1.1.140`, 2026-11-13; `1.1.120` → `1.1.130`, 2026-11-13; `1.1.110` → `1.1.120`, 2026-11-11; `1.1.100` → `1.1.110`, 2026-11-10; `1.1.0` → `1.1.100`, 2026-11-10; `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **1.1.200** (ahawr-runner `1.1.150` → `1.1.200`, 2026-11-14; `1.1.140` → `1.1.150`, 2026-11-13; `1.1.130` → `1.1.140`, 2026-11-13; `1.1.120` → `1.1.130`, 2026-11-13; `1.1.110` → `1.1.120`, 2026-11-11; `1.1.100` → `1.1.110`, 2026-11-10; `1.1.0` → `1.1.100`, 2026-11-10; `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-14 (1.1.200)
+
+Bug-fix step. The commit also takes the finished work of the missions `ahawr-features-one-source` (features defaults served by one JSON,
+`features_defaults.json`) and the part of `ahawr-mission-dependencies` done so far (`board_dependencies.py`).
+
+Fixed bugs:
+
+- **The Features section of the launch settings window showed "no feature defaults were received" for every row.** `board_features.js` keeps no
+  copy of the defaults, and `loadFeatures()` in `board_edit_win.js` never handed it the answer of `/api/board/features`. It now calls
+  `setFeatureDefaults` and reports a bad answer through `ew.feat.invalid`.
+- **The Statistics button never appeared until the launch settings window had been opened.** `board_stats_popup.js` parsed the flags without the
+  defaults. It now feeds the route answer to `setFeatureDefaults` before every parse.
+- Tests: 12 failing Features tests and 6 failing popup tests were brought to the new contract (stubs answer with the shipped defaults,
+  `tests/features_route_defaults.js`); new test `loadFeatures hands the answer of /api/board/features to setFeatureDefaults`. `node --test tests/*.test.js`: 590 pass, 0 fail.
+
+## 2026-11-13 (1.1.150)
+
+Small change: the feature defaults and the parameter minimums are written once in `features_defaults.json`;
+the runner, the dashboard and the Constants patch read that file. No behaviour change: all features stay OFF.
+
+- New `ahawr-runner/src/ahawr_runner/features_defaults.json` with the sections `features` and `param_minimums`;
+  `features_config.py` loads it at import (no literal defaults in the code), the route `GET /api/board/features`
+  answers with `feature_defaults` and `param_minimums` from it, `board_features.js` takes its defaults only from
+  that answer (`setFeatureDefaults`), and `data-tables/ops/features_config_patch.py` embeds the same values into
+  the Constants node when it patches the workflow.
+- Tests: `tests/test_features_config.py`, `tests/test_board_features_api.py`, `tests/board_features.test.js` and
+  `tests/test_features_config_patch.py` check that all three readers match the shipped file.
 
 ## 2026-11-13 (1.1.140)
 

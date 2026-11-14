@@ -20,6 +20,7 @@
 
 "use strict";
 const path = require("path");
+const { FEATURE_ROUTE_DEFAULTS } = require("./features_route_defaults.js");
 require(path.join(__dirname, "i18n_stub.js"));
 const BM = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_mission.js"));
 
@@ -572,7 +573,7 @@ async function s10stats() {
   const statsFetch = (featuresJson) => async (url, opts) => {
     const u = String(url);
     if (u === "/api/board/features") {
-      return { ok: true, json: async () => ({ features_json: featuresJson }) };
+      return { ok: true, json: async () => ({ ...FEATURE_ROUTE_DEFAULTS, features_json: featuresJson }) };
     }
     if (u === "/api/board/missions/m1/features") {
       return { ok: true, json: async () => ({ mission_features_json: "" }) };

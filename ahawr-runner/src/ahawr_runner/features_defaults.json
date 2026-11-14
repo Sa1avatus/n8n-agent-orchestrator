@@ -1,0 +1,40 @@
+{
+  "features": {
+    "plan_no_truncate": {
+      "enabled": false,
+      "max_tasks": 15,
+      "max_tasks_hard": 30
+    },
+    "adaptive_split": {
+      "enabled": false,
+      "split_steps": 150,
+      "max_splits": 6,
+      "max_total_tasks": 40
+    },
+    "run_hygiene": {
+      "enabled": false
+    },
+    "event_schema_version": {
+      "enabled": false
+    },
+    "think_profiles": {
+      "enabled": false
+    },
+    "stats_popup": {
+      "enabled": false
+    },
+    "stats_engine_sampler": {
+      "enabled": false
+    },
+    "mission_dependencies": {
+      "enabled": false
+    }
+  },
+  "param_minimums": {
+    "max_tasks": 1,
+    "max_tasks_hard": 1,
+    "split_steps": 1,
+    "max_splits": 0,
+    "max_total_tasks": 1
+  }
+}

@@ -13,7 +13,19 @@ const BoardRoles = require(path.join(SRC, "board_roles.js"));
 const BoardFeatures = require(path.join(SRC, "board_features.js"));
 const MS = require(path.join(SRC, "board_mission_save.js"));
 
-const { FEATURE_DEFAULTS, parseFeatures, flatten } = BoardFeatures;
+const fs = require("fs");
+const SHIPPED_DEFAULTS = JSON.parse(fs.readFileSync(path.join(SRC, "features_defaults.json"), "utf8"));
+const FEATURE_DEFAULTS = SHIPPED_DEFAULTS.features;
+const { parseFeatures, flatten } = BoardFeatures;
+
+// board_features.js keeps no copy of the defaults: feed it the route answer before each test.
+test.beforeEach(() => {
+  const errors = BoardFeatures.setFeatureDefaults({
+    feature_defaults: SHIPPED_DEFAULTS.features,
+    param_minimums: SHIPPED_DEFAULTS.param_minimums,
+  });
+  assert.deepEqual(errors, []);
+});
 
 globalThis.BoardRoles = BoardRoles;
 globalThis.BoardFeatures = BoardFeatures;
@@ -137,7 +149,12 @@ function featTextarea(section) {
 const win = require(path.join(SRC, "board_edit_win.js"));
 async function openSection() {
   const savedFetch = globalThis.fetch;
-  globalThis.fetch = () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
+  globalThis.fetch = (url) => {
+    const answer = url === "/api/board/features"
+      ? { feature_defaults: SHIPPED_DEFAULTS.features, param_minimums: SHIPPED_DEFAULTS.param_minimums }
+      : {};
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(answer) });
+  };
   let box;
   try {
     globalThis.location = { hash: "" };

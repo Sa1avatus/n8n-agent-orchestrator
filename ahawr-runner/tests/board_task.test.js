@@ -15,6 +15,7 @@
 
 "use strict";
 const path = require("path");
+const { FEATURE_ROUTE_DEFAULTS } = require("./features_route_defaults.js");
 const fs = require("fs");
 const BT = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_task.js"));
 
@@ -198,7 +199,7 @@ globalThis.getJSON = async (url) => {
     globalThis.BoardStatsPopup = loadFresh();
     globalThis.fetch = async () => ({
       ok: true,
-      json: async () => ({ features_json: "", mission_features_json: "" }),
+      json: async () => ({ ...FEATURE_ROUTE_DEFAULTS, features_json: "", mission_features_json: "" }),
     });
     const offContainer = attachableContainer();
     await BT.renderBoardTask(offContainer, "m_running", "T001");
@@ -209,6 +210,7 @@ globalThis.getJSON = async (url) => {
     globalThis.fetch = async () => ({
       ok: true,
       json: async () => ({
+        ...FEATURE_ROUTE_DEFAULTS,
         features_json: '{"stats_popup":{"enabled":true}}',
         mission_features_json: "",
       }),

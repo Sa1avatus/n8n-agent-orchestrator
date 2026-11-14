@@ -101,6 +101,39 @@ def test_empty_attempts_per_task_gives_shell_default() -> None:
     assert queue_board._attempts(picked) == str(queue_board.DEFAULT_ATTEMPTS_PER_TASK)
 
 
+def test_next_mission_order_unchanged_flag_off() -> None:
+    """Pin of the flag-off order: a queue with an active, a failed, a completed
+    and three waiting entries.  Repeated next_mission calls (each one skipping
+    what was already picked) return the active mission first, then the waiting
+    entries in position order; failed (no retry) and completed never come back,
+    and the queue empties after the three waiting ones."""
+    entries = [
+        _entry("m_active", 1),
+        _entry("m_failed", 2),
+        _entry("m_done", 3),
+        _entry("m_wait1", 4),
+        _entry("m_wait2", 5),
+        _entry("m_wait3", 6),
+    ]
+    states = {
+        "m_active": "active",
+        "m_failed": "failed",
+        "m_done": "completed",
+        "m_wait1": "queued",
+        "m_wait2": "queued",
+        "m_wait3": "queued",
+    }
+    order: list[str] = []
+    skipped: frozenset[str] = frozenset()
+    for _ in range(len(entries)):  # bound: one call per entry, breaks on None
+        picked = queue_board.next_mission(entries, states, set(), skipped)
+        if picked is None:
+            break
+        order.append(picked["mission_id"])
+        skipped = frozenset({*skipped, picked["mission_id"]})
+    assert order == ["m_active", "m_wait1", "m_wait2", "m_wait3"]
+
+
 class FakeResponse:
     def __init__(self, payload: Any) -> None:
         self._body = json.dumps(payload).encode("utf-8")

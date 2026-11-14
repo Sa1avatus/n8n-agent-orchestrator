@@ -1,23 +1,29 @@
 (function () {
 // === pure features core (no DOM, no fetch, no globals) ===
-const FEATURE_DEFAULTS = {
-  plan_no_truncate: { enabled: false, max_tasks: 15, max_tasks_hard: 30 },
-  adaptive_split: { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 },
-  run_hygiene: { enabled: false },
-  event_schema_version: { enabled: false },
-  stats_popup: { enabled: false },
-  stats_engine_sampler: { enabled: false },
-};
-const PARAM_MINIMUMS = {
-  max_tasks: 1,
-  max_tasks_hard: 1,
-  split_steps: 1,
-  max_splits: 0,
-  max_total_tasks: 1,
-};
+// The defaults and the minimums of every feature come from the answer of the
+// features route (feature_defaults, param_minimums), handed in by the panel after
+// its own GET; this file holds no copy of them and no default literal.
+let featureDefaults = null;
+let paramMinimums = null;
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// Stores the defaults from the route answer. A missing field is returned as error
+// text for the panel's existing error display; nothing is filled in with a literal.
+function setFeatureDefaults(answer) {
+  const source = answer ?? {};
+  const errors = [];
+  if (!isPlainObject(source.feature_defaults)) {
+    errors.push('the features route answer has no "feature_defaults" object');
+  }
+  if (!isPlainObject(source.param_minimums)) {
+    errors.push('the features route answer has no "param_minimums" object');
+  }
+  featureDefaults = errors.length ? null : source.feature_defaults;
+  paramMinimums = errors.length ? null : source.param_minimums;
+  return errors;
 }
 
 function checkParameter(column, feature, param, value, accepted, errors) {
@@ -27,10 +33,10 @@ function checkParameter(column, feature, param, value, accepted, errors) {
     else errors.push(`${where} must be true or false, got ${JSON.stringify(value)}`);
     return;
   }
-  if (Number.isInteger(value) && value >= PARAM_MINIMUMS[param]) accepted[param] = value;
+  if (Number.isInteger(value) && value >= paramMinimums[param]) accepted[param] = value;
   else {
     errors.push(
-      `${where} must be an integer >= ${PARAM_MINIMUMS[param]}, got ${JSON.stringify(value)}`,
+      `${where} must be an integer >= ${paramMinimums[param]}, got ${JSON.stringify(value)}`,
     );
   }
 }
@@ -38,7 +44,7 @@ function checkParameter(column, feature, param, value, accepted, errors) {
 function checkFeature(column, feature, body, errors) {
   const accepted = {};
   for (const [param, value] of Object.entries(body)) {
-    if (!Object.hasOwn(FEATURE_DEFAULTS[feature], param)) {
+    if (!Object.hasOwn(featureDefaults[feature], param)) {
       errors.push(`${column}: unknown parameter "${param}" in feature "${feature}"`);
     } else checkParameter(column, feature, param, value, accepted, errors);
   }
@@ -61,7 +67,7 @@ function parseFeatureText(text, column, errors) {
   }
   const sparse = {};
   for (const [feature, body] of Object.entries(parsed)) {
-    if (!Object.hasOwn(FEATURE_DEFAULTS, feature)) {
+    if (!Object.hasOwn(featureDefaults, feature)) {
       errors.push(`${column}: unknown feature "${feature}"`);
     } else if (!isPlainObject(body)) {
       errors.push(`${column}: feature "${feature}" must be an object`);
@@ -70,16 +76,25 @@ function parseFeatureText(text, column, errors) {
   return sparse;
 }
 
+// Every feature in the route defaults is resolved: the default, then the global
+// value, then the mission override, parameter by parameter.
 function resolveFeatures(global, mission) {
   const features = {};
-  for (const feature of Object.keys(FEATURE_DEFAULTS)) {
-    features[feature] = { ...FEATURE_DEFAULTS[feature], ...global[feature], ...mission[feature] };
+  for (const feature of Object.keys(featureDefaults)) {
+    features[feature] = { ...featureDefaults[feature], ...global[feature], ...mission[feature] };
   }
   return features;
 }
 
 function checkLimits(features, errors) {
-  const { max_tasks: maxTasks, max_tasks_hard: maxTasksHard } = features.plan_no_truncate;
+  const planNoTruncate = features.plan_no_truncate;
+  if (!isPlainObject(planNoTruncate)) {
+    errors.push(
+      "the feature defaults from the features route answer have no \"plan_no_truncate\" object",
+    );
+    return;
+  }
+  const { max_tasks: maxTasks, max_tasks_hard: maxTasksHard } = planNoTruncate;
   if (maxTasksHard < maxTasks) {
     errors.push(
       `plan_no_truncate.max_tasks_hard must be at least plan_no_truncate.max_tasks ` +
@@ -90,6 +105,10 @@ function checkLimits(features, errors) {
 
 function parseFeatures(text, mission_text) {
   const errors = [];
+  if (!isPlainObject(featureDefaults) || !isPlainObject(paramMinimums)) {
+    errors.push("no feature defaults were received from the features route answer");
+    return { features: null, errors };
+  }
   const global = parseFeatureText(text, "features_json", errors);
   const mission = parseFeatureText(mission_text, "mission_features_json", errors);
   const features = resolveFeatures(global, mission);
@@ -97,6 +116,7 @@ function parseFeatures(text, mission_text) {
   return errors.length ? { features: null, errors } : { features, errors };
 }
 
+// shortcut: flatten needs the limit features in the route defaults; upgrade if they are absent.
 function flatten(features) {
   const planNoTruncate = features.plan_no_truncate;
   const adaptiveSplit = features.adaptive_split;
@@ -115,7 +135,7 @@ function flatten(features) {
 
 // === export (browser global + CommonJS module.exports) ===
 const BoardFeatures = {
-  FEATURE_DEFAULTS,
+  setFeatureDefaults,
   parseFeatures,
   flatten,
 };

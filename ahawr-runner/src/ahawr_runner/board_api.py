@@ -34,6 +34,7 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import (
+    board_dependencies,
     board_engine,
     board_order,
     board_plan,
@@ -345,6 +346,94 @@ def _queue_version(store: BoardStore) -> str | None:
     if callable(version):  # the Pg store computes it (a method), the in-memory store keeps a stamp
         version = version()
     return version or None
+
+
+def _mission_statuses(store: BoardStore) -> dict[str, str]:
+    """The Live State status of every mission by mission id ("" when it has no
+    Live State row, which the dependency rule treats as an unmet dependency)."""
+    status_by_key = {live.state_key: live.status or "" for live in store.list_live_states()}
+    return {
+        mission.mission_id: status_by_key.get(mission.state_namespace, "")
+        for mission in store.list_missions()
+    }
+
+
+def _stored_dependencies(store: BoardStore, mission_id: str) -> list[str]:
+    """The ``depends_on`` ids stored for one queue entry, read through the store verb
+    that owns the column.
+
+    shortcut: a store without that verb has no dependency column (the in-memory
+    store), so it reports none; upgrade when ``QueueEntry`` carries the field."""
+    getter = getattr(store, "list_dependencies", None)
+    if getter is None:
+        return []
+    return list(getter(mission_id))
+
+
+def _dependency_fields(verdict: board_dependencies.DependencyState) -> dict[str, Any]:
+    """The answer keys of one verdict: the ids, the state and the reason."""
+    return {
+        "depends_on": verdict["depends_on"],
+        "dependency_state": verdict["state"],
+        "dependency_reason": verdict["reason"],
+    }
+
+
+def _queue_dependency_rows(
+    store: BoardStore, entries: list[QueueEntry]
+) -> list[dict[str, Any]]:
+    """The queue rows with ``depends_on``, ``dependency_state`` and
+    ``dependency_reason``, classified once by ``board_dependencies.classify_queue``
+    (the rule lives only in that module)."""
+    rows = [entry.model_dump() for entry in entries]
+    raw_entries = [
+        {
+            "mission_id": row["mission_id"],
+            "depends_on": _stored_dependencies(store, row["mission_id"]),
+        }
+        for row in rows
+    ]
+    verdicts = board_dependencies.classify_queue(raw_entries, _mission_statuses(store))
+    for row in rows:
+        row.update(_dependency_fields(verdicts[row["mission_id"]]))
+    return rows
+
+
+def _mission_dependency_fields(store: BoardStore, mission_id: str) -> dict[str, Any]:
+    """The dependency fields of one mission, by the same ``classify_queue`` rule."""
+    verdict = board_dependencies.classify_queue(
+        [{"mission_id": mission_id, "depends_on": _stored_dependencies(store, mission_id)}],
+        _mission_statuses(store),
+    )
+    return _dependency_fields(verdict[mission_id])
+
+
+def _save_dependencies(store: BoardStore, mission_id: str, raw_dependencies: Any) -> None:
+    """Validate one proposed ``depends_on`` with the rule module and write it through
+    the store's own verb; a refusal raises ``ValueError`` (HTTP 400)."""
+    dependencies = board_dependencies.build_dependencies(raw_dependencies)
+    entries = store.queue()
+    statuses = _mission_statuses(store)
+    problems = board_dependencies.validate_dependencies(
+        mission_id,
+        dependencies,
+        [entry.mission_id for entry in entries],
+        [
+            done_id
+            for done_id, status in statuses.items()
+            if status == board_dependencies.COMPLETED_STATE
+        ],
+        {
+            entry.mission_id: _stored_dependencies(store, entry.mission_id)
+            for entry in entries
+        },
+    )
+    if problems:
+        raise ValueError("; ".join(problems))
+    setter = getattr(store, "set_dependencies", None)
+    if setter is None:
+        raise ValueError("the board store has no depends_on column to write dependencies into")
+    setter(mission_id, dependencies, _queue_version(store))
 
 
 def _state_key_of(store: BoardStore, mission_id: str) -> str:
@@ -924,7 +1013,7 @@ def get_mission(request: Request, mission_id: str) -> dict[str, Any]:
     if mission is None:
         raise KeyError(f"mission {mission_id!r} not found")
     live = store.get_live_state(mission.state_namespace)
-    return {
+    answer = {
         "mission": mission.model_dump(),
         "live_state": live.model_dump() if live is not None else None,
         "task_views": [v.model_dump() for v in store.task_views(mission.state_namespace)],
@@ -932,6 +1021,9 @@ def get_mission(request: Request, mission_id: str) -> dict[str, Any]:
         "defaults": _config_defaults(store),
         "task_overrides": store.task_overrides(mission_id),
     }
+    if _feature_enabled(store, mission_id, "mission_dependencies"):
+        answer.update(_mission_dependency_fields(store, mission_id))
+    return answer
 
 
 def mission_qa(request: Request, mission_id: str) -> dict[str, Any]:
@@ -984,14 +1076,24 @@ def update_mission(request: Request, mission_id: str, body: dict[str, Any]) -> d
     fields = {k: v for k, v in body.items() if k not in ("who", "mission_id")}
     if not fields:
         raise ValueError("no fields to update")
+    dependency_flag = _feature_enabled(store, mission_id, "mission_dependencies")
+    if dependency_flag and "depends_on" in fields:
+        _save_dependencies(store, mission_id, fields.pop("depends_on"))
     if "overrides_json" in fields:
         text = _features_text(fields, "overrides_json")
         errors = overrides_config.validate(text)
         if errors:
             raise ValueError("; ".join(errors))
         fields["overrides_json"] = text
-    updated = store.update_mission(mission_id, expected, who=body.get("who", ""), **fields)
-    return {"mission": updated.model_dump()}
+    updated = (
+        store.update_mission(mission_id, expected, who=body.get("who", ""), **fields)
+        if fields
+        else mission
+    )
+    answer = {"mission": updated.model_dump()}
+    if dependency_flag:
+        answer.update(_mission_dependency_fields(store, mission_id))
+    return answer
 
 
 def delete_mission(request: Request, mission_id: str,
@@ -1422,7 +1524,12 @@ def _build_router() -> APIRouter:
     @router.get("/queue")
     def get_queue(request: Request) -> dict[str, Any]:
         store = _store_guard(request)
-        return {"queue": [e.model_dump() for e in store.queue()], "version": _queue_version(store)}
+        entries = store.queue()
+        if _feature_enabled(store, None, "mission_dependencies"):
+            queue = _queue_dependency_rows(store, entries)
+        else:
+            queue = [entry.model_dump() for entry in entries]
+        return {"queue": queue, "version": _queue_version(store)}
 
     @router.post("/queue")
     def set_queue(request: Request, body: dict[str, Any]) -> dict[str, Any]:
@@ -1939,7 +2046,9 @@ def _build_router() -> APIRouter:
     def get_features(request: Request) -> dict[str, Any]:
         row = _store_guard(request).hermes_config() or {}
         return {"features_json": row.get("features_json") or "", "version": _stamp(
-            row.get("updatedAt"))}
+            row.get("updatedAt")),
+            "feature_defaults": features_config.FEATURE_DEFAULTS,
+            "param_minimums": features_config.PARAM_MINIMUMS}
 
     @router.put("/features")
     def put_features(request: Request, body: dict[str, Any]) -> dict[str, Any]:

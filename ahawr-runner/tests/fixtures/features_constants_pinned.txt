@@ -1,0 +1,217 @@
+const rows = $('Load Config').all().map(item => item.json || {});
+// Claude Code variant: execution goes to the claude-runner container (profile 'claude-code').
+const row = rows.find(r => String(r.profile_id ?? '').trim() === 'claude-code' && (r.enabled === true || String(r.enabled ?? '').toLowerCase() === 'true'));
+if (!row) throw new Error("No enabled 'claude-code' profile found in Data Table hermes_config.");
+function num(value, field, min = 0) { const n = Number(value); if (!Number.isFinite(n) || n < min) throw new Error(`Invalid ${field}: ${value}`); return n; }
+let retryDelays = [15, 30, 60, 120, 300];
+if (String(row.retry_delays_json ?? '').trim()) {
+  try {
+    const parsed = JSON.parse(String(row.retry_delays_json));
+    if (!Array.isArray(parsed) || parsed.some(v => !Number.isFinite(Number(v)) || Number(v) < 0)) throw new Error('retry_delays_json must be a JSON array of non-negative numbers');
+    retryDelays = parsed.map(Number);
+  } catch (e) { throw new Error(`Invalid retry_delays_json: ${e.message}`); }
+}
+const mission = $('Mission').first()?.json ?? {};
+const stateNamespace = String(mission.state_namespace ?? '').trim();
+if (!stateNamespace) throw new Error(`Mission "${String(mission.mission_id ?? 'unknown')}" does not define state_namespace.`);
+// Context Retrieval Layer (AHAWR v13): the ahawr-retrieval container of this compose stack.
+// Optional columns; absent/false keeps v12 behaviour. Retrieval is read-only context: it never
+// replaces or restores persisted execution state.
+function parseCorpora(value) {
+  if (Array.isArray(value)) return value;
+  const text = String(value ?? '').trim();
+  if (!text) return [];
+  if (!text.startsWith('[')) return text.split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error('must be a JSON array');
+    return parsed;
+  } catch (e) { throw new Error(`Invalid retrieval_corpora_json: ${e.message}`); }
+}
+const corpusEntries = (Array.isArray(mission.retrieval_corpora) && mission.retrieval_corpora.length)
+  ? mission.retrieval_corpora : parseCorpora(row.retrieval_corpora_json);
+const retrievalCorpora = corpusEntries
+  .map(e => String((e && typeof e === 'object') ? (e.corpus_id ?? '') : e).trim())
+  .filter(Boolean);
+const retrievalUrl = (String(row.retrieval_url ?? '').trim() || 'http://ahawr-retrieval:8500').replace(/\/+$/, '');
+const retrievalRequested = row.retrieval_enabled === true || String(row.retrieval_enabled ?? '').toLowerCase() === 'true';
+function optNum(value, fallback, min) { const n = Number(value); return Number.isFinite(n) && n >= min ? n : fallback; }
+
+const runnerUrl = (String(row.runner_url ?? '').trim() || 'http://claude-runner:8700').replace(/\/+$/, '');
+// Run Manager sub-workflow to execute (n8n assigns new ids on import, so it is
+// configurable): hermes_config.run_manager_workflow_id, default nhjwX1G7FiVTO2Ah.
+const runManagerWorkflowId = String(row.run_manager_workflow_id ?? '').trim() || 'nhjwX1G7FiVTO2Ah';
+// === pure features core (no DOM, no fetch, no globals) ===
+const FEATURE_DEFAULTS = {
+  plan_no_truncate: { enabled: false, max_tasks: 15, max_tasks_hard: 30 },
+  adaptive_split: { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 },
+  run_hygiene: { enabled: false },
+  event_schema_version: { enabled: false },
+  stats_popup: { enabled: false },
+  stats_engine_sampler: { enabled: false },
+};
+const PARAM_MINIMUMS = {
+  max_tasks: 1,
+  max_tasks_hard: 1,
+  split_steps: 1,
+  max_splits: 0,
+  max_total_tasks: 1,
+};
+
+function isPlainObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function checkParameter(column, feature, param, value, accepted, errors) {
+  const where = `${column}: ${feature}.${param}`;
+  if (param === "enabled") {
+    if (typeof value === "boolean") accepted[param] = value;
+    else errors.push(`${where} must be true or false, got ${JSON.stringify(value)}`);
+    return;
+  }
+  if (Number.isInteger(value) && value >= PARAM_MINIMUMS[param]) accepted[param] = value;
+  else {
+    errors.push(
+      `${where} must be an integer >= ${PARAM_MINIMUMS[param]}, got ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+function checkFeature(column, feature, body, errors) {
+  const accepted = {};
+  for (const [param, value] of Object.entries(body)) {
+    if (!Object.hasOwn(FEATURE_DEFAULTS[feature], param)) {
+      errors.push(`${column}: unknown parameter "${param}" in feature "${feature}"`);
+    } else checkParameter(column, feature, param, value, accepted, errors);
+  }
+  return accepted;
+}
+
+function parseFeatureText(text, column, errors) {
+  const source = String(text ?? "").trim();
+  if (!source) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch (error) {
+    errors.push(`${column}: not valid JSON (${error.message})`);
+    return {};
+  }
+  if (!isPlainObject(parsed)) {
+    errors.push(`${column}: must be a JSON object`);
+    return {};
+  }
+  const sparse = {};
+  for (const [feature, body] of Object.entries(parsed)) {
+    if (!Object.hasOwn(FEATURE_DEFAULTS, feature)) {
+      errors.push(`${column}: unknown feature "${feature}"`);
+    } else if (!isPlainObject(body)) {
+      errors.push(`${column}: feature "${feature}" must be an object`);
+    } else sparse[feature] = checkFeature(column, feature, body, errors);
+  }
+  return sparse;
+}
+
+function resolveFeatures(global, mission) {
+  const features = {};
+  for (const feature of Object.keys(FEATURE_DEFAULTS)) {
+    features[feature] = { ...FEATURE_DEFAULTS[feature], ...global[feature], ...mission[feature] };
+  }
+  return features;
+}
+
+function checkLimits(features, errors) {
+  const { max_tasks: maxTasks, max_tasks_hard: maxTasksHard } = features.plan_no_truncate;
+  if (maxTasksHard < maxTasks) {
+    errors.push(
+      `plan_no_truncate.max_tasks_hard must be at least plan_no_truncate.max_tasks ` +
+        `(${maxTasks}), got ${maxTasksHard}`,
+    );
+  }
+}
+
+function parseFeatures(text, mission_text) {
+  const errors = [];
+  const global = parseFeatureText(text, "features_json", errors);
+  const mission = parseFeatureText(mission_text, "mission_features_json", errors);
+  const features = resolveFeatures(global, mission);
+  checkLimits(features, errors);
+  return errors.length ? { features: null, errors } : { features, errors };
+}
+
+function flatten(features) {
+  const planNoTruncate = features.plan_no_truncate;
+  const adaptiveSplit = features.adaptive_split;
+  return {
+    plan_no_truncate: planNoTruncate.enabled ? 1 : 0,
+    max_tasks: planNoTruncate.max_tasks,
+    max_tasks_hard: planNoTruncate.max_tasks_hard,
+    adaptive_split: adaptiveSplit.enabled ? 1 : 0,
+    split_steps: adaptiveSplit.split_steps,
+    max_splits: adaptiveSplit.max_splits,
+    max_total_tasks: adaptiveSplit.max_total_tasks,
+    run_hygiene: features.run_hygiene.enabled ? 1 : 0,
+  };
+}
+// === end pure features core ===
+const __features = parseFeatures(row.features_json, mission.mission_features_json);
+if (!__features.features) {
+  throw new Error(`Invalid features_json: ${__features.errors.join('; ')}`);
+}
+const __flat = flatten(__features.features);
+// shortcut: max_tasks falls back to the legacy column unless a features JSON sets it,
+// upgrade: drop the legacy column once every profile sets plan_no_truncate.max_tasks
+const __maxTasksSet = [row.features_json, mission.mission_features_json].some(text => {
+  const __sparse = parseFeatureText(text, 'features_json', []).plan_no_truncate ?? {};
+  return Object.hasOwn(__sparse, 'max_tasks');
+});
+return [{ json: {
+  run_manager_workflow_id: runManagerWorkflowId,
+  runner_url: runnerUrl,
+  // optional bearer token for claude-runner (CLAUDE_RUNNER_API_KEY); empty = no auth
+  runner_api_key: String(row.runner_api_key ?? '').trim(),
+  retrieval_enabled: retrievalRequested && retrievalCorpora.length > 0,
+  retrieval_url: retrievalUrl,
+  retrieval_corpora: retrievalCorpora,
+  retrieval_timeout_ms: optNum(row.retrieval_timeout_ms, 120000, 1000),
+  retrieval_worker_max_tokens: optNum(row.retrieval_worker_max_tokens, 6000, 100),
+  retrieval_reviewer_max_tokens: optNum(row.retrieval_reviewer_max_tokens, 5000, 100),
+  retrieval_label: String(row.retrieval_label ?? '').trim(),
+  planner_model: String(row.architect_model ?? '').trim(),
+  planner_provider: String(row.architect_provider ?? '').trim(),
+  worker_model: String(row.worker_model ?? '').trim(),
+  worker_provider: String(row.worker_provider ?? '').trim(),
+  reviewer_model: String(row.reviewer_model ?? '').trim(),
+  reviewer_provider: String(row.reviewer_provider ?? '').trim(),
+  service_model: String(row.service_model ?? '').trim(),
+  service_provider: String(row.service_provider ?? '').trim(),
+  max_tasks: __maxTasksSet ? __flat.max_tasks : num(row.max_tasks,'max_tasks',1),
+  plan_no_truncate: __flat.plan_no_truncate,
+  max_tasks_hard: __flat.max_tasks_hard,
+  adaptive_split: __flat.adaptive_split,
+  split_steps: __flat.split_steps,
+  max_splits: __flat.max_splits,
+  max_total_tasks: __flat.max_total_tasks,
+  run_hygiene: __flat.run_hygiene,
+  max_attempts_per_task: num(row.max_attempts_per_task,'max_attempts_per_task',1),
+  architect_max_provider_retries: num(row.architect_max_retries,'architect_max_provider_retries',0),
+  worker_max_provider_retries: num(row.worker_max_retries,'worker_max_provider_retries',0),
+  reviewer_max_provider_retries: num(row.reviewer_max_retries,'reviewer_max_provider_retries',0),
+  architect_max_polls: num(row.architect_max_polls,'architect_max_polls',1),
+  worker_max_polls: num(row.worker_max_polls,'worker_max_polls',1),
+  reviewer_max_polls: num(row.reviewer_max_polls,'reviewer_max_polls',1),
+  architect_poll_seconds: num(row.architect_poll_seconds,'architect_poll_seconds',1),
+  worker_poll_seconds: num(row.worker_poll_seconds,'worker_poll_seconds',1),
+  reviewer_poll_seconds: num(row.reviewer_poll_seconds,'reviewer_poll_seconds',1),
+  telegram_chat_id: String(row.telegram_chat_id ?? '').trim(),
+  state_namespace: stateNamespace,
+  execution_mode: String(row.execution_mode ?? 'production').trim(),
+  retry_delays: retryDelays,
+  // thinking policy of the local Worker (sent to the runner with every Worker run; empty / 0 / -1 = the runner's .env defaults)
+  worker_think_policy: String(row.worker_think_policy ?? '').trim().toLowerCase(),
+  worker_think_policy_from_task: Number(row.worker_think_policy_from_task ?? 0) || 0,
+  worker_think_off_after_seconds: (row.worker_think_off_after_seconds === null || row.worker_think_off_after_seconds === undefined || row.worker_think_off_after_seconds === '') ? -1 : Number(row.worker_think_off_after_seconds),
+  worker_think_off_after_steps: (row.worker_think_off_after_steps === null || row.worker_think_off_after_steps === undefined || row.worker_think_off_after_steps === '') ? -1 : Number(row.worker_think_off_after_steps),
+  roles_json: String(row.roles_json ?? '').trim(),
+  mission_roles_json: String(mission.roles_json ?? '').trim()
+} }];

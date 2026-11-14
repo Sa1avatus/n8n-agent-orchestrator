@@ -4,8 +4,9 @@
 flag columns for the adaptive split (`adaptive_split`, `plan_no_truncate`, `run_hygiene`) with one JSON setting,
 the same way `roles_json` replaces the model columns (see `roles-config.md`).
 
-Status: design. The pure core (`board_features.js`, `features_config.py`), the patches and the board section are
-written by the features-config mission; until then no reader uses this document's rules.
+Status: implemented. Defaults and minimums are in one file, `ahawr-runner/src/ahawr_runner/features_defaults.json`
+("One source of defaults" below); the pure core (`board_features.js`, `features_config.py`), the patches and the
+board section are written by the features-config mission and read that file instead of keeping copies.
 
 ## Shape of features_json
 
@@ -24,24 +25,52 @@ The example is the seed value in `data-tables/ops/_make_features_config_mission.
 - A feature that is not in the object is off. A parameter that is not in a feature's object takes its default.
 - Keys are `snake_case`, as the naming rules in `docs/naming.md` require.
 
-## Defaults
+## One source of defaults
+
+Every default and every minimum is in `ahawr-runner/src/ahawr_runner/features_defaults.json`. Three readers take
+them from that file, and none of them keeps a copy of its own:
+
+- `ahawr-runner/src/ahawr_runner/features_config.py` loads the file at import into `FEATURE_DEFAULTS` and
+  `PARAM_MINIMUMS`. A missing or unreadable file raises with the reason: there is no literal fallback.
+- the features route `GET /api/board/features` (`board_api.py`) answers with two fields read from that file,
+  `feature_defaults` and `param_minimums`, beside `features_json` and `version`. `board_features.js` takes
+  its defaults only from that answer (`setFeatureDefaults(answer)`): the JS core holds no default value.
+- `data-tables/ops/features_config_patch.py` reads the same file at patch time when it writes the defaults and
+  the minimums into the Constants node of the workflow. A missing file aborts the patch with the reason.
+
+To add a feature, add ONE entry to `features_defaults.json`: the feature object with `enabled` and its
+parameters, and a minimum in `param_minimums` for every parameter except `enabled`. No runner code changes;
+the patch script stays as it is, and re-running it on a fresh export regenerates the patched copy the operator
+imports. Defaults stay off — the operator turns a feature on in `features_json`, never by editing the defaults.
+
+## Defaults (mirror of `features_defaults.json`)
 
 | Feature | Key | Default | Minimum | Flattened constant |
 |---|---|---|---|---|
-| `plan_no_truncate` | `enabled` | off (0) | 0 | `plan_no_truncate` |
+| `plan_no_truncate` | `enabled` | off (`false`) | boolean | `plan_no_truncate` |
 | `plan_no_truncate` | `max_tasks` | 15 | 1 | `max_tasks` |
 | `plan_no_truncate` | `max_tasks_hard` | 30 | 1 | `max_tasks_hard` |
-| `adaptive_split` | `enabled` | off (0) | 0 | `adaptive_split` |
+| `adaptive_split` | `enabled` | off (`false`) | boolean | `adaptive_split` |
 | `adaptive_split` | `split_steps` | 150 | 1 | `split_steps` |
 | `adaptive_split` | `max_splits` | 6 | 0 | `max_splits` |
 | `adaptive_split` | `max_total_tasks` | 40 | 1 | `max_total_tasks` |
-| `run_hygiene` | `enabled` | off (0) | 0 | `run_hygiene` |
-| `event_schema_version` | `enabled` | off (0) | 0 | — |
+| `run_hygiene` | `enabled` | off (`false`) | boolean | `run_hygiene` |
+| `event_schema_version` | `enabled` | off (`false`) | boolean | — |
+| `think_profiles` | `enabled` | off (`false`) | boolean | — |
+| `stats_popup` | `enabled` | off (`false`) | boolean | — |
+| `stats_engine_sampler` | `enabled` | off (`false`) | boolean | — |
+| `mission_dependencies` | `enabled` | off (`false`) | boolean | — |
 
-`run_hygiene` and `event_schema_version` have no parameters. `event_schema_version` is read by the runner itself
-(`api.py`, at app start) and has no flattened constant: no workflow node reads it. The minimums are the ones the adaptive split code reads
-(`optNum(row.<flag>, <default>, <minimum>)` in the design notes, `data-tables/ops/adaptive_split/NOTES.md`).
-`max_tasks` has the default 15 only when the legacy `max_tasks` column is absent (see the flatten section).
+`run_hygiene`, `event_schema_version`, `think_profiles`, `stats_popup`, `stats_engine_sampler` and
+`mission_dependencies` have no parameters, so `param_minimums` has no entry for them. `event_schema_version`
+is read by the runner itself (`api.py`, at app start) and has no flattened constant: no workflow node reads
+it. `mission_dependencies` is the flag of the mission-dependency design (`docs/mission-dependencies.md`):
+no reader uses it yet, and like `think_profiles` it is not in the Constants core of the workflow
+(`CORE_FEATURES` in `data-tables/ops/features_config_patch.py`), so a `features_json` that sets it is
+reported as an unknown feature by that node until the patch lists it. The numeric minimums are the
+`param_minimums` object of `features_defaults.json`, the values the adaptive split code checks
+(`optNum(row.<flag>, <default>, <minimum>)` in `data-tables/ops/adaptive_split/NOTES.md`). `max_tasks` has the
+default 15 only when the legacy `max_tasks` column is absent (see the flatten section).
 
 ## Validation
 
@@ -50,7 +79,7 @@ the features and a list of errors. A value with any error is rejected; nothing i
 
 - Unknown feature names and unknown parameter names are errors.
 - `enabled` must be a boolean.
-- Numbers must be integers at or above their minimum (table above).
+- Numbers must be integers at or above their minimum (`param_minimums` in `features_defaults.json`).
 - `max_tasks_hard` must be at least `max_tasks`.
 - The text must parse as JSON. An error names the feature and the key, so the operator can fix it.
 
@@ -66,8 +95,8 @@ Merge rule: the override is applied per feature. A parameter set in the mission'
 global value of that parameter; parameters the mission does not set come from the global value, then from the
 default. A feature the mission does not mention is the global feature unchanged.
 
-This is the intended rule. `board_features.js` is the reference once it is written; if its behaviour differs,
-this section is changed to match it.
+This is the rule both readers implement: `parseFeatures` in `board_features.js` and `validate_features_json` in
+`features_config.py`. If one of them differs, this section is changed to match it.
 
 ## Flatten to the legacy constants
 
@@ -86,9 +115,11 @@ these constants:
 | `run_hygiene` | `run_hygiene.enabled`, 0 or 1 |
 
 Legacy columns are the fallback. If a parameter is absent from `features_json` and its legacy column exists, the
-column value is used; otherwise the default is used. `docs/config-columns-plan.md` records the `max_tasks` column
-as 30 and the `features_json` default as 15. `ahawr-runner/docs/board-data-model.md` (line 159) records 20 for
-the same profile row. These three values disagree and must be settled before the golden test is written. With
+column value is used; otherwise the default from `features_defaults.json` is used. `docs/config-columns-plan.md`
+records the legacy `max_tasks` column as 30 and `ahawr-runner/docs/board-data-model.md` (line 159) records 20 for
+the same profile row. Those are column values, not defaults: the only default of `max_tasks` is 15 in
+`features_defaults.json`. The two legacy values disagree and must be settled before the golden test is written.
+With
 `features_json` empty and the column present, `max_tasks` flattens to the column value. The default 15 applies only
 when the column is absent. The three flags and the adaptive parameters have no legacy column, so their fallback is
 the default.

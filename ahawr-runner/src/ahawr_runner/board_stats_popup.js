@@ -326,6 +326,13 @@ const FLAG_CACHE_LIMIT = 20;
 const missionFlagCache = new Map();
 let boardFlagsCache = null;
 
+// board_features.js keeps no copy of the defaults: the answer of the features route is their only
+// source, so every read of that route hands the answer to the module before parsing.
+function feedDefaults(payload) {
+  const errors = popupFeatures.setFeatureDefaults(payload);
+  if (errors.length) throw new Error(errors.join("; "));
+}
+
 function mergedFeatures(globalText, missionText) {
   const parsed = popupFeatures.parseFeatures(globalText || "", missionText || "");
   return parsed.features || {};
@@ -335,12 +342,14 @@ async function scopeFlags(scope) {
   if (scope.kind === "project") {
     if (boardFlagsCache === null) {
       const payload = await fetchJson("/api/board/features");
+      feedDefaults(payload);
       boardFlagsCache = mergedFeatures(payload.features_json, "");
     }
     return boardFlagsCache;
   }
   if (missionFlagCache.has(scope.missionId)) return missionFlagCache.get(scope.missionId);
   const globalPayload = await fetchJson("/api/board/features");
+  feedDefaults(globalPayload);
   const missionPayload = await fetchJson(
     "/api/board/missions/" + encodeURIComponent(scope.missionId) + "/features"
   );
