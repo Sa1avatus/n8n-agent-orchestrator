@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from . import (
@@ -39,6 +39,7 @@ from . import (
     board_order,
     board_plan,
     board_ready,
+    board_run_mission,
     board_stats,
     board_think,
     engine_collector,
@@ -64,6 +65,8 @@ from .board_common import _error, _on_conflict, _on_missing, _on_runtime, _on_va
 from .board_lessons import InMemoryLessonStore, PgLessonStore
 from .board_lessons_extract import build_candidate, decide, render_lessons_block, select_lessons
 from .board_ops_redact import scrub
+from .board_ops_store import OpsStore
+from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
 from .board_pg import UnavailableBoardStore
 from .board_plan import update_mission_config
 from .board_ready import MissionIdError, create_mission, rollback, save_template, start_guard
@@ -348,6 +351,57 @@ def _queue_version(store: BoardStore) -> str | None:
     return version or None
 
 
+def _flag_off_answer() -> HTTPException:
+    """The 404 a path nothing mounted produces.  The run routes raise it while
+    ``run_mission_from_card`` is off (and while the board store cannot be read,
+    since unreadable flags count as off), so the board behaves byte-for-byte as
+    if the routes did not exist."""
+    return HTTPException(status_code=404)
+
+
+def _require_mission_on_board(store: BoardStore, mission_id: str) -> None:
+    """The run routes' mission check: an empty path segment is a 400, a mission
+    with no board row the same 404 envelope the other "not found" answers carry."""
+    if not mission_id.strip():
+        raise ValueError("mission id must not be empty")
+    if store.get_mission(mission_id) is None:
+        raise KeyError(f"mission {mission_id!r} is not on the board")
+
+
+def _run_expected_version(body: dict[str, Any], store: BoardStore) -> str | None:
+    """The queue version the body claims for the store's optimistic lock, or the
+    current one when the body omits it; a stale stamp raises ``ConflictError`` (409)."""
+    expected = body.pop("expected_version", _queue_version(store))
+    if expected is not None and not isinstance(expected, str):
+        raise ValueError("expected_version must be a string or null")
+    return expected
+
+
+def _ops_store_guard(request: Request) -> OpsStore:
+    """The ops store the "run now" route needs for the "is a mission running"
+    fact and the ``resume`` row.  ``board_ops_api`` keeps its store on the app,
+    but the dashboard never mounts the ops routes, so the DSN factory is tried
+    here too.  An unavailable store is rebuilt at most once per
+    ``STORE_RETRY_SECONDS`` (the same bound as ``live_store``), so a database
+    that starts after the dashboard is picked up without a restart; while it
+    stays unreachable the answer is 503 with the store's own reason (no DSN)."""
+    app = request.app
+    store: OpsStore | None = getattr(app.state, "board_ops_store", None)
+    if store is None:
+        store = get_ops_store()
+        app.state.board_ops_store = store
+    if isinstance(store, UnavailableOpsStore):
+        tried = time.monotonic()
+        last = getattr(app.state, "board_ops_store_tried", float("-inf"))
+        if tried - last >= STORE_RETRY_SECONDS:
+            app.state.board_ops_store_tried = tried
+            app.state.board_ops_store = store = get_ops_store()
+    refuse = _unavailable(store)
+    if refuse is not None:
+        raise RuntimeError(refuse["reason"])
+    return store
+
+
 def _mission_statuses(store: BoardStore) -> dict[str, str]:
     """The Live State status of every mission by mission id ("" when it has no
     Live State row, which the dependency rule treats as an unmet dependency)."""
@@ -408,13 +462,75 @@ def _mission_dependency_fields(store: BoardStore, mission_id: str) -> dict[str, 
     return _dependency_fields(verdict[mission_id])
 
 
-def _save_dependencies(store: BoardStore, mission_id: str, raw_dependencies: Any) -> None:
-    """Validate one proposed ``depends_on`` with the rule module and write it through
-    the store's own verb; a refusal raises ``ValueError`` (HTTP 400)."""
-    dependencies = board_dependencies.build_dependencies(raw_dependencies)
+#: The title of a mission's report task, the pattern the workflow's "Approved
+#: Result" node matches when it builds the final report.
+_REPORT_TASK_TITLE_RE = re.compile(r"^Mission report\b", re.IGNORECASE)
+
+
+def _dependency_report_text(store: BoardStore, mission: Mission) -> str:
+    """The last worker output logged for one mission's report task, "" when the
+    mission has no report task or nothing was logged.
+
+    The report is carried as data by the block builder: nothing here reads an
+    instruction from it.  The rows are read newest-last because the event log is
+    ordered oldest first and an attempt rewrites the output."""
+    report_ids = {
+        view.task_id
+        for view in store.task_views(mission.state_namespace)
+        if _REPORT_TASK_TITLE_RE.search(view.title)
+    }
+    if not report_ids:
+        return ""
+    outputs = [
+        str(event.get("worker_output") or "")
+        for event in store.events(mission.state_namespace)
+        if str(event.get("task_id")) in report_ids and event.get("worker_output")
+    ]
+    return outputs[-1] if outputs else ""
+
+
+def _dependency_context(store: BoardStore, mission_id: str) -> str:
+    """The Architect dependency block of one mission, "" when it has no dependencies.
+
+    Every value comes from stored rows: the name and the state of a dependency
+    from the missions and Live State tables, its report from the event log, its
+    plan summary from the plan column.  The text itself is built by
+    ``board_dependencies.build_dependency_context``, which owns the limits.
+    """
+    mission = store.get_mission(mission_id)
+    if mission is None:
+        return ""
+    dependencies = _stored_dependencies(store, mission_id)
+    if not dependencies:
+        return ""
+    missions_by_id = {item.mission_id: item for item in store.list_missions()}
+    live_by_key = {live.state_key: live for live in store.list_live_states()}
+    # shortcut: the report of each dependency is read one by one; a single batch
+    # read of the event log replaces this when a mission can name many dependencies.
+    rows: list[dict[str, Any]] = []
+    for dependency in dependencies:
+        dep = missions_by_id.get(dependency)
+        live = live_by_key.get(dep.state_namespace) if dep is not None else None
+        plan = dict(live.plan or {}) if live is not None else {}
+        rows.append(
+            {
+                "mission_id": dependency,
+                "name": dep.name if dep is not None else "",
+                "report": _dependency_report_text(store, dep) if dep is not None else "",
+                "summary": str(plan.get("summary") or ""),
+            }
+        )
+    return board_dependencies.build_dependency_context(
+        {"depends_on": dependencies}, rows, _mission_statuses(store)
+    )
+
+
+def _dependency_problems(store: BoardStore, mission_id: str, dependencies: list[str]) -> list[str]:
+    """The refusal messages for one proposed ``depends_on``, decided by the rule
+    module against the current queue and the completed missions."""
     entries = store.queue()
     statuses = _mission_statuses(store)
-    problems = board_dependencies.validate_dependencies(
+    return board_dependencies.validate_dependencies(
         mission_id,
         dependencies,
         [entry.mission_id for entry in entries],
@@ -428,12 +544,115 @@ def _save_dependencies(store: BoardStore, mission_id: str, raw_dependencies: Any
             for entry in entries
         },
     )
+
+
+def _queue_dependency_entries(store: BoardStore) -> list[dict[str, Any]]:
+    """The queue entries in the shape the pure move rule reads: position, mission
+    id and the stored ``depends_on``."""
+    return [
+        {
+            "mission_id": entry.mission_id,
+            "position": entry.position,
+            "depends_on": _stored_dependencies(store, entry.mission_id),
+        }
+        for entry in store.queue()
+    ]
+
+
+_START_BODY = Body(default=None)  # FastAPI sentinel: the "Run now" body may be absent or empty
+
+
+def _dependency_start_refusal(store: BoardStore, mission_id: str) -> JSONResponse | None:
+    """The refusal for a start of a mission that still waits on or is blocked by a
+    dependency, or ``None`` when every dependency is met."""
+    fields = _mission_dependency_fields(store, mission_id)
+    state = fields["dependency_state"]
+    if state not in (board_dependencies.WAITING_STATE, board_dependencies.BLOCKED_STATE):
+        return None
+    return _refusal(
+        403,
+        "guard",
+        f"mission {mission_id} is {state}: {fields['dependency_reason']}; pass run_anyway: true",
+        blocked_by=fields["depends_on"],
+        dependency_state=state,
+    )
+
+
+def _dependency_move(
+    store: BoardStore,
+    mission_id: str,
+    target_position: int,
+    move_dependents: bool,
+    expected_version: str | None,
+) -> dict[str, Any] | JSONResponse:
+    """One queue move checked against the stored dependencies, applied through
+    ``store.move_queue`` position by position.
+
+    A refused move returns the guard envelope and touches nothing; a move that
+    carries its dependents (``move_dependents``) lands the whole group as
+    individual store moves, never a raw queue write.
+    """
+    entries = _queue_dependency_entries(store)
+    statuses = _mission_statuses(store)
+    problems = board_dependencies.find_move_problems(
+        entries, target_position, mission_id, move_dependents, statuses
+    )
     if problems:
-        raise ValueError("; ".join(problems))
+        return _refusal(
+            403,
+            "guard",
+            "; ".join(problems),
+            blocked_by=board_dependencies.find_move_blockers(
+                entries, target_position, mission_id, move_dependents, statuses
+            ),
+        )
+    planned = board_dependencies.plan_move_order(
+        entries, target_position, mission_id, move_dependents, statuses
+    )
+    current = [entry["mission_id"] for entry in entries]
+    version = expected_version
+    for position, wanted in enumerate(planned):  # bounded by the queue length
+        if current[position] == wanted:
+            continue
+        from_position = current.index(wanted)
+        store.move_queue(wanted, position, version)
+        # shortcut: the later moves of one group use the store's own fresh stamp,
+        # so the group does not conflict with its own first move; upgrade when the
+        # routes carry a per-move expected_version
+        version = _queue_version(store)
+        current.pop(from_position)
+        current.insert(position, wanted)
+    queue = [entry.model_dump() for entry in store.queue()]
+    return {"queue": queue, "version": _queue_version(store)}
+
+
+def _write_dependencies(store: BoardStore, mission_id: str, dependencies: list[str]) -> None:
+    """Write one validated ``depends_on`` through the store's own verb, which keeps
+    the audit row and the queue version check."""
     setter = getattr(store, "set_dependencies", None)
     if setter is None:
         raise ValueError("the board store has no depends_on column to write dependencies into")
+    # shortcut: the stamp passed is the store's own queue version, so a client that
+    # sent a stale queue stamp is not refused here; pass the body's expected_version
+    # when the queue save routes start carrying one
     setter(mission_id, dependencies, _queue_version(store))
+
+
+def _dependency_queue_position(store: BoardStore, dependencies: list[str]) -> int | None:
+    """The earliest queue position a newly created mission may take: one past the
+    last queued entry it still waits on, so the queue runs the dependency before it.
+
+    ``None`` when no dependency is queued (none given, or every dependency
+    already completed), in which case the caller keeps the requested position."""
+    position_by_id = {entry.mission_id: entry.position for entry in store.queue()}
+    statuses = _mission_statuses(store)
+    waiting_positions = [
+        position_by_id[dependency]
+        for dependency in dependencies
+        if dependency in position_by_id
+        and statuses.get(dependency, "") != board_dependencies.COMPLETED_STATE
+    ]
+    return max(waiting_positions) + 1 if waiting_positions else None
 
 
 def _state_key_of(store: BoardStore, mission_id: str) -> str:
@@ -1013,7 +1232,7 @@ def get_mission(request: Request, mission_id: str) -> dict[str, Any]:
     if mission is None:
         raise KeyError(f"mission {mission_id!r} not found")
     live = store.get_live_state(mission.state_namespace)
-    answer = {
+    answer: dict[str, Any] = {
         "mission": mission.model_dump(),
         "live_state": live.model_dump() if live is not None else None,
         "task_views": [v.model_dump() for v in store.task_views(mission.state_namespace)],
@@ -1023,6 +1242,9 @@ def get_mission(request: Request, mission_id: str) -> dict[str, Any]:
     }
     if _feature_enabled(store, mission_id, "mission_dependencies"):
         answer.update(_mission_dependency_fields(store, mission_id))
+        context = _dependency_context(store, mission_id)
+        if context:
+            answer["dependency_context"] = context
     return answer
 
 
@@ -1048,23 +1270,88 @@ def qa_screenshot(run_name: str, file_name: str) -> FileResponse:
 
 
 _CREATE_FIELD_KEYS = ("name", "rules", "acceptance_criteria", "retrieval_corpora", "working_directory")
+INHERIT_SETTINGS_KEY = "inherit_settings_from"
+
+
+def _inherited_settings(store: BoardStore, body: dict[str, Any]) -> dict[str, Any]:
+    """The settings a new mission (a part of a split) takes from the mission named
+    in ``inherit_settings_from``: its ``overrides_json`` (roles, features, retrieval),
+    its config row (hints, ``mission_features_json``) and the attempts of its queue
+    entry.  Empty when the key is absent; a missing parent is refused."""
+    parent_id = str(body.get(INHERIT_SETTINGS_KEY) or "").strip()
+    if not parent_id:
+        return {}
+    parent = store.get_mission(parent_id)
+    if parent is None:
+        raise KeyError(f"mission {parent_id!r} not found")
+    entry = next((e for e in store.queue() if e.mission_id == parent_id), None)
+    return {
+        "overrides_json": parent.overrides_json,
+        "config": dict(store.mission_config(parent_id) or {}),
+        "attempts_per_task": entry.attempts_per_task if entry else None,
+    }
 
 
 def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    """Create a mission (copy of a source, from a template, or the fields a
+    splitting mission sends for its parts).
+
+    With the ``mission_dependencies`` flag on the body's ``depends_on`` (or the
+    source's, for a copy) is validated before anything is written: an unknown
+    id or a cycle is refused with 400 and nothing is created.  A new mission
+    that waits on a not-yet-completed dependency is placed in the queue
+    directly after its last such dependency: a sent ``position`` is kept when
+    it is already at or after that spot, and moved up when it is before it.
+    With the flag off the body's ``depends_on`` is dropped like any unknown
+    field and the position stays as sent."""
     store = _store_guard(request)
     _check_plan(body.get("plan"))
-    return create_mission(
+    mission_id = body.get("mission_id", "")
+    position = body.get("position")
+    dependencies: list[str] | None = None
+    dependency_flag = _feature_enabled(store, mission_id, "mission_dependencies")
+    if dependency_flag:
+        if "depends_on" in body:
+            dependencies = board_dependencies.build_dependencies(body["depends_on"])
+        elif body.get("source_mission_id"):
+            # a copy keeps the dependencies its source has
+            dependencies = _stored_dependencies(store, body["source_mission_id"])
+        if dependencies is not None:
+            problems = _dependency_problems(store, mission_id, dependencies)
+            if problems:
+                raise ValueError("; ".join(problems))
+            if dependencies:
+                after = _dependency_queue_position(store, dependencies)
+                if after is not None and (position is None or position < after):
+                    position = after
+    inherited = _inherited_settings(store, body)
+    overrides_text = inherited.get("overrides_json") or ""
+    if overrides_text:
+        errors = overrides_config.validate(overrides_text)
+        if errors:
+            raise ValueError("; ".join(errors))
+    fields = {k: body[k] for k in _CREATE_FIELD_KEYS if k in body}
+    if inherited.get("config"):
+        fields["config"] = inherited["config"]
+    answer = create_mission(
         store,
-        body.get("mission_id", ""),
+        mission_id,
         source_mission_id=body.get("source_mission_id"),
         template_name=body.get("template_name"),
         objective=body.get("objective", ""),
         plan=body.get("plan"),
-        position=body.get("position"),
+        position=position,
         queue_note=body.get("queue_note"),
         who=body.get("who", ""),
-        fields={k: body[k] for k in _CREATE_FIELD_KEYS if k in body},
+        fields=fields,
+        overrides_json=overrides_text,
+        attempts_per_task=inherited.get("attempts_per_task"),
     )
+    if dependencies:
+        _write_dependencies(store, mission_id, dependencies)
+    if dependency_flag:
+        answer.update(_mission_dependency_fields(store, mission_id))
+    return answer
 
 
 def update_mission(request: Request, mission_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -1077,8 +1364,12 @@ def update_mission(request: Request, mission_id: str, body: dict[str, Any]) -> d
     if not fields:
         raise ValueError("no fields to update")
     dependency_flag = _feature_enabled(store, mission_id, "mission_dependencies")
+    proposed_dependencies: list[str] | None = None
     if dependency_flag and "depends_on" in fields:
-        _save_dependencies(store, mission_id, fields.pop("depends_on"))
+        proposed_dependencies = board_dependencies.build_dependencies(fields.pop("depends_on"))
+        problems = _dependency_problems(store, mission_id, proposed_dependencies)
+        if problems:
+            raise ValueError("; ".join(problems))
     if "overrides_json" in fields:
         text = _features_text(fields, "overrides_json")
         errors = overrides_config.validate(text)
@@ -1090,6 +1381,8 @@ def update_mission(request: Request, mission_id: str, body: dict[str, Any]) -> d
         if fields
         else mission
     )
+    if proposed_dependencies is not None:
+        _write_dependencies(store, mission_id, proposed_dependencies)
     answer = {"mission": updated.model_dump()}
     if dependency_flag:
         answer.update(_mission_dependency_fields(store, mission_id))
@@ -1194,11 +1487,16 @@ def _build_router() -> APIRouter:
         store = _store_guard(request)
         data = _plan_guard(store, mission_id)
         live = store.get_live_state(data["state_key"])
-        return {
+        answer: dict[str, Any] = {
             "plan": live.plan if live is not None and live.plan else None,
             "version": data["stored_version"],
             "tasks": [v.model_dump() for v in store.task_views(data["state_key"])],
         }
+        if _feature_enabled(store, mission_id, "mission_dependencies"):
+            context = _dependency_context(store, mission_id)
+            if context:
+                answer["dependency_context"] = context
+        return answer
 
     @router.post("/missions/{mission_id}/tasks/reorder")
     def reorder_tasks(request: Request, mission_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -1455,12 +1753,23 @@ def _build_router() -> APIRouter:
             preflight_max_age_seconds=preflight_max_age_seconds,
         )
 
-    @router.post("/missions/{mission_id}/start")
-    async def start(request: Request, mission_id: str, confirmed: bool = Query(False)) -> dict[str, Any]:
+    # response_model=None keeps FastAPI from building a model from the
+    # dict-or-JSONResponse return type of the dependency guard
+    @router.post("/missions/{mission_id}/start", response_model=None)
+    async def start(
+        request: Request,
+        mission_id: str,
+        confirmed: bool = Query(False),
+        body: dict[str, Any] | None = _START_BODY,
+    ) -> dict[str, Any] | JSONResponse:
         store = _store_guard(request)
         mission = store.get_mission(mission_id)
         if mission is None:
             raise KeyError(f"mission {mission_id!r} not found")
+        if _feature_enabled(store, None, "mission_dependencies") and not (body or {}).get("run_anyway"):
+            refusal = _dependency_start_refusal(store, mission_id)
+            if refusal is not None:
+                return refusal
         # the start decision uses the mission's full readiness (the same
         # checks the /readiness endpoint reports): any error item blocks
         # the start unless the caller confirms it.
@@ -1491,6 +1800,50 @@ def _build_router() -> APIRouter:
         _confirm_needed(running, confirm, "disabling a running mission")
         store.update_mission(mission_id, mission.updated_at, enabled=False)
         return {"mission_id": mission_id, "enabled": False}
+
+    # ------------------------------------------------------------------ run from the card
+    # Both routes are mounted always: with ``run_mission_from_card`` off they
+    # answer exactly like a path nothing mounted (``_flag_off_answer``), so the
+    # board behaves byte-for-byte as before the routes existed.
+    @router.post("/missions/{mission_id}/run-next", response_model=None)
+    def run_next_from_card(
+        request: Request, mission_id: str, body: dict[str, Any]
+    ) -> dict[str, Any] | JSONResponse:
+        """Send the mission to the front of the queue (``board_run_mission.run_next``)."""
+        store = live_store(request.app)
+        if _unavailable(store) is not None or not _feature_enabled(
+            store, mission_id, "run_mission_from_card"
+        ):
+            raise _flag_off_answer()
+        _require_dashboard_header(request)
+        _require_mission_on_board(store, mission_id)
+        expected = _run_expected_version(body, store)
+        queue = board_run_mission.run_next(store, mission_id, expected)
+        return {"queue": [e.model_dump() for e in queue], "version": _queue_version(store)}
+
+    @router.post("/missions/{mission_id}/run-now", response_model=None)
+    def run_now_from_card(
+        request: Request, mission_id: str, body: dict[str, Any]
+    ) -> dict[str, Any] | JSONResponse:
+        """Front-of-queue move plus the queue wake (``board_run_mission.run_now``);
+        the "is something running now" fact and the ``resume`` row come from the
+        ops store, so an unreachable ops store answers 503."""
+        store = live_store(request.app)
+        if _unavailable(store) is not None or not _feature_enabled(
+            store, mission_id, "run_mission_from_card"
+        ):
+            raise _flag_off_answer()
+        _require_dashboard_header(request)
+        _require_mission_on_board(store, mission_id)
+        expected = _run_expected_version(body, store)
+        result = board_run_mission.run_now(
+            store, mission_id, _ops_store_guard(request), expected
+        )
+        return {
+            **result,
+            "queue": [e.model_dump() for e in store.queue()],
+            "version": _queue_version(store),
+        }
 
     # ------------------------------------------------------------------ rollback
     @router.post("/changelog/{changelog_id}/rollback")
@@ -1566,12 +1919,20 @@ def _build_router() -> APIRouter:
         updated = store.remove_queue(mission_id, expected, confirmed=confirm)
         return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
 
-    @router.post("/queue/move")
-    def move_queue(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    @router.post("/queue/move", response_model=None)
+    def move_queue(request: Request, body: dict[str, Any]) -> dict[str, Any] | JSONResponse:
         store = _store_guard(request)
         expected = body.pop("expected_version", _queue_version(store))
-        updated = store.move_queue(body.get("mission_id", ""), int(body.get("to_position", -1)), expected)
-        return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        if not _feature_enabled(store, None, "mission_dependencies"):
+            updated = store.move_queue(body.get("mission_id", ""), int(body.get("to_position", -1)), expected)
+            return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        return _dependency_move(
+            store,
+            body.get("mission_id", ""),
+            int(body.get("to_position", -1)),
+            bool(body.get("move_dependents")),
+            expected,
+        )
 
     @router.post("/queue/set-enabled")
     def set_queue_enabled(request: Request, body: dict[str, Any]) -> dict[str, Any]:
@@ -1608,21 +1969,38 @@ def _build_router() -> APIRouter:
         updated = store.set_queue([by_id[i] for i in ids], expected)
         return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
 
-    @router.post("/queue/first")
-    def first_queue(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    @router.post("/queue/first", response_model=None)
+    def first_queue(request: Request, body: dict[str, Any]) -> dict[str, Any] | JSONResponse:
         store = _store_guard(request)
         expected = body.pop("expected_version", _queue_version(store))
-        updated = store.move_queue(body.get("mission_id", ""), 0, expected)
-        return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        mission_id = body.get("mission_id", "")
+        if not _feature_enabled(store, None, "mission_dependencies"):
+            updated = store.move_queue(mission_id, 0, expected)
+            return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        if bool(body.get("run_anyway")):
+            # run_anyway: the operator asked to start it despite its dependencies, so
+            # the position move goes through as it does with the flag off
+            updated = store.move_queue(mission_id, 0, expected)
+            return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        refusal = _dependency_start_refusal(store, mission_id)
+        if refusal is not None:
+            return refusal
+        return _dependency_move(
+            store, mission_id, 0, bool(body.get("move_dependents")), expected
+        )
 
-    @router.post("/queue/last")
-    def last_queue(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    @router.post("/queue/last", response_model=None)
+    def last_queue(request: Request, body: dict[str, Any]) -> dict[str, Any] | JSONResponse:
         store = _store_guard(request)
         expected = body.pop("expected_version", _queue_version(store))
         # the store clamps positions to [0, n-1], so "last" is n-1, not -1
         n = len(store.queue())
-        updated = store.move_queue(body.get("mission_id", ""), n - 1, expected)
-        return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        if not _feature_enabled(store, None, "mission_dependencies"):
+            updated = store.move_queue(body.get("mission_id", ""), n - 1, expected)
+            return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
+        return _dependency_move(
+            store, body.get("mission_id", ""), n - 1, bool(body.get("move_dependents")), expected
+        )
 
     @router.post("/queue/retry-not-completed")
     def retry_not_completed(request: Request) -> dict[str, Any]:

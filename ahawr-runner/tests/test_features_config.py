@@ -35,6 +35,7 @@ PARTIAL_INPUTS: dict[str, str] = {
     "stats_popup": '{"stats_popup": {"enabled": true}}',
     "stats_engine_sampler": '{"stats_engine_sampler": {"enabled": true}}',
     "mission_dependencies": '{"mission_dependencies": {"enabled": true}}',
+    "run_mission_from_card": '{"run_mission_from_card": {"enabled": true}}',
 }
 MISSION_OVERRIDE_INPUTS: dict[str, str] = {
     "plan_no_truncate": '{"plan_no_truncate": {"enabled": true, "max_tasks": 20}}',
@@ -45,6 +46,7 @@ MISSION_OVERRIDE_INPUTS: dict[str, str] = {
     "stats_popup": '{"stats_popup": {"enabled": true}}',
     "stats_engine_sampler": '{"stats_engine_sampler": {"enabled": true}}',
     "mission_dependencies": '{"mission_dependencies": {"enabled": true}}',
+    "run_mission_from_card": '{"run_mission_from_card": {"enabled": true}}',
 }
 PINNED_FIXTURE = Path(__file__).parent / "fixtures" / "features_pinned.json"
 

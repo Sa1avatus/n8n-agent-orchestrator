@@ -269,6 +269,14 @@ button { font: inherit; color: inherit; }
 .qitem .qstats { font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
 @media (max-width: 800px) { .qitem .qmeta { flex-wrap: wrap; } .qitem .qstats { white-space: normal; } }
 
+/* mission dependencies (docs/mission-dependencies.md §e): the "after: <ids>" line
+ * of a queue row and the waiting / blocked chip, in the .ch / .kchip chip shape */
+.q-deps { display: inline-block; font: 11px var(--mono); color: var(--muted); white-space: nowrap; }
+.dep-chip { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 5px; background: var(--panel2); color: var(--muted); }
+.dep-chip.q-dep-waiting { background: var(--warnbg); color: var(--warn); }
+.dep-chip.q-dep-blocked { background: var(--badbg); color: var(--bad); }
+#boardviewbody .kdeps { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 5px; }
+
 /* mission and task screens: the page scrolls as a whole, panels keep their natural height */
 #board.bd-mission { overflow-y: auto; }
 #board.bd-mission > * { flex: none !important; overflow: visible !important; }

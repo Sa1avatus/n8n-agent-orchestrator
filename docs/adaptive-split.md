@@ -28,6 +28,12 @@ The live n8n workflow is unchanged until the patch is applied and the flags are 
    new one starts (`Has Cancel Run Id` -> `Cancel Previous Run`), so relaunches do not leave stale runs.
    The runner side of this is the supersede and watchdog behaviour in `ahawr-runner/README.md`.
 
+Part dependencies: with the flag `mission_dependencies` on, each created part carries
+`depends_on` of the part before it — part 2 waits for the original mission, part 3 for
+`<mission_id>-p2`, part 1 for nothing (`data-tables/ops/split_dependencies_patch.py`, anchor
+`plan: partPlan(part, k),` in `Create Part Missions`), so the queue never picks a part before the
+part it waits for. Details in `docs/mission-dependencies.md`.
+
 ## Split-trigger decision table
 
 `shouldSplit()` in the Build Worker Run Input node is evaluated on the last Worker run of the task.
@@ -47,12 +53,37 @@ The rows are checked top to bottom; the first match decides.
 The runner-side error codes `child_hung` and `orphan` are not split triggers. They end the run
 and are reported as failures, see `ahawr-runner/README.md`.
 
+## Why the split did not start after a timeout (fixed 2026-11-15)
+
+Seen on `ahawr-mission-dependencies-p4` T038 and `audio-dub-speed-p5` T053: the Worker ran the whole runner limit
+(error code `timeout`) and the mission ended `failed` with no split. Two causes:
+
+1. The workflow does not loop after a permanent Worker failure: it stores the failed state and ends. The split is decided
+   only on the next launch of the task (`unfinished` in Build Worker Run Input: a session and a worker status other than
+   `completed`). Prepare Workflow Failure Persistence read the run with `$(name).all()`, which returns the last execution
+   of the node in this workflow run, so for the tenth task of an execution it stored the run, session and status
+   (`completed`) of the task before. The next launch saw nothing unfinished and never looked the timeout up.
+   `failure_state_task_match_patch.py` (in `launch_mission.sh`) keeps a Load Worker Result row or a Reviewer State item
+   only when it belongs to the failing task. Test: `data-tables/ops/adaptive_split/failure_state_split.test.js`.
+2. A failed mission is skipped by the queue unless it has `retry_failed`, so nothing relaunched it. `queue_board.py next`
+   now relaunches a failed mission whose last Worker run ended with error code `timeout`, at most
+   `MAX_TIMEOUT_RELAUNCHES` (2) times per mission and task (counter file `timeout_relaunch_counts.json` in the ops folder;
+   a split part does not split again, so the bound stops a loop). Tests: `tests/test_queue_board.py`.
+
+Not covered by an end-to-end run: the runner limit is one environment setting (`CLAUDE_RUNNER_MAX_RUN_SECONDS`), so a
+live check with a 60 s limit needs the runner recreated with that value during a pause and restored afterwards.
+
 ## Flags and defaults
 
 The settings live in `features_json` (the `features` entries of `hermes_config`, see
 `ahawr-runner/docs/features-config.md`). A mission can override them with `mission_features_json`.
-`features_config_patch.py` flattens them into the Constants node of the workflow; the split nodes read
-the flattened values, not the JSON. Every feature defaults to off.
+The defaults and the minimums of every feature are in one file,
+`ahawr-runner/src/ahawr_runner/features_defaults.json`: `features_config.py`, the features route (the
+`feature_defaults` and `param_minimums` fields) and `features_config_patch.py` all read that file, and none
+of them keeps a copy. `features_config_patch.py` reads it at patch time when it writes the Constants node,
+and flattens the resolved values into it; the split nodes read the flattened values, not the JSON. Every
+feature defaults to off and the operator turns it on in `features_json`. The table below mirrors
+`features_defaults.json`.
 
 | Feature key (`features_json`)     | Default      | Flattened constant(s)                 | Effect when enabled                                              |
 |-----------------------------------|--------------|---------------------------------------|------------------------------------------------------------------|

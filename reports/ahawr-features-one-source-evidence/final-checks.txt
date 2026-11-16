@@ -1,0 +1,244 @@
+T018 FINAL CHECKS (attempt 2, 2026-11-13) — validation only; no shipped source file was modified.
+Attempt 2 adds one test and the fixture it compares against (section 7); sections 1-6 are the
+attempt-1 checks, re-run where a re-run was affected.
+All commands run from /d/n8n/ahawr-runner unless a path is absolute. "before" values come from
+baseline.txt and pinned-runs.txt in this same report folder.
+
+====================================================================
+1. TARGETED TESTS AND PINNED FIXTURES
+====================================================================
+
+$ python -m pytest tests/test_features_config.py -q --no-cov        (exit=0)
+  ......................                                             [100%]        (24 tests)
+  same file without -q (summary line): "24 passed, 1 warning in 1.18s"; attempt-2 re-run:
+  "24 passed, 1 warning in 1.43s"
+  before (baseline.txt:108-111):  ..................  [100%]  (18 tests); "18 passed, 1 warning in 1.43s"
+  after T007 (pinned-runs.txt:59-61): 20 passed
+  -> passes, test count grew 18 -> 20 -> 24, no failure.
+
+$ node --test tests/board_features.test.js                           (exit=0)
+  # tests 46
+  # pass 46
+  # fail 0
+  before (baseline.txt:113-116): # tests 13 / # pass 13 / # fail 0
+  after T012 (pinned-runs.txt:77-79): # tests 46 / # pass 46 / # fail 0  -> identical
+
+$ sha256sum tests/fixtures/features_pinned.json
+  d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  tests/fixtures/features_pinned.json
+  before (pinned-runs.txt:6, 13, 24, 63): d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  EQUAL
+
+$ sha256sum tests/fixtures/board_features_pinned.json
+  25e94a56760bc19dd68f7ef0dc86fa58fb872150ace2eb058aa21b02a1fd00ff  tests/fixtures/board_features_pinned.json
+  before (pinned-runs.txt:37, 81): 25e94a56760bc19dd68f7ef0dc86fa58fb872150ace2eb058aa21b02a1fd00ff  EQUAL
+
+$ sha256sum tests/fixtures/features_constants_pinned.txt
+  efc931564af32447cad446f922dcc9d32bba148110fbada0e2c2daa05654554b  tests/fixtures/features_constants_pinned.txt
+  before (pinned-runs.txt:55): efc931564af32447cad446f922dcc9d32bba148110fbada0e2c2daa05654554b  EQUAL
+
+  Attempt 1 found this file missing; the review follow-up restored it (see section 7).
+
+====================================================================
+2. ONE SOURCE FOR THE DEFAULTS (split_steps)
+====================================================================
+
+$ python -m pytest tests/ -q --no-cov -k features_defaults
+  exit=2, collection error (environment, not the mission):
+    ERROR collecting tests/test_qa_container_static.py
+    tests/test_qa_container_static.py:7: in <module>
+        import yaml
+    E   ModuleNotFoundError: No module named 'yaml'
+  PyYAML is absent from /opt/ahawr-runner/venv (pyproject dev extra lists only "types-PyYAML").
+
+$ python -m pytest tests/ -q --no-cov -k features_defaults --ignore=tests/test_qa_container_static.py   (exit=0)
+  re-run after the review follow-up: "14 passed, 2 skipped, 3429 deselected, 1 warning in 10.35s"
+  (14 selected: tests/test_features_config.py 4, tests/test_board_features_api.py 2,
+   tests/test_features_config_patch.py 8 — the 8th is the restored pinned-constants test, section 7)
+
+$ grep -n "split_steps" src/ahawr_runner/features_config.py src/ahawr_runner/board_features.js ../data-tables/ops/features_config_patch.py
+  src/ahawr_runner/features_config.py:171:        "split_steps": split["split_steps"],
+  src/ahawr_runner/board_features.js:128:    split_steps: adaptiveSplit.split_steps,
+  ../data-tables/ops/features_config_patch.py:127:    split_steps: adaptiveSplit.split_steps,
+  ../data-tables/ops/features_config_patch.py:154:    "  split_steps: __flat.split_steps,",
+  All four hits are name mappings, no number. The same grep for the literal default values
+  (15, 30, 150, 6, 40) in those three files: no match (exit=1).
+
+$ grep -rn "split_steps" src/ahawr_runner/features_defaults.json
+  src/ahawr_runner/features_defaults.json:10:      "split_steps": 150,
+  src/ahawr_runner/features_defaults.json:33:    "split_steps": 1,
+  One file, two lines: 150 is the adaptive_split default, 1 is the param_minimums floor. The feature
+  default appears nowhere else in the repo.
+  features_config.py:59 "FEATURE_DEFAULTS, PARAM_MINIMUMS = _load_defaults()" is the only read;
+  grep -n "FEATURE_DEFAULTS" src/ahawr_runner/board_features.js -> no match (the JS file holds no defaults).
+
+====================================================================
+3. DEFAULTS MATCH git HEAD, EVERY FEATURE OFF
+====================================================================
+
+$ git show HEAD:ahawr-runner/src/ahawr_runner/features_config.py > /tmp/head_features_config.py
+  HEAD is d4f7c17 (1.1.140); its inline FEATURE_DEFAULTS / PARAM_MINIMUMS (lines 7-26) were compared with
+  src/ahawr_runner/features_defaults.json by ast.literal_eval:
+  features match: True
+  param_minimums match: True
+  mismatched keys: []
+  HEAD all enabled False: True
+  JSON all enabled False: True
+  feature count HEAD/JSON: 7 7
+
+====================================================================
+4. RUFF / MYPY PER TOUCHED FILE (before -> after)
+====================================================================
+
+src/ahawr_runner/features_config.py
+  ruff: before 0 (baseline.txt:119-120 "All checks passed!") -> after "All checks passed!" (0)  EQUAL
+  mypy: before 0 (baseline.txt:122-123) -> after "Success: no issues found in 1 source file" (0)  EQUAL
+
+src/ahawr_runner/api.py   (no before entry in baseline.txt)
+  ruff: "All checks passed!" (0)
+  mypy: "Found 80 errors in 10 files (checked 1 source file)"; anchored in api.py: 1 line,
+        src/ahawr_runner/api.py:285: error: Unused "type: ignore" comment  [unused-ignore]
+  The 80 total is the same 79 from the imported board modules (baseline.txt:134) plus this one line.
+  git diff -- src/ahawr_runner/api.py touches only the version string (line 359, "1.1.140" -> "1.1.150");
+  line 285 is unchanged (git blame: commit e70a18515, 2026-10-27, before the mission) -> pre-existing, not new.
+
+src/ahawr_runner/board_api.py
+  ruff: before 29 E501 (baseline.txt:130-131) -> after "Found 29 errors.", grep -c "E501" = 29  EQUAL
+  mypy: before "Found 79 errors in 9 files", 16 anchored (baseline.txt:133-136)
+        -> after "Found 79 errors in 9 files (checked 1 source file)", grep -c "board_api.py:.*error" = 16  EQUAL
+
+src/ahawr_runner/board_features.js  (JS: ruff/mypy do not apply)
+  node --test tests/board_features.test.js exit 0, 46/46 pass (see section 1).
+
+src/ahawr_runner/features_defaults.json  (data file, not lintable)
+  json.load exit 0 (pinned-runs.txt:68-69); read by features_config.py:21 and the JS test.
+
+tests/test_features_config.py
+  ruff: "All checks passed!" (0)
+  mypy with the plain call: "Found 10 errors in 1 file", all attr-defined:
+    :63 DEFAULTS_PATH, :103/:107/:115/:122/:126/:295/:300/:305/:309 _load_defaults
+  mypy on the HEAD copy of the same file (git show HEAD:... > /tmp/t018head/test_features_config.py):
+    "Success: no issues found in 1 source file"  -> 0 before, 10 now in this environment.
+  Cause: pyproject.toml [tool.mypy] (lines 51-53) sets no mypy_path, so mypy resolves `ahawr_runner` to
+  /opt/ahawr-runner/venv/lib/python3.12/site-packages/ahawr_runner (ahawr_runner-1.1.110.dist-info, a
+  stale non-editable install: grep -c "_load_defaults|DEFAULTS_PATH" in its features_config.py = 0).
+  With the source tree on the path the count is 0:
+    $ MYPYPATH=src python -m mypy tests/test_features_config.py
+    Success: no issues found in 1 source file
+  pytest passes because tests/conftest.py inserts src into sys.path (comment there: "stale copy of
+  ahawr_runner (pip-installed non-editable)"). No source defect: the names exist in the working file.
+
+tests/test_features_config_patch.py (new, untracked -> no before)
+  ruff: "All checks passed!" (0); mypy (MYPYPATH=src): "Success: no issues found in 1 source file" (0)
+  re-checked after the pinned test was added (section 7): both still clean, 8 passed, 1 warning in 1.92s.
+
+tests/test_board_features_api.py
+  ruff: "All checks passed!" (0)
+  mypy: "Found 1 error in 1 file (checked 1 source file)"; the HEAD copy of the same file gives the
+  identical "Found 1 error in 1 file" -> unchanged count.
+
+../data-tables/ops/features_config_patch.py
+  ruff: before 2 (pinned-runs.txt:98) -> after "Found 2 errors." (E501 at :237 and :238, the two
+        pre-existing comment lines in patch())  EQUAL
+  mypy: "Success: no issues found in 1 source file" (0), same as pinned-runs.txt:106
+
+Combined run for reference: python -m mypy src/ahawr_runner/features_config.py src/ahawr_runner/api.py
+  src/ahawr_runner/board_api.py tests/test_features_config.py tests/test_features_config_patch.py
+  tests/test_board_features_api.py ../data-tables/ops/features_config_patch.py
+  -> "Found 80 errors in 10 files (checked 7 source files)" (the 79 old module errors + api.py:285).
+  Checked together, the two test files report no attr-defined errors: mypy resolves `ahawr_runner` to the
+  checked src/ahawr_runner/* modules. Checked one at a time, the tests resolve it to the stale wheel (see
+  the test_features_config.py entry above), which is why 10 errors appear there alone.
+
+====================================================================
+5. GIT HYGIENE
+====================================================================
+
+$ git diff --check                                   (exit=2)
+  ahawr-runner/qa/contracts/audio-dub-ui-redesign/contract.md:69: new blank line at EOF.
+  The only whitespace finding; it is pre-existing and already noted in pinned-runs.txt:73 and :82
+  ("the repo-wide git diff --check still flags the pre-existing blank line at EOF in
+  qa/contracts/audio-dub-ui-redesign/contract.md:69"). The "LF will be replaced by CRLF" lines are the
+  Windows host's git settings, not findings.
+$ git diff --check -- <every mission file>           (exit=0, no output)
+  CHANGELOG.md README.md ROADMAP.md ahawr-runner/pyproject.toml
+  ahawr-runner/docs/features-config.md ahawr-runner/src/ahawr_runner/{features_config,api,board_api}.py
+  ahawr-runner/src/ahawr_runner/board_features.js ahawr-runner/src/ahawr_runner/features_defaults.json
+  ahawr-runner/tests/{board_features.test.js,test_features_config.py,test_board_features_api.py,test_features_config_patch.py}
+
+$ git status --short                                 (79 entries; the mission set is)
+   M CHANGELOG.md, M README.md, M ROADMAP.md, M ahawr-runner/docs/features-config.md,
+   M ahawr-runner/pyproject.toml, M ahawr-runner/qa/contracts/audio-dub-ui-redesign/contract.md,
+   M ahawr-runner/src/ahawr_runner/{api,board_api,features_config}.py,
+   M ahawr-runner/src/ahawr_runner/board_features.js,
+   M ahawr-runner/tests/{board_features.test.js,test_board_features_api.py,test_features_config.py},
+   ?? ahawr-runner/qa/scenarios/board_features_panel.yaml,
+   ?? ahawr-runner/src/ahawr_runner/features_defaults.json,
+   ?? ahawr-runner/tests/fixtures/board_features_pinned.json,
+   ?? ahawr-runner/tests/fixtures/features_constants_pinned.txt,
+   ?? ahawr-runner/tests/fixtures/features_pinned.json,
+   ?? ahawr-runner/tests/test_features_config_patch.py,
+   ?? reports/ahawr-features-one-source-evidence/
+  The only files this task created are this report folder, test_features_config_patch.py and, in
+  attempt 2, tests/fixtures/features_constants_pinned.txt (section 7); no other untracked entry is
+  new — litellm/, scripts/, evals/, .claude/, reports/dub-ui/ and the four mission-*-draft.md files
+  are pre-existing per baseline.txt section 6.
+
+====================================================================
+6. CHECKS NOT RUN, AND WHY
+====================================================================
+- Full test suite: not run. The task is the narrow pair of checks; CLAUDE.md says run only the tests a
+  change can affect, and this task changes no source.
+- tests/test_qa_container_static.py: not runnable — `import yaml` fails (PyYAML absent in the venv), which
+  is the collection error quoted in section 2. Installing it would be a new runtime dependency (forbidden).
+- Dashboard/app start smoke: not run. pinned-runs.txt records attempts T004 (x3), T005, T006, T007, T012,
+  T013 only — there is no T017 entry, so there is no "before" app-start output to compare against.
+- tests/board_i18n.test.js: not run here; the i18n keys are untouched by this mission, and T012 recorded
+  "# tests 1 / # pass 1 / # fail 0" (pinned-runs.txt:90-91).
+- ruff/mypy on board_features.js and features_defaults.json: not applicable (JS and JSON).
+- docker / queue / container commands: never run, per the repository boundaries.
+
+====================================================================
+7. REVIEW FOLLOW-UP (attempt 2): the missing constants fixture
+====================================================================
+
+Why the file was gone
+$ git status --short ahawr-runner/tests/fixtures
+  ?? ahawr-runner/tests/fixtures/board_features_pinned.json
+  ?? ahawr-runner/tests/fixtures/features_constants_pinned.txt   (the one created now, below)
+  ?? ahawr-runner/tests/fixtures/features_pinned.json
+$ git log --all -- ahawr-runner/tests/fixtures/features_constants_pinned.txt
+  no output: the fixture was never committed, like the other two pins, so Git has no copy of it.
+$ grep -n pinned ahawr-runner/tests/test_features_config_patch.py   (before this follow-up)
+  the docstring lines 6-9 of attempt 1 stated the parity test and its fixture were dropped when the
+  patch stopped carrying a copy of the defaults; the file then held 7 tests, none named "pinned":
+  :115 no_literal_defaults, :123 temp-file value, :146 patch-a-copy-twice, :168 live-export copy,
+  :195 anchors-exactly-once, :224 node syntax check, :246 malformed json.
+
+The original bytes were recovered, not regenerated
+  Source: /tmp/t013run/constants_code.txt, the Constants jsCode dump written by attempt T013,
+  the run that recorded pinned-runs.txt:110 "byte_identical_with_fixture: True len_code: 10966
+  len_pinned: 10966". Restored with cp, byte copy of that dump: 10966 bytes,
+  sha256 efc931564af32447cad446f922dcc9d32bba148110fbada0e2c2daa05654554b = pinned-runs.txt:55.
+  Direct comparison of that file against the refactored patch's output on a copy of
+  data-tables/ops/_scratch/live_export.json: 10966 vs 10966, "bytes equal: True". So the fixture is
+  the earlier content, and the current patch still writes exactly it.
+
+Restored test (ahawr-runner/tests/test_features_config_patch.py)
+  :31-32 FIXTURES_DIR and PINNED_CONSTANTS_PATH point at the fixture.
+  :199-216 test_features_defaults_pinned_constants_text_matches_the_patch_output: copies the live
+  export under tmp_path, runs the refactored patch on that copy, reads back the Constants jsCode and
+  asserts it equals the fixture bytes, then asserts the live export bytes are unchanged.
+  :199-200 two skipif markers keep it skipped if the export copy or the fixture is absent.
+
+$ python -m pytest tests/test_features_config_patch.py --no-cov -k pinned    (exit=0)
+  "1 passed, 7 deselected, 1 warning in 1.22s"
+$ python -m pytest tests/test_features_config_patch.py --no-cov              (exit=0)
+  "8 passed, 1 warning in 1.92s"
+$ python -m ruff check tests/test_features_config_patch.py -> "All checks passed!"
+$ MYPYPATH=src python -m mypy tests/test_features_config_patch.py -> "Success: no issues found in 1 source file"
+$ node -e 'new Function(<the fixture text>)' -> "node new Function ok, length 10966"
+
+Nothing else in this report changed. The live export and AHAWR_Workflow.json were not written:
+  ls -l data-tables/ops/_scratch/live_export.json still reads 221093 Oct 21 12:33, the same time as
+  pinned-runs.txt:41 and :49.
+  git diff --check -- ahawr-runner/tests/test_features_config_patch.py exits 0 with no output
+  (the file is untracked, so the repo-wide git diff --check cannot cover it either way).

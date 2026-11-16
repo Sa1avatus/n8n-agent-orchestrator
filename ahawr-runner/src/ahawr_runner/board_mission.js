@@ -193,6 +193,14 @@ function formHtml(mission, queueEntry, config, running, defaults) {
   const attemptsRow = rows[6]; // the "attempts_per_task" row (index 6)
   // The attempts row gets the preset buttons after its input.
   rows[6] = attemptsRow.replace(/<\/div>$/, presetButtons(running) + `</div>`);
+  // The dependency row appears only when the queue answer carries depends_on
+  // (the mission_dependencies flag): with the flag off the form markup is
+  // byte-for-byte the same as before.
+  const deps = dependencyHelpers();
+  if (deps && queueEntry && "depends_on" in queueEntry) {
+    rows.splice(7, 0, fieldRow("queue", "depends_on", t("m.dep"), "text",
+      deps.formatDependencyField(queueEntry.depends_on), running, null, null));
+  }
   return `<div class="confbox" id="confbox">` + rows.join("") + `</div>`;
 }
 
@@ -352,6 +360,14 @@ function orderRules() {
 function rolesCore() {
   if (typeof BoardRoles !== "undefined") return BoardRoles;
   return require("./board_roles.js");
+}
+
+// The dependency field helpers of board_mission_dependencies.js.  board.html
+// loads that script after this one, so the module is looked up when a form is
+// built; the require() covers node loads of this file standalone.
+function dependencyHelpers() {
+  if (typeof BoardMissionDependencies !== "undefined") return BoardMissionDependencies;
+  return require("./board_mission_dependencies.js");
 }
 
 // The config with its model and provider values taken from roles_json where it sets them;

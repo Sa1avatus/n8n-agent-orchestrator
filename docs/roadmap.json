@@ -577,6 +577,14 @@
         [
           "todo",
           "DeepSeek Harness evaluated as an executor"
+        ],
+        [
+          "todo",
+          "ahawr-engine-contract: one engine interface and a registry, a generic CLI engine (queued 2026-11-14)"
+        ],
+        [
+          "todo",
+          "ahawr-engine-opencode: OpenCode as a fourth engine behind a flag, after the contract and recorded fixtures"
         ]
       ]
     }

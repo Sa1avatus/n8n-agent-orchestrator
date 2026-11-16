@@ -1,0 +1,123 @@
+
+before run (T004, attempt 1, 2026-11-13):
+$ python -m pytest tests/test_features_config.py -q --no-cov
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+$ sha256sum tests/fixtures/features_pinned.json
+d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  tests/fixtures/features_pinned.json
+
+before run (T004, attempt 2, 2026-11-13): pytest summary and JSON validity:
+$ python -m pytest tests/test_features_config.py -q --no-cov | grep -E "passed|failed"
+$ python -c "import json;json.load(open(\"tests/fixtures/features_pinned.json\"))"; exit code
+0
+$ sha256sum tests/fixtures/features_pinned.json
+d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  tests/fixtures/features_pinned.json
+
+before run (T004, attempt 3, 2026-11-13): pytest summary line and exit code:
+$ python -m pytest tests/test_features_config.py -q --no-cov -p no:randomly; echo exit=$?
+dots line: ...................                                                      [100%]
+exit code: 0
+$ python -m pytest tests/test_features_config.py --no-cov (summary line)
+19 passed, 1 warning in 1.51s
+$ git diff --stat -- src/ahawr_runner/features_config.py (empty = unchanged)
+(no output above means no diff)
+$ sha256sum tests/fixtures/features_pinned.json (final)
+d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  tests/fixtures/features_pinned.json
+
+before run (T005, attempt 1, 2026-11-13): node --test summary and JSON validity, before any refactoring (board_features.js unchanged):
+$ node --test tests/board_features.test.js
+# tests 44
+# pass 44
+# fail 0
+$ node -e "JSON.parse(require('fs').readFileSync('tests/fixtures/board_features_pinned.json','utf8'))"; echo exit=$?
+exit=0
+$ git diff --stat -- src/ahawr_runner/board_features.js (empty = unchanged)
+$ git diff --check -- tests/board_features.test.js tests/fixtures/board_features_pinned.json
+(no whitespace findings for these files; exit 0)
+$ sha256sum tests/fixtures/board_features_pinned.json
+25e94a56760bc19dd68f7ef0dc86fa58fb872150ace2eb058aa21b02a1fd00ff  tests/fixtures/board_features_pinned.json
+
+before run (T006, attempt 1, 2026-11-13): pinned patch test against the unrefactored patch; the live export copy and AHAWR_Workflow.json are only read, never written (the patch runs on a tmp_path copy):
+$ ls -l data-tables/ops/_scratch/live_export.json AHAWR_Workflow.json (before the test run)
+-rwxrwxrwx 1 root root 221093 Oct 21 12:33 data-tables/ops/_scratch/live_export.json
+-rwxrwxrwx 1 root root 252278 Nov  9 15:01 AHAWR_Workflow.json
+$ cd ahawr-runner && python -m pytest tests/test_features_config_patch.py --no-cov -k pinned
+2 passed, 1 warning in 1.63s
+$ python -m ruff check tests/test_features_config_patch.py
+All checks passed!
+$ python -m mypy tests/test_features_config_patch.py
+Success: no issues found in 1 source file
+$ ls -l data-tables/ops/_scratch/live_export.json AHAWR_Workflow.json (after the test run: identical times)
+-rwxrwxrwx 1 root root 221093 Oct 21 12:33 data-tables/ops/_scratch/live_export.json
+-rwxrwxrwx 1 root root 252278 Nov  9 15:01 AHAWR_Workflow.json
+$ ls -l data-tables/ops/features_config_patch.py (the patch was not touched)
+-rwxrwxrwx 1 root root 4879 Nov  9 03:13 data-tables/ops/features_config_patch.py
+$ sha256sum ahawr-runner/tests/fixtures/features_constants_pinned.txt
+efc931564af32447cad446f922dcc9d32bba148110fbada0e2c2daa05654554b  ahawr-runner/tests/fixtures/features_constants_pinned.txt
+
+after run (T007, attempt 1, 2026-11-13): defaults moved to src/ahawr_runner/features_defaults.json; the pinned fixture is unchanged and the pinned test still matches the code:
+$ python -m pytest tests/test_features_config.py -q --no-cov
+....................                                                     [100%]
+$ python -m pytest tests/test_features_config.py --no-cov (summary line)
+20 passed, 1 warning in 1.38s
+$ sha256sum tests/fixtures/features_pinned.json
+d98d2158a21ca6ee02b37982f2639fb6e585a7de6ecdf4aef4ea9e47a0236d04  tests/fixtures/features_pinned.json
+$ python -m ruff check src/ahawr_runner/features_config.py
+All checks passed!
+$ python -m mypy src/ahawr_runner/features_config.py
+Success: no issues found in 1 source file
+$ python -c "import json;json.load(open('src/ahawr_runner/features_defaults.json'))"; echo exit=$?
+exit=0
+$ PYTHONPATH=src python -c "from ahawr_runner import api, runs, board_api, overrides_config, retrieval_config, thinking_config, features_config; print(len(features_config.FEATURE_DEFAULTS), len(features_config.PARAM_MINIMUMS))"
+7 5
+$ git diff --check -- ahawr-runner/src/ahawr_runner/features_config.py ahawr-runner/tests/test_features_config.py ahawr-runner/src/ahawr_runner/features_defaults.json
+(no output above; exit 0; the repo-wide git diff --check still flags the pre-existing blank line at EOF in qa/contracts/audio-dub-ui-redesign/contract.md:69, not touched by T007)
+
+after run (T012, attempt 1, 2026-11-13): tests/board_features.test.js feeds board_features.js with the defaults read from src/ahawr_runner/features_defaults.json; the JS copy and the JS half of the copy-parity test are gone (board_features.js itself untouched):
+$ node --test tests/board_features.test.js
+# tests 46
+# pass 46
+# fail 0
+$ sha256sum tests/fixtures/board_features_pinned.json (byte-identical to the T005 pin above)
+25e94a56760bc19dd68f7ef0dc86fa58fb872150ace2eb058aa21b02a1fd00ff  tests/fixtures/board_features_pinned.json
+$ git diff --check -- ahawr-runner/tests/board_features.test.js (no whitespace findings, exit 0; repo-wide git diff --check still flags only the pre-existing blank line at EOF in qa/contracts/audio-dub-ui-redesign/contract.md:69)
+$ git show HEAD:ahawr-runner/src/ahawr_runner/board_features.js | grep -n "FEATURE_DEFAULTS = {\|split_steps: 150"
+3:const FEATURE_DEFAULTS = {
+5:  adaptive_split: { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 },
+the new tests copy that HEAD source into a scratch tree and run against it:
+  not ok 45 - features_defaults: board_features.js source holds no defaults object and no default literal
+    error: 'board_features.js still declares a defaults object' (first assertion trips; the literal check, run on the same HEAD copy, matches lines 4-9: enabled: false, max_tasks: 15, max_splits: 6, split_steps: 150, max_total_tasks: 40)
+  # tests 46 / # pass 0 / # fail 46   (all tests fail on the HEAD copy: no setFeatureDefaults there)
+$ node --test tests/board_i18n.test.js (parity of the i18n keys, unchanged by T012)
+# tests 1 / # pass 1 / # fail 0
+
+after run (T013, attempt 1, 2026-11-13): features_config_patch.py now reads the defaults and minimums from src/ahawr_runner/features_defaults.json at patch time; the text it writes into Constants is byte-identical to the pinned fixture:
+$ cd ahawr-runner && python -m pytest tests/test_features_config_patch.py --no-cov
+2 passed, 1 warning in 1.54s
+$ python -m pytest tests/test_features_config_patch.py -q --no-cov -k pinned
+..                                                                       [100%]
+$ python -m ruff check ../data-tables/ops/features_config_patch.py (before the change: "Found 2 errors", E501 at :80 and :81; after: the same 2)
+Found 2 errors.  (E501 at features_config_patch.py:237 and :238 = the two pre-existing comment lines in patch())
+$ python -m py_compile ../data-tables/ops/features_config_patch.py; echo py_compile_exit=$?
+py_compile_exit=0
+$ grep -n "split_steps" ../data-tables/ops/features_config_patch.py
+127:    split_steps: adaptiveSplit.split_steps,
+154:    "  split_steps: __flat.split_steps,",
+(no default value left; both hits are name mappings, the value comes from the JSON)
+$ python -m mypy ../data-tables/ops/features_config_patch.py
+Success: no issues found in 1 source file
+patch on a copy of the live export in /tmp/t013run (run 1 then run 2, the export copy itself untouched):
+copy.json: patched Constants
+byte_identical_with_fixture: True  len_code: 10966 len_pinned: 10966  diff_lines: none
+copy.json: already patched
+sha256sum of the copy after run 1 and run 2: 40e587d3dbcd498e0a113cce0be7305ae122d0479a2deb4aa7d5d0062977594a (identical)
+$ node -e 'const code=fs.readFileSync("constants_code.txt");new Function(code)' (the patched Constants jsCode, the top-level return wrapped by new Function)
+node syntax check ok: jsCode compiled as a function body, length 10966
+$ ls -l data-tables/ops/_scratch/live_export.json AHAWR_Workflow.json data-tables/ops/real_queue.sh (after the runs, same times as before)
+-rwxrwxrwx 1 root root 221093 Oct 21 12:33 data-tables/ops/_scratch/live_export.json
+-rwxrwxrwx 1 root root 252278 Nov  9 15:01 AHAWR_Workflow.json
+-rwxrwxrwx 1 root root 13667 Nov  5 07:29 data-tables/ops/real_queue.sh
+abort paths of a missing or malformed defaults JSON (patch copied to /tmp/t013run/deep/deeper/patch.py, the flow copy stays unpatched):
+features defaults JSON not found: /tmp/t013run/ahawr-runner/src/ahawr_runner/features_defaults.json (exit 1)
+features defaults JSON is not valid JSON: ...: Expecting value: line 1 column 1 (char 0) (exit 1)
+features defaults JSON has no non-empty "param_minimums" object (exit 1)
+features defaults JSON: the feature "adaptive_split" is not an object (exit 1)

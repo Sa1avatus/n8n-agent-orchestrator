@@ -337,6 +337,14 @@ class TestQueueDependencies:
         # Running the migration again must not error (IF NOT EXISTS).
         store._ensure_queue_columns()
 
+    def test_migration_skips_the_alter_when_the_column_exists(self, monkeypatch):
+        """The board role is not the table owner: an ALTER would fail with 'must be owner',
+        so the migration looks at the catalog first and does nothing when the column is there."""
+        conn = FakeConnection()
+        conn.set_response("information_schema.columns", [{"?column?": 1}])
+        _make_store(monkeypatch, conn)
+        assert [sql for sql, _ in conn.executed if "ADD COLUMN" in sql] == []
+
     def test_list_dependencies_reads_the_stored_ids(self, monkeypatch):
         store, conn = _make_store(monkeypatch)
         conn.set_response("SELECT depends_on", [{"depends_on": ["m2", "m3"]}])

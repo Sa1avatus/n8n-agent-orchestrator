@@ -134,6 +134,228 @@ def test_next_mission_order_unchanged_flag_off() -> None:
     assert order == ["m_active", "m_wait1", "m_wait2", "m_wait3"]
 
 
+def _dependency_rule() -> ModuleType:
+    """The runner's shared due/waiting/blocked rule, loaded as queue_board loads it."""
+    return queue_board._shared_dependency_rule()
+
+
+def _flag_on_queue(entries: list[dict[str, Any]], states: dict[str, str]) -> list[dict[str, Any]]:
+    """Queue rows in the shape GET /api/board/queue gives when mission_dependencies is on."""
+    verdicts = _dependency_rule().classify_queue(entries, states)
+    return [
+        {
+            **entry,
+            "depends_on": verdicts[entry["mission_id"]]["depends_on"],
+            "dependency_state": verdicts[entry["mission_id"]]["state"],
+            "dependency_reason": verdicts[entry["mission_id"]]["reason"],
+        }
+        for entry in entries
+    ]
+
+
+def test_flag_on_skips_an_entry_with_unmet_dependency_and_picks_the_next_due_one() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_pre", 1),
+        {**_entry("m_after", 2), "depends_on": ["m_pre"]},
+        _entry("m_free", 3),
+    ]
+    states = {"m_pre": "queued", "m_after": "queued", "m_free": "queued"}
+    first = queue_board.next_mission(entries, states, set(), frozenset(), rule)
+    assert first is not None and first["mission_id"] == "m_pre"
+    second = queue_board.next_mission(entries, states, set(), frozenset({"m_pre"}), rule)
+    assert second is not None and second["mission_id"] == "m_free"
+
+
+def test_flag_on_blocked_dependency_entry_is_never_picked() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_dep", 1),
+        {**_entry("m_needs", 2), "depends_on": ["m_dep"]},
+        _entry("m_free", 3),
+    ]
+    states = {"m_dep": "failed", "m_needs": "queued", "m_free": "queued"}
+    order: list[str] = []
+    skipped: frozenset[str] = frozenset()
+    for _ in range(len(entries)):  # bound: one call per entry, breaks on None
+        picked = queue_board.next_mission(entries, states, set(), skipped, rule)
+        if picked is None:
+            break
+        order.append(picked["mission_id"])
+        skipped = frozenset({*skipped, picked["mission_id"]})
+    assert order == ["m_free"]
+    assert "m_needs" not in order and "m_dep" not in order
+
+
+def test_flag_on_dependency_completed_returns_the_previously_waiting_entry() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_pre", 1),
+        {**_entry("m_after", 2), "depends_on": ["m_pre"]},
+        _entry("m_free", 3),
+    ]
+    states = {"m_pre": "queued", "m_after": "queued", "m_free": "queued"}
+    first = queue_board.next_mission(entries, states, set(), frozenset({"m_pre"}), rule)
+    assert first is not None and first["mission_id"] == "m_free"
+    done_states = {"m_pre": "completed", "m_after": "queued", "m_free": "queued"}
+    second = queue_board.next_mission(entries, done_states, set(), frozenset({"m_pre"}), rule)
+    assert second is not None and second["mission_id"] == "m_after"
+
+
+def test_flag_on_failed_dependency_is_blocked_and_listed_with_the_reason() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_dep", 1),
+        {**_entry("m_needs", 2), "depends_on": ["m_dep"]},
+        _entry("m_free", 3),
+    ]
+    states = {"m_dep": "failed", "m_needs": "queued", "m_free": "queued"}
+    verdict = rule.classify_queue(entries, states)["m_needs"]
+    assert verdict["state"] == rule.BLOCKED_STATE
+    assert verdict["reason"] == "blocked by m_dep: a dependency failed"
+    assert queue_board._blocked_lines(entries, states, frozenset(), rule) == [
+        "m_needs: blocked by m_dep: a dependency failed"
+    ]
+    order: list[str] = []
+    skipped: frozenset[str] = frozenset()
+    for _ in range(len(entries)):  # bound: one call per entry, breaks on None
+        picked = queue_board.next_mission(entries, states, set(), skipped, rule)
+        if picked is None:
+            break
+        order.append(picked["mission_id"])
+        skipped = frozenset({*skipped, picked["mission_id"]})
+    assert "m_needs" not in order
+    # flag off the same queue would return the dependent, proving the rule changes the pick
+    flag_off = queue_board.next_mission(entries, states, set(), frozenset({"m_dep"}), None)
+    assert flag_off is not None and flag_off["mission_id"] == "m_needs"
+
+
+def test_flag_on_retry_then_completed_dependency_unblocks_the_dependent() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_dep", 1, retry_failed=True),
+        {**_entry("m_needs", 2), "depends_on": ["m_dep"]},
+    ]
+    retry_flags = {"m_dep"}
+    states = {"m_dep": "failed", "m_needs": "queued"}
+    picked = queue_board.next_mission(entries, states, retry_flags, frozenset(), rule)
+    assert picked is not None and picked["mission_id"] == "m_dep"
+    completed = {"m_dep": "completed", "m_needs": "queued"}
+    after = queue_board.next_mission(entries, completed, retry_flags, frozenset({"m_dep"}), rule)
+    assert after is not None and after["mission_id"] == "m_needs"
+
+
+def test_flag_on_dependency_removed_from_depends_on_makes_the_dependent_due() -> None:
+    rule = _dependency_rule()
+    states = {"m_dep": "failed", "m_needs": "queued"}
+    before = [
+        _entry("m_dep", 1),
+        {**_entry("m_needs", 2), "depends_on": ["m_dep"]},
+    ]
+    assert queue_board.next_mission(before, states, set(), frozenset({"m_dep"}), rule) is None
+    after = [
+        _entry("m_dep", 1),
+        {**_entry("m_needs", 2), "depends_on": []},
+    ]
+    picked = queue_board.next_mission(after, states, set(), frozenset({"m_dep"}), rule)
+    assert picked is not None and picked["mission_id"] == "m_needs"
+
+
+def test_flag_on_queue_with_only_waiting_and_blocked_entries_returns_no_mission() -> None:
+    rule = _dependency_rule()
+    entries = [
+        {**_entry("m_wait", 1), "depends_on": ["m_pre"]},
+        {**_entry("m_blocked", 2), "depends_on": ["m_dead"]},
+    ]
+    states = {"m_wait": "queued", "m_blocked": "queued", "m_dead": "failed"}
+    assert queue_board.next_mission(entries, states, set(), frozenset(), rule) is None
+    # without the rule the same queue would start the waiting entry: the rule is what stops it
+    off = queue_board.next_mission(entries, states, set(), frozenset(), None)
+    assert off is not None and off["mission_id"] == "m_wait"
+
+
+def test_flag_on_active_mission_resumes_first_even_with_due_entries() -> None:
+    rule = _dependency_rule()
+    entries = [
+        _entry("m_due_first", 1),
+        _entry("m_active", 2),
+        {**_entry("m_also_due", 3), "depends_on": []},
+    ]
+    states = {"m_due_first": "queued", "m_active": "active", "m_also_due": "queued"}
+    picked = queue_board.next_mission(entries, states, set(), frozenset(), rule)
+    assert picked is not None and picked["mission_id"] == "m_active"
+
+
+def test_flag_on_split_mission_with_empty_depends_on_behaves_like_the_flag_off_order() -> None:
+    """A split mission gets the empty ``depends_on`` list of its parts: the pick order
+    must stay the flag-off order (active first, waiting in position order)."""
+    rule = _dependency_rule()
+    entries = [
+        {**_entry("m_active", 1), "depends_on": []},
+        {**_entry("m_failed", 2), "depends_on": []},
+        {**_entry("m_done", 3), "depends_on": []},
+        {**_entry("m_wait1", 4), "depends_on": []},
+        {**_entry("m_wait2", 5), "depends_on": []},
+    ]
+    states = {
+        "m_active": "active",
+        "m_failed": "failed",
+        "m_done": "completed",
+        "m_wait1": "queued",
+        "m_wait2": "queued",
+    }
+    order: list[str] = []
+    skipped: frozenset[str] = frozenset()
+    for _ in range(len(entries)):  # bound: one call per entry, breaks on None
+        picked = queue_board.next_mission(entries, states, set(), skipped, rule)
+        if picked is None:
+            break
+        order.append(picked["mission_id"])
+        skipped = frozenset({*skipped, picked["mission_id"]})
+    assert order == ["m_active", "m_wait1", "m_wait2"]
+
+
+@pytest.mark.parametrize("rule", [None, _dependency_rule()], ids=["flag-off", "flag-on"])
+def test_active_mission_resumes_first_with_and_without_the_rule(rule: Any) -> None:
+    entries = [
+        _entry("m_queued", 1),
+        {**_entry("m_waiting", 2), "depends_on": ["m_queued"]},
+        _entry("m_active", 3),
+    ]
+    states = {"m_queued": "queued", "m_waiting": "queued", "m_active": "active"}
+    picked = queue_board.next_mission(entries, states, set(), frozenset(), rule)
+    assert picked is not None and picked["mission_id"] == "m_active"
+
+
+def test_blocked_entries_listed_on_stderr_stdout_keeps_the_parsed_line(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    entries = [
+        _entry("m_done", 1),
+        {**_entry("m_after", 2), "depends_on": ["m_done"]},
+        _entry("m_failed", 3),
+        {**_entry("m_needs", 4), "depends_on": ["m_failed"]},
+    ]
+    states = {
+        "m_done": "completed",
+        "m_after": "queued",
+        "m_failed": "failed",
+        "m_needs": "queued",
+    }
+    live_states = [{"state_key": key, "status": status} for key, status in states.items()]
+    rc_off = _run(FakeBoard(queue=entries, live_states=live_states), "next")
+    out_off = capsys.readouterr().out
+    rc_on = _run(
+        FakeBoard(queue=_flag_on_queue(entries, states), live_states=live_states), "next"
+    )
+    captured_on = capsys.readouterr()
+    assert rc_off == rc_on == queue_board.EXIT_FOUND
+    assert captured_on.out == out_off == "m_after 3 0\n"
+    assert captured_on.err == (
+        "queue_board: blocked m_needs: blocked by m_failed: a dependency failed\n"
+    )
+
+
 class FakeResponse:
     def __init__(self, payload: Any) -> None:
         self._body = json.dumps(payload).encode("utf-8")
@@ -475,3 +697,70 @@ def test_sync_from_shell_sends_the_entries_the_shell_would_run(
         "expected_version": "v7",
     }
     assert capsys.readouterr().out == "queue_board: sync-from-shell done, queue version v8\n"
+
+
+# --- relaunch of a mission whose Worker run ended by the runner time limit (2026-11-15) ---
+
+RUNNER = "http://127.0.0.1:8"
+
+
+class _Reply:
+    def __init__(self, payload: Any) -> None:
+        self.payload = payload
+
+    def __enter__(self) -> _Reply:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return json.dumps(self.payload).encode("utf-8")
+
+
+def _runner_opener(runs: dict[str, dict[str, Any]]) -> Any:
+    def opener(url: str, timeout: float = 0) -> _Reply:
+        run_id = url.removeprefix(RUNNER + "/v1/runs/")
+        if run_id not in runs:
+            raise urllib.error.URLError("unknown run")
+        return _Reply(runs[run_id])
+
+    return opener
+
+
+def _live(mission_id: str, run_id: str, task_index: float = 5.0) -> dict[str, Any]:
+    return {"state_key": mission_id, "worker_run_id": run_id, "task_index": task_index}
+
+
+def test_timed_out_failed_mission_is_relaunched_with_its_counter_key() -> None:
+    entries = [_entry("m_timeout", 1), _entry("m_other", 2)]
+    states = {"m_timeout": "failed", "m_other": "failed"}
+    live = [_live("m_timeout", "run_t"), _live("m_other", "run_o")]
+    runs = {"run_t": {"error": {"code": "timeout"}}, "run_o": {"error": {"code": "cli_error"}}}
+    found = queue_board.timeout_relaunches(
+        entries, states, live, _runner_opener(runs), runner_url=RUNNER
+    )
+    assert found == {"m_timeout": "m_timeout:5.0"}
+
+
+def test_timeout_relaunch_stops_after_the_limit_and_skips_flagged_or_active() -> None:
+    entries = [_entry("m_a", 1), _entry("m_b", 2, retry_failed=True), _entry("m_c", 3)]
+    states = {"m_a": "failed", "m_b": "failed", "m_c": "active"}
+    live = [_live("m_a", "run_a"), _live("m_b", "run_b"), _live("m_c", "run_c")]
+    runs = {run: {"error": {"code": "timeout"}} for run in ("run_a", "run_b", "run_c")}
+    opener = _runner_opener(runs)
+    counts = {"m_a:5.0": queue_board.MAX_TIMEOUT_RELAUNCHES}
+    assert queue_board.timeout_relaunches(
+        entries, states, live, opener, runner_url=RUNNER, counts=counts
+    ) == {}
+
+
+def test_unreachable_runner_does_not_make_a_mission_eligible(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    entries = [_entry("m_a", 1)]
+    found = queue_board.timeout_relaunches(
+        entries, {"m_a": "failed"}, [_live("m_a", "run_a")], _runner_opener({}), runner_url=RUNNER
+    )
+    assert found == {}
+    assert "m_a skipped" in capsys.readouterr().err

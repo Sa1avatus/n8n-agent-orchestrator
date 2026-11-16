@@ -37,6 +37,16 @@
 // this file standalone (board.html always loads board_logic.js first).
 const esc = (typeof BoardLogic !== "undefined" ? BoardLogic : require("./board_logic.js")).esc;
 
+// The dependency helpers of board_mission_dependencies.js (the refusal message
+// and the move body), looked up like the renderers do in board_queue.js: a
+// require() in node, the global the board page sets.
+function dependencyModule() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
 // Working copy of the board data (the same shape board_queue.js loads:
 // { groups, missions, queue, version, cards }) and the id of the card being
 // dragged (null when not dragging).
@@ -89,15 +99,57 @@ async function postQueueJson(url, payload) {
     const err = new Error(body && body.error && body.error.message
       ? body.error.message : t("conflict.plan_changed"));
     err.status = 409;
+    err.body = body;
     throw err;
   }
   if (!res.ok) {
     const err = new Error((body && (body.error && body.error.message ? body.error.message
       : body.code)) || "HTTP " + res.status);
     err.status = res.status;
+    err.body = body;
     throw err;
   }
   return body;
+}
+
+// The refusal of the mission-dependency guard (the _refusal envelope of
+// board_api.py): only the dependency rule answers carry code "guard", so with
+// the flag off a move never reaches this path.
+function isDependencyGuardRefusal(e) {
+  const md = dependencyModule();
+  return Boolean(md && md.isDependencyRefusal(e));
+}
+
+// A move the dependency guard refused: when only the missions that depend on it
+// stand in the way, ask "move them too" and resend the same position with
+// move_dependents; otherwise show the refusal message naming the ids.  A
+// refused move touches nothing on the server, so the caller's refresh leaves the
+// card in the column and position it had.
+async function handleMoveRefusal(e, missionId, toPosition) {
+  const md = dependencyModule();
+  if (!md) {
+    showState(e.message || t("move.failed"));
+    return;
+  }
+  const askText = md.dependencyGroupConfirm(
+    (DndState.data && DndState.data.queue) || [], missionId, e.body,
+  );
+  if (askText && window.confirm(askText)) {
+    const version = DndState.data ? DndState.data.version : null;
+    try {
+      await postQueueJson(
+        "/api/board/queue/move",
+        md.buildMoveBody(missionId, toPosition, version, true),
+      );
+      return;
+    } catch (again) {
+      showState(again.status === 409
+        ? t("conflict.plan_changed")
+        : (again.message || t("move.failed")));
+      return;
+    }
+  }
+  showState(md.dependencyRefusalMessage(e.body, missionId));
 }
 
 // The pure part: given the working queue data, the mission being moved and
@@ -232,7 +284,8 @@ function moveByStep(missionId, dir) {
 
 // Apply one reorder: compute the new queue with BoardLogic, call the queue
 // API, then refresh the board from the server.  A 409 shows
-// "план изменился, обновите" and the board is reloaded too.
+// "план изменился, обновите" and the board is reloaded too; a 403 from the
+// mission-dependency guard is asked about or shown, as handleMoveRefusal says.
 async function applyMove(missionId, targetId, side) {
   if (!DndState.data) return;
   const groups = DndState.data.groups || {};
@@ -267,6 +320,8 @@ async function applyMove(missionId, targetId, side) {
   } catch (e) {
     if (e.status === 409) {
       showState(t("conflict.plan_changed"));
+    } else if (isDependencyGuardRefusal(e)) {
+      await handleMoveRefusal(e, missionId, pos);
     } else {
       showState(e.message || t("move.failed"));
     }
@@ -300,7 +355,18 @@ async function requeueMission(missionId, targetId, side) {
     const lastWaiting = queue.filter((e) => e.mission_id !== missionId && waiting.has(e.mission_id)).pop();
     const target = targetId || (lastWaiting ? lastWaiting.mission_id : null);
     const at = BoardLogic.dropPosition(queue, missionId, target, targetId ? side : "after", groups);
-    await postMoveQueue(missionId, at);
+    try {
+      await postMoveQueue(missionId, at);
+    } catch (e) {
+      if (isDependencyGuardRefusal(e)) {
+        // shortcut: the enable/add that came first already landed, so the card
+        // stays in the queue where the add put it; upgrade when the queue routes
+        // take enable and position in one guarded call
+        await handleMoveRefusal(e, missionId, at);
+      } else {
+        throw e;
+      }
+    }
   } catch (e) {
     showState(e.status === 409 ? t("conflict.plan_changed") : (e.message || t("move.failed")));
   }

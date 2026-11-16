@@ -1,0 +1,52 @@
+AHAWR mission baseline of checks (recorded 2026-11-13, before any mission change)
+Environment: /opt/ahawr-runner/venv (python 3.12, ruff 0.17.4, mypy 2.4.1, pytest 9.2.0, node v22.23.4).
+No new venv was needed: dev dependencies (ruff, mypy, pytest) were already installed in the active venv.
+Working tree keeps existing uncommitted changes of other people; this task changed no source file.
+
+RUN: python -m ruff check --output-format concise <file>   (counts of reported lines per file)
+- src/ahawr_runner/board_pg.py: 26
+- src/ahawr_runner/board_api.py: 29
+- src/ahawr_runner/features_config.py: 0
+- src/ahawr_runner/board_order.py: 0
+- src/ahawr_runner/board.py: 5
+- data-tables/ops/queue_board.py (the file that holds queue_board.py): 0
+Total ruff errors on the six files: 60
+
+RUN: python -m mypy <files> (strict = true per pyproject, exit code 1)
+Error lines reported against each target file:
+- src/ahawr_runner/board_pg.py: 29
+- src/ahawr_runner/board_api.py: 16
+- src/ahawr_runner/board_order.py: 20
+- src/ahawr_runner/board.py: 5
+- src/ahawr_runner/features_config.py: 0
+- data-tables/ops/queue_board.py: 0
+Extra mypy errors surfaced on transitively imported modules (not target files):
+board_ready.py 4, board_stats.py 2, board_think.py 1, board_ops_redact.py 1, runs.py 1
+Total mypy error lines in the run: 79
+
+RUN: python -m pytest tests/test_board_pg.py tests/test_queue_board.py tests/test_features_config.py tests/test_board_features_api.py -q --no-cov
+Summary: exit code 0; 112 tests collected, all passed, 0 failed (no FAILED lines; progress lines:
+"........ [ 64%]" / "........ [100%]"; pytest -q in this environment prints no trailing "passed in" line).
+Failing test names: none.
+One warning only: StarletteDeprecationWarning from the venv fastapi testclient (not a failure).
+Rerun timed: real 0m11.240s.
+
+RUN: node --test tests/board_i18n.test.js tests/board_features.test.js
+Summary lines:
+# tests 47
+# suites 0
+# pass 47
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 183.016346
+Exit code 0. Failing test names: none.
+
+RUN: git diff --check (from /d/n8n)
+Exit code 2. One real whitespace finding:
+ahawr-runner/qa/contracts/audio-dub-ui-redesign/contract.md:69: new blank line at EOF.
+Plus ~50 informational "warning: in the working copy of '<file>', LF will be replaced by CRLF the next time Git touches it" lines (Windows line-ending conversion notices, not whitespace errors).
+
+NOT RUN: creating a /tmp venv with `python3 -m venv /tmp/venv; pip install -e 'ahawr-runner[dev]'`
+Reason: not needed - the active interpreter (/opt/ahawr-runner/venv/bin/python) already provides ruff, mypy and pytest, so all checks ran with it.

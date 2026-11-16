@@ -51,8 +51,8 @@ has `parseCorpora(row.retrieval_corpora_json)`, the line that patch replaces.
 
 | Column or name | File:line | Reader or writer | What it does |
 |---|---|---|---|
-| `mission_features_json` | `features_config_patch.py:29` | reader (emitted into `Constants`) | `parseFeatures(row.features_json, mission.mission_features_json)` |
-| `mission_features_json` | `features_config_patch.py:36` | reader (emitted into `Constants`) | `max_tasks` set-check over `row.features_json` and `mission.mission_features_json` |
+| `mission_features_json` | `features_config_patch.py:137` | reader (emitted into `Constants`) | `parseFeatures(row.features_json, mission.mission_features_json)` |
+| `mission_features_json` | `features_config_patch.py:144` | reader (emitted into `Constants`) | `max_tasks` set-check over `row.features_json` and `mission.mission_features_json` |
 | `mission_features_json` | `features_config_patch.py:5` | comment only | docstring |
 | `mission_roles_json` | `roles_config_patch.py:52` | writer (emitted into `Constants`) | `mission_roles_json: String(mission.roles_json ?? '')` |
 | `mission_roles_json` | `roles_config_patch.py:70` | reader (emitted into run inputs) | `mergeRoles(parse(config.roles_json), parse(config.mission_roles_json))` |

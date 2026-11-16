@@ -55,10 +55,48 @@ function queueModules() {
   return { dnd: globalThis.BoardDnd, actions: globalThis.BoardActions };
 }
 
+// The dependency renderers of board_mission_dependencies.js, loaded the same
+// way as the queue modules: a require() in node, the global the board page sets.
+function dependencyModule() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
+// The "after: <ids>" line and the waiting / blocked chip of a mission with
+// dependencies.  The renderers return "" when the answer carries no depends_on
+// (the mission_dependencies flag is off), so a card without dependencies gets
+// no node at all and keeps its old markup.
+function dependencyNode(el, mission) {
+  const md = dependencyModule();
+  if (!md) return null;
+  const html = md.renderDependencyLine(mission) + md.renderDependencyChip(mission);
+  if (!html) return null;
+  const box = el("div", { class: "kdeps" });
+  box.innerHTML = html;
+  return box;
+}
+
 function attachQueuedCards(controls, cards) {
   for (const card of cards) {
     controls.dnd.attachCard(card, controls.dnd.DndState.data);
     controls.actions.attachCardActions(card, controls.dnd.DndState.data);
+  }
+  attachRunCards(controls);
+}
+
+// "Run next" / "Run now" on the cards of the open columns (running, queued, not completed);
+// the actions module adds nothing while the run_mission_from_card flag is off.
+function attachRunCards(controls) {
+  if (typeof controls.actions.attachRunButtons !== "function") return;
+  const body = document.getElementById("boardviewbody");
+  if (!body) return;
+  for (const column of body.querySelectorAll(".kcol")) {
+    if (column.dataset.col === "ok") continue;
+    for (const card of column.querySelectorAll(".kcard")) {
+      controls.actions.attachRunButtons(card, controls.dnd.DndState.data);
+    }
   }
 }
 
@@ -165,6 +203,7 @@ function missionCard(ctx, mission, position) {
     ]),
     el("div", { class: "bar" }, [el("i", { style: "width:" + (total ? Math.round(100 * done / total) : 0) + "%" })]),
     el("div", { class: "kchips" }, figureChips(ctx, mission, done, total)),
+    dependencyNode(el, mission),
   ]);
 }
 

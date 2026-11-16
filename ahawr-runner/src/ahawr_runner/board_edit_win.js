@@ -22,7 +22,7 @@
 
 const PAGES = [
   { id: "mission", label: "ew.s1", keys: ["name", "objective", "rules", "acceptance_criteria", "working_directory"] },
-  { id: "exec", label: "ew.s2", keys: ["attempts_per_task", "enabled", "worker_model", "worker_provider", "reviewer_model",
+  { id: "exec", label: "ew.s2", keys: ["attempts_per_task", "enabled", "depends_on", "worker_model", "worker_provider", "reviewer_model",
     "reviewer_provider", "architect_model", "architect_provider", "max_tasks"] },
   { id: "ctx", label: "ew.s3", keys: ["hints", "required_files"] },
 ];
@@ -1030,6 +1030,9 @@ function fillPages(box, win) {
   move(two2, "max_tasks");
   l.appendChild(two2);
   move(l, "enabled");
+  // The row exists only when the mission_dependencies flag is on; move() does
+  // nothing when no such row was rendered.
+  move(l, "depends_on");
   const th = sec(tr("ew.sec.policy"), tr("ew.hint.policy"));
   const thNote = mk("div", "ew-warn");
   thNote.id = "ew-think-note";

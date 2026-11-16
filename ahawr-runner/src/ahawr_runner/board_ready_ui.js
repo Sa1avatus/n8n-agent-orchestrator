@@ -142,6 +142,16 @@ function render(container, missionId, mission, readiness, opts) {
   attachReadyControls(el, missionId, s);
 }
 
+// The dependency helpers of board_mission_dependencies.js (the guard refusal
+// test and the confirm texts), looked up like the other board modules do:
+// board.html loads that script before this one, the require() covers node loads.
+function dependencyModule() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
 // The Start request: POST /api/board/missions/{id}/start.  The body carries
 // the `preflight` flag (the checkbox) as documented in T002; the server's
 // start_guard reads `confirmed` as a query parameter (board_api.py:500), so
@@ -150,6 +160,39 @@ function startRequest(missionId, body, confirmed) {
   const url = "/api/board/missions/" + encodeURIComponent(missionId)
     + "/start" + (confirmed ? "?confirmed=true" : "");
   return readyPost(url, body);
+}
+
+// A start the dependency guard refused (the _dependency_start_refusal of
+// board_api.py): the panel asks "run anyway"; a confirm resends the same body
+// with run_anyway: true, a refused confirm shows the reason and sends nothing.
+// Returns true when the refusal was handled, so the caller keeps its own error
+// text for every other failure.
+async function handleStartRefusal(el, missionId, s, readiness, body, confirmed, e) {
+  const deps = dependencyModule();
+  if (!deps || !deps.isDependencyRefusal(e) || !e.body || !e.body.dependency_state) {
+    return false;
+  }
+  if (window.confirm(deps.dependencyRunConfirm(e.body))) {
+    try {
+      const answer = await startRequest(missionId,
+        { ...body, ...deps.buildStartBody(true) }, confirmed);
+      render(el, missionId, s.mission || {}, readiness,
+        { preflight: body.preflight, message: answer.reason, readiness });
+    } catch (again) {
+      render(el, missionId, s.mission || {}, readiness, {
+        preflight: body.preflight,
+        message: again.message || L("rd.startfail", "start failed"),
+        readiness,
+      });
+    }
+    return true;
+  }
+  render(el, missionId, s.mission || {}, readiness, {
+    preflight: body.preflight,
+    message: deps.dependencyRefusalMessage(e.body, missionId),
+    readiness,
+  });
+  return true;
 }
 
 // Attach the panel controls.  The buttons live in the template, which each
@@ -173,7 +216,10 @@ function attachReadyControls(el, missionId, s) {
           const next = { preflight, message: answer.reason, readiness };
           render(el, missionId, s.mission || {}, readiness, next);
         })
-        .catch((e) => {
+        .catch(async (e) => {
+          if (await handleStartRefusal(el, missionId, s, readiness, { preflight }, confirmed, e)) {
+            return;
+          }
           const next = { preflight, message: e.message || L("rd.startfail", "start failed"), readiness };
           render(el, missionId, s.mission || {}, readiness, next);
         });

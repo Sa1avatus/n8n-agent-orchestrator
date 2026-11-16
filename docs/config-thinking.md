@@ -148,12 +148,12 @@ JSON defaults would change behaviour for a row with empty columns (code `0`/`-1`
 
 ## 5. Planned anchor lines for the patch
 
-Patch rules (`docs/naming.md`, the mission text, `features_config_patch.py:8`): idempotent, every anchor asserted exactly
+Patch rules (`docs/naming.md`, the mission text, `features_config_patch.py:10`): idempotent, every anchor asserted exactly
 once, nothing written if an anchor is missing. Anchors below are the exact text of the fresh export, checked with a count:
 
 | Node | Anchor (exact text) | Count in export |
 |---|---|---|
-| `Constants` | `return [{ json: {` (the start of the return, where the core block is inserted, as `features_config_patch.py:26`) | 1 |
+| `Constants` | `return [{ json: {` (the start of the return, where the core block is inserted, as `features_config_patch.py:134`) | 1 |
 | `Constants` | `  worker_think_policy: String(row.worker_think_policy ?? '').trim().toLowerCase(),` (line 81, the first of the four legacy lines) | 1 |
 | `Build Worker Run Input` | `think_policy: String($('Constants').first().json.worker_think_policy ?? ''),` (line 556) | 1 |
 | `Build Worker Run Input` | `think_off_after_steps: Number.isFinite(Number($('Constants').first().json.worker_think_off_after_steps ?? NaN))` (line 559) | 1 |

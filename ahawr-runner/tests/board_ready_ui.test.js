@@ -15,10 +15,15 @@
 //      the preflight flag in the body; with no error check no
 //      confirmation is asked and ?confirmed=true is not sent;
 //   6. the server's refusal text is shown in the panel (.rdresult);
-//   7. a failed readiness load renders the escaped error state.
+//   7. a dependency-guard refusal of Start asks "run anyway": an accepted
+//      confirm resends the same body with run_anyway: true and the dashboard
+//      header, a refused confirm sends only the first request and shows the
+//      refusal message naming the dependency ids;
+//   8. a failed readiness load renders the escaped error state.
 
 "use strict";
 const path = require("path");
+require(path.join(__dirname, "i18n_stub.js")); // the dependency confirm texts come from t()
 const BR = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_ready_ui.js"));
 
 function check(name, cond) {
@@ -90,7 +95,8 @@ let startAnswer = null;   // 200 body for POST /start
 let startStatus = 200;    // status for POST /start
 let readinessBody = null; // 200 body for GET .../readiness
 
-globalThis.window = { confirm: () => confirmResult };
+const confirmTexts = [];
+globalThis.window = { confirm: (text) => { confirmTexts.push(text); return confirmResult; } };
 
 globalThis.fetch = (url, opts) => {
   const u = String(url);
@@ -270,7 +276,64 @@ check("the refused start posted the confirmed start URL",
   fetchLog.length === 1 &&
   fetchLog[0].url === "/api/board/missions/m_running/start?confirmed=true");
 
-// --- 7. a failed readiness load renders the escaped error state ---
+// --- 7. the dependency guard refusal of Start: the "run anyway" confirm ---
+// The stub answers the plain start with the guard refusal of board_api.py
+// (_dependency_start_refusal) and accepts a body that carries run_anyway:
+// true, exactly like the server does.
+const runRefusal = {
+  status: "failed",
+  error: { code: "guard", message: "mission m_running is waiting: pass run_anyway: true" },
+  code: "guard", status_code: 403,
+  reason: "mission m_running is waiting for m_wait",
+  blocked_by: ["m_wait"],
+  dependency_state: "waiting",
+};
+function guardFetch(url, opts) {
+  const body = opts && opts.body ? JSON.parse(opts.body) : {};
+  fetchLog.push({ url: String(url), method: opts.method,
+    body: opts.body, headers: (opts && opts.headers) || null });
+  const accepted = body.run_anyway === true;
+  return Promise.resolve({
+    ok: accepted, status: accepted ? 200 : 403,
+    json: () => Promise.resolve(accepted
+      ? { allowed: true, reason: "run requested anyway" }
+      : runRefusal),
+  });
+}
+
+// 7a. accepted confirm: the same body resent with run_anyway, header kept
+confirmResult = true;
+confirmTexts.length = 0;
+const c7a = makeContainer();
+BR.renderInto(c7a, "m_running", mission, { status: "ok", items: okItems, errors: [] }, { preflight: true });
+globalThis.fetch = guardFetch;
+fetchLog.length = 0;
+c7a.querySelector(".rd-start").click();
+await new Promise((r) => setTimeout(r, 10));
+check("the run-anyway confirm names the dependency ids",
+  confirmTexts.length === 1 && has(confirmTexts[0], "m_wait"));
+check("the plain start is refused once, the resend carries run_anyway",
+  fetchLog.length === 2 &&
+  fetchLog[0].body === JSON.stringify({ preflight: true }) &&
+  JSON.parse(fetchLog[1].body).run_anyway === true);
+check("the run-anyway resend keeps the dashboard header",
+  fetchLog[1].headers["X-AHAWR-Dashboard"] === "1");
+check("the accepted run shows the server answer in the panel",
+  c7a.querySelector(".rdresult").textContent === "run requested anyway");
+
+// 7b. refused confirm: only the first request is sent, the message names the ids
+confirmResult = false;
+confirmTexts.length = 0;
+const c7b = makeContainer();
+BR.renderInto(c7b, "m_running", mission, { status: "ok", items: okItems, errors: [] }, {});
+fetchLog.length = 0;
+c7b.querySelector(".rd-start").click();
+await new Promise((r) => setTimeout(r, 10));
+check("a refused run-anyway confirm sends no second request", fetchLog.length === 1);
+check("the refused run shows the message naming the dependency id",
+  c7b.querySelector(".rdresult").textContent === "Run refused: m_running still waits for m_wait");
+
+// --- 8. a failed readiness load renders the escaped error state ---
 const c7 = makeContainer();
 readinessBody = null;
 globalThis.fetch = () => Promise.reject(new Error(HOSTILE_REASON));

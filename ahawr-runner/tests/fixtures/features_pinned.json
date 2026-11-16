@@ -37,6 +37,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -83,6 +86,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -133,6 +139,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -181,6 +190,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -227,6 +239,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -290,6 +305,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -336,6 +354,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -386,6 +407,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -432,6 +456,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -482,6 +509,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -528,6 +558,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -580,6 +613,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -626,6 +662,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -676,6 +715,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -722,6 +764,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -772,6 +817,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -818,6 +866,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -870,6 +921,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -916,6 +970,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -966,6 +1023,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1014,6 +1074,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1060,6 +1123,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1123,6 +1189,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1169,6 +1238,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1219,6 +1291,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1265,6 +1340,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1315,6 +1393,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1361,6 +1442,317 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": true
+        },
+        "run_mission_from_card": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    }
+  },
+  "run_mission_from_card": {
+    "absent_column": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 1,
+        "split_steps": 150
+      },
+      "inputs": [
+        "{\"run_hygiene\": {\"enabled\": true}}",
+        null
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": true
+        },
+        "run_mission_from_card": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    },
+    "empty_none": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 0,
+        "split_steps": 150
+      },
+      "inputs": [
+        null,
+        null
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    },
+    "empty_object": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 0,
+        "split_steps": 150
+      },
+      "inputs": [
+        "{}",
+        "{}"
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    },
+    "empty_string": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 0,
+        "split_steps": 150
+      },
+      "inputs": [
+        "",
+        ""
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
+          "enabled": false
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    },
+    "mission_override": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 0,
+        "split_steps": 150
+      },
+      "inputs": [
+        "",
+        "{\"run_mission_from_card\": {\"enabled\": true}}"
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
+          "enabled": true
+        },
+        "stats_engine_sampler": {
+          "enabled": false
+        },
+        "stats_popup": {
+          "enabled": false
+        },
+        "think_profiles": {
+          "enabled": false
+        }
+      }
+    },
+    "partial_object": {
+      "errors": [],
+      "flatten": {
+        "adaptive_split": 0,
+        "max_splits": 6,
+        "max_tasks": 15,
+        "max_tasks_hard": 30,
+        "max_total_tasks": 40,
+        "plan_no_truncate": 0,
+        "run_hygiene": 0,
+        "split_steps": 150
+      },
+      "inputs": [
+        "{\"run_mission_from_card\": {\"enabled\": true}}",
+        ""
+      ],
+      "resolved": {
+        "adaptive_split": {
+          "enabled": false,
+          "max_splits": 6,
+          "max_total_tasks": 40,
+          "split_steps": 150
+        },
+        "event_schema_version": {
+          "enabled": false
+        },
+        "mission_dependencies": {
+          "enabled": false
+        },
+        "plan_no_truncate": {
+          "enabled": false,
+          "max_tasks": 15,
+          "max_tasks_hard": 30
+        },
+        "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": true
         },
         "stats_engine_sampler": {
@@ -1413,6 +1805,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1459,6 +1854,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1509,6 +1907,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1555,6 +1956,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1605,6 +2009,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": true
         },
@@ -1651,6 +2058,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1703,6 +2113,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1749,6 +2162,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1799,6 +2215,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1845,6 +2264,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1895,6 +2317,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -1941,6 +2366,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -1993,6 +2421,9 @@
         "run_hygiene": {
           "enabled": true
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -2039,6 +2470,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -2089,6 +2523,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -2135,6 +2572,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {
@@ -2185,6 +2625,9 @@
         "run_hygiene": {
           "enabled": false
         },
+        "run_mission_from_card": {
+          "enabled": false
+        },
         "stats_engine_sampler": {
           "enabled": false
         },
@@ -2231,6 +2674,9 @@
           "max_tasks_hard": 30
         },
         "run_hygiene": {
+          "enabled": false
+        },
+        "run_mission_from_card": {
           "enabled": false
         },
         "stats_engine_sampler": {

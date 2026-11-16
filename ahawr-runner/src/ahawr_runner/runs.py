@@ -45,6 +45,7 @@ from .git_snapshot import take_snapshot
 from .handoff import session_digest
 from .local_pricing import LocalPricing
 from .manager_types import DigestSource as DigestSource  # re-export: the digest type of RunManager
+from .run_limits import effective_run_limit_seconds
 from .store import Store, now
 from .think_policy import render_policy
 from .think_profiles import parse_profiles, resolve_profile
@@ -643,7 +644,11 @@ class RunManager:
                 role=role,
             )
             timeout = (
-                self.settings.compact_timeout_seconds if compact else self.settings.max_run_seconds
+                self.settings.compact_timeout_seconds
+                if compact
+                else effective_run_limit_seconds(
+                    self.settings.data_dir, role, self.settings.max_run_seconds
+                )
             )
             env = child_env(
                 provider,

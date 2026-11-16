@@ -57,12 +57,12 @@ test("golden: empty or missing features_json flattens byte-for-byte to the legac
 });
 
 // === pinned characterization of T005, now fed with the single defaults file ===
-// shortcut: the pinned fixture was captured before think_profiles and mission_dependencies
-// entered the single source, so those are the keys it adds; upgrade when the fixture is
-// regenerated with the one-source defaults.
+// shortcut: the pinned fixture was captured before think_profiles, mission_dependencies
+// and run_mission_from_card entered the single source, so those are the keys it adds;
+// upgrade when the fixture is regenerated with the one-source defaults.
 const PINED = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "board_features_pinned.json"), "utf8"));
 const PYTHON_PINED = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "features_pinned.json"), "utf8"));
-const PINED_EXTRA = ["think_profiles", "mission_dependencies"];
+const PINED_EXTRA = ["think_profiles", "mission_dependencies", "run_mission_from_card"];
 
 for (const [feature, forms] of Object.entries(PINED)) {
   for (const [form, pinned] of Object.entries(forms)) {

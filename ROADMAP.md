@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.1.300** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.2.0** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -182,6 +182,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.1.150: feature defaults and minimums in one JSON for the runner, the dashboard and the Constants patch
 - [x] 1.1.200: bug fixes: the Features panel and the Statistics button read the defaults from the features route
 - [x] 1.1.300: bug fixes: the four QA scenarios that failed `ahawr-mission-dependencies-p2` (Kanban moves, Grid sort, Features panel); queue moves of a waiting mission without a queue row
+- [x] 1.2.0: Run next / Run now buttons on the kanban card behind the flag `run_mission_from_card` (off by default)
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 
@@ -191,6 +192,8 @@ after 1.0.0 · Several missions at once and Hermes parity · 0/4 milestones, 0%
 - [ ] Hermes runs on par with Claude Code on the dashboard
 - [ ] Mission templates and A/B of executors
 - [ ] DeepSeek Harness evaluated as an executor
+- [ ] ahawr-engine-contract: one engine interface and a registry, a generic CLI engine (queued 2026-11-14)
+- [ ] ahawr-engine-opencode: OpenCode as a fourth engine behind a flag, after the contract and recorded fixtures
 
 ## Open decisions
 

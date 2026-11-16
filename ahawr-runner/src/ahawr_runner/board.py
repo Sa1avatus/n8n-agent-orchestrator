@@ -422,10 +422,12 @@ class BoardStore(ABC):
         position: int | None = None,
         note: str | None = None,
         who: str = "",
+        attempts_per_task: float | None = None,
     ) -> None:
         """Create a mission: the missions row, its Live State row, its queue
-        entry (at ``position``) and its config row — one atomic write: all
-        rows or none.  The audit keeps the four rows together in one change."""
+        entry (at ``position``, with ``attempts_per_task``) and its config row
+        — one atomic write: all rows or none.  The audit keeps the four rows
+        together in one change."""
 
     @abstractmethod
     def set_mission_config(
@@ -915,6 +917,7 @@ class InMemoryBoardStore(BoardStore):
         position: int | None = None,
         note: str | None = None,
         who: str = "",
+        attempts_per_task: float | None = None,
     ) -> None:
         """One atomic step: the mission row, its Live State row, its queue entry
         (at ``position``) and its config row — all rows or none.
@@ -943,6 +946,7 @@ class InMemoryBoardStore(BoardStore):
                 for entry in reordered:
                     if entry.mission_id == mission_id:
                         entry.note = note
+                        entry.attempts_per_task = attempts_per_task
                 self._queue_version = now()
                 if config:
                     previous_config = self._mission_config.get(mission_id)

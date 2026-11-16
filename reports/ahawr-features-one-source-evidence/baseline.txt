@@ -1,0 +1,457 @@
+Baseline evidence for "feature defaults in one source" (T001, attempt 1, 2026-11-13)
+Read-only research run. No source file was changed; this file is the only new file.
+All commands were run from /d/n8n/ahawr-runner unless noted ("repo root" = /d/n8n).
+
+====================================================================
+1. WHAT IS IN features_config.py TODAY (line numbers of the working file)
+   ahawr-runner/src/ahawr_runner/features_config.py (154 lines, read in full)
+
+  FEATURE_DEFAULTS      line 7   FEATURE_DEFAULTS: dict[str, dict[str, Any]] = {
+    features and their defaults: plan_no_truncate {"enabled": False, "max_tasks": 15, "max_tasks_hard": 30} (line 8);
+    adaptive_split {"enabled": False, "split_steps": 150, "max_splits": 6, "max_total_tasks": 40} (lines 9-14);
+    run_hygiene/event_schema_version/think_profiles/stats_popup/stats_engine_sampler each {"enabled": False} (lines 15-19).
+  PARAM_MINIMUMS        line 21  PARAM_MINIMUMS: dict[str, int] = {
+    "max_tasks": 1, "max_tasks_hard": 1, "split_steps": 1, "max_splits": 0, "max_total_tasks": 1 (lines 22-26).
+
+  Public functions (the exported names):
+    line 121  def parse_features(features_json: str | None, mission_features_json: str | None)
+              -> tuple[dict[str, dict[str, Any]] | None, list[str]]
+    line 134  def validate_features_json(features_json: str | None, mission_features_json: str | None) -> tuple[str, ...]
+    line 141  def flatten(features: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]
+              (line 142-153: plan_no_truncate, max_tasks, max_tasks_hard, adaptive_split, split_steps,
+               max_splits, max_total_tasks, run_hygiene - "int(...)" casts on the flags;
+               event_schema_version, think_profiles, stats_popup, stats_engine_sampler are NOT in flatten.)
+
+  Private helpers (imported by other modules, so they are de-facto cross-module names):
+    line 30   def _reject_constant(name: str) -> Any:
+    line 34   def _is_integer(value: Any) -> bool:
+    line 40   def _check_parameter(column: str, feature: str, param: str, value: Any,
+                                   accepted: dict[str, Any], errors: list[str]) -> None
+    line 63   def _check_feature(column: str, feature: str, body: dict[str, Any],
+                                 errors: list[str]) -> dict[str, Any]
+    line 75   def _parse_text(text: str | None, column: str, errors: list[str]) -> dict[str, dict[str, Any]]
+    line 98   def _resolve_features(global_features: Mapping[str, Mapping[str, Any]],
+                                   mission_features: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]
+    line 112  def _check_limits(features: Mapping[str, Mapping[str, Any]], errors: list[str]) -> None
+
+  The two copies of the same defaults (no shared file yet):
+    ahawr-runner/src/ahawr_runner/features_config.py:7   FEATURE_DEFAULTS (Python)
+    ahawr-runner/src/ahawr_runner/board_features.js:3    const FEATURE_DEFAULTS = { (JS copy)
+    board_features.js:75-76 does the merge: for (const feature of Object.keys(FEATURE_DEFAULTS))
+      features[feature] = { ...FEATURE_DEFAULTS[feature], ...global[feature], ...mission[feature] };
+    board_features.js:41 and :64 use Object.hasOwn on the same copies for the unknown-param/unknown-feature checks.
+    The third copy is the n8n Constants node written by data-tables/ops/features_config_patch.py.
+
+  The existing parity test of the copies:
+    There is NO test that compares the two FEATURE_DEFAULTS tables with each other.
+    grep -rn "FEATURE_DEFAULTS" ahawr-runner/tests src  -> only src/ahawr_runner/board_features.js:3,41,64,75,76
+    and tests/board_features_ui.test.js:16,37,49 (the JS test reads the JS copy, never the Python one).
+    The parity that does exist is the shared fixture run against both sides:
+      tests/test_features_config.py:16-18  CASES: dict[str, Any] = json.loads(.../features_cases.json")
+      tests/test_features_config.py:22-23  @pytest.mark.parametrize("item", CASES["parse"], ...) / def test_parse_case(...)
+      tests/board_features.test.js:9-13    the same tests/features_cases.json against board_features.js
+      tests/board_features.test.js:33      test("golden: empty or missing features_json flattens byte-for-byte to the legacy constants")
+      tests/test_features_config.py:41     test_golden_empty_or_missing_flattens_byte_for_byte_to_legacy() (Python side of the same golden)
+    Every test name in tests/test_features_config.py (18 tests: 12 parametrized parse cases + 6 named):
+      22  test_parse_case (parametrized, 12 parse cases in tests/features_cases.json)
+      41  test_golden_empty_or_missing_flattens_byte_for_byte_to_legacy
+      50  test_non_standard_json_constants_are_rejected
+      56  test_reject_constant_refuses_every_non_standard_json_literal
+      66  test_features_constants_are_rejected_in_both_columns
+      80  test_stats_popup_and_stats_engine_sampler_are_flags_default_off
+      112 test_event_schema_version_is_a_flag_with_no_parameters
+
+====================================================================
+2. EVERY IMPORTER OF features_config
+   Command: grep -rn "features_config" ahawr-runner/src ahawr-runner/tests data-tables/ops   (run from /d/n8n)
+   Files touched by the grep, one line each (code importers first):
+
+  ahawr-runner/src/ahawr_runner/api.py:27            from .features_config import parse_features
+  ahawr-runner/src/ahawr_runner/board_api.py:45      features_config,   (the import block)
+  ahawr-runner/src/ahawr_runner/board_api.py:87      docstring: "the stored JSON parsed by ``features_config``"
+  ahawr-runner/src/ahawr_runner/board_api.py:94      features, errors = features_config.parse_features(
+  ahawr-runner/src/ahawr_runner/board_api.py:1949    errors = features_config.validate_features_json(text, None)
+  ahawr-runner/src/ahawr_runner/board_api.py:2031    errors = features_config.validate_features_json(global_text, text)
+  ahawr-runner/src/ahawr_runner/overrides_config.py:9  from ahawr_runner.features_config import _is_integer, _reject_constant
+  ahawr-runner/src/ahawr_runner/retrieval_config.py:9  from ahawr_runner.features_config import _is_integer, _reject_constant
+  ahawr-runner/src/ahawr_runner/thinking_config.py:7   from ahawr_runner.features_config import _is_integer, _reject_constant
+  ahawr-runner/src/ahawr_runner/runs.py:43           from .features_config import parse_features
+  ahawr-runner/tests/test_features_config.py:9       from ahawr_runner.features_config import ( _reject_constant, flatten,
+                                                   parse_features, validate_features_json )
+  ahawr-runner/tests/test_board_stats_detail.py:30   from ahawr_runner.features_config import parse_features
+  data-tables/ops/features_config_patch.py:3         usage line: python features_config_patch.py <workflow.json> ...
+  data-tables/ops/test_features_config_patch.py:1,12 docstring + PATCH = OPS / "features_config_patch.py"
+  data-tables/ops/test_all_patches_order.py:28       FEATURES_SCRIPT = "features_config_patch"
+  data-tables/ops/set_think_profiles.py:13,25,112    comment; from ahawr_runner import features_config, think_profiles;
+                                                   errors = features_config.validate_features_json(body, None)
+  data-tables/ops/roles_options_patch.py:10          comment: independent of features_config_patch.py
+  data-tables/ops/launch_mission.sh:47               python "$SP/features_config_patch.py" "$SP/wf_next.json"
+  data-tables/ops/_restart_queue_once.sh:2           comment about _retry_features_config.sh
+  data-tables/ops/_make_features_config_mission.py   6 lines (mission text that created features_config.py)
+  data-tables/ops/_make_features_one_source_mission.py 8 lines - THIS mission's plan text: "the feature defaults live in three
+    hand-kept copies (features_config.py FEATURE_DEFAULTS, board_features.js FEATURE_DEFAULTS, the Constants node written
+    by features_config_patch.py). One source." (lines 3-4, 18-20, 25-27, 36-37)
+  data-tables/ops/_make_json_config_{cutover,engine,overrides,retrieval,thinking}_mission.py  1 line each
+  data-tables/ops/_make_split_trial_mission.py       1 line
+  data-tables/ops/adaptive_split/NOTES.md            8 lines (notes on the missing features_config_patch.py)
+
+  Non-importers that also match the string (logs/backups, do not edit): features_config_patch.py.bak-20261109,
+  launch_mission.sh.bak-* (4), launch_mission.sh.new, replay_results_*.jsonl (9 files), think_steps_archive.jsonl,
+  wip_docs_before_0.13.0/CHANGELOG.md, _scratch/** (12 files).
+  Note: data-tables/ops/features_config_patch.py EXISTS and is listed by the grep, while
+  adaptive_split/NOTES.md:314 says it "does not exist on disk" - the note is older than the file.
+
+====================================================================
+3. BASELINE OF THE CHECKS (quoted key lines)
+
+  python -m pytest tests/test_features_config.py -q --no-cov   (exit 0)
+    ..................                                                       [100%]
+    (pytest 9.2.0 prints no "passed" line with -q in this environment; the dots line is 18 tests)
+  same file with -v to get the summary line:
+    ======================== 18 passed, 1 warning in 1.43s =========================
+
+  node --test tests/board_features.test.js   (exit 0)
+    # tests 13
+    # pass 13
+    # fail 0
+    # duration_ms 150.34118
+
+  python -m ruff check src/ahawr_runner/features_config.py
+    All checks passed!          -> 0 errors
+
+  python -m mypy src/ahawr_runner/features_config.py
+    Success: no issues found in 1 source file   -> 0 errors
+
+  The module that holds the features route (named by grep -rn 'router\.(get|put|post|delete).*features' src/):
+    ahawr-runner/src/ahawr_runner/board_api.py  (1938 @router.get("/features"), 1944 @router.put("/features"),
+    2010 @router.get("/missions/{mission_id}/features"), 2021 @router.put("/missions/{mission_id}/features"))
+    There is no separate features-route module; the JS UI side is board_features.js + board_features_ui.test.js.
+
+  python -m ruff check src/ahawr_runner/board_api.py   (exit 1)
+    Found 29 errors.   - all 29 are E501 (line too long); grep -c "^E501" = 29. Pre-existing, not from this mission.
+
+  python -m mypy src/ahawr_runner/board_api.py
+    Found 79 errors in 9 files (checked 1 source file)
+    of which 16 are anchored in board_api.py itself (grep -c "board_api.py:.*error" = 16); the rest come from
+    the 9 modules it imports (CLAUDE.md lists board_api.py among the files with old mypy errors).
+
+====================================================================
+4. HOW EACH INPUT FORM IS HANDLED TODAY
+
+  Empty value ("" or None):
+    _parse_text, features_config.py:76-78  source = (text or "").strip(); if not source: return {}
+    -> the sparse map stays empty, so _resolve_features (features_config.py:102-109) fills every feature from
+       FEATURE_DEFAULTS; parse_features returns the full default set with errors == [].
+    At the route the text is coerced to "": _features_text, board_api.py:305-309 (text = body.get(key, ""),
+    a non-string raises ValueError); GET returns row.get("features_json") or "" (board_api.py:1941, 2014).
+    Pinned by tests/test_features_config.py:41-47 (None and "") and tests/board_features.test.js:33.
+
+  {} (a literal empty object):
+    _parse_text, features_config.py:79-86: json.loads succeeds, isinstance(parsed, dict) is true, the loop at
+    :88-95 iterates zero items -> sparse {} -> same full defaults as the empty case. A non-object (a number,
+    an array) errors at :84-86 with "{column}: must be a JSON object".
+
+  Absent column (the hermes_config row or the mission config has no features key):
+    board_api.py:95   (store.hermes_config() or {}).get("features_json")  -> None, passed to parse_features
+    board_api.py:90   (store.mission_config(mission_id) or {}).get("mission_features_json") -> None
+    board_api.py:1941, 2014  the GET routes return "" for a missing column, so the UI never sees None.
+    _parse_text treats None exactly like "" (features_config.py:76-78). In runs.py:43 and api.py:27 the same
+    parse_features is called on the stored text.
+
+  Partial object (only some parameters, e.g. {"adaptive_split": {"enabled": true}}):
+    _check_feature, features_config.py:63-72: every key of the body is checked against FEATURE_DEFAULTS[feature]
+    (:68-69 unknown parameter -> error), and only the known ones land in `accepted` (:71), so `accepted` holds
+    exactly the parameters the operator wrote. Missing parameters are then filled from FEATURE_DEFAULTS in
+    _resolve_features (:102-109). Cross-parameter consistency is only checked on the merged result in
+    _check_limits (:112-118): max_tasks_hard must be >= max_tasks; a partial {"max_tasks_hard": 5} alone is
+    accepted and merged with the default max_tasks 15 (the limit error then appears, naming the merged value).
+
+  Mission override (mission_features_json vs features_json):
+    _resolve_features, features_config.py:98-109 - the spread order is defaults, then global, then mission:
+    mission_features.get(feature, {}) is spread LAST, so a mission parameter wins per parameter, not per feature
+    (a mission that writes only {"max_splits": 2} keeps the global values of the other parameters of adaptive_split).
+    Validation of the pair happens before saving: board_api.py:2031 validate_features_json(global_text, text),
+    where global_text is read again at :2030; the board-side reader applies the same merge through
+    _feature_enabled (board_api.py:85-103), and an invalid stored JSON leaves every flag off (:97-103).
+
+====================================================================
+5. FILES THIS MISSION WILL NEED TO REACH (from the grep above)
+  Python: features_config.py (defaults + minimums), api.py:27, runs.py:43, board_api.py:45/94/1949/2031,
+  overrides_config.py:9, retrieval_config.py:9, thinking_config.py:7 (these three import the private helpers
+  _is_integer and _reject_constant - a one-source refactor must keep them importable or move them out),
+  set_think_profiles.py:25/112.
+  JS: board_features.js:3,41,64,75-76 + its consumers tests/board_features_ui.test.js:16,37,49 and
+  tests/board_features.test.js:9,13; tests/features_cases.json is the shared fixture both sides run.
+  Ops: features_config_patch.py (the Constants copy) + test_features_config_patch.py:12,
+  test_all_patches_order.py:28, launch_mission.sh:47.
+
+====================================================================
+6. Git status after this run (the evidence file is the only new/changed file)
+  git status --short | grep -v '^ M evals\|^ M docs' | head -30   (run from /d/n8n, after writing this file)
+  Output (15 lines, nothing inside ahawr-runner/ changed or added):
+    M litellm/ahawr_hooks.py
+    M litellm/test_ahawr_hooks.py
+    M litellm/test_think_leak_guard.py
+    M litellm/think_leak_guard.py
+    M scripts/make_logo.py
+    M scripts/patch_status_bot_control.py
+    ?? .claude/
+    ?? reports/ahawr-features-one-source-evidence/
+    ?? reports/dub-ui/
+    ?? reports/mission-ahawr-qa-project-targets-draft.md
+    ?? reports/mission-ahawr-stats-dashboard-draft.md
+    ?? reports/mission-mi-find-tracker-2-draft.md
+    ?? reports/mission-mi-find-tracker-3-draft.md
+    ?? reports/mission-mi-find-tracker-4-draft.md
+    ?? reports/mission-mi-find-tracker-5-draft.md
+  Every ' M ' line above is pre-existing work of others (litellm/, scripts/, docs/, evals/); none of them is touched
+  by this run. The only line this run adds is ?? reports/ahawr-features-one-source-evidence/.
+
+====================================================================
+7. JS AND ROUTE (T002, attempt 1, 2026-11-13) - the JS copy, the features route, packaged JSON data
+   Read-only research run; no source file was changed (see section 8).
+
+7.1 The JS copy: ahawr-runner/src/ahawr_runner/board_features.js (127 lines, read in full)
+  line 3   const FEATURE_DEFAULTS = {
+  features it holds (lines 4-9), all enabled false by default:
+    plan_no_truncate       { enabled: false, max_tasks: 15, max_tasks_hard: 30 }                       line 4
+    adaptive_split         { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 }   line 5
+    run_hygiene            { enabled: false }                                                          line 6
+    event_schema_version   { enabled: false }                                                          line 7
+    stats_popup            { enabled: false }                                                          line 8
+    stats_engine_sampler   { enabled: false }                                                          line 9
+  MISSING FROM THE JS COPY: think_profiles. The table has six features, the Python table
+  (features_config.py:7-19, section 1 above) has seven; think_profiles has no line in board_features.js.
+  Verification grep (run from /d/n8n/ahawr-runner):
+    grep -n "FEATURE_DEFAULTS\|think_profiles\|split_steps" src/ahawr_runner/board_features.js
+    3:const FEATURE_DEFAULTS = {
+    5:  adaptive_split: { enabled: false, split_steps: 150, max_splits: 6, max_total_tasks: 40 },
+    14:  split_steps: 1,
+    41:    if (!Object.hasOwn(FEATURE_DEFAULTS[feature], param)) {
+    64:    if (!Object.hasOwn(FEATURE_DEFAULTS, feature)) {
+    75:  for (const feature of Object.keys(FEATURE_DEFAULTS)) {
+    76:    features[feature] = { ...FEATURE_DEFAULTS[feature], ...global[feature], ...mission[feature] };
+    108:    split_steps: adaptiveSplit.split_steps,
+    118:  FEATURE_DEFAULTS,
+    (9 lines, none of them think_profiles)
+  A second copy in the same file: PARAM_MINIMUMS lines 11-17 (max_tasks 1, max_tasks_hard 1,
+    split_steps 1, max_splits 0, max_total_tasks 1) - the same numbers as features_config.py:21-26.
+
+  Every JS function that reads the copy (def line -> read line):
+    checkFeature      def line 38  -> FEATURE_DEFAULTS[feature] at line 41 (unknown-parameter check)
+    parseFeatureText  def line 48  -> Object.hasOwn(FEATURE_DEFAULTS, feature) at line 64 (unknown-feature check)
+    resolveFeatures   def line 73  -> Object.keys(FEATURE_DEFAULTS) line 75, spread line 76
+    checkLimits       def line 81  -> line 82 reads the MERGED features.plan_no_truncate, not the table
+    flatten           def line 100 -> lines 101-112 read the merged features, not the table
+    export block      lines 117-121 -> BoardFeatures = { FEATURE_DEFAULTS (118), parseFeatures (119), flatten (120) }
+    isPlainObject (19) and checkParameter (23) touch only PARAM_MINIMUMS (line 30).
+  The file never talks to the server: grep -n "fetch\|document" src/ahawr_runner/board_features.js gives
+  only line 2 ("pure features core (no DOM, no fetch, no globals)") and line 124 (the export branch).
+  The server answer is fetched by the consumers, then handed to the copy as plain text:
+    board_edit_win.js:407   featLib() -> globalThis.BoardFeatures
+    board_edit_win.js:491-505 loadFeatures() -> s.fetchJson("/api/board/features") (503),
+      "/api/board/missions/<id>/features" (504), s.featuresState(profile, mission) (505)
+    board_edit_win.js:471   lib.parseFeatures(featFields.global.value, "") fills the rows from the defaults
+    board_edit_win.js:1115  featLib().parseFeatures(...) before the review step
+    board_mission_save.js:196-203 featuresState(profile, mission) reads the keys features_json / version /
+      mission_features_json / version; :210-215 featuresSavePlan builds the two PUTs
+    board_stats_popup.js:40-41  const popupFeatures = ... BoardFeatures (require("./board_features.js") in node)
+    board_stats_popup.js:337,343,345 fetchJson("/api/board/features") and the mission variant
+  Consumers of the exported table in the tests:
+    tests/board_features_ui.test.js:16   const { FEATURE_DEFAULTS, parseFeatures, flatten } = BoardFeatures;
+    tests/board_features_ui.test.js:37,49 assert.deepEqual(features, FEATURE_DEFAULTS) (JS copy compared to itself)
+    tests/board_edit_win_features.test.js:41,62 require of board_features.js
+    tests/board_features.test.js:7,14,24,26,38 require + parseFeatures + flatten; never FEATURE_DEFAULTS directly
+
+7.2 The features route (module: ahawr-runner/src/ahawr_runner/board_api.py)
+  grep -n "features" ahawr-runner/src/ahawr_runner/board*.py ahawr-runner/src/ahawr_runner/dashboard.py | head -60
+  (run from /d/n8n; 30 lines quoted; the route lines are 1938, 1944, 2010, 2021):
+    1938:    @router.get("/features")
+    1939:    def get_features(request: Request) -> dict[str, Any]:
+    1941:        return {"features_json": row.get("features_json") or "", "version": _stamp(
+    1944:    @router.put("/features")
+    1945:    def put_features(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    1949:        errors = features_config.validate_features_json(text, None)
+    1953:        return {"features_json": text, "version": _stamp(
+    2010:    @router.get("/missions/{mission_id}/features")
+    2011:    def get_mission_features(request: Request, mission_id: str) -> dict[str, Any]:
+    2017:            "mission_features_json": config.get("mission_features_json") or "",
+    2018:            "version": _config_version(store, mission_id),
+    2021:    @router.put("/missions/{mission_id}/features")
+    2031:        errors = features_config.validate_features_json(global_text, text)
+    2039:        return {"mission_features_json": text, "version": _config_version(store, mission_id)}
+    862 (board_pg.py): "roles_json", "features_json", "thinking_json", "retrieval_json",  (the stored columns)
+  Exact shape of the current answer - the server returns the raw stored TEXT only, never the defaults:
+    GET  /api/board/features                         -> {"features_json": str ("" when the column is empty),
+                                                        "version": updatedAt of hermes_config, isoformat via
+                                                        _stamp (board_api.py:424-428)}
+    PUT  /api/board/features                         -> {"features_json": the saved text, "version": stamp};
+                                                        PUT raises ValueError("; ".join(errors)) at 1950-1951
+    GET/PUT /api/board/missions/{mission_id}/features -> {"mission_features_json": str, "version": _config_version}
+    PUT requires the dashboard header: _require_dashboard_header(request) at board_api.py:1946 and :2025.
+  dashboard.py has NO features route: grep -n "features" src/ahawr_runner/dashboard.py -> 0 lines.
+  The JS function that calls it: loadFeatures (board_edit_win.js:491, fetches at 503-504); the save side is
+  featuresSavePlan (board_mission_save.js:210). No route returns FEATURE_DEFAULTS, so the UI keeps its own copy.
+  Test file of the route: ahawr-runner/tests/test_board_features_api.py (fixture features_client at 25-37;
+  asserts at 51-52 r.json()["features_json"] == "" and at 57-58 r.json()["mission_features_json"] == "").
+  The same four routes appear in the header matrix tests/test_board_api.py:2104-2113.
+
+7.3 How a packaged JSON data file is loaded today (the pattern T007 should reuse, not rewrite)
+  settings_defaults.py - the shared defaults of 1.1.130 and the provider form limits of 1.1.140
+  (commit d4f7c17 added a "provider_limits" section to settings_defaults.json; top-level keys of the file:
+  runner, engine, retrieval, provider_limits):
+    line 17  DEFAULTS_PATH = Path(__file__).with_name("settings_defaults.json")
+    lines 25-28 @cache def _load() -> dict[str, Any]:
+                  data = json.loads(DEFAULTS_PATH.read_text(encoding="utf-8"))
+    lines 31-34 def section(name: str) -> dict[str, Any]: copy.deepcopy(_load()[name])
+    lines 67-79 render_js() turns the same JSON into the JS twin; lines 82-84 main() writes JS_PATH (line 18)
+    caller: board_providers_api.py:22 from ahawr_runner import settings_defaults; :47 LIMITS = settings_defaults.section("provider_limits")
+    guard test: tests/test_settings_defaults.py:26-29 test_generated_js_is_current compares the written
+      board_defaults.js with settings_defaults.render_js(); :23 ALLOWED_FILES = {"settings_defaults.json", "board_defaults.js"}
+  provider_api_types.py - the same packaging pattern for another data file:
+    line 19  TEMPLATES_PATH = Path(__file__).with_name("provider_templates.json")
+    line 174-175 def load_templates(path: Path = TEMPLATES_PATH) -> list[ProviderTemplate]:
+                   rows = json.loads(path.read_text(encoding="utf-8"))
+  Two other readers of packaged JSON: board_api.py:312-313 _i18n_file(lang) = json.loads(
+    Path(__file__).with_name(f"board_i18n_{lang}.json").read_text("utf-8"));
+    dashboard.py:330-331 GET /manifest.json = resources.files("ahawr_runner").joinpath("dashboard_manifest.json").read_bytes()
+  Packaging of JSON files - ahawr-runner/pyproject.toml:
+    31: [tool.hatch.build.targets.wheel]
+    32: packages = ["src/ahawr_runner"]
+    grep -n "packages = \|tool.hatch" pyproject.toml -> only those two lines; there is no force-include or
+    exclude list, so hatchling ships every file inside src/ahawr_runner (the five .json files that are there:
+    board_i18n_en.json, board_i18n_ru.json, dashboard_manifest.json, provider_templates.json, settings_defaults.json).
+    A new .json next to the module therefore needs NO pyproject change.
+  Serving of the JS twin: dashboard.py:300-312 serves /static/<name> only for the regex
+  ^board[a-z0-9_]*[.](js|css|html)$ - a new board*.js is served automatically, a .json is not (the
+  manifest is a separate explicit route at 329-331). If the one source becomes a JSON, the JS side has to
+  either read it through a route or be generated from it the way settings_defaults.render_js generates
+  board_defaults.js.
+  Note for T007: config.py:254-262 DEFAULT_RISK_TIER_PATTERNS lists */board_i18n_*.json as "supporting"; a new
+  packaged JSON is not matched by any pattern.
+
+7.4 i18n keys and visible texts of the features panel (for the QA scenario of T017)
+  Rendered by board_edit_win.js (the consumer of board_features.js):
+    line 1012  const fe = sec(tr("ew.sec.features"), tr("ew.hint.features"));
+    line 1014-1018 feNote id "ew-feat-note", feBox.append(feNote, featRowsNode(), labelled(...Global JSON...),
+      labelled(...Mission JSON...))
+    line 62-66  FEATURE_ROWS = [["plan_no_truncate", ["max_tasks","max_tasks_hard"]],
+                                ["adaptive_split", ["split_steps","max_splits","max_total_tasks"]],
+                                ["run_hygiene", []]]  -> three rows only
+    line 70-74  FEAT_NAME_KEY, line 75-81 FEAT_PARAM_KEY (the key per label)
+    line 442-452 featRowsNode(): div class "ew-feat-row", the enabled checkbox plus the parameter inputs
+    line 498 tr("ew.feat.nolib"), line 511 tr("ew.feat.loadfail"), line 1116 tr("ew.feat.invalid", {msg})
+  14 feature keys exist in board_i18n_en.json, board_i18n_ru.json and BUNDLED_EN of board_i18n.js
+  (grep -c "ew.feat" -> 14 matching lines in board_i18n.js; the two dictionaries hold the same 14 keys on one
+  long line each, so grep -c reports 1 per file). EN / RU text of each key:
+    ew.sec.features                 "Features" / "Функции"
+    ew.hint.features                "Each feature is a row with an enabled switch and its parameters. The free-text
+                                     JSON below is the fallback: edit it when a row does not cover the value." /
+                                     "Каждая функция — строка с переключателем enabled и её параметрами. Свободный
+                                     JSON ниже — запасной вариант: правьте его, когда строка не покрывает значение."
+    ew.feat.enabled                 "enabled" / "включена"
+    ew.feat.global                  "Global JSON" / "Глобальный JSON"
+    ew.feat.mission                 "Mission JSON" / "JSON миссии"
+    ew.feat.nolib                   "The features module is not loaded." / "Модуль функций не загружен."
+    ew.feat.loadfail                "Could not load the features settings." / "Не удалось загрузить настройки функций."
+    ew.feat.invalid                 "Features: {msg}" / "Функции: {msg}"
+    ew.feat.name.plan_no_truncate   "Plan without truncation" / "План без усечения"
+    ew.feat.name.adaptive_split     "Adaptive split" / "Адаптивное разбиение"
+    ew.feat.name.run_hygiene        "Run hygiene" / "Гигиена прогона"
+    ew.feat.p.max_tasks             "max tasks" / "максимум задач"
+    ew.feat.p.max_tasks_hard        "max tasks (hard)" / "максимум задач (жёстко)"
+    ew.feat.p.split_steps           "split steps" / "шаги разбиения"
+    ew.feat.p.max_splits            "max splits" / "максимум разбиений"
+    ew.feat.p.max_total_tasks       "max total tasks" / "максимум задач всего"
+  No key exists for event_schema_version, stats_popup, stats_engine_sampler or think_profiles: the panel shows
+  no row for them, so a one-source table that adds those rows needs new keys in both dictionaries and in BUNDLED_EN.
+  (The stats popup reads the flags through board_stats_popup.js:40-41, not through this panel.)
+
+====================================================================
+8. Git status after the T002 run
+  git status --short ahawr-runner/src   -> no output (0 lines); nothing under ahawr-runner/src was touched.
+  git status --short | grep -c "^ M ahawr-runner/src" -> 0
+
+====================================================================
+9. Patch (T003, attempt 1, 2026-11-13) - data-tables/ops/features_config_patch.py (119 lines, read in full)
+
+Anchors and their assertions (every anchor must match exactly once):
+  line 26  RETURN_OLD = "return [{ json: {"            -- asserted by once() at line 89
+  line 27  MAX_TASKS_OLD = "  max_tasks: num(row.max_tasks,'max_tasks',1)," -- asserted by once() at line 90
+  lines 22-23 CORE_START "// === pure features core", CORE_END "// === end pure features core ==="
+           -- asserted in core_block() lines 71-72: "the core markers must appear exactly once, in order"
+  line 25  CONSTANTS = "Constants" -- node_named() (lines 53-57) requires exactly one Constants node,
+           else SystemExit (lines 55-56).
+  The "exactly once" guard is once() (lines 60-64): count != 1 raises SystemExit
+  "anchor found {count} times, expected 1". The file has no bare `assert` statements: the verification grep
+  `grep -n "split_steps\|assert\|Constants" data-tables/ops/features_config_patch.py | head -40` matched only
+  lines 1, 5, 25, 46, 81 (docstring, CONSTANTS name, the split_steps output line, the bench comment).
+
+Literal default values written as literals in the patch:
+  line 27 and line 42: the legacy fallback literal `1` in num(row.max_tasks,'max_tasks',1) (same literal in the
+  old anchor and in the replacement line). Every other constant in MAX_TASKS_NEW (lines 43-49:
+  plan_no_truncate, max_tasks_hard, adaptive_split, split_steps, max_splits, max_total_tasks, run_hygiene) is
+  written as __flat.<name>, i.e. read from the parsed features JSON at runtime - no numeric literal in the patch.
+  The per-feature defaults live in board_features.js (embedded into Constants via core_block), not here.
+  Shortcut comment lines 34-35: "max_tasks falls back to the legacy column unless a features JSON sets it,
+  upgrade: drop the legacy column once every profile sets plan_no_truncate.max_tasks".
+
+Idempotency mechanism:
+  patch() (lines 76-92): if CORE_START is already present in the node's jsCode (line 79), the embedded block
+  (lines 82-83) is compared with a freshly built core_block() (line 84); if equal, patch() returns False (line 86)
+  and main() prints "<name>: already patched" without writing (lines 102-104). If board_features.js changed
+  since the last launch, only the core block is replaced (line 87; comment lines 80-81: a new feature such as
+  stats_popup must be known to Constants, bench stopped 2026-11-09). The fresh first patch inserts the marker
+  via the RETURN_OLD anchor (line 89), so later runs take the compare path. Nothing is written until both
+  anchors match exactly once (once() raises SystemExit before node["parameters"]["jsCode"] is assigned,
+  lines 90-91). The write is atomic: json.dumps to path + ".tmp" then os.replace (lines 111-114).
+  Pinned by the test test_second_run_changes_nothing (test_features_config_patch.py:100-110).
+
+Syntax check used:
+  The patch file itself does not syntax-check. The check is in the test: test_patched_constants_passes_node_syntax_check
+  (test_features_config_patch.py:129-141) wraps the patched jsCode in "function __constants($) { ... }" and runs
+  node --check (lines 137-139), asserting returncode 0; node comes from shutil.which("node") (line 14).
+  At launch the staged workflow is additionally checked inside the n8n container before import:
+  launch_mission.sh:78-79 (tg_syntax_check.js; "Telegram expression check failed: workflow NOT imported").
+
+Input and output paths:
+  The patch takes one or more workflow JSON paths as argv (docstring line 3, main loop line 96), reads them
+  (lines 98-100), accepts both list and dict export formats (line 101), and rewrites the SAME file in place
+  (tmp + os.replace, lines 111-114), preserving the original pretty/CRLF formatting (lines 105-110).
+  Launch input/output: data-tables/ops/wf_next.json - exported from n8n at launch (launch_mission.sh:20
+  "n8n export:workflow --output=/tmp/wf_current.json"), patched in place (launch_mission.sh:47:
+  "python \"$SP/features_config_patch.py\" \"$SP/wf_next.json\""), then imported.
+
+Copy of a live export used by the tests (prerequisite: operator copy at
+/d/n8n/data-tables/ops/_scratch/live_export.json):
+  test_features_config_patch.py:13 SCRATCH_EXPORT = OPS / "_scratch" / "live_export.json"; the export_copy
+  fixture copies it to tmp_path (lines 93-97) and all tests run against that copy only (docstring line 1).
+  ls -l /d/n8n/data-tables/ops/_scratch/live_export.json ->
+  "-rwxrwxrwx 1 root root 221093 Oct 21 12:33 /d/n8n/data-tables/ops/_scratch/live_export.json"
+  (modification date 2026-10-21 12:33, 221,093 bytes). The same path is used by
+  test_all_patches_order.py:25 (LIVE_EXPORT = OPS_DIR / "_scratch" / "live_export.json), which skips when the
+  copy is absent (line 54). AHAWR_Workflow.json was not used as a source of facts.
+
+Existing tests of the patch:
+  data-tables/ops/test_features_config_patch.py (206 lines, 7 tests): second run changes nothing (100-110);
+  missing anchor aborts without writing and leaves no .tmp (113-126, asserts "anchor found 0 times");
+  node --check of patched Constants (129-141); old vs new Constants output with empty features_json pins the
+  new-key defaults NEW_KEY_DEFAULTS (144-160); features_json sets flattened constants (164-181);
+  mission_features_json sets max_tasks (184-193); invalid features_json throws (196-206).
+  grep "features_config_patch" in ahawr-runner/tests: 0 matches (no runner test covers this patch). The nearest
+  patch tests in ahawr-runner/tests to follow: test_overrides_config_patch.py (it locates the sibling ops patch
+  with Path(__file__).resolve().parents[2] / "data-tables" / "ops" / ... at line 15), test_failover_patch.py,
+  test_legacy_columns_optional_patch.py, test_all_patches_constants_roles.py.
+
+How the patch locates runner sources from data-tables/ops (for features_defaults.json):
+  features_config_patch.py already does it at lines 18-21: Path(__file__).resolve().parents[2] /
+  "ahawr-runner" / "src" / "ahawr_runner" / "board_features.js" (parents[1] = data-tables, parents[2] = repo
+  root /d/n8n). So features_defaults.json resolves as Path(__file__).resolve().parents[2] / "ahawr-runner" /
+  "src" / "ahawr_runner" / "features_defaults.json". Precedent: ops/core_defaults.py:11 uses exactly this
+  expression for ahawr-runner/src/ahawr_runner/settings_defaults.json. Note: features_defaults.json does NOT
+  exist yet (ls of ahawr-runner/src/ahawr_runner shows board_features.js, 4231 bytes, Nov 9, but no
+  features_defaults.json).
+
+Checks actually run for this section: the patch and its test were read in full (Read); the verification grep,
+the ls of the export copy, and the greps above were run as quoted. No pytest run was started (read-only task).
+Nothing changed except this evidence file; git status was checked afterwards.

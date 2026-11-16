@@ -37,6 +37,33 @@ function esc(v) {
     .replace(/'/g, "&#39;");
 }
 
+// The dependency helpers of board_mission_dependencies.js (the field text and
+// the refusal message), looked up when the form is built or read: the module is
+// loaded before this one in board.html, and the require() covers node loads of
+// this file standalone.
+function dependencyHelpers() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
+// The feature flags of the board, read from the features route the UI already
+// loads (the same JSON the features panel edits).  Null when the route or the
+// parser is unavailable, which leaves every flag off.
+async function boardFeatureFlags() {
+  const features = typeof BoardFeatures !== "undefined" ? BoardFeatures : null;
+  if (!features) return null;
+  try {
+    const answer = await fetchJson("/api/board/features");
+    if (features.setFeatureDefaults(answer).length) return null;
+    return features.parseFeatures(answer.features_json || "", "").features || null;
+  } catch (e) {
+    // the features route is unreachable: the flag stays off, the form keeps its old shape
+    return null;
+  }
+}
+
 // Working copy of the board data (the same shape board_queue.js loads:
 // { groups, missions, queue, version }).  Filled by loadBoardData() the
 // first time it is needed; kept fresh after every successful action.
@@ -173,6 +200,53 @@ function attachCardActions(el, data) {
   el.appendChild(group);
 }
 
+// The run buttons of board_run_mission.js (the module is loaded before this one in
+// board.html; the require() covers node loads of this file standalone).
+function runMissionModule() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_run_mission.js");
+  }
+  return globalThis.BoardRunMission || null;
+}
+
+// Whether run_mission_from_card is on, read once from the features route; false while the
+// route is unreachable, which keeps every card as it was.
+let runFlagPromise = null;
+function runFlagOn() {
+  if (!runFlagPromise) {
+    runFlagPromise = boardFeatureFlags().then((flags) => Boolean(
+      flags && flags.run_mission_from_card && flags.run_mission_from_card.enabled,
+    ));
+  }
+  return runFlagPromise;
+}
+
+// Reload the board data after a run request and tell the views (the kanban listens to
+// "board:refresh" and redraws its queued column).
+async function refreshAfterRun() {
+  boardData = await loadBoardData();
+  if (typeof BoardDnd !== "undefined" && BoardDnd.DndState) BoardDnd.DndState.data = boardData;
+  if (typeof document.dispatchEvent === "function" && typeof CustomEvent === "function") {
+    document.dispatchEvent(new CustomEvent("board:refresh"));
+  }
+}
+
+// Add "Run next" / "Run now" to a kanban card of an open column (idempotent).
+async function attachRunButtons(card, data) {
+  const runModule = runMissionModule();
+  if (!runModule || card.dataset.runReady === "1") return;
+  const flagOn = await runFlagOn();
+  runModule.attachRunButtons(card, {
+    data,
+    flagOn,
+    post: postJson,
+    show: showState,
+    refresh: refreshAfterRun,
+    confirm: (text) => window.confirm(text),
+    tr: t,
+  });
+}
+
 // Make one small button inside the action group; the click handler stops
 // the click from navigating (the buttons live inside the card's <a>).
 function mkButton(group, label, action, missionId, needsConfirm) {
@@ -204,6 +278,43 @@ function confirmActions(missionId, action) {
   const label = labelKey ? t(labelKey) : action;
   if (!window.confirm(label + " (" + esc(missionId) + ")?")) return;
   doAction(action, missionId);
+}
+
+// A queue action the dependency guard refused: "Run next" of a mission that
+// still waits on a dependency is asked "run anyway", a move where the missions
+// that depend on it stand in the way is asked "move them too".  A refusal lands
+// nothing on the server, so the refresh the caller does re-renders the card at
+// its old position; a refused confirm sends no second request.  Returns true
+// when the refusal was handled (message shown or resend sent), so the caller
+// does not print the raw API message too.
+async function handleDependencyRefusal(e, action, missionId, body, url) {
+  const deps = dependencyHelpers();
+  if (!deps || !deps.isDependencyRefusal(e)) return false;
+  if (e.body && e.body.dependency_state) {
+    if (window.confirm(deps.dependencyRunConfirm(e.body))) {
+      try {
+        await postJson(url, { ...body, ...deps.buildStartBody(true) });
+      } catch (again) {
+        showState(again.message || t("action.failed", { action }));
+      }
+      return true;
+    }
+    showState(deps.dependencyRefusalMessage(e.body, missionId));
+    return true;
+  }
+  const askText = deps.dependencyGroupConfirm(
+    boardData && boardData.queue ? boardData.queue : [], missionId, e.body,
+  );
+  if (askText && window.confirm(askText)) {
+    try {
+      await postJson(url, { ...body, move_dependents: true });
+    } catch (again) {
+      showState(again.message || t("action.failed", { action }));
+    }
+    return true;
+  }
+  showState(deps.dependencyRefusalMessage(e.body, missionId));
+  return true;
 }
 
 // One action: build the request, call the API, then refresh the board from
@@ -252,7 +363,7 @@ async function doAction(action, missionId) {
   } catch (e) {
     if (e.status === 409) {
       showState(t("conflict.plan_changed"));
-    } else {
+    } else if (!await handleDependencyRefusal(e, action, missionId, body, url)) {
       showState(e.message || t("action.failed", { action }));
     }
     // The server state may have changed (e.g. a refusal); reload it.
@@ -366,6 +477,74 @@ function toggleNewMission() {
   submit.textContent = t("new.submit");
   submit.addEventListener("click", createMissionForm);
   el.appendChild(submit);
+  // The dependency field only when the mission_dependencies flag is on; with
+  // the flag off the form and the create body stay exactly as they were.
+  attachDependencyField(el, tplSel, submit);
+}
+
+// The "after missions" field of the new-mission form: an input named
+// depends_on holding the ids as "a, b", prefilled with the dependencies of the
+// mission the new one copies from.  Nothing is added when the flag is off.
+async function attachDependencyField(el, tplSel, submit) {
+  const deps = dependencyHelpers();
+  let flags = null;
+  try {
+    flags = await boardFeatureFlags();
+  } catch (e) {
+    // the features route failed: no field, the form keeps its old shape
+    return;
+  }
+  if (!deps || !flags || !flags.mission_dependencies || !flags.mission_dependencies.enabled) return;
+
+  const label = document.createElement("label");
+  label.textContent = t("m.dep") + " ";
+  const input = document.createElement("input");
+  input.name = "depends_on";
+  input.type = "text";
+  input.value = "";
+  input.dataset.initial = "";
+  input.dataset.key = "depends_on";
+  input.required = false;
+  input.title = t("m.dep.hint");
+  const errorEl = document.createElement("small");
+  errorEl.id = "missionform-dep-error";
+  errorEl.className = "dep-field-error";
+  label.appendChild(input);
+  label.appendChild(errorEl);
+  el.insertBefore(label, submit);
+  el.insertBefore(document.createElement("br"), submit);
+
+  // The ids of the source mission, read once from the queue rows (they carry
+  // depends_on only when the flag is on).
+  let sourceIds = null;
+  async function idsOf(sourceId) {
+    if (sourceIds === null) {
+      try {
+        const rows = (await fetchJson("/api/board/queue")).queue || [];
+        sourceIds = {};
+        for (const row of rows) {
+          sourceIds[row.mission_id] = deps.formatDependencyField(row.depends_on || []);
+        }
+      } catch (e) {
+        // the queue could not be read: the field stays empty for the operator to type
+        sourceIds = {};
+      }
+    }
+    return sourceIds[sourceId] || "";
+  }
+  tplSel.addEventListener("change", () => {
+    const picked = String(tplSel.value || "");
+    if (!picked.startsWith("mission:")) {
+      input.value = "";
+      return;
+    }
+    idsOf(picked.slice("mission:".length)).then((ids) => {
+      // the prefilled ids are the form's initial state, so an untouched copy
+      // is not read as a dirty form by dirtyForm()
+      input.value = ids;
+      input.dataset.initial = ids;
+    });
+  });
 }
 
 // Read the form values and POST /api/board/missions/create; every value
@@ -383,11 +562,25 @@ async function createMissionForm() {
   if (tpl.startsWith("template:")) body.template_name = tpl.slice("template:".length);
   const pos = el.querySelector('[name="position"]').value.trim();
   if (pos !== "") body.position = Number(pos);
+  // The dependency field exists only when the flag is on: with the flag off the
+  // body has no depends_on key at all.
+  const depEl = el.querySelector('[name="depends_on"]');
+  if (depEl) {
+    const deps = dependencyHelpers();
+    body.depends_on = deps ? deps.parseDependencyField(depEl.value) : [];
+  }
   body.who = "dashboard";
   try {
     await postJson("/api/board/missions/create", body);
   } catch (e) {
-    showState(e.message || t("mission.create_failed"));
+    const deps = dependencyHelpers();
+    const message = (deps && deps.dependencyRefusalMessage(e.body, body.mission_id))
+      || e.message || t("mission.create_failed");
+    showState(message);
+    // The reason next to the field, so the operator sees what to fix; the form
+    // stays open and nothing was saved.
+    const errorEl = document.getElementById("missionform-dep-error");
+    if (errorEl) errorEl.textContent = message;
     return;
   }
   toggleNewMission();
@@ -468,12 +661,15 @@ const BoardActions = {
   fetchJson,
   attachCardActions,
   attachCardActionsTo,
+  attachRunButtons,
   doAction,
   confirmActions,
   refreshBoard,
   dirtyForm,
   toggleNewMission,
   createMissionForm,
+  attachDependencyField,
+  boardFeatureFlags,
   tick,
   startAutoRefresh,
   stopAutoRefresh,

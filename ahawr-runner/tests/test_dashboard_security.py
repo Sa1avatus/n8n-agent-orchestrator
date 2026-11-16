@@ -380,6 +380,8 @@ def test_readonly_mode_refuses_every_write_and_tells_the_page(
             ("POST", "/api/board/missions/create"),
             ("PUT", "/api/board/queue"),
             ("DELETE", "/api/board/missions/x"),
+            ("POST", "/api/board/missions/m1/run-next"),
+            ("POST", "/api/board/missions/m1/run-now"),
             ("POST", "/api/runs/run_abc/cancel"),
         ):
             response = client.request(method, path, headers=cookie | headers)
@@ -411,3 +413,25 @@ def test_board_save_without_dashboard_header_is_refused_with_403() -> None:
     assert refused.status_code == 403
     assert refused.json() == {"error": "missing X-AHAWR-Dashboard header"}
     assert allowed.status_code != 403
+
+
+def test_run_routes_need_the_dashboard_header_and_are_closed_while_the_flag_is_off() -> None:
+    """The run routes of ``board_api`` inherit the header guard; with
+    ``run_mission_from_card`` off (the shipped default) their answer is exactly
+    the one an unmounted path gives."""
+    app = create_dashboard_app(DashboardSettings(), transport=httpx.MockTransport(_refuse_runner))
+    paths = "/api/board/missions/m1/run-next", "/api/board/missions/m1/run-now"
+    with TestClient(app, base_url=BASE_URL, follow_redirects=False) as client:
+        cookie = _cookie_header(_login(client))
+        for path in paths:
+            refused = client.post(path, headers=cookie | JSON_ACCEPT, json={})
+            assert refused.status_code == 403, path
+            assert refused.json() == {"error": "missing X-AHAWR-Dashboard header"}
+            closed = client.post(path, headers=cookie | DASHBOARD_HEADER | JSON_ACCEPT, json={})
+            unknown = client.post(
+                "/api/board/missions/m1/not-mounted",
+                headers=cookie | DASHBOARD_HEADER | JSON_ACCEPT,
+                json={},
+            )
+            assert closed.status_code == unknown.status_code == 404, path
+            assert closed.text == unknown.text, path

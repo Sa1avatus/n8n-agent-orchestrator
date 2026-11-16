@@ -28,6 +28,9 @@
     },
     "mission_dependencies": {
       "enabled": false
+    },
+    "run_mission_from_card": {
+      "enabled": false
     }
   },
   "param_minimums": {

@@ -30,6 +30,16 @@
 // this file standalone (board.html always loads board_logic.js first).
 const esc = (typeof BoardLogic !== "undefined" ? BoardLogic : require("./board_logic.js")).esc;
 
+// The dependency field helpers of board_mission_dependencies.js: the field text
+// ("a, b") and the id list the API wants.  Looked up when a field is read or
+// posted, so a page whose dependency script did not load keeps the old saving.
+function dependencyHelpers() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
 // State: the current mission id, the initial field values captured at render
 // time, the last server payload, and the last diff shown.
 const SaveState = {
@@ -103,6 +113,13 @@ function initialValue(kind, key, data, control) {
     : kind === "queue" ? (queueEntry[key] != null ? queueEntry[key] : (key === "enabled" ? mission.enabled : undefined))
     : kind === "listarea" ? (data.mission ? data.mission[key] : config[key])
     : config[key];
+  // depends_on is a plain text field holding the ids as "a, b": the stored list
+  // is formatted exactly as the field renders it, so the dirty check and the
+  // diff compare the same shape the field shows.
+  if (key === "depends_on" && Array.isArray(v)) {
+    const deps = dependencyHelpers();
+    return deps ? deps.formatDependencyField(v) : "";
+  }
   if (ctl === "bool") return v === true || String(v).toLowerCase() === "true";
   if (ctl === "number") return v == null || v === "" ? null : Number(v);
   if (ctl === "text") return v == null ? "" : String(v).replace(/\r\n?/g, "\n");
@@ -364,6 +381,10 @@ async function doSave(box) {
       // enabled is the mission's flag; the store's queue route reads it from
       // the mission row, so it is sent as a mission field.
       missionBody.enabled = cur[key];
+    } else if (kind === "queue" && key === "depends_on") {
+      // The field is the text "a, b"; the API takes the list of ids.
+      const deps = dependencyHelpers();
+      missionBody.depends_on = deps ? deps.parseDependencyField(cur[key]) : [];
     } else if (kind === "queue") {
       // attempts_per_task lives on the queue entry, not in the mission config;
       // no board route edits it from this form, so it is not posted.
@@ -385,6 +406,17 @@ async function doSave(box) {
     if (e.status === 409) {
       showBanner(box, t("conflict.plan_changed"));
       await refresh(box, t("conflict.plan_changed"));
+    } else if ("depends_on" in missionBody && e.status !== 409) {
+      // The API refused the ids (unknown mission, cycle): show the reason where
+      // the operator can read it.  The edit window hides the confbox banner, so
+      // the reason goes into #ew-err too; nothing is saved and the typed ids
+      // stay in the field, so the form is not refreshed.
+      const deps = dependencyHelpers();
+      const message = (deps && deps.dependencyRefusalMessage(e.body, missionId))
+        || e.message || t("save.failed");
+      showBanner(box, message);
+      const errEl = document.getElementById?.("ew-err");
+      if (errEl) errEl.textContent = message;
     } else {
       showBanner(box, e.message || t("save.failed"));
       await refresh(box);
@@ -476,6 +508,10 @@ function copyIntoForm(box, data) {
         : (v == null ? "" : String(v));
     } else if (kind === "json") {
       el.value = v == null ? "" : JSON.stringify(v, null, 2);
+    } else if (key === "depends_on") {
+      // The copied ids are stored as a list; the field shows them as "a, b".
+      const deps = dependencyHelpers();
+      el.value = deps && Array.isArray(v) ? deps.formatDependencyField(v) : (v == null ? "" : String(v));
     } else {
       el.value = v == null ? "" : String(v);
     }

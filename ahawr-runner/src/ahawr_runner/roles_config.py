@@ -13,7 +13,9 @@ FIRST_ATTEMPT_KEY = "1"
 MAX_ROLE_KEYS = 10
 MAX_DISTINCT_MODELS = 8
 KNOWN_ROLES = frozenset({"architect", "worker", "reviewer", "service", "qa", "qa_agent", "report"})
-COMMON_OPTION_KEYS = frozenset({"fresh", "think", "max_polls", "poll_seconds", "max_retries"})
+COMMON_OPTION_KEYS = frozenset(
+    {"fresh", "think", "max_polls", "poll_seconds", "max_retries", "fallback"}
+)
 QA_OPTION_KEYS = COMMON_OPTION_KEYS | {
     "mode",
     "max_minutes",
@@ -178,7 +180,18 @@ def _check_options(role: str, options: Any) -> list[str]:
     if role == "qa":
         errors.extend(_check_qa_options(role, options))
     errors.extend(_check_polling(role, options))
+    errors.extend(_check_fallback(role, options))
     return errors
+
+
+def _check_fallback(role: str, options: dict[str, Any]) -> list[str]:
+    """``fallback``: the model a run goes to when its provider keeps refusing (a limit, 429, 5xx)."""
+    if "fallback" not in options:
+        return []
+    value = options["fallback"]
+    if isinstance(value, str) and MODEL_SEPARATOR in value.strip().strip(MODEL_SEPARATOR):
+        return []
+    return [f"role {role!r}: option 'fallback' must be a model written as provider/model"]
 
 
 def _check_qa_options(role: str, options: dict[str, Any]) -> list[str]:

@@ -3,7 +3,7 @@
 // Active only when /api/ui-mode says the page is read-only.
 "use strict";
 const WRITE_LABEL_KEYS = [
-  "tr.open", "tr.add", "kan.new", "action.enable", "action.disable", "action.stop", "action.retry",
+  "tr.open", "tr.add", "kan.new", "action.enable", "action.disable", "action.stop", "action.retry", "action.run_next", "action.run_now",
   "rd.start", "ew.edit", "pe.save", "save.button", "claudemd.save", "btn.group", "btn.cancel",
   "control.button_stop_mission", "prov.add", "prov.edit", "prov.delete", "prov.create",
   "prov.form.save", "prov.key.save", "prov.models.add", "prov.models.save", "prov.models.new",

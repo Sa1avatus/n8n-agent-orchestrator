@@ -7,7 +7,7 @@ const FIRST_ATTEMPT_KEY = "1";
 const MAX_ROLE_KEYS = 10;
 const MAX_DISTINCT_MODELS = 8;
 const KNOWN_ROLES = ["architect", "worker", "reviewer", "service", "qa", "qa_agent", "report"];
-const COMMON_OPTION_KEYS = ["fresh", "think", "max_polls", "poll_seconds", "max_retries"];
+const COMMON_OPTION_KEYS = ["fresh", "think", "max_polls", "poll_seconds", "max_retries", "fallback"];
 const QA_OPTION_KEYS = [...COMMON_OPTION_KEYS, "mode", "max_minutes", "max_cost_usd", "layers"];
 // Mirrors QA_AGENT_OPTION_KEYS in roles_config.py: the qa_agent role's options.
 const QA_AGENT_OPTION_KEYS = [...COMMON_OPTION_KEYS, "max_minutes", "max_cost_usd"];
@@ -321,7 +321,17 @@ function checkOptions(role, options) {
     errors.push(...checkLayers(name, asMap(options).get("layers")));
   }
   errors.push(...checkPolling(name, asMap(options)));
+  errors.push(...checkFallback(name, asMap(options)));
   return errors;
+}
+
+// The model a run goes to when its provider keeps refusing (a limit, 429, 5xx).
+function checkFallback(name, options) {
+  if (!options.has("fallback")) return [];
+  const value = options.get("fallback");
+  const trimmed = typeof value === "string" ? value.trim().replace(/^\/+|\/+$/g, "") : "";
+  if (trimmed.includes(MODEL_SEPARATOR)) return [];
+  return [`role ${name}: option ${pyRepr("fallback")} must be a model written as provider/model`];
 }
 
 function roleModels(value) {

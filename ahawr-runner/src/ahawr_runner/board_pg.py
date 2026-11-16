@@ -283,6 +283,7 @@ class UnavailableBoardStore(BoardStore):
     def create_mission_rows(
         self, mission: Mission, live: LiveState, config: dict[str, Any] | None,
         position: int | None = None, note: str | None = None, who: str = "",
+        attempts_per_task: float | None = None,
     ) -> None:
         self._refuse()
 
@@ -423,7 +424,17 @@ class PgBoardStore(BoardStore):
 
         The store's own migration: ``ALTER ... IF NOT EXISTS`` is a no-op when
         the column is already there, so the old rows keep the default empty list.
+        The ALTER needs the table owner and the board role is not one, so it runs
+        only when the catalog says the column is missing.
         """
+        present = self._conn.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = %s AND column_name = 'depends_on' "
+            "AND table_schema = ANY (current_schemas(false))",
+            (_QUEUE_TABLE,),
+        ).fetchone()
+        if present is not None:
+            return
         self._conn.execute(
             f"ALTER TABLE {_QUEUE_TABLE} ADD COLUMN IF NOT EXISTS "
             "depends_on jsonb NOT NULL DEFAULT '[]'"
@@ -941,6 +952,13 @@ class PgBoardStore(BoardStore):
                 if len(ids) != len(set(ids)):
                     raise ValueError("queue contains duplicate mission ids")
                 before = self._queue_snapshot()
+                # the table is rewritten: keep the depends_on of every entry
+                kept = {
+                    row["mission_id"]: build_dependencies(row.get("depends_on"))
+                    for row in self._conn.execute(
+                        f"SELECT mission_id, depends_on FROM {_QUEUE_TABLE} ORDER BY position"
+                    ).fetchall()
+                }
                 self._conn.execute(f"DELETE FROM {_QUEUE_TABLE}")
                 for index, entry in enumerate(entries):
                     self._conn.execute(
@@ -956,6 +974,11 @@ class PgBoardStore(BoardStore):
                             entry.note,
                         ),
                     )
+                    if kept.get(entry.mission_id):
+                        self._conn.execute(
+                            f"UPDATE {_QUEUE_TABLE} SET depends_on = %s WHERE mission_id = %s",
+                            (json.dumps(kept[entry.mission_id]), entry.mission_id),
+                        )
                 self._READ_VERSION = now()
                 return self._queue_audit("queue set", before)
 
@@ -1113,6 +1136,7 @@ class PgBoardStore(BoardStore):
     def create_mission_rows(
         self, mission: Mission, live: LiveState, config: dict[str, Any] | None,
         position: int | None = None, note: str | None = None, who: str = "",
+        attempts_per_task: float | None = None,
     ) -> None:
         with self._lock:
             with self._conn.transaction():
@@ -1124,6 +1148,7 @@ class PgBoardStore(BoardStore):
                     "working_directory": mission.working_directory,
                     "version": mission.version,
                     "enabled": mission.enabled,
+                    "overrides_json": mission.overrides_json,
                     "rules_json": json.dumps(mission.rules),
                     "acceptance_criteria_json": json.dumps(mission.acceptance_criteria),
                     "retrieval_corpora_json": json.dumps(mission.retrieval_corpora)
@@ -1179,7 +1204,7 @@ class PgBoardStore(BoardStore):
                     f"INSERT INTO {_QUEUE_TABLE} "
                     "(position, mission_id, enabled, attempts_per_task, "
                     "retry_failed, note) VALUES (%s, %s, %s, %s, %s, %s)",
-                    (insert_at, mission.mission_id, True, None, False, note),
+                    (insert_at, mission.mission_id, True, attempts_per_task, False, note),
                 )
                 if config:
                     self._conn.execute(

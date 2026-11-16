@@ -31,6 +31,17 @@
 // this file standalone (board.html always loads board_logic.js first).
 const esc = (typeof BoardLogic !== "undefined" ? BoardLogic : require("./board_logic.js")).esc;
 
+// The dependency renderers of board_mission_dependencies.js.  board.html loads
+// that script after this one, so the renderers are looked up when a card is
+// built; the require() covers node loads of this file alone.  A card gets no
+// dependency markup when the module did not load at all.
+function dependencyRenderers() {
+  if (typeof module !== "undefined" && module.exports) {
+    return require("./board_mission_dependencies.js");
+  }
+  return globalThis.BoardMissionDependencies || null;
+}
+
 // The five groups in display order, keyed by the store's group names.
 const GROUPS = [
   { key: "running", titleKey: "queue.group.running" },
@@ -103,6 +114,11 @@ function cardHtml(mission, position, groupKey, card) {
     stats.thinking_steps,
   ) : "—";
 
+  // Both renderers return "" when the answer carries no depends_on (the
+  // mission_dependencies flag is off), so such a card keeps its old markup.
+  const md = dependencyRenderers();
+  const dependencyHtml = md ? md.renderDependencyLine(mission) + md.renderDependencyChip(mission) : "";
+
   return (
     `<a class="qitem qcard qcard-${esc(groupKey)}" href="#board/${esc(id)}" ` +
     `data-mission-id="${esc(id)}" data-group="${esc(groupKey)}" data-position="${esc(position)}" draggable="false">` +
@@ -115,7 +131,9 @@ function cardHtml(mission, position, groupKey, card) {
     `<span class="qbar"><span class="qbarfill" style="width:${esc(pct)}%"></span></span>` +
     `<span class="qstats" title="${esc(t("queue.stats.title"))}">` +
     esc(t("queue.stats", { attempts, time, tokens, cache, cost, speed, thinking })) + `</span>` +
-    `</div></a>`
+    `</div>` +
+    dependencyHtml +
+    `</a>`
   );
 }
 

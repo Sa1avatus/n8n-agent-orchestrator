@@ -23,7 +23,10 @@
 //      saveReady attach guard is reset, so the savebar comes back;
 //   9. featuresState() gives an empty state for absent payloads, and
 //      featuresSavePlan() diffs and PUTs only the changed features texts,
-//      each with its read version; the PUTs carry X-AHAWR-Dashboard: 1.
+//      each with its read version; the PUTs carry X-AHAWR-Dashboard: 1;
+//   10. the depends_on editor field posts the ids as a list with that header,
+//      a refused save shows the reason in the banner and in #ew-err without
+//      refreshing, and copyIntoForm prefills the ids of the copied mission.
 
 "use strict";
 const path = require("path");
@@ -71,24 +74,36 @@ const data = {
   mission: { mission_id: "m1", name: "A", objective: "цель",
              working_directory: "/tmp/x", rules: ["r1", "r2"],
              acceptance_criteria: ["c1"], updated_at: "v1" },
-  queue: [{ position: 0, mission_id: "m1", enabled: true, attempts_per_task: 5 }],
+  queue: [{
+    position: 0, mission_id: "m1", enabled: true, attempts_per_task: 5,
+    depends_on: ["m0", "m9"],
+  }],
   config: { worker_model: "m1", worker_think_policy: { a: 1 } },
   version: "qv1",
 };
 
 // initial values from the server data
 check("initialValue mission field", MS.initialValue("mission", "name", data) === "A");
+check("initialValue depends_on formats the stored ids",
+  MS.initialValue("queue", "depends_on", data) === "m0, m9");
 check("initialValue queue field", MS.initialValue("queue", "attempts_per_task", data) === 5);
 check("initialValue config field",
   JSON.stringify(MS.initialValue("config", "worker_think_policy", data)) === '{"a":1}' &&
   JSON.stringify(MS.initialValue("config", "worker_model", data)) === '"m1"');
 
 // captureInitial via a stub box (dataset keys come from the form markup)
+// The dependency field of the editor form: a plain text control holding the
+// stored ids as "a, b".
+const depField = {
+  dataset: { key: "depends_on", kind: "queue", control: "text" },
+  type: "text", value: "m0, m9", checked: false, closest: () => null,
+};
 const boxEls = [
   field("name", "mission", "A"),
   field("rules", "listarea", "r1\nr2"),
   field("enabled", "queue", "", "checkbox", true),
   field("worker_model", "config", "m1"),
+  depField,
 ];
 const box = stubBox(boxEls);
 MS.captureInitial(box, data);
@@ -199,6 +214,8 @@ function panelStub() {
 // createElement returns an element that records its children (appendChild),
 // so the panel and bar renderClean's attachControls creates can be found by
 // querySelector in the box stub below.
+// #ew-err is the edit-window error element the save refusal writes into.
+const ewErrStub = { textContent: "" };
 globalThis.document = {
   createElement: () => {
     const el = { _children: [] };
@@ -206,16 +223,22 @@ globalThis.document = {
     el.addEventListener = () => {};
     return el;
   },
+  getElementById: (id) => (id === "ew-err" ? ewErrStub : null),
 };
 
 // Box stub: querySelector(".savepanel") returns a panel stub, so the real
 // showBanner / diff/banner wiring works without a DOM.
+// A selector like '[data-key="depends_on"]' also resolves to the field stub,
+// so kindOf() (which reads dataset.kind of the found element) works in node.
 function panelBox() {
   return {
     dataset: { saveReady: "0" },
     querySelectorAll: (sel) => (sel === "[data-key]" ? boxEls : []),
-    querySelector: (sel) =>
-      sel === ".savepanel" ? panelStub() : null,
+    querySelector: (sel) => {
+      if (sel === ".savepanel") return panelStub();
+      const key = (String(sel).match(/data-key="([^"]+)"/) || [])[1];
+      return boxEls.find((el) => el.dataset.key === key) || null;
+    },
   };
 }
 
@@ -274,6 +297,88 @@ postErr = { error: { message: "план изменился, обновите" } 
   check("post-save banner cleared", bannerStub.textContent === "");
   check("post-save initial refreshed",
     MS.SaveState.initial.name === "B" && MS.SaveState.data.version === "qv2");
+
+  // --- the dependency field: the ids go to the API as a list ---
+  const depFetchBackup = globalThis.fetch;
+  const depCalls = [];
+  globalThis.fetch = (url, options) => {
+    depCalls.push({ url, options });
+    return Promise.resolve({
+      ok: false, status: 400,
+      json: () => Promise.resolve({
+        status: "failed",
+        error: { code: "bad_request", message: "unknown mission dependency zz" },
+        code: "bad_request", status_code: 400,
+      }),
+    });
+  };
+  ewErrStub.textContent = "";
+  depField.value = "zz, ww";
+  await MS.doSave(panelBox());
+  check("the refused save posted exactly one body", depCalls.length === 1);
+  check("the save body sends the ids as a list",
+    JSON.parse(depCalls[0].options.body).depends_on.join(",") === "zz,ww");
+  check("the save body keeps the version check",
+    JSON.parse(depCalls[0].options.body).expected_version === "v1");
+  check("the save carries the dashboard header",
+    depCalls[0].options.headers["X-AHAWR-Dashboard"] === "1");
+  check("the refusal reason is visible in the banner",
+    bannerStub.textContent === "unknown mission dependency zz");
+  check("the refusal reason is visible in the edit window",
+    ewErrStub.textContent === "unknown mission dependency zz");
+  check("a refused save fetches nothing back",
+    !depCalls.some((c) => String(c.url).endsWith("/queue")));
+  check("a refused save leaves the typed ids and the form dirty",
+    depField.value === "zz, ww" && MS.formDirty(panelBox()) === true);
+
+  // the cycle refusal shows the closing pair the API reports
+  globalThis.fetch = (url, options) => {
+    depCalls.push({ url, options });
+    return Promise.resolve({
+      ok: false, status: 422,
+      json: () => Promise.resolve({
+        status: "failed",
+        error: { code: "cycle", message: "the dependency closes a cycle" },
+        code: "cycle", status_code: 422, closing_pair: ["m1", "zz"],
+      }),
+    });
+  };
+  await MS.doSave(panelBox());
+  check("the cycle refusal names the pair",
+    bannerStub.textContent === "Mission dependency closes a cycle: m1 -> zz -> m1");
+  globalThis.fetch = depFetchBackup;
+  depField.value = "m0, m9";
+
+  // --- the copy action prefills the source mission's ids ---
+  const copyEls = [
+    { dataset: { key: "name", kind: "mission", control: "text" }, type: "text",
+      value: "", checked: false, closest: () => null },
+    { dataset: { key: "rules", kind: "mission", control: "listarea" }, type: "textarea",
+      value: "", checked: false, closest: () => null },
+    { dataset: { key: "depends_on", kind: "queue", control: "text" }, type: "text",
+      value: "", checked: false, closest: () => null },
+  ];
+  const copyBox = {
+    dataset: { saveReady: "1" },
+    querySelectorAll: (sel) => (sel === "[data-key]" ? copyEls : []),
+    querySelector: (sel) => (sel === ".savepanel" ? panelStub() : null),
+  };
+  MS.copyIntoForm(copyBox, {
+    mission: { mission_id: "m9", name: "Source", rules: ["r"] },
+    queue: [{ position: 1, mission_id: "m9", depends_on: ["m0", "m9x"] }],
+    config: {},
+  });
+  check("copy prefills the source ids as the field shows them",
+    copyEls[2].value === "m0, m9x");
+  // the flag off: the queue answer has no depends_on key, the field stays empty
+  copyEls[2].value = "typed by the operator";
+  MS.copyIntoForm(copyBox, {
+    mission: { mission_id: "m9", name: "Source" },
+    queue: [{ position: 1, mission_id: "m9" }],
+    config: {},
+  });
+  check("copy of a mission with no depends_on leaves the field empty",
+    copyEls[2].value === "");
 
   // renderClean re-attaches the controls after wiping the form.  The box
   // stub keeps dataset.saveReady across innerHTML wipes (the form was

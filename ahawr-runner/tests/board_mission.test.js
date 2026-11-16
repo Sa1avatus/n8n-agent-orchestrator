@@ -124,6 +124,30 @@ check("presets enabled while idle",
   has(BM.renderMission(idle), 'data-preset="3"') &&
   !/frow-preset" data-preset="3" disabled/.test(BM.renderMission(idle)));
 
+// --- 2b. the depends_on editor row, only when the flag is on ---
+// The queue answer carries depends_on only when mission_dependencies is on,
+// so its presence in the entry is the flag test.
+const queueWithDeps = [{
+  position: 0, mission_id: "m1", enabled: true, attempts_per_task: 5,
+  depends_on: ["m0", "m9"],
+}];
+const depHtml = BM.renderMission({
+  mission, queue: queueWithDeps, config,
+  live_state: { status: "queued", task_index: null }, groups: {},
+});
+check("flag on: the depends_on row is rendered", has(depHtml, 'data-key="depends_on"'));
+check("flag on: the label comes from m.dep", has(depHtml, '<label class="frow-label">After missions</label>'));
+check("flag on: the stored ids are prefilled", has(depHtml, 'name="depends_on" data-kind="queue" data-key="depends_on" data-control="text" value="m0, m9"'));
+check("flag off: no depends_on row at all", !has(html, "depends_on"));
+check("flag on: the row sits after attempts and before the models",
+  depHtml.indexOf('data-key="attempts_per_task"') < depHtml.indexOf('data-key="depends_on"') &&
+  depHtml.indexOf('data-key="depends_on"') < depHtml.indexOf('data-key="worker_model"'));
+check("flag on with no ids renders an empty field",
+  has(BM.renderMission({
+    mission, queue: [{ position: 0, mission_id: "m1", enabled: true, attempts_per_task: 5, depends_on: [] }],
+    config, live_state: { status: "queued" }, groups: {},
+  }), 'data-key="depends_on" data-control="text" value=""'));
+
 // --- 3. every value goes through esc() ---
 const evilMission = Object.assign({}, mission, {
   name: 'x<script>"&', objective: "<script>alert('x')<\/script>",

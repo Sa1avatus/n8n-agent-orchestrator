@@ -637,7 +637,7 @@ def _fields_content(fields: dict[str, Any]) -> dict[str, Any]:
         "acceptance_criteria": list(fields.get("acceptance_criteria") or []),
         "retrieval_corpora": list(fields.get("retrieval_corpora") or []),
         "working_directory": fields.get("working_directory") or None,
-        "config": {},
+        "config": dict(fields.get("config") or {}),
     }
 
 
@@ -701,6 +701,8 @@ def create_mission(
     queue_note: str | None = None,
     who: str = "",
     fields: dict[str, Any] | None = None,
+    overrides_json: str | None = None,
+    attempts_per_task: float | None = None,
 ) -> dict[str, Any]:
     """Create a mission: one atomic write of the missions row, its Live State
     row and its queue entry — all three rows or none.
@@ -758,6 +760,7 @@ def create_mission(
         rules=rows["rules"],
         acceptance_criteria=rows["acceptance_criteria"],
         retrieval_corpora=rows["retrieval_corpora"] or None,
+        overrides_json=overrides_json or None,
     )
     live = LiveState(state_key=state_key, plan=clean, status="active" if clean else None)
 
@@ -765,7 +768,8 @@ def create_mission(
     # under its lock (rolling the rows back on failure), the Pg store inside
     # one transaction (``with self._conn.transaction()``).
     store.create_mission_rows(
-        mission, live, config, position=position, note=queue_note, who=who or ""
+        mission, live, config, position=position, note=queue_note, who=who or "",
+        attempts_per_task=attempts_per_task,
     )
 
     return {

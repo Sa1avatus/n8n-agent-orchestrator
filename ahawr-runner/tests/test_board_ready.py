@@ -730,6 +730,7 @@ class TestCreateMission:
 
             def create_mission_rows(
                 self, mission, live, config, position=None, note=None, who="",
+                attempts_per_task=None,
             ) -> None:
                 # record that the atomic step was called, and record the
                 # writes through the public views (as the store would)

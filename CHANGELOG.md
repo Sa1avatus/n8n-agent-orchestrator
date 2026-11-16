@@ -3,7 +3,43 @@
 Notable changes to the AHAWR stack: n8n workflows, `claude-runner`, `ahawr-retrieval`,
 LiteLLM, the dashboard and the missions. Newest first. Commit ids are in brackets.
 
-Version: **1.1.300** (ahawr-runner `1.1.200` → `1.1.300`, 2026-11-14; `1.1.150` → `1.1.200`, 2026-11-14; `1.1.140` → `1.1.150`, 2026-11-13; `1.1.130` → `1.1.140`, 2026-11-13; `1.1.120` → `1.1.130`, 2026-11-13; `1.1.110` → `1.1.120`, 2026-11-11; `1.1.100` → `1.1.110`, 2026-11-10; `1.1.0` → `1.1.100`, 2026-11-10; `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+Version: **1.2.0** (ahawr-runner `1.1.310` → `1.2.0`, 2026-11-16; `1.1.300` → `1.1.310`, 2026-11-14; `1.1.200` → `1.1.300`, 2026-11-14; `1.1.150` → `1.1.200`, 2026-11-14; `1.1.140` → `1.1.150`, 2026-11-13; `1.1.130` → `1.1.140`, 2026-11-13; `1.1.120` → `1.1.130`, 2026-11-13; `1.1.110` → `1.1.120`, 2026-11-11; `1.1.100` → `1.1.110`, 2026-11-10; `1.1.0` → `1.1.100`, 2026-11-10; `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
+
+## 2026-11-16 (1.2.0)
+
+New function: **Run next / Run now on the kanban card** (mission `ahawr-board-run-mission`), behind the flag `run_mission_from_card`, OFF by default
+(with the flag off the kanban markup and the API answers are unchanged).
+
+- Backend (`board_run_mission.py`, routes `POST /api/board/missions/{id}/run-next` and `/run-now` in `board_api.py`): the mission goes to
+  position 0 of `board.queue` through `store.move_queue`; `run-now` also enqueues the `resume` ops action when no mission is running, and
+  stops nothing when one is (the answer offers `pause_at_boundary`). Disabled, failed-without-retry, running and completed missions are
+  refused with a reason code taken from stored data. Both routes need the header `X-AHAWR-Dashboard: 1` and answer 403 on the read-only port.
+- Frontend (`board_run_mission.js`, hooks in `board_actions.js` and `board_view_kanban.js`): two buttons on the cards of the Running, Queued
+  and Not completed columns, a confirm step before the request, buttons disabled with the reason, no buttons on a Completed card; the
+  read-only page hides them by label (`board_readonly.js`). Twelve board texts in `board_i18n_en.json`, `board_i18n_ru.json` and `BUNDLED_EN`.
+- Tests: `tests/test_board_run_mission.py` (backend, 31) and `tests/board_run_mission.test.js` (node, 9).
+- The review of the mission by an independent reviewer found the frontend, the texts, the node test and these entries missing (the mission
+  had been marked completed while the Reviewer was a free model during the cloud limit); this step adds them.
+- Version: `ahawr-runner/pyproject.toml` and `api.py` `1.1.310` → `1.2.0`; `ROADMAP.md` carries the matching timeline line.
+
+## 2026-11-14 (1.1.310)
+
+Documentation step (no runtime code changed; the version moves by 10 as a small change).
+
+- `docs/mission-dependencies.md` is the final note for the mission dependency work: the `depends_on`
+  column of `board.queue` and the store methods that read and write it, the rule due / waiting /
+  blocked and the validation of ids, cycles and moves, the dashboard side (drag-and-drop refusal,
+  "Move them too", "Run anyway", the i18n keys), the split parts that wait for the part before them,
+  the Architect block with its limits (`DEPENDENCY_REPORT_MAX_CHARS = 700`,
+  `ARCHITECT_BLOCK_MAX_CHARS = 4000`) and the plan lint, the flag `mission_dependencies` (off by
+  default, and byte-for-byte the old behaviour with the flag off), and an "Operator steps" section
+  that lists, in order, the store migration, the three patch files with their commands and the flag
+  turn. The research maps of the earlier attempts (T001-T005) and the design names that never
+  shipped are removed. The note states plainly that no patch has been applied to the live workflow.
+- `docs/adaptive-split.md` gains the paragraph on `depends_on`: part N of a split waits for part
+  N-1 (`split_dependencies_patch.py`), part 1 waits for nothing.
+- Version: `ahawr-runner/pyproject.toml` and `ahawr-runner/src/ahawr_runner/api.py` `1.1.300` →
+  `1.1.310`; `ROADMAP.md` carries the matching timeline line.
 
 ## 2026-11-14 (1.1.300)
 

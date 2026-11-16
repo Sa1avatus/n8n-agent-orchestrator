@@ -48,6 +48,7 @@ MESSAGE_FRAGMENTS = {
     "layers_not_list": "must be a list of layer names",
     "bad_whole_number": "must be a whole number",
     "bad_positive_number": "must be a positive number",
+    "bad_fallback": "must be a model written as",
 }
 
 
