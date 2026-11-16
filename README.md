@@ -12,7 +12,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 <!-- stats:start -->
 | Version | Missions completed | Executors | Models in use |
 |:---:|:---:|:---:|:---:|
-| **1.1.300** | **31** | Claude Code · Codex · Hermes | local Qwen3.8-27B · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 |
+| **1.2.020** | **31** | Claude Code · Codex · Hermes | local Qwen3.8 Flash-next Q2_0 · Haiku 5.5 · Sonnet 5.5 · Opus 5.5 · Fable 5.2 |
 <!-- stats:end -->
 
 ## How a mission runs
@@ -31,7 +31,7 @@ An n8n workflow drives the loop, <code>ahawr-runner</code> runs the models, a da
 |---|---|
 | **n8n workflows** | the orchestration loop, retries, persistence, Telegram notices and a status bot |
 | **`ahawr-runner`** | runs the Claude Code CLI headless behind a `/v1/runs` API; sessions, compaction, thinking policy |
-| **LiteLLM + llama.cpp** | the local model (Qwen3.8-27B) with prompt cache and speculative decoding |
+| **LiteLLM + llama.cpp** | the local model (Qwen3.8 Flash-next Q2_0 on Strata) with prompt cache and speculative decoding |
 | **Retrieval service** | hybrid search over the workspace for the Worker and the Reviewer |
 | **Dashboard** | live runs, cost, cache and speed, click filters, full-text search, **mission board** |
 | **Mission board** | queue cards with drag and drop, task cards, plan editing, per-task statistics |
@@ -773,7 +773,7 @@ The stack is versioned as a whole by the `ahawr-runner` package version (`ahawr-
 
 ### Why it works this way: constraints and workarounds
 
-Several parts of this stack look odd until you know what they work around. The Worker is usually a small quantized local model (Qwen3.8-27B at 2-bit, MTP speculative decoding, one 12 GB GPU, a 64K–96K context window, roughly 25–30 tokens per second), while the Architect and the Reviewer run on Opus (about 130 tokens per second). Three facts drive most decisions: **the window is small**, **generation and uncached prefill are slow** (a full 78K-token prefill takes about 4 minutes, a compaction about 7), and **a cheap Worker is only useful if something checks its work**. Each item below says what the workaround is, why it exists, and what it costs.
+Several parts of this stack look odd until you know what they work around. The Worker is usually a small quantized local model (Qwen3.8 Flash-next at 2-bit (Q2_0, on Strata), MTP speculative decoding, one 12 GB GPU, a 64K–96K context window, roughly 25–30 tokens per second), while the Architect and the Reviewer run on Opus (about 130 tokens per second). Three facts drive most decisions: **the window is small**, **generation and uncached prefill are slow** (a full 78K-token prefill takes about 4 minutes, a compaction about 7), and **a cheap Worker is only useful if something checks its work**. Each item below says what the workaround is, why it exists, and what it costs.
 
 **1. The mission and the plan are translated into English first; the report comes back in the mission's language.**
 - *What.* The Architect writes the summary and every task in English whatever language the mission is written in. The Worker writes notes, reports and code comments in English and the Reviewer answers in English. Texts that must appear exactly as given (paths, identifiers, commands, UI strings, headings the mission requires) stay verbatim in the original language and in quotes. For a non-English mission the Architect adds a last task, `Mission report (<language>)`, that depends on all others; the Worker writes a report of the whole mission in the mission's language without changing files, the Reviewer checks language, coverage and facts, and the `✅ WORKFLOW APPROVED` Telegram notice carries that report.
@@ -1612,7 +1612,7 @@ Architect контекст из RAG не получает, только Worker �
 
 ### Почему всё устроено именно так: ограничения и обходные решения
 
-Многое в этом стеке выглядит странно, пока не знаешь, что именно оно обходит. Worker — обычно небольшая квантованная локальная модель (Qwen3.8-27B в 2 битах, спекулятивное декодирование MTP, одна видеокарта на 12 ГБ, окно 64K–96K токенов, примерно 25–30 токенов в секунду), а Architect и Reviewer работают на Opus (около 130 токенов в секунду). Большинство решений следует из трёх фактов: **окно маленькое**, **генерация и prefill без кэша медленные** (полный prefill 78K токенов занимает около 4 минут, одно сжатие — около 7) и **дешёвый Worker полезен, только если кто-то проверяет его работу**. Для каждого пункта ниже указано, в чём обходное решение, зачем оно и чего стоит.
+Многое в этом стеке выглядит странно, пока не знаешь, что именно оно обходит. Worker — обычно небольшая квантованная локальная модель (Qwen3.8 Flash-next в 2 битах (Q2_0, на Strata), спекулятивное декодирование MTP, одна видеокарта на 12 ГБ, окно 64K–96K токенов, примерно 25–30 токенов в секунду), а Architect и Reviewer работают на Opus (около 130 токенов в секунду). Большинство решений следует из трёх фактов: **окно маленькое**, **генерация и prefill без кэша медленные** (полный prefill 78K токенов занимает около 4 минут, одно сжатие — около 7) и **дешёвый Worker полезен, только если кто-то проверяет его работу**. Для каждого пункта ниже указано, в чём обходное решение, зачем оно и чего стоит.
 
 **1. Миссия и план сначала переводятся на английский, а отчёт возвращается на языке миссии.**
 - *Что.* Architect пишет summary и каждую задачу на английском, на каком бы языке ни была миссия. Worker пишет заметки, отчёты и комментарии в коде на английском, Reviewer отвечает на английском. Тексты, которые должны появиться дословно (пути, идентификаторы, команды, строки интерфейса, заголовки, которых требует миссия), остаются на исходном языке и в кавычках. Для миссии не на английском Architect добавляет последнюю задачу `Mission report (<язык>)`, зависящую от всех остальных: Worker пишет отчёт по всей миссии на языке миссии, не меняя файлы, Reviewer проверяет язык, полноту и факты, а Telegram-уведомление `✅ WORKFLOW APPROVED` содержит этот отчёт.
