@@ -37,6 +37,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from . import board_api, export, settings_defaults
 from .board_common import _unavailable
+from .board_ops_api import add_ops_routes
 from .board_ops_store import InMemoryOpsStore
 from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
 from .board_pg import DSN_ENV
@@ -259,6 +260,8 @@ def create_dashboard_app(
     if qa_fixture is not None:
         app.state.board_store = board_store_from_rows(load_fixture(qa_fixture))
     board_api.add_board_routes(app, settings)
+    if _bool(dict(os.environ), "DASHBOARD_OPS_TAB", False):
+        add_ops_routes(app, settings)  # the Control tab and run-now talk to these routes
     if settings.providers_db:
         secrets = ProviderSecrets(settings.secrets_file or Path("provider-secrets.json"))
 

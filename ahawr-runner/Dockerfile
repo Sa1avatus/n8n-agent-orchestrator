@@ -2,7 +2,7 @@
 FROM node:22-bookworm-slim
 
 # Pin for reproducible builds, e.g. --build-arg CLAUDE_CODE_VERSION=2.1.283
-ARG CLAUDE_CODE_VERSION=latest
+ARG CLAUDE_CODE_VERSION=2.1.325
 # Claude Code is installed unless --build-arg INSTALL_CLAUDE_CODE=false (an image for the Codex or Hermes engine
 # only); a run that needs it then fails with cli_unavailable.
 ARG INSTALL_CLAUDE_CODE=true

@@ -121,7 +121,7 @@ services:
       context: ./ahawr-runner
       dockerfile: Dockerfile
       args:
-        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.325}
         EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
         INSTALL_CLAUDE_CODE: ${AHAWR_INSTALL_CLAUDE_CODE:-true}
         INSTALL_CODEX_CLI: ${AHAWR_INSTALL_CODEX_CLI:-false}
@@ -358,7 +358,7 @@ services:
       context: ./ahawr-runner
       dockerfile: Dockerfile
       args:
-        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.325}
         EXTRA_APT_PACKAGES: ${CLAUDE_RUNNER_EXTRA_APT_PACKAGES:-}
 
     container_name: ahawr-dashboard

@@ -62,3 +62,16 @@ def test_ops_tab_unset_page_equals_explicit_off_baseline(
     with dashboard(client) as dash:
         baseline_page = dash.get("/").text
     assert unset_page == baseline_page
+
+
+def test_ops_routes_are_mounted_only_with_the_tab_flag(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Control tab and "Run now" call /api/board/ops/*: the routes exist with
+    DASHBOARD_OPS_TAB=1 and answer 404 (nothing mounted) with it unset."""
+    monkeypatch.delenv("DASHBOARD_OPS_TAB", raising=False)
+    with dashboard(client) as dash:
+        assert dash.get("/api/board/ops/status").status_code == 404
+    monkeypatch.setenv("DASHBOARD_OPS_TAB", "1")
+    with dashboard(client) as dash:
+        assert dash.get("/api/board/ops/status").status_code != 404

@@ -18,7 +18,7 @@ The live n8n workflow is unchanged until the patch is applied and the flags are 
    `added/Create_Part_Missions.js` (`planParts(tasks, max_tasks, max_tasks_hard ?? 30, 5)`).
 3. **Adaptive split at run time.** `shouldSplit()` in the Build Worker Run Input node decides, before
    the RESUME prompt is built, whether a task is replaced by narrower tasks. The Architect is asked for
-   a split in split mode with a digest of the failed run. The task is replaced by 2-4 tasks with
+   a split in split mode with a digest of the failed run. The task is replaced by 2-6 tasks with
    letter-suffixed ids built from the original id (T013 becomes T013A, T013B, T013C; never
    renumbered, no next free number) and rewritten dependencies, and the Worker session fields are
    reset. Code:
