@@ -10,7 +10,7 @@
     "stats": [
       [
         "Current version",
-        "1.4.200"
+        "1.4.300"
       ],
       [
         "Missions completed",
@@ -616,6 +616,10 @@
         [
           "ok",
           "1.4.200: bug fixes: Stop and Reset state answered 409/500; Run next/now retries a stale queue stamp; the board redraws at once after a move or an action"
+        ],
+        [
+          "ok",
+          "1.4.300: bug fix: the Reviewer verdict re-ask keeps the model that answered and its fallbacks (it went back to the limited primary model and the mission failed); Worker is Sonnet 5.5 with the local model as fallback"
         ]
       ]
     },

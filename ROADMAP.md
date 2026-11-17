@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.4.200** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.4.300** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -191,6 +191,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.4.0: a running card has a Reset state button (POST /api/board/missions/{id}/reset-run-state, confirm required) that clears the marks of an old run; the plan stays
 - [x] 1.4.100: bug fix: a split head planned a second time no longer loops (the part creation answered 500 and the queue relaunched the Architect); Stop cancels the running runs
 - [x] 1.4.200: bug fixes: Stop and Reset state answered 409/500; Run next/now retries a stale queue stamp; the board redraws at once after a move or an action
+- [x] 1.4.300: bug fix: the Reviewer verdict re-ask keeps the model that answered and its fallbacks (it went back to the limited primary model and the mission failed); Worker is Sonnet 5.5 with the local model as fallback
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 
