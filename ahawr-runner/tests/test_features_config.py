@@ -86,7 +86,7 @@ ON_BY_DEFAULT = frozenset({"adaptive_split", "run_mission_from_card"})  # operat
 
 
 def test_features_defaults_are_off_except_the_two_the_operator_turned_on() -> None:
-    """Each feature is off in the JSON, in the loaded table and in the resolved defaults, except ON_BY_DEFAULT."""
+    """Off in the JSON, in the loaded table and in the resolved defaults, except ON_BY_DEFAULT."""
     for feature, body in json.loads(_shipped_defaults_text())["features"].items():
         assert body["enabled"] is (feature in ON_BY_DEFAULT), feature
     for feature, body in FEATURE_DEFAULTS.items():
@@ -95,7 +95,7 @@ def test_features_defaults_are_off_except_the_two_the_operator_turned_on() -> No
     assert errors == []
     assert resolved is not None
     for feature, body in resolved.items():
-        assert body["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} resolves wrong with empty columns"
+        assert body["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} wrong with empty columns"
 
 
 def test_features_defaults_missing_or_malformed_file_raises_with_reason(
@@ -358,7 +358,8 @@ def test_pinned_fixture_pins_current_resolution_and_flatten() -> None:
     assert fixture == expected, "the pinned fixture no longer matches the current code"
     for feature in FEATURE_DEFAULTS:
         resolved = fixture[feature]["empty_object"]["resolved"]
-        assert resolved[feature]["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} default is wrong"
+        expected_on = feature in ON_BY_DEFAULT
+        assert resolved[feature]["enabled"] is expected_on, f"{feature} default is wrong"
 
 
 def test_tables_are_read_from_the_packaged_json(
