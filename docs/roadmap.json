@@ -10,7 +10,7 @@
     "stats": [
       [
         "Current version",
-        "1.2.020"
+        "1.2.030"
       ],
       [
         "Missions completed",
@@ -592,6 +592,10 @@
         [
           "ok",
           "1.2.020: the Hermes icon of the dashboard follows the runner (Hermes runs inside ahawr-runner); README and roadmap name the current local model (Qwen3.8 Flash-next Q2_0) and the version"
+        ],
+        [
+          "ok",
+          "1.2.030: the dashboard Resume starts the queue chain and the watcher (the host agent named the old queue script); tests of the command agent"
         ]
       ]
     },

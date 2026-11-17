@@ -66,11 +66,14 @@ class SpawnGuard:
         self.calls: list[tuple[list[str], dict[str, Any]]] = []
         self.reply: subprocess.CompletedProcess[str] | None = None
         self.error: Exception | None = None
+        self.replies: list[subprocess.CompletedProcess[str]] = []
 
     def __call__(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         self.calls.append((list(argv), kwargs))
         if self.error is not None:
             raise self.error
+        if self.replies:
+            return self.replies.pop(0)
         if self.reply is None:
             raise AssertionError(f"unexpected subprocess: {argv}")
         return self.reply
@@ -291,7 +294,7 @@ def _log_file(tmp_path: Path, lines: Sequence[str] = ()) -> Path:
     return path
 
 
-def test_resume_does_not_start_second_queue_watch(spawned: SpawnGuard) -> None:
+def test_resume_starts_nothing_when_all_run(spawned: SpawnGuard) -> None:
     agent = _load_agent()
     spawned.reply = subprocess.CompletedProcess(["x"], 0, "1\n", "")
     db = FakeDb(x_result=1)
@@ -299,26 +302,42 @@ def test_resume_does_not_start_second_queue_watch(spawned: SpawnGuard) -> None:
     row = {"id": 20, "action": "resume", "args_json": {}, "confirm_token": None}
     assert agent._handle_command(client, row, 0.0) is False
     argvs = [argv for argv, _ in spawned.calls]
-    assert argvs == [agent.PROCESS_LIST_ARGV["queue_watch_running"]]
+    lists = agent.PROCESS_LIST_ARGV
+    assert argvs == [lists["queue_alive"], lists["queue_watch_running"]]
     assert json.loads(str(db.x_params[-1][1])) == {
         "started": False,
-        "reason": "queue_watch already running",
+        "reason": "the queue and queue_watch are already running",
     }
 
 
-def test_resume_starts_queue_watch_once_through_fixed_argv(spawned: SpawnGuard) -> None:
+def test_resume_starts_the_chain_when_only_queue_watch_runs(spawned: SpawnGuard) -> None:
+    agent = _load_agent()
+    texts = ("0\n", "", "1\n")
+    spawned.replies = [subprocess.CompletedProcess(["x"], 0, text, "") for text in texts]
+    outcome = agent.resume()
+    assert outcome == agent.Outcome(agent.DONE, {"started": True, "queue": True})
+    assert len(spawned.calls) == 3
+    assert spawned.calls[0][0] == agent.PROCESS_LIST_ARGV["queue_alive"]
+    assert agent.QUEUE_CHAIN_COMMAND_LINE in spawned.calls[1][0][-1]
+    assert spawned.calls[2][0] == agent.PROCESS_LIST_ARGV["queue_watch_running"]
+
+
+def test_resume_starts_both_when_both_are_gone(spawned: SpawnGuard) -> None:
     agent = _load_agent()
     spawned.reply = subprocess.CompletedProcess(["x"], 0, "0\n", "")
-    db = FakeDb(x_result=1)
-    client = agent.BoardClient(db)
-    row = {"id": 21, "action": "resume", "args_json": {}, "confirm_token": None}
-    assert agent._handle_command(client, row, 0.0) is False
-    assert len(spawned.calls) == 2
-    assert spawned.calls[0][0] == agent.PROCESS_LIST_ARGV["queue_watch_running"]
-    start_argv = spawned.calls[1][0]
-    assert start_argv[:3] == ["powershell.exe", "-NoProfile", "-Command"]
-    assert agent.QUEUE_WATCH_COMMAND_LINE in start_argv[-1]
-    assert json.loads(str(db.x_params[-1][1])) == {"started": True}
+    outcome = agent.resume()
+    expected = {"started": True, "queue": True, "queue_watch": True}
+    assert outcome == agent.Outcome(agent.DONE, expected)
+    assert len(spawned.calls) == 4
+    assert agent.QUEUE_CHAIN_COMMAND_LINE in spawned.calls[1][0][-1]
+    assert agent.QUEUE_WATCH_COMMAND_LINE in spawned.calls[3][0][-1]
+
+
+def test_the_agent_names_the_board_queue_script_not_the_old_fixed_list() -> None:
+    agent = _load_agent()
+    assert "real_queue_board.sh" in agent.QUEUE_CHAIN_COMMAND_LINE
+    for pattern in (agent.KILL_PATTERNS["queue_chain"], agent.PROCESS_LIST_ARGV["queue_alive"][-1]):
+        assert "_board" in pattern
 
 
 def test_pause_at_boundary_waits_while_a_task_runs(

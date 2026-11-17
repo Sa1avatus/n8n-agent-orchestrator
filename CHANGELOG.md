@@ -5,6 +5,14 @@ LiteLLM, the dashboard and the missions. Newest first. Commit ids are in bracket
 
 Version: **1.2.010** (ahawr-runner `1.2.000` → `1.2.010`, 2026-11-16; `1.1.310` → `1.2.000`, 2026-11-16; `1.1.300` → `1.1.310`, 2026-11-14; `1.1.200` → `1.1.300`, 2026-11-14; `1.1.150` → `1.1.200`, 2026-11-14; `1.1.140` → `1.1.150`, 2026-11-13; `1.1.130` → `1.1.140`, 2026-11-13; `1.1.120` → `1.1.130`, 2026-11-13; `1.1.110` → `1.1.120`, 2026-11-11; `1.1.100` → `1.1.110`, 2026-11-10; `1.1.0` → `1.1.100`, 2026-11-10; `1.0.210` → `1.1.0`, 2026-11-09; `1.0.200` → `1.0.210`, 2026-11-09; `1.0.100` → `1.0.200`, 2026-11-08; `1.0.0` → `1.0.100`, 2026-11-07; `0.13.100` → `1.0.0`, 2026-11-05; `0.13.0` → `0.13.100`, 2026-11-03; `0.12.020` → `0.13.0`, 2026-11-03; `0.12.10` → `0.12.020`, 2026-11-03; `0.12.0` → `0.12.10`, 2026-11-02; `0.11.930` → `0.12.0`, 2026-11-02; `0.11.920` → `0.11.930`, 2026-10-31; `0.11.910` → `0.11.920`, 2026-10-30; `0.11.900` → `0.11.910`, 2026-10-30; `0.11.800` → `0.11.900`, 2026-10-30; `0.11.700` → `0.11.800`, 2026-10-29; `0.11.600` → `0.11.700`, 2026-10-28; `0.11.500` → `0.11.600`, 2026-10-28; `0.11.400` → `0.11.500`, 2026-10-28; `0.11.300` → `0.11.400`, 2026-10-27; `0.11.200` → `0.11.300`, 2026-10-27; `0.11.110` → `0.11.200`, 2026-10-27; `0.11.100` → `0.11.110`, 2026-10-27; `0.11.0` → `0.11.100`, 2026-10-27; `0.10.100` → `0.11.0`, 2026-10-27; `0.10.0` → `0.10.100`, 2026-10-23; `0.9.0` → `0.10.0`, 2026-10-23; `0.8.0` → `0.9.0`, 2026-10-21; `0.7.400` → `0.8.0`, 2026-10-21; `0.7.300` → `0.7.400`, 2026-10-19; `0.7.200` → `0.7.300`, 2026-10-19; `0.7.100` → `0.7.200`, 2026-10-19; `0.7.0` → `0.7.100`, 2026-10-19; `0.6.100` → `0.7.0`, 2026-10-19; `0.6.0` → `0.6.100`, 2026-10-19; `0.5.510` → `0.6.0`, 2026-10-18; `0.5.500` → `0.5.510`, 2026-10-18; `0.5.400` → `0.5.500`, 2026-10-18; `0.5.300` → `0.5.400`, 2026-10-18; `0.5.200` → `0.5.300`, 2026-10-18; `0.5.100` → `0.5.200`, 2026-10-18; `0.5.0` → `0.5.100`, 2026-10-17; `0.4.200` → `0.5.0`, 2026-10-17; `0.4.100` → `0.4.200`, 2026-10-15; `0.4.0` → `0.4.100`, 2026-10-15; `0.3.0` → `0.4.0`, 2026-10-14; `0.2.0` → `0.3.0`, 2026-10-12; `0.1.0` → `0.2.0` on 2026-10-06); the stack's single version number is the runner's, see the README section "Versioning". Rule: new functions raise the middle number by 1 (`0.4.0` → `0.5.0`); a bug-fix-only release raises the last number by 100 (`0.5.0` → `0.5.100`) and its entry lists the fixed bugs; every push adds an entry with the version and the changes.
 
+## 2026-11-17 (1.2.030)
+
+Small change (tests of the host command agent; the agent file itself is an operator script, not in git).
+
+- The dashboard Resume and the queue buttons did nothing: the host agent `data-tables/ops/board_agent.py` started only `queue_watch` and answered "already running" while it lived, and its patterns and command line named the old `real_queue.sh` instead of `real_queue_board.sh` (pause, stop and restart never found the board queue). Now `resume()` starts the queue chain first and `queue_watch` second, each only when its process is absent; the patterns and the command line name `real_queue_board.sh`.
+- `tests/test_board_agent.py`: the two resume tests are replaced by three (nothing starts when both run; the chain starts when only the watcher runs; both start when both are gone) and one test pins the board script name; `SpawnGuard` takes a list of replies.
+- Version: `ahawr-runner/pyproject.toml` and `api.py` `1.2.020` → `1.2.030`.
+
 ## 2026-11-16 (1.2.020)
 
 Small change (dashboard icon, documentation).
@@ -60,13 +68,35 @@ Documentation step (no runtime code changed; the version moves by 10 as a small 
   blocked and the validation of ids, cycles and moves, the dashboard side (drag-and-drop refusal,
   "Move them too", "Run anyway", the i18n keys), the split parts that wait for the part before them,
   the Architect block with its limits (`DEPENDENCY_REPORT_MAX_CHARS = 700`,
-  `ARCHITECT_BLOCK_MAX_CHARS = 4000`) and the plan lint, the flag `mission_dependencies` (off by
-  default, and byte-for-byte the old behaviour with the flag off), and an "Operator steps" section
-  that lists, in order, the store migration, the three patch files with their commands and the flag
-  turn. The research maps of the earlier attempts (T001-T005) and the design names that never
-  shipped are removed. The note states plainly that no patch has been applied to the live workflow.
-- `docs/adaptive-split.md` gains the paragraph on `depends_on`: part N of a split waits for part
-  N-1 (`split_dependencies_patch.py`), part 1 waits for nothing.
+  `ARCHITECT_BLOCK_MAX_CHARS = 4000`) and the plan lint, the flag `mission_dependencies`, and an
+  "Operator steps" section that lists, in order, the store migration, the three patch files with
+  their commands and the flag turn. The research maps of the earlier attempts (T001-T005) and the
+  design names that never shipped are removed. The note states plainly that no patch has been
+  applied to the live workflow.
+- The mission dependencies themselves (`ahawr-mission-dependencies` parts p1-p4; the code of the
+  earlier parts shipped before this step, it is recorded here) are in the runner behind the flag
+  `mission_dependencies`, **OFF by default**: `depends_on` (the ids that must finish
+  before this mission runs) is stored on the `board.queue` row and read or written only through
+  `list_dependencies` and `set_dependencies` (`board_pg.py`); `board_dependencies.py` is a pure
+  module (no DB, no I/O) that classifies every entry as due, waiting or blocked — an id that is
+  neither in the queue nor completed counts as unmet, a `failed` dependency makes the entry blocked —
+  and `next_mission` in `data-tables/ops/queue_board.py` skips what is not due; part N of an adaptive
+  split waits for part N-1 and part 1 waits for nothing; the queue and kanban cards show the
+  `after: <ids>` line and the waiting/blocked chip (`board_mission_dependencies.js`, CSS `q-deps`,
+  `dep-chip`), a drag, "to the top" or "to the end" that would put a mission before the one it waits
+  for is refused with "Move them too" or "only the dragged one", and starting a waiting or blocked
+  mission needs `run_anyway: true`; the Architect receives the dependency block and `Evaluate
+  Architect` lints the part order once (`LINT_RETRY_LIMIT = 1`). With the flag off no answer carries a
+  dependency key, no move, drop or start is guarded and the Architect prompt is unchanged: byte for
+  byte the old behaviour. Tests: `tests/test_mission_dependencies.py` (80),
+  `tests/test_board_dependencies.py`, `tests/test_queue_board.py`, `tests/test_split_dependencies.py`
+  (9), `tests/test_architect_dependencies.py` (27), `tests/board_mission_dependencies.test.js` (node).
+- Operator steps, not run yet: the migration of the store (the `depends_on` column is added when the
+  board store is built, `board_pg.py:422`, no hand-run SQL), the three patches of `data-tables/ops`
+  (`split_dependencies_patch.py`, `architect_prompt_dependency_block.py`,
+  `plan_dependency_lint_patch.py`) applied to a fresh export of the live workflow and imported in the
+  n8n interface, then the flag turned on in `features_json`. Until then the rule runs only on the
+  runner side.
 - Version: `ahawr-runner/pyproject.toml` and `ahawr-runner/src/ahawr_runner/api.py` `1.1.300` →
   `1.1.310`; `ROADMAP.md` carries the matching timeline line.
 
