@@ -185,11 +185,14 @@ def _check_options(role: str, options: Any) -> list[str]:
 
 
 def _check_fallback(role: str, options: dict[str, Any]) -> list[str]:
-    """``fallback``: the model a run goes to when its provider keeps refusing (a limit, 429, 5xx)."""
+    """``fallback``: the model, or a list of models tried in order, a run goes to when its
+    provider keeps refusing (limit, 429, 5xx)."""
     if "fallback" not in options:
         return []
     value = options["fallback"]
-    if isinstance(value, str) and MODEL_SEPARATOR in value.strip().strip(MODEL_SEPARATOR):
+    models = value if isinstance(value, list) and value else [value]
+    strip_chars = MODEL_SEPARATOR + " "
+    if all(isinstance(m, str) and MODEL_SEPARATOR in m.strip(strip_chars) for m in models):
         return []
     return [f"role {role!r}: option 'fallback' must be a model written as provider/model"]
 

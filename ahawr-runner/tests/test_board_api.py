@@ -333,6 +333,21 @@ class TestStartStopDisable:
         assert r.status_code == 200
         assert r.json()["enabled"] is False
 
+    async def test_enable_takes_a_disabled_mission_back_to_the_queue_groups(self, board_client):
+        await board_client.post("/api/board/missions/m1/disable", params={"confirm": "true"})
+        groups = (await board_client.get("/api/board/missions")).json()["groups"]
+        assert groups["disabled"] == ["m1"]
+        r = await board_client.post("/api/board/missions/m1/enable")
+        assert r.status_code == 200
+        assert r.json() == {"mission_id": "m1", "enabled": True}
+        groups = (await board_client.get("/api/board/missions")).json()["groups"]
+        assert groups["disabled"] == []
+        assert groups["queued"] == ["m1"]
+
+    async def test_enable_of_an_unknown_mission_is_not_found(self, board_client):
+        r = await board_client.post("/api/board/missions/nope/enable")
+        assert r.status_code == 404
+
 
 class TestChangelog:
     async def test_changelog_endpoint(self, board_client):
@@ -2059,6 +2074,9 @@ _BOARD_ROUTE_ORDER: list[tuple[str, str]] = [
     ("POST", "/api/board/missions/{mission_id}/start"),
     ("POST", "/api/board/missions/{mission_id}/stop"),
     ("POST", "/api/board/missions/{mission_id}/disable"),
+    ("POST", "/api/board/missions/{mission_id}/enable"),
+    ("POST", "/api/board/missions/{mission_id}/run-next"),
+    ("POST", "/api/board/missions/{mission_id}/run-now"),
     ("POST", "/api/board/changelog/{changelog_id}/rollback"),
     ("GET", "/api/board/templates"),
     ("POST", "/api/board/templates/{name}"),
@@ -2168,6 +2186,7 @@ class TestFirstRouteGroup:
             "queued": ["m1"],
             "completed": [],
             "not_completed": [],
+            "stopped": [],
             "disabled": [],
         }
         assert [mission["mission_id"] for mission in body["missions"]] == ["m1"]

@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.2.030** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.3.0** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -186,6 +186,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.2.010: the flag `run_mission_from_card` is known to the workflow Constants (operator patch), documented in `docs/run-from-card.md`; the runner image pins Claude Code 2.1.325; the Control tab routes are mounted with `DASHBOARD_OPS_TAB=1`; the adaptive split is stored in the plan (operator patches)
 - [x] 1.2.020: the Hermes icon of the dashboard follows the runner (Hermes runs inside ahawr-runner); README and roadmap name the current local model (Qwen3.8 Flash-next Q2_0) and the version
 - [x] 1.2.030: the dashboard Resume starts the queue chain and the watcher (the host agent named the old queue script); tests of the command agent
+- [x] 1.3.0: the kanban gets the Stopped and Disabled columns (Stop moves a card to Stopped; a Disabled card is enabled by drag or button); a role may list several fallback models; the mission-dependencies and run-from-card features are switched on
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 

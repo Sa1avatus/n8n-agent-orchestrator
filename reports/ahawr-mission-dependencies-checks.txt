@@ -1,0 +1,184 @@
+AHAWR mission-dependencies final checks (T039, attempt 1) - recorded 2026-11-16
+Environment: /opt/ahawr-runner/venv, python 3.12.16, ruff 0.17.5, mypy 2.4.1, pytest 9.2.0, node v22.23.5.
+All commands run from /d/n8n/ahawr-runner except `git status`/`git diff --check` from /d/n8n.
+Baseline for comparison: reports/ahawr-mission-dependencies-baseline.txt (T006) and the pre-mission
+snapshot of commit d4f7c17 (1.1.140) exported to /tmp/t039_before.
+
+1) python -m pytest tests/test_board_pg.py tests/test_mission_dependencies.py -q --no-cov -k depend
+   RAN, exit 0. Summary lines:
+   ........................................................................ [ 78%]
+   ....................                                                     [100%]
+   92 tests selected (72 + 20 progress dots), 0 FAILED. One warning only:
+   "StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated".
+
+2) python -m pytest tests/test_queue_board.py tests/test_mission_dependencies.py -q --no-cov
+   RAN, exit 0. Summary lines:
+   ........................................................................ [ 58%]
+   ...................................................                      [100%]
+   123 tests (72 + 51), 0 FAILED.
+
+3) python -m pytest tests/ -q --no-cov -k split_dependencies
+   RAN as written, exit 2 - collection blocked, not a test failure:
+   "ERROR collecting tests/test_qa_container_static.py ... ModuleNotFoundError: No module named 'yaml'"
+   "!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!"
+   Rerun with the blocked module ignored (python -m pytest tests/ -q --no-cov -k split_dependencies
+   --ignore=tests/test_qa_container_static.py): RAN, exit 0, 9 tests matched, all passed:
+   ".........                                                                [100%]"
+   pyyaml is not installed in the venv (python -c "import yaml" fails); tests/test_qa_container_static.py
+   is the only test module importing yaml.
+
+4) node --test tests/board_mission_dependencies.test.js tests/board_i18n.test.js
+   RAN, exit 0:
+   "# tests 30", "# suites 0", "# pass 30", "# fail 0", "# duration_ms 271.76"
+
+5) python -m pytest tests/ -q --no-cov -k architect_dependencies
+   RAN as written, exit 2 (same yaml collection blocker as in 3). Rerun with
+   --ignore=tests/test_qa_container_static.py: exit 1, 32 tests matched, 25 passed, 7 FAILED:
+   "........FF.....FFFFF............                                         [100%]"
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_prompt_patch_applied_twice_leaves_the_same_bytes
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_prompt_patch_never_writes_the_export_it_reads
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_flag_off_prompt_is_byte_for_byte_the_unpatched_prompt
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_flag_on_plan_prompt_carries_the_block_and_the_rule
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_flag_on_split_prompt_carries_the_part_order_rule
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_board_fetch_failure_leaves_the_prompt_unchanged
+   FAILED tests/test_architect_dependencies.py::test_architect_dependencies_flag_on_with_no_dependencies_adds_no_block
+   Cause (environment state, not mission code): the staged live export data-tables/ops/wf_next.json
+   (387903 bytes, mtime 2026-11-16 12:47) already contains the marker
+   "// architect_prompt_dependency_block.py" (grep count 1), so ARCHITECT_PATCH.patch() returns False
+   and the tests that need an unpatched export cannot run against it.
+
+6a) ruff (python -m ruff check --output-format concise <file>), per file, baseline vs now
+    file                                       baseline   d4f7c17 before   now
+    src/ahawr_runner/board_pg.py                  26          26           26
+    src/ahawr_runner/board_api.py                 29          29           29
+    src/ahawr_runner/board_order.py                0           0            0
+    src/ahawr_runner/board.py                      5           5            5
+    src/ahawr_runner/features_config.py            0           0            0
+    data-tables/ops/queue_board.py                 0        (untracked)     0
+    Total on the six baseline files: 60 before / 60 now - unchanged.
+    Other mission-touched Python files (no baseline entry):
+    board_ready.py 2 before / 2 now; api.py, board_dependencies.py, board_run_mission.py, dashboard.py,
+    qa_fixture.py, qa_runner.py, run_limits.py, runs.py: 0.
+    roles_config.py: 0 before, 1 after the mission (E501 line 188, 101 > 100, docstring of _check_fallback,
+    added by commit 66cc181) - FIXED in this task, now 0 ("All checks passed!").
+    Mission-touched test files (ruff): test_board_pg.py 4 before / 4 now, test_qa_runner.py 2 / 2,
+    test_board_features_api.py, test_board_ready.py, test_dashboard_ops_tab.py, test_dashboard_security.py,
+    test_features_config.py, test_qa_fixture.py, test_queue_board.py, test_roles_config.py: 0 before and now;
+    test_architect_dependencies.py, test_board_dependencies.py, test_board_run_mission.py,
+    test_fallback_option_patch.py, test_features_config_patch.py, test_mission_dependencies.py,
+    test_run_limits.py, test_split_dependencies.py, test_split_inherit_settings.py,
+    test_architect_fallback_patch.py: new files, 0 errors now.
+
+6b) mypy (python -m mypy <baseline six files>, strict), per file, baseline vs now
+    file                                       baseline   d4f7c17 before   now
+    src/ahawr_runner/board_pg.py                  29          29           29
+    src/ahawr_runner/board_api.py                 16          16           16
+    src/ahawr_runner/board_order.py               20          20           20
+    src/ahawr_runner/board.py                      5           5            5
+    src/ahawr_runner/features_config.py            0           0            0
+    data-tables/ops/queue_board.py                 0        (untracked)     0
+    Target files unchanged: 70 before / 70 now.
+    Transitive extras in the same run: board_ready.py 4 / 4, board_stats.py 2 / 2, board_think.py 1 / 1,
+    board_ops_redact.py 1 / 1, runs.py 1 / 1 -> baseline total 79; now 87 because mypy surfaces three more
+    transitively imported modules that the baseline run did not reach: board_ops_store_pg.py 6,
+    board_ops_guard.py 1, board_ops_settings.py 1. Those three files were not changed by the mission: a
+    direct mypy run on the snapshot copy and on the current copy reports 42 errors both times.
+    mypy on the mission test files: test_board_pg.py 83 before / 81 now, test_board_ready.py 121 / 121,
+    test_qa_fixture.py 5 / 5, test_qa_runner.py 9 / 9, test_queue_board.py 3 before / 3 now (was 4 after
+    the mission: "Returning Any from function declared to return Module" in _dependency_rule, fixed here),
+    transitive test_board_api.py 157, test_dashboard.py 60, test_runs.py 49 in both runs; every new mission
+    test file (test_mission_dependencies.py, test_split_dependencies.py, test_architect_dependencies.py,
+    test_board_dependencies.py, test_board_run_mission.py, test_run_limits.py, test_features_config.py,
+    test_features_config_patch.py, test_fallback_option_patch.py, test_architect_fallback_patch.py,
+    test_board_features_api.py, test_dashboard_ops_tab.py, test_dashboard_security.py, test_roles_config.py)
+    reports 0 mypy errors.
+
+6c) git diff --check (from /d/n8n)
+    RAN, exit 0. No whitespace findings; only informational lines of the form
+    "warning: in the working copy of '<file>', LF will be replaced by CRLF the next time Git touches it".
+    The baseline finding "ahawr-runner/qa/contracts/audio-dub-ui-redesign/contract.md:69: new blank line
+    at EOF" is no longer present (exit 2 there, exit 0 now).
+
+Other mission-touched modules' tests (not in commands 1-5), node:
+    tests/board_actions.test.js            exit 0: # tests 1  # pass 1  # fail 0
+    tests/board_dnd_ensure_queued.test.js  exit 0: # tests 6  # pass 6  # fail 0
+    tests/board_mission.test.js            exit 0: # tests 1  # pass 1  # fail 0
+    tests/board_mission_save.test.js       exit 0: # tests 1  # pass 1  # fail 0
+    tests/board_ready_ui.test.js           exit 0: # tests 1  # pass 1  # fail 0
+    tests/board_roles.test.js              exit 0: # tests 137 # pass 137 # fail 0
+    tests/board_run_mission.test.js        exit 0: # tests 9  # pass 9  # fail 0
+    tests/board_features.test.js           exit 1: # tests 49 # pass 12 # fail 37
+    Cause: someone else's uncommitted change in ahawr-runner/src/ahawr_runner/features_defaults.json
+    ("adaptive_split": enabled false -> true, "run_mission_from_card": enabled false -> true) against the
+    pinned golden expectation, e.g. test "golden: empty or missing features_json flattens byte-for-byte to
+    the legacy constants" (tests/board_features.test.js:49):
+    + actual ... "adaptive_split":1 ...  - expected ... "adaptive_split":0 ...
+
+Other mission-touched modules' tests, pytest (tests/test_board_ready.py test_board_features_api.py
+test_board_dependencies.py test_board_run_mission.py test_dashboard_ops_tab.py test_dashboard_security.py
+test_features_config.py test_features_config_patch.py test_fallback_option_patch.py
+test_architect_fallback_patch.py test_qa_fixture.py test_qa_runner.py test_roles_config.py
+test_run_limits.py test_split_inherit_settings.py): 76 FAILED lines, exit non-zero.
+    - tests/test_qa_runner.py: 63 FAILED, every one ending "ModuleNotFoundError" -
+      "src/ahawr_runner/qa_runner.py:141: ModuleNotFoundError: No module named 'yaml'". The venv lacks pyyaml.
+    - tests/test_features_config.py: 12 FAILED, among them
+      test_features_defaults_are_all_off_by_default, test_parse_case[empty], test_parse_case[missing],
+      test_parse_case[golden], test_golden_empty_or_missing_flattens_byte_for_byte_to_legacy,
+      test_mission_dependencies_is_a_flag_default_off, test_pinned_fixture_pins_current_resolution_and_flatten -
+      same root cause as the node failure above (the uncommitted features_defaults.json turns flags on).
+    - tests/test_features_config_patch.py::test_features_defaults_pinned_constants_text_matches_the_patch_output
+      FAILED ("At index 3213 diff: b't' != b'f'") - the pinned golden text vs the same defaults change.
+    - No FAILED lines in test_board_ready.py, test_board_features_api.py, test_board_dependencies.py,
+      test_board_run_mission.py, test_dashboard_ops_tab.py, test_dashboard_security.py,
+      test_fallback_option_patch.py, test_architect_fallback_patch.py, test_qa_fixture.py,
+      test_roles_config.py, test_run_limits.py, test_split_inherit_settings.py.
+    (The run ended with exit code 1, 76 FAILED lines; progress: the last two progress lines are
+    "........................................................................ [ 98%]" / "......                                                                   [100%]".)
+
+Files changed by the mission: the mission work is committed (commits ca7d7b0 1.1.200, 634d87e 1.1.300,
+66cc181 1.2.0, 33f34cd 1.2.010, 0be2cd6 1.2.020 on top of d4f7c17), so `git status --short` shows nothing for
+it. `git diff --name-only d4f7c17 HEAD` lists 98 files: Python api.py, board.py, board_api.py,
+board_dependencies.py, board_pg.py, board_ready.py, board_run_mission.py, dashboard.py, features_config.py,
+qa_fixture.py, qa_runner.py, roles_config.py, run_limits.py, runs.py and the 20 test modules listed in 6a/6b,
+plus the JS/i18n/fixture files (board_actions.js, board_dnd.js, board_edit_win.js, board_features.js,
+board_i18n.js, board_i18n_en.json, board_i18n_ru.json, board_mission.js, board_mission_dependencies.js,
+board_mission_save.js, board_queue.js, board_readonly.js, board_ready_ui.js, board_roles.js,
+board_run_mission.js, board_stats_popup.js, board.css, board.html, tests/fixtures/*pinned*).
+`git status --short` (68 entries) still shows mission leftovers, untracked:
+  ?? ahawr-runner/qa/contracts/ahawr-mission-dependencies-p2/
+  ?? ahawr-runner/qa/fixtures/mission_dependencies.json
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_create_with_dependency.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_drop_before_dependency_refused.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_editor_cycle.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_editor_unknown_id.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_kanban_blocked.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_queue_waiting.yaml
+  ?? ahawr-runner/qa/scenarios/mission_dependencies_run_next_run_anyway.yaml
+and, created by this T039 run (trivial fixes, no behaviour change):
+  M ahawr-runner/src/ahawr_runner/roles_config.py  (docstring shortened to 100 columns)
+  M ahawr-runner/tests/test_queue_board.py  (_dependency_rule return typed via a local annotation)
+  data-tables/ops/queue_board.py (comment wrapped, file not tracked by git)
+
+Pre-existing uncommitted changes of other people (untouched by this task): M ahawr-runner/src/ahawr_runner/features_defaults.json,
+M docs/{codex-executor,dashboard-lan-access,guards,naming}.md, M docs/retrieval/{ARCHITECTURE,EVALUATION,INTEGRATION,ROADMAP}.md,
+M litellm/{ahawr_hooks,test_ahawr_hooks,test_think_leak_guard,think_leak_guard}.py, M scripts/{make_logo,patch_status_bot_control}.py,
+M evals/worker-suite/* (task.md, check.py, src/*), untracked .claude/, reports/ahawr-board-run-mission-report-ru.md,
+reports/dub-ui/, reports/mission-*-draft.md.
+
+Forbidden files confirmed unchanged: `git status --short | grep -i "real_queue\|\.env"` printed no lines
+(exit 1, no match). On-disk timestamps: data-tables/ops/real_queue.sh Nov 5 07:29,
+data-tables/ops/real_queue_board.sh Nov 12 10:21, data-tables/ops/queue.md Nov 5 07:29 - all older than this
+task. No .env file was read or written. The live export copy data-tables/ops/wf_next.json (Nov 16 12:47)
+was not modified by this task; it was already patched (see item 5).
+
+Open items (not fixed here):
+- pyyaml missing in the venv: blocks tests/test_qa_container_static.py collection and 63 tests in
+  tests/test_qa_runner.py.
+- The uncommitted features_defaults.json change (adaptive_split and run_mission_from_card turned on) makes
+  37 node tests in tests/board_features.test.js and 13 pytest tests in test_features_config.py /
+  test_features_config_patch.py fail against the pinned golden values.
+- The staged wf_next.json already carries the architect dependency-block patch, so the 7
+  tests/test_architect_dependencies.py cases that need an unpatched export cannot pass until the operator
+  stages a fresh unpatched export.
+- mypy surfaces 8 new errors in transitively imported board_ops_* modules (6 + 1 + 1) that the baseline run
+  did not reach; the modules themselves are unchanged.

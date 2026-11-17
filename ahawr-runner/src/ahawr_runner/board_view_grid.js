@@ -14,6 +14,7 @@ const STATE_OF_GROUP = {
   queued: "q",
   completed: "ok",
   not_completed: "bad",
+  stopped: "bad",
   disabled: "off",
 };
 const STATE_ORDER = { run: 0, bad: 1, q: 2, ok: 3, off: 4 };
@@ -130,6 +131,7 @@ function missionRow(ctx, mission) {
   return el("tr", {
     class: "row bv-card" + (selectedId === id ? " sel" : ""),
     "data-id": id,
+    "data-group": mission.state_group || "",
     "data-project": (mission.project && mission.project.key) || "",
     "data-search": (name + " " + id).toLowerCase(),
   }, [

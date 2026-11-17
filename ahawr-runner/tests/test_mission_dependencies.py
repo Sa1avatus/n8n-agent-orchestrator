@@ -1158,6 +1158,31 @@ async def test_flag_off_move_first_and_last_keep_their_old_answer(
     assert [row["mission_id"] for row in last.json()["queue"]] == ["m2", "m1"]
 
 
+async def test_flag_off_queue_with_stored_dependencies_keeps_the_old_answer_and_order(
+    pinned_clock: None,
+    dependency_store: DependencyStore,
+    dependency_client: AsyncClient,
+) -> None:
+    """The flag-off pin on a queue whose entries carry a stored ``depends_on``:
+    m2 keeps ["m1"] in the dependency column but the flag is off, so GET
+    /api/board/queue answers the old bytes with no dependency fields and the rows
+    stay in plain position order (the flag-off next_mission order pinned in
+    tests/test_queue_board.py:104)."""
+    dependency_store.set_dependencies("m2", ["m1"], None)
+    dependency_store.update_hermes_config(None, features_json=FLAG_OFF_JSON)
+    queue = await dependency_client.get("/api/board/queue")
+    assert queue.status_code == 200
+    assert queue.content == (
+        b'{"queue":[{"position":0,"mission_id":"m1","enabled":true,"attempts_per_task":null,'
+        b'"retry_failed":false,"note":null},{"position":1,"mission_id":"m2","enabled":true,'
+        b'"attempts_per_task":null,"retry_failed":false,"note":null}],'
+        b'"version":null}'  # the dependency fixture never stamps a queue version
+    )
+    rows = queue.json()["queue"]
+    assert [row["mission_id"] for row in rows] == ["m1", "m2"]
+    assert not any("depends_on" in row or "dependency_state" in row for row in rows)
+
+
 QUEUE_IDS = ["m1", "m2", "m3"]
 DEPENDENCY_GRAPH = {"m1": [], "m2": ["m1"], "m3": ["m2"]}
 

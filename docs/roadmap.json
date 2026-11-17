@@ -10,7 +10,7 @@
     "stats": [
       [
         "Current version",
-        "1.2.030"
+        "1.3.0"
       ],
       [
         "Missions completed",
@@ -596,6 +596,10 @@
         [
           "ok",
           "1.2.030: the dashboard Resume starts the queue chain and the watcher (the host agent named the old queue script); tests of the command agent"
+        ],
+        [
+          "ok",
+          "1.3.0: the kanban gets the Stopped and Disabled columns (Stop moves a card to Stopped; a Disabled card is enabled by drag or button); a role may list several fallback models; the mission-dependencies and run-from-card features are switched on"
         ]
       ]
     },

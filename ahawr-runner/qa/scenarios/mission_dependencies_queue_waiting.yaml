@@ -1,0 +1,16 @@
+# Queue list view (board.js:103 lets every non-view hash fall to the queue,
+# board.js:130 calls BoardQueue, board_queue.js:120 adds the dependency line and chip).
+# The texts come from board_i18n_en.json:14 "q.dep" ("after: {ids}") and
+# "q.dep.waiting" ("waiting for {ids}"), so the chip reads "waiting for dep-base",
+# not the bare word "waiting".
+name: queue list shows the after line and the waiting chip of a mission with a queued dependency
+tags: [ui, queue]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board
+    expect:
+      text_visible: ["after: dep-base", "waiting for dep-base"]
+      request_2xx: [/api/board]
+      no_console_error: true

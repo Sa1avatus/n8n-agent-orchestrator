@@ -329,8 +329,10 @@ function checkOptions(role, options) {
 function checkFallback(name, options) {
   if (!options.has("fallback")) return [];
   const value = options.get("fallback");
-  const trimmed = typeof value === "string" ? value.trim().replace(/^\/+|\/+$/g, "") : "";
-  if (trimmed.includes(MODEL_SEPARATOR)) return [];
+  const models = Array.isArray(value) && value.length ? value : [value];
+  const written = (model) => typeof model === "string"
+    && model.trim().replace(/^\/+|\/+$/g, "").includes(MODEL_SEPARATOR);
+  if (models.every(written)) return [];
   return [`role ${name}: option ${pyRepr("fallback")} must be a model written as provider/model`];
 }
 

@@ -7,6 +7,7 @@ const STATE_OF_GROUP = {
   queued: "q",
   completed: "ok",
   not_completed: "bad",
+  stopped: "bad",
   disabled: "off",
 };
 const STATES = ["run", "q", "ok", "bad", "off"];

@@ -1,6 +1,6 @@
 {
 "app.title":"Missions","tab.proj":"Projects","tab.kan":"Kanban","tab.lane":"Lanes","tab.spr":"Sprint","tab.grid":"Grid","search":"Search missions","theme":"Theme: {mode}","theme.auto":"auto","theme.light":"light","theme.dark":"dark","tr.open":"Translations","filter.all":"All projects",
-"st.run":"Running","st.q":"Queued","st.ok":"Completed","st.bad":"Not completed","st.off":"Disabled",
+"st.run":"Running","st.q":"Queued","st.ok":"Completed","st.bad":"Not completed","st.off":"Disabled","st.stp":"Stopped",
 "ts.a":"Accepted","ts.w":"Accepted (retry)","ts.p":"In progress","ts.g":"Waiting","ts.f":"Rejected",
 "of":"{a} out of {b}","att":"attempts {n}","hours":"{n} h","cache":"cache {n}%","think":"thinking {n}%","tps":"tok/s","not.run":"not started yet","more":"+{n} more","back":"← {view}",
 "proj.hint":"Projects by working folder; the 21 model-bench folders are merged into one project by a rule. A click highlights a project, the arrow expands its missions, a double click filters by the project and opens the kanban. In an open project a click highlights a mission, a double click opens it with its tasks.",
@@ -22,7 +22,7 @@
 "nav.missions":"Missions","nav.runs":"Runs","board.loading":"Loading the board…",
 "board.loading":"The board is loading: the database is not ready yet, retrying…","board.offline":"The board service is offline (503 — board store unavailable).","board.bad_link":"Unrecognized board link: {error}","board.task_failed":"Task view failed: {error}","board.mission_failed":"Mission view failed: {error}","board.claudemd_failed":"CLAUDE.md editor failed: {error}","board.not_loaded":"View not loaded yet.","board.load_failed":"The board could not be loaded.",
 "conflict.plan_changed":"The plan changed, refresh.",
-"queue.group.running":"Running now","queue.group.queued":"Queued","queue.group.completed":"Completed","queue.group.not_completed":"Not completed / stopped","queue.group.disabled":"Disabled",
+"queue.group.running":"Running now","queue.group.queued":"Queued","queue.group.completed":"Completed","queue.group.not_completed":"Not completed / stopped","queue.group.disabled":"Disabled","queue.group.stopped":"Stopped",
 "queue.task_of":"{a} of {b}","queue.stats.title":"attempts · time · tokens · cache · cost · speed · thinking","queue.stats":"{attempts} attempts · {time} · {tokens} tokens · {cache} cache · {cost} · {speed} · {thinking} thinking",
 "move.logic_missing":"move logic not loaded","move.refused":"the move was refused","move.failed":"move failed","board.reload_failed":"reload failed","action.failed":"{action} failed","mission.create_failed":"mission create failed","form.id":"id: {value}","error.unknown":"error","board.script_missing":"Board logic script not loaded — the deep link cannot be resolved.","board.offline_reason":"The board service is offline (503 — board store unavailable) — {reason}.","queue.up.title":"up (higher in the queue)","queue.down.title":"down (lower in the queue)",
 "action.enable":"enable","action.disable":"disable","action.first":"to the top","action.last":"to the end","action.pause":"pause","action.stop":"stop","action.retry":"retry",

@@ -21,9 +21,10 @@ const STATE_OF_GROUP = {
   queued: "q",
   completed: "ok",
   not_completed: "bad",
+  stopped: "stp",
   disabled: "off",
 };
-const COLUMNS = ["run", "q", "ok", "bad"];
+const COLUMNS = ["run", "q", "stp", "ok", "bad", "off"];
 const DONE_STATUSES = ["accepted", "accepted_retry"];
 
 let loadingQueue = false;
@@ -86,6 +87,20 @@ function attachQueuedCards(controls, cards) {
   attachRunCards(controls);
 }
 
+// The Running, Stopped and Disabled cards get their buttons: Stop on a running card moves it to the
+// Stopped column, Enable on a disabled card takes it out of the Disabled column.
+const ACTION_COLUMNS = ["run", "stp", "off"];
+
+function attachColumnActions(controls, body) {
+  for (const key of ACTION_COLUMNS) {
+    const column = body.querySelector('[data-col="' + key + '"]');
+    if (!column) continue;
+    for (const card of column.querySelectorAll(".kcard")) {
+      controls.actions.attachCardActions(card, controls.dnd.DndState.data);
+    }
+  }
+}
+
 // "Run next" / "Run now" on the cards of the open columns (running, queued, not completed);
 // the actions module adds nothing while the run_mission_from_card flag is off.
 function attachRunCards(controls) {
@@ -102,11 +117,17 @@ function attachRunCards(controls) {
 
 // A not-completed card is dragged into the Queued column to put the mission back in the queue
 // (the column handles a drop beside the cards; a drop on a card is handled by the card).
+const REQUEUE_GROUPS = ["not_completed", "stopped", "disabled"];
+// the columns a card leaves when its mission is put back in the queue
+const LEAVING_STATES = ["bad", "stp", "off"];
+
 function attachRequeueDrag(controls, body) {
   const dnd = controls.dnd;
   const column = body.querySelector('[data-col="q"]');
-  const failedColumn = body.querySelector('[data-col="bad"]');
-  for (const card of failedColumn ? failedColumn.querySelectorAll(".kcard") : []) {
+  const sources = ["bad", "stp", "off"]
+    .map((key) => body.querySelector('[data-col="' + key + '"]'))
+    .filter((source) => source);
+  for (const card of sources.flatMap((source) => [...source.querySelectorAll(".kcard")])) {
     card.setAttribute("draggable", "true");
     card.addEventListener("dragstart", (e) => {
       dnd.DndState.dragId = card.dataset.missionId;
@@ -120,7 +141,8 @@ function attachRequeueDrag(controls, body) {
   if (!column) return;
   const notCompleted = (id) => {
     const data = dnd.DndState.data;
-    return Boolean(id && data && data.groups && (data.groups.not_completed || []).includes(id));
+    return Boolean(id && data && data.groups
+      && REQUEUE_GROUPS.some((group) => (data.groups[group] || []).includes(id)));
   };
   column.addEventListener("dragover", (e) => {
     if (!notCompleted(dnd.DndState.dragId)) return;
@@ -136,7 +158,11 @@ function attachRequeueDrag(controls, body) {
     e.preventDefault();
     const dragId = e.dataTransfer.getData("text/plain") || dnd.DndState.dragId;
     dnd.DndState.dragId = null;
-    if (notCompleted(dragId)) dnd.requeueMission(dragId, null, null);
+    if (!notCompleted(dragId)) return;
+    const disabled = ((dnd.DndState.data.groups || {}).disabled || []).includes(dragId);
+    // a disabled mission is enabled first, then put in the queue like a failed one
+    if (disabled) controls.actions.enableMission(dragId).then(() => dnd.requeueMission(dragId, null, null));
+    else dnd.requeueMission(dragId, null, null);
   });
 }
 
@@ -268,15 +294,17 @@ function requeue(controls, ctx) {
   const byId = {};
   for (const m of ctx.missions || []) {
     if (stateOf(m) === "q") byId[m.mission_id] = m;
-    else if (stateOf(m) === "bad" && fresh.has(m.mission_id)) {
+    else if (LEAVING_STATES.includes(stateOf(m)) && fresh.has(m.mission_id)) {
       byId[m.mission_id] = Object.assign({}, m, { state_group: "queued" });
     }
   }
-  const failedColumn = body.querySelector('[data-col="bad"]');
-  const failedCards = failedColumn ? failedColumn.querySelector(".kcol-cards") : null;
-  if (failedCards) {
-    const kept = [...failedCards.querySelectorAll(".kcard")].filter((card) => !fresh.has(card.dataset.missionId));
-    failedCards.replaceChildren(...kept);
+  const leavingColumns = LEAVING_STATES
+    .map((key) => body.querySelector('[data-col="' + key + '"]')).filter((c) => c);
+  for (const leaving of leavingColumns) {
+    const leavingCards = leaving.querySelector(".kcol-cards");
+    if (!leavingCards) continue;
+    const kept = [...leavingCards.querySelectorAll(".kcard")].filter((card) => !fresh.has(card.dataset.missionId));
+    leavingCards.replaceChildren(...kept);
   }
   const ordered = queue
     .map((entry) => byId[entry.mission_id])
@@ -290,7 +318,7 @@ function requeue(controls, ctx) {
   );
   attachQueuedCards(controls, [...col.querySelectorAll(".kcard")]);
   setCount(col, ordered.length);
-  if (failedColumn) setCount(failedColumn, failedColumn.querySelectorAll(".kcard").length);
+  for (const leaving of leavingColumns) setCount(leaving, leaving.querySelectorAll(".kcard").length);
 }
 
 function setCount(column, count) {
@@ -335,6 +363,7 @@ function render(body, ctx) {
   ))));
   if (!dnd || !actions) return;
   attachRequeueDrag(controls, body);
+  if (dnd.DndState.data) attachColumnActions(controls, body);
   if (dnd.DndState.data) attachQueuedCards(controls, queued);
   else loadQueueData(controls, queued, ctx);
   // Re-render the queued column when a move lands (BoardDnd.applyMove

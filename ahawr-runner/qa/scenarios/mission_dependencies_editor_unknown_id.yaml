@@ -1,0 +1,99 @@
+# Editor flow on the model of save_validation_error_then_persist.yaml. The mission screen
+# #board/dep-free already carries the "After missions" row before the editor opens:
+# board_mission.js:199-202 splices the row when the queue answer has depends_on, label from
+# board_i18n_en.json:14 "m.dep":"After missions", input name depends_on. The row moves to the
+# Execution page of the window (board_edit_win.js:25, board_edit_win.js:1035), so the first
+# "Next ›" is needed before the field can be typed.
+# The save POSTs /api/board/missions/dep-free (board_mission_save.js:398-399). An unknown id
+# raises ValueError in board_api.py:1368-1371 (_dependency_problems, board_api.py:528), which
+# board_common.py:53-54 answers as 400 bad_request with board_dependencies.py:151-152:
+# "unknown mission dependency no-such-mission: it is neither in the queue nor completed".
+# qa_runner has no request_4xx expectation (EXPECTATIONS, qa_runner.py:43-52 only lists
+# request_2xx) and allow_http_status accepts only 409 (qa_runner.py:68), so the 400 status is
+# documented here, not asserted. no_console_error is omitted on the refused "Save changes"
+# step: Chrome logs the failed POST as "status of 400", and only allowed statuses are skipped
+# (qa_runner.py:633-637).
+# The review pass assumed the fixture dropped dep-blocked's dependency; it did not:
+# qa/fixtures/mission_dependencies.json:138-144 keeps dep-blocked -> ["dep-failed"]. The
+# scenario fills dep-free instead, whose depends_on is empty (fixture:147-153).
+name: mission editor refuses an unknown dependency id, then a valid dependency saves
+tags: [ui, settings]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board/dep-free
+    expect:
+      text_visible: ["Edit launch settings", "After missions"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Execution, Roles, "After missions"]
+      no_console_error: true
+  - type:
+      into: depends_on
+      text: no-such-mission
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  # The POST returns 400 bad_request; nothing is stored and the reason goes to #ew-err
+  # (board_mission_save.js:416-419). The code is "bad_request", not "cycle", so
+  # dependencyRefusalMessage falls through and shows the raw API message
+  # (board_mission_dependencies.js:142-158).
+  - click: "Save changes"
+    expect:
+      text_visible: ["unknown mission dependency no-such-mission: it is neither in the queue nor completed"]
+  # Two back steps reach the Execution page again (board_edit_win.js:1258-1261), where the
+  # rejected text is replaced with the queued dep-failed (fixture:129-135).
+  - click: "‹ Back"
+    expect:
+      no_console_error: true
+  - click: "‹ Back"
+    expect:
+      text_visible: [Execution, "After missions"]
+      no_console_error: true
+  - type:
+      into: depends_on
+      text: dep-failed
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  - click: "Save changes"
+    expect:
+      text_visible: [dep-failed]
+      request_2xx: [/api/board/missions/dep-free]
+      no_console_error: true
+  # The saved line is rendered by board_queue.js:120 with t("q.dep") "after: {ids}"
+  # (board_i18n_en.json:14). dep-blocked carries the same line before the save, so the
+  # proof for dep-free itself is the 2xx POST above; the reload recheck (reload_persistence)
+  # still finds the line after a fresh page load.
+  - open: /static/board.html#board
+    expect:
+      text_visible: ["after: dep-failed"]
+      request_2xx: [/api/board]
+      no_console_error: true
+reload_persistence: true

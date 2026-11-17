@@ -1,0 +1,90 @@
+# Kanban view (#board/view/kan, t("tab.kan") board_i18n_en.json:2) on the fixture
+# mission_dependencies: dep-blocked depends on dep-failed (qa/fixtures/mission_dependencies.json:136-144)
+# whose Live State row is failed (fixture:87-89), so its chip reads
+# "blocked by dep-failed: a dependency is not completed" (t("q.dep.blocked"), board_i18n_en.json:14).
+#
+# HOW THE CONFIRM IS RENDERED: native, not a DOM dialog.  The card button is labelled
+# "run next" (t("action.run_next", board_i18n_en.json:29), class qact-run-next,
+# board_run_mission.js:79; the flag run_mission_from_card is on by default,
+# features_defaults.json:32-34 - the fixture profile only turns on mission_dependencies,
+# fixture:105, so the default stands).  runCard asks through the caller's hook
+# confirm: (text) => window.confirm(text) (board_actions.js:245) with t("run.confirm.next")
+# "Move {id} to the front of the queue?" (board_run_mission.js:24,96).  qa_runner accepts
+# every dialog automatically - page.on("dialog", _accept_dialog), qa_runner.py:623,629-630 -
+# so the confirm text never reaches the DOM: text_visible cannot assert it.
+#
+# THE CARD BUTTON HAS NO DEPENDENCY GUARD TODAY: POST /api/board/missions/{id}/run-next
+# (board_api.py:1808-1822) checks only run_mission_from_card and the eligibility check at
+# board_run_mission.py:153; nothing reads dependency_state.  The REQUIRED behaviour,
+# asserted below, is that run next of a waiting or blocked mission is refused with code
+# "guard" and asks "run anyway" (the native confirm is auto-accepted, qa_runner.py:623,
+# 629-630), and the accepted confirm resends the same url with run_anyway: true.  Until
+# the guard is added the route answers 200 on the first POST: this scenario is expected
+# to FAIL until board_api.py:1808-1822 grows the guard (a code task outside QA scope).
+#
+# THE RUN-ANYWAY QUESTION (t("dep.anyway") "The dependencies are not completed: run
+# anyway?", board_i18n_en.json:14; dependencyRunConfirm, board_mission_dependencies.js:129-132)
+# lives on the guarded queue action "to the top" (t("action.first", board_i18n_en.json:28,
+# button at board_actions.js:191; the guard comment itself calls it "Run next",
+# board_actions.js:283).  POST /api/board/queue/first (board_api.py:1973-1984) refuses with
+# 403 code "guard" and dependency_state blocked_by [dep-failed] (board_api.py:565-577); the
+# accepted native confirm then resends the same url with run_anyway: true
+# (board_actions.js:293-296), which answers 200.  The same guard sits on
+# POST /api/board/missions/{id}/start (board_api.py:1769-1771).
+# shortcut: the confirm text and the 403 status are asserted nowhere, upgrade when qa_runner
+# can read dialog text or a refused status (EXPECTATIONS has no request_4xx, qa_runner.py:43-54,
+# and allow_http_status accepts only 409, qa_runner.py:68,168-173).
+#
+# The scenario stops at the move: "run now" would enqueue the resume row
+# (board_run_mission.py:186-221) and wake the queue, i.e. contact a provider.
+name: kanban run next of a blocked mission asks run anyway and resends with run_anyway
+tags: [ui, queue]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban, "blocked by dep-failed: a dependency is not completed"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  # Every open card carries a "run next" button (board_view_kanban.js:96-99) and _locate
+  # takes the first visible match (qa_runner.py:788), so the header search - the input with
+  # aria-label t("search") "Search missions" (board_views.js:161-165) - filters the cards
+  # by data-search "name id" (board_views.js:193-198, board_view_kanban.js:197) first.
+  - type:
+      into: Search missions
+      text: dep-blocked
+      replace: true
+    expect:
+      text_visible: ["Blocked by the failed run"]
+      text_absent: [Dependency base, "Failed dependency"]
+      no_console_error: true
+  # With the guard in place the first POST is refused and the auto-accepted confirm
+  # resends with run_anyway: true; only that 2xx answer is asserted here.  Today the
+  # first POST is the 2xx (no guard), so this step is expected to FAIL until the guard
+  # lands (board_api.py:1808-1822, board_run_mission.py:153).
+  - click: "run next"
+    expect:
+      request_2xx: [/api/board/missions/dep-blocked/run-next]
+  # The refresh after the move redraws the cards unfiltered, so the search runs again and
+  # the "to the top" click lands on the dep-blocked card, now position 0 of board.queue.
+  - type:
+      into: Search missions
+      text: dep-blocked
+      replace: true
+    expect:
+      no_console_error: true
+  # The refused POST logs one console error (only allowed statuses are skipped,
+  # qa_runner.py:633-637), so no_console_error is asserted on the reopen below, not here
+  # (the shape of mission_dependencies_drop_before_dependency_refused.yaml:26-30).
+  - click: "to the top"
+    expect:
+      request_2xx: [/api/board/queue/first]
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban, "blocked by dep-failed: a dependency is not completed"]
+      order: ["Blocked by the failed run", "Failed dependency"]
+      request_2xx: [/api/board]
+      no_console_error: true
+reload_persistence: true

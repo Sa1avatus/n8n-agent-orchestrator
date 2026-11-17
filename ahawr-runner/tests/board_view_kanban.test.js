@@ -296,16 +296,27 @@ function renderWith(views, overrides) {
   return { body, ctx, counter };
 }
 
-test("render draws four state columns in order with their cards", () => {
+test("render draws six state columns in order with their cards", () => {
   resetDom();
   stubFetch(queueHandler);
   const views = freshKanban();
   const { body } = renderWith(views, { data: {}, missions: MISSIONS });
   const cols = byClass(body, "kcol");
-  assert.deepEqual(cols.map((c) => c.dataset.col), ["run", "q", "ok", "bad"]);
+  assert.deepEqual(cols.map((c) => c.dataset.col), ["run", "q", "stp", "ok", "bad", "off"]);
   assert.deepEqual(byClass(cols[1], "kcard").map((c) => c.dataset.id), ["q1", "q2"]);
-  assert.deepEqual(byClass(cols[2], "kcard").map((c) => c.dataset.id), ["o1"]);
-  assert.equal(walk(body, (n) => n.dataset && n.dataset.id === "d1").length, 0, "disabled missions are not shown");
+  assert.deepEqual(byClass(cols[3], "kcard").map((c) => c.dataset.id), ["o1"]);
+  assert.deepEqual(byClass(cols[5], "kcard").map((c) => c.dataset.id), ["d1"], "disabled missions have their column");
+});
+
+test("a stopped mission is in the Stopped column, not in Not completed", () => {
+  resetDom();
+  stubFetch(queueHandler);
+  const views = freshKanban();
+  const stopped = { mission_id: "s1", name: "s1", state_group: "stopped", tasks: [] };
+  const { body } = renderWith(views, { data: {}, missions: [stopped] });
+  const column = (key) => byClass(body, "kcol").find((c) => c.dataset.col === key);
+  assert.deepEqual(byClass(column("stp"), "kcard").map((c) => c.dataset.id), ["s1"]);
+  assert.equal(byClass(column("bad"), "kcard").length, 0);
 });
 
 test("the completed column lists the newest finished mission first", () => {
@@ -345,7 +356,7 @@ test("the figure chips come from the translator", () => {
   assert.equal(byClass(running, "ch")[0].textContent, 'of:{"a":1,"b":2}');
   assert.equal(byClass(running, "mono")[0].textContent, "r1");
   const heads = byClass(body, "kcol").map((c) => byClass(c, "mono")[0].textContent);
-  assert.deepEqual(heads, ["1", "2", "1", "1"]);
+  assert.deepEqual(heads, ["1", "2", "0", "1", "1", "1"]);
 });
 
 test("the queued column header carries the new-mission button, labelled from t()", () => {
@@ -455,19 +466,19 @@ test("a failed queue load leaves the columns rendered without controls", async (
   const views = freshKanban();
   const { body } = renderWith(views, { data: {}, missions: MISSIONS });
   await flush();
-  assert.equal(byClass(body, "kcol").length, 4);
+  assert.equal(byClass(body, "kcol").length, 6);
   assert.equal(byClass(body, "qmove").length, 0);
 });
 
-test("empty board still shows the four columns with zero counts", () => {
+test("empty board still shows the six columns with zero counts", () => {
   resetDom();
   stubFetch(queueHandler);
   const views = freshKanban();
   const { body } = renderWith(views, { data: {}, missions: [] });
   const cols = byClass(body, "kcol");
-  assert.equal(cols.length, 4);
+  assert.equal(cols.length, 6);
   assert.equal(byClass(body, "kcard").length, 0);
-  assert.deepEqual(cols.map((c) => byClass(c, "mono")[0].textContent), ["0", "0", "0", "0"]);
+  assert.deepEqual(cols.map((c) => byClass(c, "mono")[0].textContent), ["0", "0", "0", "0", "0", "0"]);
 });
 
 test("missing data shows the offline note", () => {

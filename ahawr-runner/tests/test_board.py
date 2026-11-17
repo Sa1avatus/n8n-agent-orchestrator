@@ -103,7 +103,7 @@ class TestMissionGroups:
         # completed: enabled + completed
         board._missions["m2"] = _mission("m2", "sk2")
         board._live["sk2"] = LiveState(state_key="sk2", status="completed")
-        # not_completed: enabled + stopped
+        # stopped: enabled + stopped by the operator
         board._missions["m3"] = _mission("m3", "sk3")
         board._live["sk3"] = LiveState(state_key="sk3", status="stopped")
         # queued: enabled, no Live State row
@@ -114,7 +114,8 @@ class TestMissionGroups:
         assert groups["running"] == ["m1"]
         assert groups["queued"] == ["m4"]
         assert groups["completed"] == ["m2"]
-        assert groups["not_completed"] == ["m3"]
+        assert groups["not_completed"] == []
+        assert groups["stopped"] == ["m3"]
         assert groups["disabled"] == ["m5"]
 
     def test_failed_is_not_completed(self, board: InMemoryBoardStore):

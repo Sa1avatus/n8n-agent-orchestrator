@@ -1766,7 +1766,10 @@ def _build_router() -> APIRouter:
         mission = store.get_mission(mission_id)
         if mission is None:
             raise KeyError(f"mission {mission_id!r} not found")
-        if _feature_enabled(store, None, "mission_dependencies") and not (body or {}).get("run_anyway"):
+        if (
+            _feature_enabled(store, None, "mission_dependencies")
+            and not (body or {}).get("run_anyway")
+        ):
             refusal = _dependency_start_refusal(store, mission_id)
             if refusal is not None:
                 return refusal
@@ -1800,6 +1803,22 @@ def _build_router() -> APIRouter:
         _confirm_needed(running, confirm, "disabling a running mission")
         store.update_mission(mission_id, mission.updated_at, enabled=False)
         return {"mission_id": mission_id, "enabled": False}
+
+    @router.post("/missions/{mission_id}/enable")
+    def enable(request: Request, mission_id: str) -> dict[str, Any]:
+        """Take a disabled mission out of the Disabled column: the mission row and its queue entry are enabled."""
+        store = _store_guard(request)
+        mission = store.get_mission(mission_id)
+        if mission is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        store.update_mission(mission_id, mission.updated_at, enabled=True)
+        entries = store.queue()
+        if any(e.mission_id == mission_id and not e.enabled for e in entries):
+            store.set_queue(
+                [e.model_copy(update={"enabled": True}) if e.mission_id == mission_id else e for e in entries],
+                _queue_version(store),
+            )
+        return {"mission_id": mission_id, "enabled": True}
 
     # ------------------------------------------------------------------ run from the card
     # Both routes are mounted always: with ``run_mission_from_card`` off they
@@ -1924,7 +1943,9 @@ def _build_router() -> APIRouter:
         store = _store_guard(request)
         expected = body.pop("expected_version", _queue_version(store))
         if not _feature_enabled(store, None, "mission_dependencies"):
-            updated = store.move_queue(body.get("mission_id", ""), int(body.get("to_position", -1)), expected)
+            updated = store.move_queue(
+                body.get("mission_id", ""), int(body.get("to_position", -1)), expected
+            )
             return {"queue": [e.model_dump() for e in updated], "version": _queue_version(store)}
         return _dependency_move(
             store,
@@ -2008,7 +2029,7 @@ def _build_router() -> APIRouter:
         the queue order and version stay untouched."""
         store = _store_guard(request)
         groups = store.mission_groups()
-        ids = groups["not_completed"] + groups["queued"]
+        ids = groups["not_completed"] + groups["stopped"] + groups["queued"]
         if not ids:
             return {"queue": [e.model_dump() for e in store.queue()],
                     "version": _queue_version(store), "changed": []}

@@ -42,12 +42,13 @@ function dependencyRenderers() {
   return globalThis.BoardMissionDependencies || null;
 }
 
-// The five groups in display order, keyed by the store's group names.
+// The six groups in display order, keyed by the store's group names.
 const GROUPS = [
   { key: "running", titleKey: "queue.group.running" },
   { key: "queued", titleKey: "queue.group.queued" },
   { key: "completed", titleKey: "queue.group.completed" },
   { key: "not_completed", titleKey: "queue.group.not_completed" },
+  { key: "stopped", titleKey: "queue.group.stopped" },
   { key: "disabled", titleKey: "queue.group.disabled" },
 ];
 
@@ -191,7 +192,7 @@ function render(data) {
 // queue; the figures of each card (live state, task views, statistics) are fetched afterwards, a few at a time and
 // in the order running, queued, not completed, completed (disabled missions have no runs, so no statistics are
 // asked for), and the board is redrawn as they arrive. A card whose figures fail to load keeps its dashes.
-const CARD_ORDER = ["running", "queued", "not_completed", "completed"];
+const CARD_ORDER = ["running", "queued", "not_completed", "stopped", "completed"];
 const CARD_PARALLEL = 3;
 
 async function loadCard(data, id) {

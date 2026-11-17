@@ -181,7 +181,9 @@ function attachCardActions(el, data) {
   const enabled = data && data.queue
     ? (data.queue.find((e) => e.mission_id === missionId) || {}).enabled
     : null;
-  if (enabled === false) {
+  if (groupKey === "disabled") {
+    mkButton(group, t("action.enable"), "enable_mission", missionId, false);
+  } else if (enabled === false) {
     const btn = mkButton(group, t("action.enable"), "enable", missionId, false);
   } else {
     const btn = mkButton(group, t("action.disable"), "disable", missionId, true);
@@ -193,7 +195,7 @@ function attachCardActions(el, data) {
   } else if (groupKey === "running") {
     mkButton(group, t("action.pause"), "pause", missionId, true);
     mkButton(group, t("action.stop"), "stop", missionId, true);
-  } else if (groupKey === "not_completed" || groupKey === "queued") {
+  } else if (groupKey === "not_completed" || groupKey === "stopped" || groupKey === "queued") {
     mkButton(group, t("action.retry"), "retry", missionId, true);
   }
 
@@ -317,6 +319,16 @@ async function handleDependencyRefusal(e, action, missionId, body, url) {
   return true;
 }
 
+// Enable a disabled mission (mission row and queue entry) and reload the board; the drag of a
+// Disabled card into Queued calls this first.
+async function enableMission(missionId) {
+  try {
+    await postJson("/api/board/missions/" + encodeURIComponent(missionId) + "/enable", {});
+  } catch (e) {
+    showState(e.message || t("action.failed", { action: "enable" }));
+  }
+}
+
 // One action: build the request, call the API, then refresh the board from
 // the server.  The server reads confirm=true as a query parameter (the
 // stop/disable routes' confirm: bool = Query(False)), so ?confirm=true is
@@ -339,6 +351,8 @@ async function doAction(action, missionId) {
   let url;
   if (action === "disable") {
     url = "/api/board/missions/" + encodeURIComponent(missionId) + "/disable?confirm=true";
+  } else if (action === "enable_mission") {
+    url = "/api/board/missions/" + encodeURIComponent(missionId) + "/enable";
   } else if (action === "enable") {
     url = "/api/board/queue/set-enabled";
     Object.assign(body, { enabled: true, expected_version: version });
@@ -663,6 +677,7 @@ const BoardActions = {
   attachCardActionsTo,
   attachRunButtons,
   doAction,
+  enableMission,
   confirmActions,
   refreshBoard,
   dirtyForm,

@@ -1,0 +1,16 @@
+# Kanban view (route pinned by kanban_open_order.yaml:6, the tab text by
+# board_i18n_en.json:2 "tab.kan"); board_view_kanban.js:74 renders the same
+# dependency line and chip as the queue cards.  The blocked chip text is
+# "blocked by dep-failed: a dependency is not completed" (board_i18n_en.json:14
+# "q.dep.blocked"), not the bare word "blocked".
+name: kanban card shows the after line and the blocked chip of a mission with a failed dependency
+tags: [ui, queue]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban, "after: dep-failed", "blocked by dep-failed: a dependency is not completed"]
+      request_2xx: [/api/board]
+      no_console_error: true

@@ -289,7 +289,7 @@ function moveByStep(missionId, dir) {
 async function applyMove(missionId, targetId, side) {
   if (!DndState.data) return;
   const groups = DndState.data.groups || {};
-  if ((groups.not_completed || []).includes(missionId)) {
+  if ((groups.not_completed || []).includes(missionId) || (groups.stopped || []).includes(missionId)) {
     await requeueMission(missionId, targetId, side);
     return;
   }

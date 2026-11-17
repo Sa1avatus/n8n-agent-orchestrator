@@ -4,7 +4,7 @@
   color-scheme: light dark;
   --bg: #f7f8fa; --panel: #ffffff; --ink: #1b2130; --muted: #6a7385; --faint: #687182;
   --line: #e6e8ee; --hover: #f2f4f8; --sel: #e9f0fd; --code: #f3f5f8; --accent: #2f6fde;
-  --ok: #16803c; --err: #d03b30; --retry: #b98900;
+  --ok: #16803c; --err: #d03b30; --retry: #b98900; --dis: #7c4dc4; --disbg: #efe9fa;
   --shadow: rgba(0,0,0,.15);
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
@@ -13,6 +13,7 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #a8b1c1;
+    --dis: #b794f4; --disbg: #2a2140;
     --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
     --ok: #4cc27a; --err: #f2766b; --retry: #e3b341;
     --shadow: rgba(0,0,0,.35);
@@ -21,6 +22,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0f1218; --panel: #161a22; --ink: #e3e7ee; --muted: #8e97a8; --faint: #a8b1c1;
+  --dis: #b794f4; --disbg: #2a2140;
   --line: #262c37; --hover: #1b2029; --sel: #1d2940; --code: #11151c; --accent: #6f9ef6;
   --ok: #4cc27a; --err: #f2766b; --retry: #e3b341;
   --shadow: rgba(0,0,0,.35);
@@ -65,6 +67,8 @@ button { font: inherit; color: inherit; }
 .qgroup h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
 .qitem { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); margin-bottom: 6px; }
 .qitem.running { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.qitem.qcard-disabled { border-color: var(--dis); background: var(--disbg); }
+.qitem.qcard-disabled .pos { color: var(--dis); }
 .qitem .pos { color: var(--faint); font: 600 11px var(--mono); min-width: 28px; }
 .qitem .name { flex: 1; font-weight: 520; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qitem .id { font: 11px var(--mono); color: var(--muted); }
@@ -238,7 +242,7 @@ button { font: inherit; color: inherit; }
 #boardviewbody .stack .s-q { background: var(--muted); }
 #boardviewbody .stack .s-ok { background: var(--ok); }
 #boardviewbody .stack .s-bad { background: var(--err); }
-#boardviewbody .stack .s-off { background: var(--line); }
+#boardviewbody .stack .s-off { background: var(--dis); }
 #boardviewbody .kpi span { display: block; color: var(--muted); font-size: 11px; }
 #boardviewbody .kpi b { font-weight: 600; }
 #boardviewbody .arr { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 2px 8px; transition: transform .15s; }
@@ -255,7 +259,7 @@ button { font: inherit; color: inherit; }
 #boardviewbody .p-q { color: var(--muted); }
 #boardviewbody .p-ok { color: var(--ok); }
 #boardviewbody .p-bad { color: var(--err); }
-#boardviewbody .p-off { color: var(--muted); }
+#boardviewbody .p-off { color: var(--dis); }
 @media (max-width: 900px) {
   #boardviewbody .prh { grid-template-columns: 1fr 1fr; }
   #boardviewbody .prh > div:nth-child(2) { grid-column: 1 / -1; }
@@ -294,7 +298,7 @@ button { font: inherit; color: inherit; }
 #boardviewbody .p-q { background: var(--panel2); color: var(--mut); }
 #boardviewbody .p-ok { background: var(--okbg); color: var(--ok); }
 #boardviewbody .p-bad { background: var(--badbg); color: var(--bad); }
-#boardviewbody .p-off { background: var(--panel2); color: var(--faint); }
+#boardviewbody .p-off { background: var(--disbg); color: var(--dis); }
 #boardviewbody .mono { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
 #boardviewbody button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
 #boardviewbody button:hover { background: var(--panel2); }
@@ -308,13 +312,16 @@ button { font: inherit; color: inherit; }
 #boardviewbody .kc:hover { background: var(--panel); }
 
 /* Kanban */
-#boardviewbody .kb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; }
+#boardviewbody .kb { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; align-items: start; }
 #boardviewbody .kcol { background: var(--panel2); border-radius: 12px; padding: 10px; min-height: 120px; min-width: 0; }
 #boardviewbody .kcol h3 { font-size: 12.5px; margin: 0 0 8px; color: var(--mut); display: flex; justify-content: space-between; font-weight: 600; }
 #boardviewbody .kcard { display: block; width: auto; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line2); border-radius: 8px; padding: 9px 10px; margin: 0 0 8px; cursor: pointer; user-select: none; text-align: left; }
 #boardviewbody .kcard[data-group="running"] { border-left-color: var(--run); }
 #boardviewbody .kcard[data-group="completed"] { border-left-color: var(--ok); }
 #boardviewbody .kcard[data-group="not_completed"] { border-left-color: var(--bad); }
+#boardviewbody .kcard[data-group="stopped"] { border-left-color: var(--retry); }
+#boardviewbody .kcard[data-group="disabled"] { border-left-color: var(--dis); background: var(--disbg); }
+#boardviewbody .kcard[data-group="disabled"] b { color: var(--dis); }
 #boardviewbody .kcard.sel { outline: 2px solid var(--acc); outline-offset: -1px; background: var(--accbg); }
 #boardviewbody .kcard b { display: block; font-weight: 600; font-size: 13px; margin: 4px 0; }
 #boardviewbody .kchip { font-size: 11px; color: var(--acc); background: var(--accbg); padding: 0 6px; border-radius: 5px; margin-right: 6px; }
@@ -630,3 +637,7 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 .bvprov-checks h4 { flex-basis: 100%; }
 .bvprov-checks select { width: auto; min-width: 200px; }
 @media (max-width: 760px) { .bvprov-grid { grid-template-columns: 1fr; } .bvprov-fields { grid-template-columns: 1fr; } .bvprov-key { grid-template-columns: 1fr; } .bvprov-key label, .bvprov-key > button { grid-column: 1; grid-row: auto; } }
+/* disabled missions: the whole row or card in the disabled colour (operator 2026-11-17) */
+#boardviewbody tr.row[data-group="disabled"] td { background: var(--disbg); }
+#boardviewbody tr.row[data-group="disabled"] td:nth-child(2) { color: var(--dis); }
+#boardviewbody .bl[data-group="disabled"] { background: var(--disbg); border-left: 4px solid var(--dis); }

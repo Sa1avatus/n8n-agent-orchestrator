@@ -73,8 +73,9 @@ check("group order",
   html.indexOf("Running now") < html.indexOf("Queued") &&
   html.indexOf("Queued") < html.indexOf("Completed") &&
   html.indexOf("Completed") < html.indexOf("Not completed / stopped") &&
-  html.indexOf("Not completed / stopped") < html.indexOf("Disabled"));
-check("five sections", (html.match(/class="qgroup"/g) || []).length === 5);
+  html.indexOf("Not completed / stopped") < html.indexOf("Stopped") &&
+  html.indexOf("Stopped") < html.indexOf("Disabled"));
+check("six sections", (html.match(/class="qgroup"/g) || []).length === 6);
 check("all mission ids", data.missions
   .every((m) => has(html, `data-mission-id="${m.mission_id}"`)));
 
@@ -121,11 +122,11 @@ check("esc id in href", has(evilHtml, 'href="#board/a&quot;b&lt;c"'));
 check("esc name raw", !has(evilHtml, "x<script>"));
 check("esc group key", has(evilHtml, 'data-group="queued"'));
 
-// empty board: the five headers stay, cards are "—"
+// empty board: the six headers stay, cards are "—"
 const empty = BQ.renderQueue({ groups: {}, missions: [], queue: [], cards: {} });
 check("empty groups kept",
   empty.indexOf("Running now") !== -1 && empty.indexOf("Disabled") !== -1);
-check("empty cards", empty.split("qempty").length === 6); // one per group
+check("empty cards", empty.split("qempty").length === 7); // one per group
 
 // --- render() on a minimal fake document ---
 // 'boardqueue' is missing at first: render must create it and append it to

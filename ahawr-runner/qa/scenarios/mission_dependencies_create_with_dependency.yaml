@@ -1,0 +1,63 @@
+# The queue view (board.js routes the bare #board hash to the queue list).  The
+# "New mission" button (t("new.title") board_i18n_en.json:31) opens the form
+# (board_actions.js:404 toggleNewMission) with the fields mission_id, name and
+# objective (board_actions.js:436-438) and the submit button t("new.submit") =
+# "create" (board_actions.js:477).  With the mission_dependencies flag on
+# (qa/fixtures/mission_dependencies.json:105) attachDependencyField appends the
+# "After missions" input named depends_on (board_actions.js:488-502, label t("m.dep")
+# board_i18n_en.json:14), and createMissionForm parses it into body.depends_on
+# (board_actions.js:567-570) and POSTs /api/board/missions/create (board_actions.js:574,
+# route board_api.py:1441) with the dashboard header (board_actions.js:108), so
+# no_mutation_without_header holds.  create() validates the ids and places the new
+# mission one past the last queued dependency it still waits on (board_api.py:1312-1325,
+# _dependency_queue_position board_api.py:641-654): the fixture queue has dep-base at
+# position 0 (qa/fixtures/mission_dependencies.json:110-117), so dep-created lands at
+# position 1, right behind it.
+# The card of the new mission then carries the "after: dep-base" line from t("q.dep")
+# (board_queue.js:119, board_mission_dependencies.js:35-36, board_i18n_en.json:14).
+name: creating a mission with a dependency through the form puts it after that dependency
+tags: [ui, queue]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board
+    expect:
+      text_visible: ["New mission", "Dependency base", "Waiting on the base"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "New mission"
+    expect:
+      text_visible: ["After missions"]
+      no_console_error: true
+  - type:
+      into: mission_id
+      text: dep-created
+      replace: true
+    expect:
+      no_console_error: true
+  - type:
+      into: name
+      text: Created with a dependency
+      replace: true
+    expect:
+      no_console_error: true
+  - type:
+      into: objective
+      text: A mission created from the form that waits on dep-base.
+      replace: true
+    expect:
+      no_console_error: true
+  - type:
+      into: depends_on
+      text: dep-base
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "create"
+    expect:
+      request_2xx: [/api/board/missions/create]
+      text_visible: ["Created with a dependency", "after: dep-base"]
+      no_console_error: true
+      no_mutation_without_header: true

@@ -149,6 +149,7 @@ function backlogCard(ctx, mission, index, current) {
   return el("div", {
     class: "bl bv-card" + (id === current.mission_id ? " sel" : ""),
     "data-id": id,
+    "data-group": mission.state_group || "",
     "data-project": (mission.project && mission.project.key) || "",
     "data-search": (name + " " + id).toLowerCase(),
   }, [

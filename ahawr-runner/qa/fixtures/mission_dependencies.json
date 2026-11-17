@@ -1,0 +1,175 @@
+{
+  "name": "mission_dependencies",
+  "tables": {
+    "data_table_user_hYAqO52ZGHXxhhHX": [
+      {
+        "id": 1,
+        "mission_id": "dep-base",
+        "state_namespace": "sk_dep_base",
+        "name": "Dependency base",
+        "objective": "A queued mission that other missions wait for.",
+        "working_directory": "/d/example/qa/dep-base",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-01T09:00:00+00:00",
+        "updatedAt": "2026-10-12T09:00:00+00:00"
+      },
+      {
+        "id": 2,
+        "mission_id": "dep-waiting",
+        "state_namespace": "sk_dep_waiting",
+        "name": "Waiting on the base",
+        "objective": "Depends on dep-base, which has not completed.",
+        "working_directory": "/d/example/qa/dep-waiting",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-02T09:00:00+00:00",
+        "updatedAt": "2026-10-12T09:00:00+00:00"
+      },
+      {
+        "id": 3,
+        "mission_id": "dep-failed",
+        "state_namespace": "sk_dep_failed",
+        "name": "Failed dependency",
+        "objective": "A mission whose run failed.",
+        "working_directory": "/d/example/qa/dep-failed",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-03T09:00:00+00:00",
+        "updatedAt": "2026-10-12T09:00:00+00:00"
+      },
+      {
+        "id": 4,
+        "mission_id": "dep-blocked",
+        "state_namespace": "sk_dep_blocked",
+        "name": "Blocked by the failed run",
+        "objective": "Depends on dep-failed, which failed.",
+        "working_directory": "/d/example/qa/dep-blocked",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-04T09:00:00+00:00",
+        "updatedAt": "2026-10-12T09:00:00+00:00"
+      },
+      {
+        "id": 5,
+        "mission_id": "dep-free",
+        "state_namespace": "sk_dep_free",
+        "name": "Independent mission",
+        "objective": "No dependencies: the cycle and creation scenarios add it as the free one.",
+        "working_directory": "/d/example/qa/dep-free",
+        "version": 1.0,
+        "enabled": true,
+        "rules_json": "[]",
+        "acceptance_criteria_json": "[]",
+        "retrieval_corpora_json": null,
+        "createdAt": "2026-10-05T09:00:00+00:00",
+        "updatedAt": "2026-10-12T09:00:00+00:00"
+      }
+    ],
+    "data_table_user_Yn9lOhVhQ9gFymNs": [
+      {
+        "state_key": "sk_dep_base",
+        "status": "queued"
+      },
+      {
+        "state_key": "sk_dep_failed",
+        "status": "failed"
+      }
+    ],
+    "data_table_user_1S21PsMqT0FpR7eD": [
+      {
+        "id": 1,
+        "profile_id": "claude-code",
+        "enabled": true,
+        "worker_provider": "claude-cli",
+        "worker_model": "example-small",
+        "reviewer_provider": "claude-cli",
+        "reviewer_model": "example-small",
+        "architect_provider": "claude-cli",
+        "architect_model": "example-large",
+        "max_tasks": 12,
+        "max_attempts_per_task": 3,
+        "retrieval_enabled": false,
+        "features_json": "{\"mission_dependencies\": {\"enabled\": true}}"
+      }
+    ],
+    "queue": [
+      {
+        "position": 0,
+        "mission_id": "dep-base",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null,
+        "depends_on": []
+      },
+      {
+        "position": 1,
+        "mission_id": "dep-waiting",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null,
+        "depends_on": ["dep-base"]
+      },
+      {
+        "position": 2,
+        "mission_id": "dep-failed",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null,
+        "depends_on": []
+      },
+      {
+        "position": 3,
+        "mission_id": "dep-blocked",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null,
+        "depends_on": ["dep-failed"]
+      },
+      {
+        "position": 4,
+        "mission_id": "dep-free",
+        "enabled": true,
+        "attempts_per_task": null,
+        "retry_failed": false,
+        "note": null,
+        "depends_on": []
+      }
+    ],
+    "i18n_languages": [
+      {
+        "code": "en",
+        "name": "English",
+        "enabled": true
+      }
+    ],
+    "i18n_strings": [
+      {
+        "lang": "en",
+        "key": "board.title",
+        "text": "Board"
+      },
+      {
+        "lang": "en",
+        "key": "queue.empty",
+        "text": "The queue is empty"
+      }
+    ]
+  }
+}

@@ -68,7 +68,7 @@ function el(tag, attrs, children) {
 }
 
 // groups of missions that are not going to run: their open tasks are leftovers and stay off the lanes
-const INERT_GROUPS = ["disabled", "not_completed", "completed"];
+const INERT_GROUPS = ["disabled", "not_completed", "stopped", "completed"];
 
 function isActive(m) {
   if (INERT_GROUPS.includes(m.state_group)) return false;

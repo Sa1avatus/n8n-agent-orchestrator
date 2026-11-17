@@ -282,11 +282,12 @@ class BoardStore(ABC):
 
     def mission_groups(self) -> dict[str, list[str]]:
         """Mission ids by group: ``running`` / ``queued`` / ``completed`` /
-        ``not_completed`` / ``disabled``.
+        ``not_completed`` / ``stopped`` / ``disabled``.
 
         A disabled mission is ``disabled`` even if its state says otherwise;
         an enabled one is ``running`` (Live State ``active``), ``completed``
-        (``completed``), ``not_completed`` (``failed`` or ``stopped``), else
+        (``completed``), ``stopped`` (stopped by the operator), ``not_completed``
+        (``failed``), else
         ``queued`` (never started or no Live State row). A failed or stopped
         mission with an enabled queue row that carries the retry flag waits for
         its retry, so it is ``queued``."""
@@ -295,6 +296,7 @@ class BoardStore(ABC):
             "queued": [],
             "completed": [],
             "not_completed": [],
+            "stopped": [],
             "disabled": [],
         }
         queue_entries = {entry.mission_id: entry for entry in self.queue()}
@@ -319,7 +321,9 @@ class BoardStore(ABC):
                 queue_entries.get(mission.mission_id)
             ):
                 groups["queued"].append(mission.mission_id)
-            elif status in ("failed", "stopped", "active"):
+            elif status == "stopped":
+                groups["stopped"].append(mission.mission_id)
+            elif status in ("failed", "active"):
                 groups["not_completed"].append(mission.mission_id)
             else:
                 groups["queued"].append(mission.mission_id)

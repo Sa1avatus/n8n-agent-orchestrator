@@ -366,6 +366,24 @@
       "warnings": []
     },
     {
+      "name": "valid_fallback_list",
+      "input": "{\"worker\": {\"1\": \"anthropic/sonnet\", \"options\": {\"fallback\": [\"anthropic/claude-opus-5-5\", \"openrouter/nvidia/nemotron-3.5-super-vl:free\", \"strata/qwen3.8-flash-next-q2_0\"]}}}",
+      "errors": [],
+      "warnings": []
+    },
+    {
+      "name": "fallback_list_with_a_bad_model",
+      "input": "{\"worker\": {\"1\": \"anthropic/sonnet\", \"options\": {\"fallback\": [\"anthropic/claude-opus-5-5\", \"qwen\"]}}}",
+      "errors": [{"code": "bad_fallback", "role": "worker", "element": "options.fallback"}],
+      "warnings": []
+    },
+    {
+      "name": "fallback_empty_list",
+      "input": "{\"worker\": {\"1\": \"anthropic/sonnet\", \"options\": {\"fallback\": []}}}",
+      "errors": [{"code": "bad_fallback", "role": "worker", "element": "options.fallback"}],
+      "warnings": []
+    },
+    {
       "name": "fallback_not_a_string",
       "input": "{\"worker\": {\"1\": \"anthropic/sonnet\", \"options\": {\"fallback\": 5}}}",
       "errors": [{"code": "bad_fallback", "role": "worker", "element": "options.fallback"}],

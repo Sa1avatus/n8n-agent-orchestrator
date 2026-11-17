@@ -136,7 +136,8 @@ def test_next_mission_order_unchanged_flag_off() -> None:
 
 def _dependency_rule() -> ModuleType:
     """The runner's shared due/waiting/blocked rule, loaded as queue_board loads it."""
-    return queue_board._shared_dependency_rule()
+    rule: ModuleType = queue_board._shared_dependency_rule()
+    return rule
 
 
 def _flag_on_queue(entries: list[dict[str, Any]], states: dict[str, str]) -> list[dict[str, Any]]:

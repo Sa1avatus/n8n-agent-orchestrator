@@ -1,0 +1,43 @@
+# Kanban view (#board/view/kan, the tab text t("tab.kan") board_i18n_en.json:2); its
+# queued cards get the queue drag handlers (board_view_kanban.js:83 attachCard, the
+# handlers in board_dnd.js:169-197).  The card title <b> is the first child of the card
+# (board_view_kanban.js:199), so dropping on the target's title lands above the card's
+# midline: side "before" (board_dnd.js:226), which puts dep-waiting at position 0.
+# POST /api/board/queue/move (board_api.py:1922-1929) runs _dependency_move
+# (board_api.py:581-605): find_move_problems (board_dependencies.py:323-354) reports
+# "mission dep-waiting cannot move before its dependency dep-base" and the 403 answer
+# carries blocked_by: [dep-base] (board_api.py:601-605).  No queue row depends on
+# dep-waiting, so dependencyGroupConfirm returns "" (board_mission_dependencies.js:121-124)
+# and the refusal text of t("dep.order") (board_i18n_en.json:14) - "The move is refused:
+# dep-waiting must run after dep-base" - is shown in the visible notice (board_dnd.js:396-404).
+# Nothing is stored: _dependency_move returns the refusal before any store write, so the
+# cards keep their tops (order check qa_runner.py:827-833).  The refused POST logs one
+# console error (qa_runner.py:633-637 filters only 409), so no_console_error is asserted
+# on the reopen, not on the drag step - the same shape as mission_dependencies_editor_cycle.yaml.
+name: dragging a mission in front of its dependency is refused and the queue order stays
+tags: [ui, queue]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban]
+      order: [Dependency base, Waiting on the base]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - drag:
+      from: Waiting on the base
+      onto: Dependency base
+    expect:
+      text_visible: ["The move is refused: dep-waiting must run after dep-base"]
+      order: [Dependency base, Waiting on the base]
+      no_mutation_without_header: true
+  # Reopen: the notice is gone and the cards sit in the fixture order (queue positions
+  # 0 and 1, qa/fixtures/mission_dependencies.json:110-125).
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_absent: ["The move is refused"]
+      order: [Dependency base, Waiting on the base]
+      request_2xx: [/api/board]
+      no_console_error: true

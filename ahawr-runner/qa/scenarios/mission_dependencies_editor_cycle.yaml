@@ -1,0 +1,61 @@
+# dep-waiting already lists dep-base (qa/fixtures/mission_dependencies.json:125) while
+# dep-base has an empty list (fixture:116), so typing dep-waiting into dep-base's
+# "After missions" field (board_mission.js:199-202, label board_i18n_en.json:14 "m.dep")
+# closes the loop. _dependency_problems (board_api.py:528-545) rebuilds the graph from the
+# queue rows and validates against the proposed ids; find_cycle (board_dependencies.py:95-126)
+# starts at the first queue id, so the path is dep-base -> dep-waiting -> dep-base, and
+# board_dependencies.py:161 produces exactly:
+# "the mission dependency closes a cycle: dep-base -> dep-waiting -> dep-base".
+# board_api.py:1368-1371 raises ValueError, board_common.py:53-54 answers 400 bad_request.
+# qa_runner offers no request_4xx key (EXPECTATIONS, qa_runner.py:43-52) and allow_http_status
+# accepts only 409 (qa_runner.py:68), so the status is documented in this comment; the refused
+# POST also shows up as a console error (qa_runner.py:633-637), hence no no_console_error on
+# the save step. t("dep.cycle") (board_i18n_en.json:14) is used only when the payload carries
+# closing_pair (board_mission_dependencies.js:142-148), which this endpoint does not, so the
+# operator sees the raw API message.
+name: mission editor refuses a dependency that closes a cycle, and the queue keeps the old ids
+tags: [ui, settings]
+preconditions:
+  fixture: mission_dependencies
+target: dashboard
+steps:
+  - open: /static/board.html#board/dep-base
+    expect:
+      text_visible: ["Edit launch settings", "After missions"]
+      request_2xx: [/api/board]
+      no_console_error: true
+  - click: "✎ Edit launch settings"
+    expect:
+      text_visible: ["Launch settings", "Mission"]
+      request_2xx: [/api/board/missions]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Execution, Roles, "After missions"]
+      no_console_error: true
+  - type:
+      into: depends_on
+      text: dep-waiting
+      replace: true
+    expect:
+      no_console_error: true
+      no_mutation_without_header: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Context]
+      no_console_error: true
+  - click: "Next ›"
+    expect:
+      text_visible: [Review]
+      no_console_error: true
+  - click: "Save changes"
+    expect:
+      text_visible: ["the mission dependency closes a cycle: dep-base -> dep-waiting -> dep-base"]
+  # Reopen the queue: dep-base still shows no after line and dep-waiting still waits for
+  # dep-base only; nothing was stored (board_queue.js:120, t("q.dep") board_i18n_en.json:14).
+  - open: /static/board.html#board
+    expect:
+      text_visible: ["after: dep-base", "waiting for dep-base"]
+      text_absent: ["after: dep-waiting"]
+      request_2xx: [/api/board]
+      no_console_error: true
