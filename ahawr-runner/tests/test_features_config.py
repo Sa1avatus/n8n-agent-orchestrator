@@ -82,17 +82,20 @@ def test_features_defaults_source_text_has_no_literal_defaults() -> None:
     assert literals == [], f"features_config.py still carries literal defaults: {literals}"
 
 
-def test_features_defaults_are_all_off_by_default() -> None:
-    """Each feature is off in the JSON, in the loaded table and in the resolved defaults."""
-    for body in json.loads(_shipped_defaults_text())["features"].values():
-        assert body["enabled"] is False
+ON_BY_DEFAULT = frozenset({"adaptive_split", "run_mission_from_card"})  # operator 2026-11-17
+
+
+def test_features_defaults_are_off_except_the_two_the_operator_turned_on() -> None:
+    """Each feature is off in the JSON, in the loaded table and in the resolved defaults, except ON_BY_DEFAULT."""
+    for feature, body in json.loads(_shipped_defaults_text())["features"].items():
+        assert body["enabled"] is (feature in ON_BY_DEFAULT), feature
     for feature, body in FEATURE_DEFAULTS.items():
-        assert body["enabled"] is False, f"{feature} is on by default"
+        assert body["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} default is wrong"
     resolved, errors = parse_features("", "")
     assert errors == []
     assert resolved is not None
     for feature, body in resolved.items():
-        assert body["enabled"] is False, f"{feature} resolves on with empty columns"
+        assert body["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} resolves wrong with empty columns"
 
 
 def test_features_defaults_missing_or_malformed_file_raises_with_reason(
@@ -355,7 +358,7 @@ def test_pinned_fixture_pins_current_resolution_and_flatten() -> None:
     assert fixture == expected, "the pinned fixture no longer matches the current code"
     for feature in FEATURE_DEFAULTS:
         resolved = fixture[feature]["empty_object"]["resolved"]
-        assert resolved[feature]["enabled"] is False, f"{feature} is on by default"
+        assert resolved[feature]["enabled"] is (feature in ON_BY_DEFAULT), f"{feature} default is wrong"
 
 
 def test_tables_are_read_from_the_packaged_json(

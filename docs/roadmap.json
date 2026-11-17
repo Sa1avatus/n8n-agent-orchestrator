@@ -10,7 +10,7 @@
     "stats": [
       [
         "Current version",
-        "1.3.0"
+        "1.3.010"
       ],
       [
         "Missions completed",
@@ -600,6 +600,10 @@
         [
           "ok",
           "1.3.0: the kanban gets the Stopped and Disabled columns (Stop moves a card to Stopped; a Disabled card is enabled by drag or button); a role may list several fallback models; the mission-dependencies and run-from-card features are switched on"
+        ],
+        [
+          "ok",
+          "1.3.010: `adaptive_split` and `run_mission_from_card` are ON in the shipped defaults; the pinned fixtures and tests follow"
         ]
       ]
     },

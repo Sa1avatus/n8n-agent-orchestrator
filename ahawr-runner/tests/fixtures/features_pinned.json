@@ -3,7 +3,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -18,7 +18,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -38,7 +38,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -54,7 +54,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -69,7 +69,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -89,7 +89,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -105,7 +105,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -120,7 +120,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -140,7 +140,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -156,7 +156,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -171,7 +171,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -191,7 +191,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -242,7 +242,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -271,7 +271,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -286,7 +286,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -306,7 +306,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -322,7 +322,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -337,7 +337,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -357,7 +357,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -373,7 +373,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -388,7 +388,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -408,7 +408,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -424,7 +424,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -439,7 +439,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -459,7 +459,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -475,7 +475,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -490,7 +490,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -510,7 +510,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -526,7 +526,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -541,7 +541,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -561,7 +561,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -579,7 +579,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -594,7 +594,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -614,7 +614,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -630,7 +630,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -645,7 +645,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -665,7 +665,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -681,7 +681,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -696,7 +696,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -716,7 +716,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -732,7 +732,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -747,7 +747,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -767,7 +767,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -783,7 +783,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -798,7 +798,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -818,7 +818,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -834,7 +834,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -849,7 +849,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -869,7 +869,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -887,7 +887,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -902,7 +902,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -922,7 +922,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -938,7 +938,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -953,7 +953,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -973,7 +973,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -989,7 +989,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1004,7 +1004,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1024,7 +1024,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1040,7 +1040,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1055,7 +1055,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1075,7 +1075,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1091,7 +1091,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 20,
         "max_tasks_hard": 30,
@@ -1106,7 +1106,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1126,7 +1126,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1155,7 +1155,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1170,7 +1170,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1190,7 +1190,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1206,7 +1206,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1221,7 +1221,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1241,7 +1241,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1257,7 +1257,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1272,7 +1272,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1292,7 +1292,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1308,7 +1308,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1323,7 +1323,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1343,7 +1343,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1359,7 +1359,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1374,7 +1374,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1394,7 +1394,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1410,7 +1410,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1425,7 +1425,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1445,7 +1445,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1463,7 +1463,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1478,7 +1478,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1498,7 +1498,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1514,7 +1514,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1529,7 +1529,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1549,7 +1549,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1565,7 +1565,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1580,7 +1580,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1600,7 +1600,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1616,7 +1616,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1631,7 +1631,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1651,7 +1651,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1667,7 +1667,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1682,7 +1682,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1718,7 +1718,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1733,7 +1733,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1771,7 +1771,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1786,7 +1786,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1806,7 +1806,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1822,7 +1822,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1837,7 +1837,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1857,7 +1857,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1873,7 +1873,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1888,7 +1888,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1908,7 +1908,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1924,7 +1924,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1939,7 +1939,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -1959,7 +1959,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -1975,7 +1975,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -1990,7 +1990,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2010,7 +2010,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": true
@@ -2026,7 +2026,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2041,7 +2041,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2061,7 +2061,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": true
@@ -2079,7 +2079,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2094,7 +2094,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2114,7 +2114,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2130,7 +2130,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2145,7 +2145,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2165,7 +2165,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2181,7 +2181,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2196,7 +2196,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2216,7 +2216,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2232,7 +2232,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2247,7 +2247,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2267,7 +2267,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2283,7 +2283,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2298,7 +2298,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2318,7 +2318,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2334,7 +2334,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2349,7 +2349,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2369,7 +2369,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2387,7 +2387,7 @@
     "absent_column": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2402,7 +2402,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2422,7 +2422,7 @@
           "enabled": true
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2438,7 +2438,7 @@
     "empty_none": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2453,7 +2453,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2473,7 +2473,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2489,7 +2489,7 @@
     "empty_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2504,7 +2504,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2524,7 +2524,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2540,7 +2540,7 @@
     "empty_string": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2555,7 +2555,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2575,7 +2575,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2591,7 +2591,7 @@
     "mission_override": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2606,7 +2606,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2626,7 +2626,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false
@@ -2642,7 +2642,7 @@
     "partial_object": {
       "errors": [],
       "flatten": {
-        "adaptive_split": 0,
+        "adaptive_split": 1,
         "max_splits": 6,
         "max_tasks": 15,
         "max_tasks_hard": 30,
@@ -2657,7 +2657,7 @@
       ],
       "resolved": {
         "adaptive_split": {
-          "enabled": false,
+          "enabled": true,
           "max_splits": 6,
           "max_total_tasks": 40,
           "split_steps": 150
@@ -2677,7 +2677,7 @@
           "enabled": false
         },
         "run_mission_from_card": {
-          "enabled": false
+          "enabled": true
         },
         "stats_engine_sampler": {
           "enabled": false

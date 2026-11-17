@@ -6,7 +6,7 @@
       "max_tasks_hard": 30
     },
     "adaptive_split": {
-      "enabled": false,
+      "enabled": true,
       "split_steps": 150,
       "max_splits": 6,
       "max_total_tasks": 40
@@ -30,7 +30,7 @@
       "enabled": false
     },
     "run_mission_from_card": {
-      "enabled": false
+      "enabled": true
     }
   },
   "param_minimums": {

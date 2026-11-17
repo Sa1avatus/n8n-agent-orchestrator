@@ -4,7 +4,7 @@
     "plan_no_truncate": 0,
     "max_tasks": 15,
     "max_tasks_hard": 30,
-    "adaptive_split": 0,
+    "adaptive_split": 1,
     "split_steps": 150,
     "max_splits": 6,
     "max_total_tasks": 40,
