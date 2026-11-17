@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 from fastapi.testclient import TestClient
 
-from ahawr_runner.api import create_app
+from ahawr_runner.api import _qa_agent_fallbacks, create_app
 from ahawr_runner.config import Settings
 
 TOKEN = "test-qa-token"
@@ -87,3 +87,33 @@ def test_list_filters_by_status_and_rejects_unknown_status(guarded: TestClient) 
     assert [item["nonce"] for item in queued] == ["queued-one"]
     unknown = guarded.get("/v1/qa/requests", params={"status": "bogus"}, headers=AUTH)
     assert unknown.status_code == 422
+
+
+class _RolesStore:
+    def __init__(self, roles_json: str) -> None:
+        self._roles_json = roles_json
+
+    def hermes_config(self) -> dict[str, str]:
+        return {"roles_json": self._roles_json}
+
+    def mission_config(self, _mission_id: str) -> dict[str, str]:
+        return {}
+
+
+@pytest.mark.parametrize(
+    ("fallback", "expected"),
+    [
+        ('"strata/q"', ["strata/q"]),
+        ('["strata/q", "openrouter/m:free"]', ["strata/q", "openrouter/m:free"]),
+    ],
+)
+def test_qa_agent_fallbacks_come_from_the_role_options(
+    fallback: str, expected: list[str]
+) -> None:
+    roles = '{"qa_agent": {"1": "anthropic/claude-opus-5-5", "options": {"fallback": %s}}}'
+    assert _qa_agent_fallbacks(_RolesStore(roles % fallback)) == expected
+
+
+def test_qa_agent_fallbacks_are_empty_without_the_option() -> None:
+    roles = '{"qa_agent": {"1": "anthropic/claude-opus-5-5"}}'
+    assert _qa_agent_fallbacks(_RolesStore(roles)) == []

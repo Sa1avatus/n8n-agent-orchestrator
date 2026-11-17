@@ -128,3 +128,56 @@ def test_a_start_error_is_a_failed_status(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert outcome.status == "failed" and outcome.final_text == ""
     assert "could not be started" in outcome.reason
+
+
+def _scripted_runner(
+    monkeypatch: pytest.MonkeyPatch, answers: dict[str, list[dict[str, Any]]]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Answer by path in order; record (path, body) of every call."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def urlopen(request: urllib.request.Request, timeout: float) -> _FakeResponse:
+        path = request.full_url.split("://", 1)[1].split("/", 1)[1]
+        body = json.loads(cast(bytes, request.data)) if request.data else {}
+        calls.append(("/" + path, body))
+        key = "poll" if path.startswith("v1/runs/") else "/" + path
+        queue = answers[key]
+        return _FakeResponse(queue.pop(0) if len(queue) > 1 else queue[0])
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    return calls
+
+
+def test_a_failed_run_is_started_again_on_the_fallback_model(
+    monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qa_agent_run.time, "sleep", _no_sleep)
+    failed = {"status": "failed", "error": {"message": "limit"}}
+    calls = _scripted_runner(
+        monkeypatch,
+        {
+            "/v1/runs": [START],
+            "poll": [failed, {"status": "completed", "output": "ok"}],
+            "/v1/qa/agent-fallbacks": [{"fallbacks": ["strata/qwen-q2"]}],
+        },
+    )
+
+    outcome = qa_agent_run.run_agent("p", "/w")
+
+    starts = [body for path, body in calls if path == "/v1/runs"]
+    assert starts[0].get("model") is None
+    assert (starts[1]["provider"], starts[1]["model"]) == ("strata", "qwen-q2")
+    assert (outcome.status, outcome.final_text) == ("completed", "ok")
+
+
+def test_a_timeout_does_not_use_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(qa_agent_run.time, "sleep", _no_sleep)
+    calls = _scripted_runner(
+        monkeypatch,
+        {"/v1/runs": [START], "poll": [{"status": "running"}]},
+    )
+
+    outcome = qa_agent_run.run_agent("p", "/w", max_polls=1, poll_seconds=1)
+
+    assert outcome.status == "timeout"
+    assert all(path != "/v1/qa/agent-fallbacks" for path, _ in calls)

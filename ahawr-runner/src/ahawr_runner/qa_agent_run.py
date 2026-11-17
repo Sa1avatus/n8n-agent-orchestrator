@@ -11,12 +11,16 @@ item. The HTTP calls reuse the QA worker's runner helper
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from ahawr_runner import qa_worker
 from ahawr_runner.config import QA_MAX_MINUTES
+from ahawr_runner.roles_config import split_model
+
+logger = logging.getLogger(__name__)
 
 # The agent run is bounded by the role's max_minutes (default 20): one poll
 # per minute, one poll per max_minutes.
@@ -43,9 +47,11 @@ def run_agent(
 ) -> AgentOutcome:
     """Start the qa_agent run and poll it until it ends.
 
-    The body carries only the role, the prompt and the working directory: the
-    model and provider come from ``roles_json``. On completion the run's
-    output is returned as ``final_text``; on a timeout or a failed run
+    The first body carries only the role, the prompt and the working directory: the
+    model and provider come from ``roles_json``. When that run fails (not on a
+    timeout), the run is started again for each ``options.fallback`` model of the
+    role in order, with the model and provider named in the body. On completion the
+    run's output is returned as ``final_text``; on a timeout or a failed run
     ``final_text`` stays empty and ``reason`` says why.
     """
     body = {
@@ -53,6 +59,30 @@ def run_agent(
         "role": QA_AGENT_ROLE,
         "working_directory": working_directory,
     }
+    outcome = _run_once(body, max_polls, poll_seconds)
+    if outcome.status != "failed":
+        return outcome
+    for spec in _fallback_models():
+        provider, name = split_model(spec)
+        logger.warning("qa_agent failed (%s); retrying on %s", outcome.reason, spec)
+        outcome = _run_once({**body, "provider": provider, "model": name}, max_polls, poll_seconds)
+        if outcome.status != "failed":
+            return outcome
+    return outcome
+
+
+def _fallback_models() -> list[str]:
+    """The role's fallback models from the runner; empty when it cannot say."""
+    try:
+        answer = qa_worker._call("GET", "/v1/qa/agent-fallbacks")
+    except qa_worker.RunnerError as exc:
+        logger.warning("qa_agent fallbacks not read: %s", exc)
+        return []
+    models = answer.get("fallbacks") if isinstance(answer, dict) else None
+    return [str(item) for item in models] if isinstance(models, list) else []
+
+
+def _run_once(body: dict[str, Any], max_polls: int, poll_seconds: float) -> AgentOutcome:
     try:
         run = qa_worker._call("POST", "/v1/runs", body)
     except qa_worker.RunnerError as exc:

@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from . import qa_run_record
+from . import board_ready, qa_run_record
 from .board_api import LiveProviderStore, add_board_routes
 from .board_ops_redact import scrub
 from .claude_cli import child_env
@@ -42,7 +42,7 @@ from .provider_registry import ProviderRegistry, env_provider_row
 from .provider_secrets import ProviderSecrets
 from .qa_requests import QA_AGENT_LAYER, QaRequestStore, QaTransitionError, qa_agent_enabled
 from .report_facts import build_pack, collect_repo_facts, parse_digest
-from .roles_config import QA_LAYERS
+from .roles_config import QA_LAYERS, resolve
 from .run_views import build_router, source_of
 from .runs import RunManager, RunnerError, StartRequest
 from .search import DEFAULT_LIMIT, MAX_LIMIT
@@ -237,6 +237,20 @@ async def _send_confirm_notice(notifier: Notifier, created: HostActionRequest) -
         logger.warning("host action %s: confirm notice not delivered", created.id)
 
 
+def _qa_agent_fallbacks(store: Any) -> list[str]:
+    """``options.fallback`` of the qa_agent role as a list of ``provider/model``; empty
+    when the board config is missing or has no such option."""
+    try:
+        roles = board_ready.effective_roles(store, "")
+        value = resolve(roles, "qa_agent", 1, {}).options.get("fallback")
+    except (ValueError, RuntimeError) as exc:
+        logger.warning("qa_agent fallbacks: %s", exc)
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
 def _event_schema_enabled(store: Any) -> bool:
     """The ``event_schema_version`` feature of the board's ``features_json``.
 
@@ -359,7 +373,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 app.state.provider_poll_stop.set()
             await manager.shutdown()
 
-    app = FastAPI(title="ahawr-runner", version="1.4.300", lifespan=lifespan)
+    app = FastAPI(title="ahawr-runner", version="1.4.400", lifespan=lifespan)
 
     def authorize(authorization: str = Header(default="")) -> None:
         if not settings.api_key:
@@ -616,6 +630,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body.options,
         )
         return qa_store(request).request_dict(created)
+
+    @app.get("/v1/qa/agent-fallbacks", dependencies=[Depends(authorize)])
+    def qa_agent_fallbacks(request: Request) -> dict[str, list[str]]:
+        return {"fallbacks": _qa_agent_fallbacks(request.app.state.board_store)}
 
     @app.get("/v1/qa/requests", dependencies=[Depends(authorize)])
     def list_qa_requests(request: Request, status: QaStatus | None = None) -> list[dict[str, Any]]:
