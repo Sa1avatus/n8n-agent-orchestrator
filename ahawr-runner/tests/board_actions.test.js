@@ -167,6 +167,13 @@ const BA = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_acti
   check("stop url has confirm=true",
     stopCall.url === "/api/board/missions/m1/stop?confirm=true");
 
+  // the reset of the run state asks the server with confirm=true
+  calls.length = 0;
+  await BA.doAction("reset_state", "m1");
+  const resetCall = calls.find((c) => c.url.indexOf("/reset-run-state") !== -1);
+  check("reset_state url has confirm=true",
+    resetCall && resetCall.url === "/api/board/missions/m1/reset-run-state?confirm=true");
+
   // pause is the flags endpoint
   calls.length = 0;
   await BA.doAction("pause", "m1");

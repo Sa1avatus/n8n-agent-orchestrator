@@ -11,6 +11,7 @@ A finished run never changes, so its record and events are cached (bounded); a r
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from collections import OrderedDict
@@ -18,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
+from .runs import RunnerError
 
 FINISHED = ("completed", "failed", "cancelled", "interrupted", "timeout")
 CACHE_RUNS = 400
@@ -166,6 +169,28 @@ class RemoteRunManager:
         except ValueError:
             return None
         return body if isinstance(body, dict) else None
+
+    def get(self, run_id: str) -> dict[str, Any]:
+        """One run from ``GET /v1/runs/{id}``; ``RunnerError`` when the runner does not know it."""
+        body = self.get_json(f"/v1/runs/{run_id}")
+        if body is None:
+            raise RunnerError("run_not_found", f"Run {run_id} not found.", 404)
+        return body
+
+    async def cancel(self, run_id: str) -> dict[str, Any]:
+        """Cancel a run through ``POST /v1/runs/{id}/cancel`` (the sync client runs in a thread)."""
+        try:
+            response = await asyncio.to_thread(
+                self.client.post, f"{self.url}/v1/runs/{run_id}/cancel", headers=self.headers
+            )
+        except httpx.HTTPError as exc:
+            message = f"Cancel of {run_id} failed: {exc}"
+            raise RunnerError("runner_unreachable", message, 502) from exc
+        if response.status_code != 200:
+            message = f"Cancel of {run_id} answered {response.status_code}."
+            raise RunnerError("cancel_failed", message, 502)
+        body = response.json()
+        return body if isinstance(body, dict) else {}
 
     def list_processes(self) -> list[dict[str, Any]]:
         """The runner's own CLI processes from ``GET /v1/processes``: pid, age, the run's

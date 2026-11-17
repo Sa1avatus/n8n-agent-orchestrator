@@ -641,3 +641,7 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 #boardviewbody tr.row[data-group="disabled"] td { background: var(--disbg); }
 #boardviewbody tr.row[data-group="disabled"] td:nth-child(2) { color: var(--dis); }
 #boardviewbody .bl[data-group="disabled"] { background: var(--disbg); border-left: 4px solid var(--dis); }
+
+/* dangerous card buttons: stop, reset state, disable */
+.qact-stop, .qact-reset_state, .qact-disable { color: var(--err); border-color: var(--err); }
+.qact-stop:hover, .qact-reset_state:hover, .qact-disable:hover { background: var(--err); color: #fff; }

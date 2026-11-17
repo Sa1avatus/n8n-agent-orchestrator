@@ -216,6 +216,40 @@ class TestMissions:
         r = await board_client.get("/api/board/missions")
         assert [m["mission_id"] for m in r.json()["missions"]] == ["m1", "m2"]
 
+    async def test_a_split_part_sent_again_is_refreshed_not_refused(self, board_client):
+        """The head planned twice sends its parts again: a part that has not started takes the new
+        plan, a part that started is kept; nothing answers 500."""
+        part = {
+            "mission_id": "m1-p2",
+            "name": "m1 part 2",
+            "objective": "first",
+            "plan": {"tasks": [{"id": "T1"}]},
+        }
+        first = await board_client.post("/api/board/missions/create", json=part)
+        assert first.status_code == 200
+        again = await board_client.post(
+            "/api/board/missions/create",
+            json={**part, "objective": "second", "plan": {"tasks": [{"id": "T9"}]}},
+        )
+        assert again.status_code == 200
+        assert again.json() == {"mission_id": "m1-p2", "existing": True, "refreshed": True}
+        live = (await board_client.get("/api/board/live-states/m1-p2")).json()["live_state"]
+        assert live["plan"]["tasks"][0]["id"] == "T9"
+        await board_client.post("/api/board/live-states/m1-p2", json={
+            "expected_version": live["updated_at"], "worker_run_id": "run_x", "task_index": 0,
+        })
+        started = await board_client.post("/api/board/missions/create", json=part)
+        assert started.status_code == 200
+        assert started.json()["refreshed"] is False
+        live = (await board_client.get("/api/board/live-states/m1-p2")).json()["live_state"]
+        assert live["plan"]["tasks"][0]["id"] == "T9"
+
+    async def test_a_taken_id_that_is_not_a_split_part_is_still_refused(self, board_client):
+        r = await board_client.post("/api/board/missions/create", json={
+            "mission_id": "m1", "source_mission_id": "m1", "objective": "again",
+        })
+        assert r.status_code >= 400
+
 
 class TestLiveStates:
     async def test_list_live_states(self, board_client):
@@ -321,6 +355,7 @@ class TestStartStopDisable:
         r = await board_client.post("/api/board/missions/m1/stop", params={"confirm": "true"})
         assert r.status_code == 200
         assert r.json()["status"] == "stopped"
+        assert r.json()["cancelled_runs"] == []
 
     async def test_disable_running_needs_confirm(self, board_client):
         await board_client.post("/api/board/live-states/sk1", json={
@@ -343,6 +378,30 @@ class TestStartStopDisable:
         groups = (await board_client.get("/api/board/missions")).json()["groups"]
         assert groups["disabled"] == []
         assert groups["queued"] == ["m1"]
+
+    async def test_reset_run_state_needs_confirm_and_clears_the_marks(self, board_client):
+        got = await board_client.get("/api/board/live-states/sk1")
+        await board_client.post("/api/board/live-states/sk1", json={
+            "expected_version": got.json()["live_state"]["updated_at"],
+            "status": "active",
+            "worker_run_id": "run_old",
+            "task_index": 3,
+        })
+        r = await board_client.post("/api/board/missions/m1/reset-run-state")
+        assert r.status_code == 403
+        url = "/api/board/missions/m1/reset-run-state"
+        r = await board_client.post(url, params={"confirm": "true"})
+        assert r.status_code == 200
+        assert r.json()["status"] == "active"
+        live = (await board_client.get("/api/board/live-states/sk1")).json()["live_state"]
+        assert live["worker_run_id"] is None
+        assert live["task_index"] is None
+        assert live["status"] == "active"
+
+    async def test_reset_run_state_of_an_unknown_mission_is_not_found(self, board_client):
+        url = "/api/board/missions/nope/reset-run-state"
+        r = await board_client.post(url, params={"confirm": "true"})
+        assert r.status_code == 404
 
     async def test_enable_of_an_unknown_mission_is_not_found(self, board_client):
         r = await board_client.post("/api/board/missions/nope/enable")
@@ -2073,6 +2132,7 @@ _BOARD_ROUTE_ORDER: list[tuple[str, str]] = [
     ("GET", "/api/board/missions/{mission_id}/readiness"),
     ("POST", "/api/board/missions/{mission_id}/start"),
     ("POST", "/api/board/missions/{mission_id}/stop"),
+    ("POST", "/api/board/missions/{mission_id}/reset-run-state"),
     ("POST", "/api/board/missions/{mission_id}/disable"),
     ("POST", "/api/board/missions/{mission_id}/enable"),
     ("POST", "/api/board/missions/{mission_id}/run-next"),

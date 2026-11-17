@@ -69,11 +69,18 @@ from .board_ops_store import OpsStore
 from .board_ops_store_pg import UnavailableOpsStore, get_ops_store
 from .board_pg import UnavailableBoardStore
 from .board_plan import update_mission_config
-from .board_ready import MissionIdError, create_mission, rollback, save_template, start_guard
+from .board_ready import (
+    MissionIdError,
+    _clean_plan,
+    create_mission,
+    rollback,
+    save_template,
+    start_guard,
+)
 from .board_stats import lesson_block_shown, lessons_stats, lessons_stats_overall
 from .qa import NIGHTLY_VERDICT_PATH
 from .qa_runner import RUN_DIR_PREFIX, RUNS_DIR
-from .runs import RunManager
+from .runs import RunManager, RunnerError
 
 __all__ = ["router", "add_board_routes", "start_engine_collector"]
 
@@ -84,6 +91,42 @@ _QA_SCREENSHOT_RE = re.compile(r"^qa-[0-9a-f]+/[A-Za-z0-9_.-]+\.png$")
 _STATS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 STATS_TTL_FINISHED = 600.0
 STATS_TTL_LIVE = 15.0
+
+# The live-state fields that mark a mission as started; reset_run_state clears them (a mission with
+# none of them and no update time counts as never run, see board.never_ran).
+_RUN_MARK_FIELDS = (
+    "updated_at",
+    "task_index",
+    "task_attempt",
+    "worker_session_id",
+    "worker_run_id",
+    "worker_status",
+    "reviewer_session_id",
+    "reviewer_run_id",
+    "reviewer_status",
+    "architect_session_id",
+    "architect_run_id",
+    "architect_status",
+)
+
+async def _cancel_live_runs(request: Request, live: Any) -> list[str]:
+    """Cancel the runs of the live state that still run, so a stopped mission stops working;
+    an id of a finished or forgotten run is skipped. The task position stays."""
+    manager = getattr(request.app.state, "manager", None)
+    if manager is None:
+        return []
+    cancelled: list[str] = []
+    for run_id in (live.worker_run_id, live.reviewer_run_id, live.architect_run_id):
+        if not run_id or run_id in cancelled:
+            continue
+        try:
+            run = manager.get(run_id)
+            if run.get("status") in ("queued", "running"):
+                await manager.cancel(run_id)
+                cancelled.append(run_id)
+        except RunnerError:
+            continue
+    return cancelled
 
 
 def _feature_enabled(store: BoardStore, mission_id: str | None, feature: str) -> bool:
@@ -1292,6 +1335,54 @@ def _inherited_settings(store: BoardStore, body: dict[str, Any]) -> dict[str, An
     }
 
 
+_SPLIT_PART_ID = re.compile(r"^(?P<head>.+)-p\d+$")
+
+
+def _part_started(live: Any) -> bool:
+    """A part counts as started when a run, a session, a task position or a status other than
+    "active" is recorded; the update time is not used (a new row carries one)."""
+    marks = (
+        live.worker_run_id, live.worker_session_id, live.reviewer_run_id, live.architect_run_id,
+        live.task_index,
+    )
+    return live.status not in (None, "active") or any(m not in (None, "") for m in marks)
+
+
+def _refresh_split_part(store: BoardStore, body: dict[str, Any]) -> dict[str, Any] | None:
+    """A split plan sent again names a part that already exists (the head was planned a second
+    time): a part that has not started takes the new objective and plan, a started part is kept as
+    it is. Returns None when the body is not a part of an existing split head, so the normal
+    creation (and its refusal of a taken id) runs."""
+    mission_id = str(body.get("mission_id", ""))
+    found = _SPLIT_PART_ID.match(mission_id)
+    existing = store.get_mission(mission_id) if found else None
+    if (
+        found is None
+        or existing is None
+        or body.get("source_mission_id")
+        or body.get("template_name")
+        or store.get_mission(found.group("head")) is None
+    ):
+        return None
+    live = store.get_live_state(existing.state_namespace)
+    if live is not None and _part_started(live):
+        return {"mission_id": mission_id, "existing": True, "refreshed": False}
+    if body.get("objective"):
+        store.update_mission(
+            mission_id, existing.updated_at, who=body.get("who", ""), objective=body["objective"]
+        )
+    if body.get("plan"):
+        store.upsert_live_state(
+            existing.state_namespace,
+            live.updated_at if live is not None else None,
+            plan=_clean_plan(body["plan"]),
+            status="active",
+            who=body.get("who", ""),
+        )
+    return {"mission_id": mission_id, "existing": True, "refreshed": True}
+
+
+
 def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     """Create a mission (copy of a source, from a template, or the fields a
     splitting mission sends for its parts).
@@ -1306,6 +1397,9 @@ def create(request: Request, body: dict[str, Any]) -> dict[str, Any]:
     field and the position stays as sent."""
     store = _store_guard(request)
     _check_plan(body.get("plan"))
+    again = _refresh_split_part(store, body)
+    if again is not None:
+        return again
     mission_id = body.get("mission_id", "")
     position = body.get("position")
     dependencies: list[str] | None = None
@@ -1780,7 +1874,9 @@ def _build_router() -> APIRouter:
         return start_guard(summary, confirmed=confirmed)
 
     @router.post("/missions/{mission_id}/stop")
-    def stop(request: Request, mission_id: str, confirm: bool = Query(False)) -> dict[str, Any]:
+    async def stop(
+        request: Request, mission_id: str, confirm: bool = Query(False)
+    ) -> dict[str, Any]:
         store = _store_guard(request)
         mission = store.get_mission(mission_id)
         if mission is None:
@@ -1790,8 +1886,30 @@ def _build_router() -> APIRouter:
             raise KeyError(f"mission {mission_id!r} has no live state")
         running = live.status == "active"
         _confirm_needed(running, confirm, "stopping a running mission")
-        store.upsert_live_state(mission.state_namespace, live.updated_at, status="stopped", who="api")
-        return {"mission_id": mission_id, "status": "stopped"}
+        # no version check: the operator's stop must land even when the row changed meanwhile
+        store.upsert_live_state(mission.state_namespace, None, status="stopped", who="api")
+        cancelled = await _cancel_live_runs(request, live)
+        return {"mission_id": mission_id, "status": "stopped", "cancelled_runs": cancelled}
+
+    @router.post("/missions/{mission_id}/reset-run-state")
+    def reset_run_state(
+        request: Request, mission_id: str, confirm: bool = Query(False)
+    ) -> dict[str, Any]:
+        """Clear the marks of an old run (run ids, sessions, task position, update time) so a
+        mission stuck as "running" is waiting again; the saved plan stays. Needs confirm."""
+        store = _store_guard(request)
+        mission = store.get_mission(mission_id)
+        if mission is None:
+            raise KeyError(f"mission {mission_id!r} not found")
+        live = store.get_live_state(mission.state_namespace)
+        if live is None:
+            raise KeyError(f"mission {mission_id!r} has no live state")
+        _confirm_needed(True, confirm, "resetting the run state of a mission")
+        cleared = dict.fromkeys(_RUN_MARK_FIELDS)
+        store.upsert_live_state(
+            mission.state_namespace, None, status="active", who="api", **cleared
+        )
+        return {"mission_id": mission_id, "status": "active", "cleared": sorted(cleared)}
 
     @router.post("/missions/{mission_id}/disable")
     def disable(request: Request, mission_id: str, confirm: bool = Query(False)) -> dict[str, Any]:

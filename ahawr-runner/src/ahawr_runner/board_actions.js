@@ -165,10 +165,16 @@ async function refreshBoard() {
     await BoardDnd.attachDnd();
   }
   attachCardActionsTo(data);
+  // the views redraw at once (a stop, a reset or an enable moves a card between columns)
+  if (typeof document.dispatchEvent === "function" && typeof CustomEvent === "function") {
+    document.dispatchEvent(new CustomEvent("board:refresh"));
+  }
 }
 
 // Rebuild a card's action buttons from its dataset; a card that has
 // dataset.actionsReady === "1" is skipped.
+const RESET_GROUPS = ["running", "queued", "not_completed", "stopped"];
+
 function attachCardActions(el, data) {
   if (el.dataset.actionsReady === "1") return;
   const missionId = el.dataset.missionId;
@@ -197,6 +203,10 @@ function attachCardActions(el, data) {
     mkButton(group, t("action.stop"), "stop", missionId, true);
   } else if (groupKey === "not_completed" || groupKey === "stopped" || groupKey === "queued") {
     mkButton(group, t("action.retry"), "retry", missionId, true);
+  }
+  // the reset to the first task is offered on every card that can hold the marks of an old run
+  if (RESET_GROUPS.includes(groupKey)) {
+    mkButton(group, t("action.reset"), "reset_state", missionId, true);
   }
 
   el.appendChild(group);
@@ -276,6 +286,7 @@ function confirmActions(missionId, action) {
     stop: "action.stop.title",
     retry: "action.retry.title",
     pause: "action.pause.title",
+    reset_state: "action.reset.title",
   }[action];
   const label = labelKey ? t(labelKey) : action;
   if (!window.confirm(label + " (" + esc(missionId) + ")?")) return;
@@ -369,6 +380,8 @@ async function doAction(action, missionId) {
     body = { value: "1" };
   } else if (action === "stop") {
     url = "/api/board/missions/" + encodeURIComponent(missionId) + "/stop?confirm=true";
+  } else if (action === "reset_state") {
+    url = "/api/board/missions/" + encodeURIComponent(missionId) + "/reset-run-state?confirm=true";
   } else {
     return;
   }

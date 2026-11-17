@@ -20,7 +20,7 @@
 //     startAutoRefresh; the teardown listeners are wired once (teardownWired).
 //   board_views.js (board_views.js:368-401):
 //   - init() runs tick() once immediately and then starts one interval of
-//     REFRESH_MS = 15000 ms, each tick fetching /api/board/summary;
+//     REFRESH_MS = 5000 ms, each tick fetching /api/board/summary;
 //   - the handle is stored as tickTimer and cleared on 'pagehide' and on a
 //     'hashchange' whose hash is not a #board/view/... fragment; a
 //     'hashchange' re-entering a view restarts it through startTick, whose
@@ -261,7 +261,7 @@ test("board_actions tick calls refreshBoard fetches unless a guard blocks it", a
 });
 
 // --- board_views: the interval start and its interval in ms ---
-test("board_views tick starts one interval of 15000 ms and ticks once immediately", async () => {
+test("board_views tick starts one interval of 5000 ms and ticks once immediately", async () => {
   const saved = { document: globalThis.document, fetch: globalThis.fetch,
     location: globalThis.location, history: globalThis.history,
     localStorage: globalThis.localStorage, BoardI18n: globalThis.BoardI18n,
@@ -269,12 +269,12 @@ test("board_views tick starts one interval of 15000 ms and ticks once immediatel
   try {
     const env = viewsEnv();
     const V = loadViews();
-    assert.equal(V.REFRESH_MS, 15000, "REFRESH_MS exported as 15000 (board_views.js:12)");
+    assert.equal(V.REFRESH_MS, 5000, "REFRESH_MS exported as 5000 (board_views.js:12)");
     await V.init(env.host);
     // the immediate tick() fetches /api/board/summary before setInterval is called
     assert.ok(env.fetchCalls.includes("/api/board/summary"), "init ticks once immediately with /api/board/summary");
     assert.equal(env.timer.intervals.length, 1, "init starts exactly one interval");
-    assert.equal(env.timer.intervals[0].ms, 15000, "the interval is REFRESH_MS = 15000 (board_views.js:387)");
+    assert.equal(env.timer.intervals[0].ms, 5000, "the interval is REFRESH_MS = 5000 (board_views.js:387)");
     // the captured tick fetches the summary again when invoked manually
     env.fetchCalls.length = 0;
     await env.timer.intervals[0].fn();

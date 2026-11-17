@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.3.010** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.4.200** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -188,6 +188,9 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.2.030: the dashboard Resume starts the queue chain and the watcher (the host agent named the old queue script); tests of the command agent
 - [x] 1.3.0: the kanban gets the Stopped and Disabled columns (Stop moves a card to Stopped; a Disabled card is enabled by drag or button); a role may list several fallback models; the mission-dependencies and run-from-card features are switched on
 - [x] 1.3.010: `adaptive_split` and `run_mission_from_card` are ON in the shipped defaults; the pinned fixtures and tests follow
+- [x] 1.4.0: a running card has a Reset state button (POST /api/board/missions/{id}/reset-run-state, confirm required) that clears the marks of an old run; the plan stays
+- [x] 1.4.100: bug fix: a split head planned a second time no longer loops (the part creation answered 500 and the queue relaunched the Architect); Stop cancels the running runs
+- [x] 1.4.200: bug fixes: Stop and Reset state answered 409/500; Run next/now retries a stale queue stamp; the board redraws at once after a move or an action
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 

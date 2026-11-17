@@ -89,7 +89,7 @@ function attachQueuedCards(controls, cards) {
 
 // The Running, Stopped and Disabled cards get their buttons: Stop on a running card moves it to the
 // Stopped column, Enable on a disabled card takes it out of the Disabled column.
-const ACTION_COLUMNS = ["run", "stp", "off"];
+const ACTION_COLUMNS = ["run", "bad", "stp", "off"];
 
 function attachColumnActions(controls, body) {
   for (const key of ACTION_COLUMNS) {

@@ -83,7 +83,7 @@ function attachRunButtons(card, deps) {
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      runCard(kind, missionId, deps);
+      return runCard(kind, missionId, deps);
     });
     group.appendChild(button);
   }
@@ -91,12 +91,23 @@ function attachRunButtons(card, deps) {
   return group;
 }
 
+// A stale queue stamp (409: the queue changed since the board was drawn) is sent once more without
+// the stamp, so the server takes the current version; any other error is passed on.
+async function postWithFreshVersion(post, url, body) {
+  try {
+    return await post(url, body);
+  } catch (error) {
+    if (!error || error.status !== 409) throw error;
+    return post(url, {});
+  }
+}
+
 // One click: the confirm step, the request, the message, the board refresh.
 async function runCard(kind, missionId, deps) {
   if (!deps.confirm(deps.tr(ACTIONS[kind].confirm, { id: missionId }))) return false;
   const { url, body } = runRequest(kind, missionId, deps.data ? deps.data.version : null);
   try {
-    const answer = await deps.post(url, body);
+    const answer = await postWithFreshVersion(deps.post, url, body);
     deps.show(deps.tr(answerKey(kind, answer)), "ok");
   } catch (error) {
     deps.show(refusalText(error, deps.tr), "bad");

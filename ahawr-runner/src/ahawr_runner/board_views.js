@@ -9,7 +9,7 @@
 "use strict";
 
 const SUMMARY_URL = "/api/board/summary";
-const REFRESH_MS = 15000;
+const REFRESH_MS = 5000;
 const DEFAULT_VIEW = "proj";
 const THEME_KEY = "ahawr-dashboard-theme";
 const THEMES = ["auto", "light", "dark"];
@@ -394,6 +394,10 @@ function init(host) {
   };
   tick();
   startTick();
+  // a move, a stop or any other change of the board redraws the views at once, not at the next tick
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("board:refresh", tick);
+  }
   // T009: clear the live timer when the page goes away, restart it when the
   // hash re-enters a view, and stop it when the hash leaves the views host
   // (the hash is then no longer a #board/view/... fragment).

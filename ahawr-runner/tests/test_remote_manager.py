@@ -84,3 +84,30 @@ def test_the_list_used_for_the_missing_fields_is_read_once_in_a_while():
     m.store.get_run("run_old")
     m.store.get_run("run_old_cloud")
     assert sum(c.endswith("/v1/runs?limit=500") for c in calls) == 1
+
+
+def test_get_and_cancel_go_to_the_runner_over_http():
+    import asyncio
+
+    import pytest
+
+    from ahawr_runner.runs import RunnerError
+
+    posted: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/runs/run_live/cancel":
+            posted.append(request.url.path)
+            return httpx.Response(200, json={"run_id": "run_live", "status": "cancelled"})
+        if request.url.path == "/v1/runs/run_live":
+            return httpx.Response(200, json={"run_id": "run_live", "status": "running"})
+        return httpx.Response(404)
+
+    m = RemoteRunManager("http://runner", "", transport=httpx.MockTransport(handler))
+    assert m.get("run_live")["status"] == "running"
+    with pytest.raises(RunnerError):
+        m.get("run_none")
+    assert asyncio.run(m.cancel("run_live"))["status"] == "cancelled"
+    assert posted == ["/v1/runs/run_live/cancel"]
+    with pytest.raises(RunnerError):
+        asyncio.run(m.cancel("run_none"))

@@ -116,6 +116,33 @@ test("run now posts with the version, shows the answer and refreshes", async () 
   assert.equal(d.log.refreshed, 1);
 });
 
+test("a stale queue stamp (409) is sent once more without the stamp", async () => {
+  const calls = [];
+  const d = deps({
+    post: async (url, body) => {
+      calls.push(body);
+      if (body.expected_version) {
+        const stale = new Error("queue 'queue': expected version v1, got v2");
+        stale.status = 409;
+        throw stale;
+      }
+      return { status: "resume_queued" };
+    },
+  });
+  const group = RM.attachRunButtons(card("queued-1", "queued"), d);
+  await group.children[1].listeners.click({ preventDefault() {}, stopPropagation() {} });
+  assert.deepEqual(calls, [{ expected_version: "v1" }, {}]);
+  assert.deepEqual(d.log.shown, [{ text: "The mission is first; the queue start was requested.", cls: "ok" }]);
+});
+
+test("another error is not retried", async () => {
+  let count = 0;
+  const d = deps({ post: async () => { count += 1; const e = new Error("boom"); e.status = 500; throw e; } });
+  const group = RM.attachRunButtons(card("queued-1", "queued"), d);
+  await group.children[1].listeners.click({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(count, 1);
+});
+
 test("answers and refusals map to texts", async () => {
   assert.equal(RM.answerKey("next", {}), "run.moved");
   assert.equal(RM.answerKey("now", { status: "after_running" }), "run.after_running");
