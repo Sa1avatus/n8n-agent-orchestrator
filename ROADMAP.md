@@ -12,7 +12,7 @@ AHAWR runs long coding missions on local and cloud models: an Architect plans, a
 
 **1.0.0 · November 5, 2026** — Three executors behind one runner API: Claude Code, Codex and Hermes; the runner is ahawr-runner
 
-Current version: **1.4.400** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
+Current version: **1.4.500** · Missions completed: **31** · Missions in the queue: **3** · Next milestone: **After 1.0: any client in any role**
 
 The board shows every mission with its tasks, attempts, time, tokens and cost in five views (Projects, Kanban, Lanes, Sprint, Grid), a Guards tab with the guards of the dashboard, orders tasks by their dependencies, edits the plan and the project rules, and speaks English and Russian. QA runs on the host through a request queue; the mission queue moves to the board next.
 
@@ -193,6 +193,7 @@ after 0.12.0 · Reviewer calibration, retrieval quality and the dashboard on the
 - [x] 1.4.200: bug fixes: Stop and Reset state answered 409/500; Run next/now retries a stale queue stamp; the board redraws at once after a move or an action
 - [x] 1.4.300: bug fix: the Reviewer verdict re-ask keeps the model that answered and its fallbacks (it went back to the limited primary model and the mission failed); Worker is Sonnet 5.5 with the local model as fallback
 - [x] 1.4.400: bug fix: the QA agent had no fallback model; a failed `qa_agent` run now starts again on each `options.fallback` model, like Worker, Reviewer and Architect
+- [x] 1.4.500: bug fixes: the kanban card buttons made queued cards too tall to drag onto (3 QA scenarios failed and sent a passed task back); a QA return is labelled as such in the notice
 
 ### After 1.0.0: Parallel missions and Hermes parity — Later (2027)
 

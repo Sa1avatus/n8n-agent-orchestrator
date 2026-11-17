@@ -645,3 +645,5 @@ button.ew-pri:hover:not(:disabled) { background: var(--acc); filter: brightness(
 /* dangerous card buttons: stop, reset state, disable */
 .qact-stop, .qact-reset_state, .qact-disable { color: var(--err); border-color: var(--err); }
 .qact-stop:hover, .qact-reset_state:hover, .qact-disable:hover { background: var(--err); color: #fff; }
+/* the action buttons of a kanban card are small, so a column of queued cards fits the screen and every card can be dragged onto */
+#boardviewbody .kcard .qact { font-size: 11px; padding: 1px 7px; margin: 0 3px 3px 0; border-radius: 5px; }
