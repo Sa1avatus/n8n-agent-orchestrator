@@ -514,6 +514,8 @@ docker exec ahawr-runner ps -eo pid,ppid,etimes,args | grep -E 'claude|node'
 
 The mission board lives in `src/ahawr_runner/`: `board.py` (the in-memory store and the models), `board_pg.py` (the PostgreSQL store), `board_api.py` (the `/api/board` routes), `board_stats.py` (the figures), `board_plan.py` (the plan), and the browser files `board_views.js`, `board_view_projects.js`, `board_view_kanban.js`, `board_view_grid.js`, `board_queue.js`, `board_dnd.js`, `board_actions.js`, `board_i18n.js`, `board_i18n_ui.js`, `board_task.js`, `board_tasks.js`, `board_plan_edit.js`, `board_ready_ui.js`, `board_think_ui.js`, `board_history_ui.js`, `board_claude_md.js`, `board_mission.js`, `board_mission_save.js`. The schema is `docs/board-schema.sql`, the role is `docs/board-role.sql`, and the summary, project rules, translation routes, the frontend views and the database apply steps are described in `docs/board-views.md`.
 
+Run a mission from its card (the `run_mission_from_card` flag, the two routes, the eligibility rules): [docs/board-run-mission.md](docs/board-run-mission.md).
+
 ## Development
 
 ```bash

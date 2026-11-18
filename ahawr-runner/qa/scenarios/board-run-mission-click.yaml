@@ -1,0 +1,44 @@
+# Run buttons of a kanban card (mission ahawr-board-run-mission).
+# Preconditions of every scenario: the flag run_mission_from_card is ON (the shipped default,
+# features_defaults.json:32-34; the buttons exist only then, board_run_mission.js:111) and the
+# fixture "default" is loaded: m03 "Never started" (queued), m08 "Failed import" (failed, no
+# retry_failed), m12 "Disabled" (disabled), m05 "Docs pass" (completed).
+# The runner finds elements by visible text only (qa_runner.py _locate), so the selectors
+# [data-run-mission="next"] / [data-run-mission="now"] (board_run_mission.js:131) are pinned by
+# their texts "run next" / "run now" (i18n action.run_next / action.run_now); text matching is
+# case-insensitive, and the header search (aria-label "Search missions") narrows the cards so
+# that the first visible match is the card under test.
+# No contract file: the buttons reuse the existing confirm popup and add no page
+# (qa-agent.md asks for a contract per mission with a UI design only; there is no reference image).
+# shortcut: the confirm is a native window.confirm (board_actions.js "confirm: (text) =>
+# window.confirm(text)"), which the runner accepts at once (qa_runner.py:629) and which is not
+# page text, so the confirm text is not asserted; the message shown after the answer is.
+# This file is scenario 3 of 4; the runner loads one scenario per *.yaml file
+# (qa_runner.py parse_scenario, a second document or scenario in a file would be refused), so the
+# four criteria are the files board-run-mission*.yaml.
+name: run next asks for a confirm and the run-next request succeeds
+tags: [ui, queue]
+preconditions:
+  fixture: default
+target: dashboard
+steps:
+  - open: /static/board.html#board/view/kan
+    expect:
+      text_visible: [Kanban, "Never started"]
+      request_2xx: [/api/board, /api/board/features]
+      no_console_error: true
+  - type:
+      into: Search missions
+      text: Never started
+      replace: true
+    expect:
+      text_visible: ["run next"]
+      no_console_error: true
+  # The confirm "Move m03 to the front of the queue?" (i18n run.confirm.next) is accepted by
+  # the runner's dialog handler; the answer shows "The mission is now first in the queue." (run.moved).
+  - click: "run next"
+    expect:
+      text_visible: ["The mission is now first in the queue."]
+      request_2xx: [/api/board/missions/m03/run-next]
+      no_console_error: true
+      no_mutation_without_header: true

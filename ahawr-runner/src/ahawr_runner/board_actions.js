@@ -132,6 +132,11 @@ function showState(text, cls) {
     state.textContent = text;
     state.className = cls || "bad";
   }
+  // #boardstate is hidden while a view (Kanban...) is shown: say it in the visible line too
+  if ((!state || state.hidden) && typeof BoardDnd !== "undefined"
+      && typeof BoardDnd.showNotice === "function") {
+    BoardDnd.showNotice(text);
+  }
 }
 
 // Re-render the DOM from the server.  The board data is loaded once
@@ -703,6 +708,7 @@ const BoardActions = {
   stopAutoRefresh,
   hookUp,
   getNewMissionButton,
+  showState,
 };
 function attachCardActionsTo(data) {
   boardData = data;

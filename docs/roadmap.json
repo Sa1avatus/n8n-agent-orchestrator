@@ -10,7 +10,7 @@
     "stats": [
       [
         "Current version",
-        "1.4.500"
+        "1.4.600"
       ],
       [
         "Missions completed",
@@ -628,6 +628,10 @@
         [
           "ok",
           "1.4.500: bug fixes: the kanban card buttons made queued cards too tall to drag onto (3 QA scenarios failed and sent a passed task back); a QA return is labelled as such in the notice"
+        ],
+        [
+          "ok",
+          "1.4.600: bug fix: the Run next / Run now answer was invisible in the Kanban view (hidden line), which made QA return the task five times and loop the queue"
         ]
       ]
     },

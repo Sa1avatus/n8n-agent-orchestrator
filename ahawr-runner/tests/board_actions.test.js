@@ -434,6 +434,19 @@ const BA = require(path.join(__dirname, "..", "src", "ahawr_runner", "board_acti
   globalThis.fetch = firstFetch;
   delete globalThis.BoardDnd.ensureQueued;
 
+  // a message shown while #boardstate is hidden (a view is open) reaches the visible notice line
+  const noticeCalls = [];
+  globalThis.BoardDnd.showNotice = (text) => noticeCalls.push(text);
+  stateStub.hidden = true;
+  BA.showState("The mission is now first in the queue.", "ok");
+  check("a hidden #boardstate keeps the text and shows the notice",
+    stateStub.textContent === "The mission is now first in the queue."
+    && noticeCalls.length === 1 && noticeCalls[0] === "The mission is now first in the queue.");
+  stateStub.hidden = false;
+  BA.showState("again", "ok");
+  check("a visible #boardstate shows no second notice", noticeCalls.length === 1);
+  delete globalThis.BoardDnd.showNotice;
+
   BA.toggleNewMission(); // close the form
   BA.stopAutoRefresh(); // clear the interval so node exits
 })().catch((e) => { console.error(e.message); process.exit(1); });
